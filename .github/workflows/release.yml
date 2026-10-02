@@ -28,13 +28,18 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: the tagged commit is on main
+      # 0.4.x patches come from release/0.4 (main holds 0.5); every other tag from main.
+      - name: the tagged commit is on main, or a 0.4 patch on release/0.4
         run: |
-          git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::$GITHUB_REF_NAME is on a commit that is not on main: a release is made from main only"
-            exit 1
+          git fetch --no-tags origin main release/0.4
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            exit 0
           fi
+          case "$GITHUB_REF_NAME" in
+            v0.4.*) git merge-base --is-ancestor "$GITHUB_SHA" origin/release/0.4 && exit 0 ;;
+          esac
+          echo "::error::$GITHUB_REF_NAME is on a commit that is not on main (or a 0.4 patch on release/0.4)"
+          exit 1
 
   test:
     needs: guard
@@ -94,7 +99,7 @@ jobs:
           images: ${{ steps.name.outputs.image }}
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest,enable=false # :latest stays on 0.5
       - id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         env:
@@ -181,7 +186,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          pre=""
+          # Marked latest explicitly: by version alone GitHub would keep 0.5.0.0, and the
+          # 0.4 servers reach 0.5 only through this patch.
+          pre="--latest"
           case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" $pre --verify-tag --title "mikan ${GITHUB_REF_NAME#v}" --notes-file dist/notes.md \
             dist/install.sh dist/mikan-x86_64 dist/mikan-aarch64 dist/manifest.json dist/manifest.json.sig

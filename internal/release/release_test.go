@@ -78,6 +78,15 @@ func TestNewer(t *testing.T) {
 		want bool
 	}{
 		{"0.3.10", "0.3.9", true},
+		{"0.4.4.1", "0.4.4", true},
+		{"0.4.4", "0.4.4.0", false},
+		{"0.4.4.10", "0.4.4.9", true},
+		{"0.4.5.0", "0.4.4.99", true},
+		{"0.4.4.1", "0.4.4.1-rc.1", true},
+		{"0.4.4.1-rc.10", "0.4.4.1-rc.9", true},
+		{"0.4.4.1-99999999999999999999999", "0.4.4.1-9", true},
+		{"0.4.4.1-rc..1", "0.4.4.0", false},
+		{"0.4.4.18446744073709551616", "0.4.4.0", false},
 		{"0.3.9", "0.3.10", false},
 		{"0.4.0", "0.3.99", true},
 		{"1.0.0", "0.9.9", true},
@@ -91,6 +100,20 @@ func TestNewer(t *testing.T) {
 		if got := Newer(c.a, c.b); got != c.want {
 			t.Errorf("Newer(%q, %q) = %v", c.a, c.b, got)
 		}
+	}
+}
+
+func TestFourComponentManifest(t *testing.T) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	for _, version := range []string{"0.5.0.0", "0.5.0.1", "0.5.0.10-rc.1"} {
+		data := []byte(strings.Replace(string(manifest(t)), "0.3.9", version, 1))
+		if _, err := Parse(data, Sign(data, priv), pub); err != nil {
+			t.Fatalf("version %s: %v", version, err)
+		}
+	}
+	data := []byte(strings.Replace(string(manifest(t)), "0.3.9", "0.5.0.1.2", 1))
+	if _, err := Parse(data, Sign(data, priv), pub); err == nil {
+		t.Fatal("five components are refused")
 	}
 }
 

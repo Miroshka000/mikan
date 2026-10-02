@@ -273,6 +273,25 @@ fn update_to(a: &UpdateArgs, say: &mut dyn FnMut(&str), progress: &mut dyn FnMut
         report(&install, Phase::Running, &version, &current, "");
     }
 
+    // A release's own installer updates to it: a newer one may have to prepare the server
+    // first (0.5.0.0 moves the database to PostgreSQL before its image starts). It takes
+    // over under this lock, with the image already pulled and checked against the signature.
+    if let Some(m) = &manifest {
+        if self_update(m, say) {
+            let status = Command::new(host::BIN).args(["update", &image]).env(lock::HELD_ENV, "1").status()?;
+            if !status.success() {
+                bail!("the new mikan command could not finish the update; run mikan update again");
+            }
+            return Ok(());
+        }
+        if !m.min_installer.is_empty() && release::newer(&m.min_installer, crate::version()) {
+            bail!(
+                "this release needs the mikan command {} or newer and it could not be downloaded; run mikan update again",
+                m.min_installer
+            );
+        }
+    }
+
     // Nothing has changed yet: a backup that cannot be made stops the update here.
     let saved = backup::backup_as("pre-update", say).context("the backup before the update failed; nothing was changed")?;
     say(&format!("Backup: {}", saved.display()));

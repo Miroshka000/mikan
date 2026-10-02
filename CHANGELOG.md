@@ -3,6 +3,15 @@
 Each release has a section in English and in Russian; the release workflow puts them in
 the signed manifest, and the panel shows the one in its language.
 
+## 0.4.5
+### en
+- Prepares the move to 0.5: the panel and the mikan command understand versions with four numbers (0.5.0.0), and the command updates itself before the panel when a release needs a newer one. Nothing else changes; the database stays as it is.
+- After this update, 0.5.0.0 arrives the usual way: the Update button in Settings → Updates, or the nightly automatic update. It moves the panel to PostgreSQL with a backup first.
+
+### ru
+- Подготовка к переходу на 0.5: панель и команда mikan понимают версии из четырёх чисел (0.5.0.0), а команда сама обновляется раньше панели, если релизу нужна новая. Больше ничего не меняется, база остаётся прежней.
+- После этого обновления 0.5.0.0 придёт обычным путём: кнопкой «Обновить» в «Настройки → Обновления» или ночным автообновлением. Оно переведёт панель на PostgreSQL, сначала сделав бэкап.
+
 ## 0.4.4
 ### en
 - YooKassa and CryptoBot now come from the marketplace like every other payment method. On the update the panel moves their keys into the adapters, asks the server to install the adapter that took payments (Payments shows a notice until it runs), and keeps everything working: invoices opened before the update are paid through the adapter, the notification URLs set in the YooKassa and CryptoBot dashboards stay valid, and pay buttons in old bot messages still work. Payments → Accepting payments keeps Telegram Stars and the selling switches.

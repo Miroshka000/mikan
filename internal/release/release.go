@@ -34,12 +34,13 @@ func JoinCommand(key string) string { return InstallCommand + " -s -- --join " +
 const LatestURL = "https://github.com/" + Repo + "/releases/latest/download/manifest.json"
 
 type Manifest struct {
-	Version   string            `json:"version"`
-	Published time.Time         `json:"published"`
-	Image     string            `json:"image" doc:"Образ в GitHub Packages, например ghcr.io/miroshka000/mikan"`
-	Digest    string            `json:"digest" doc:"sha256 multi-arch образа"`
-	Installer map[string]Asset  `json:"installer" doc:"Установщик по архитектуре: x86_64, aarch64"`
-	Notes     map[string]string `json:"notes" doc:"Что изменилось, markdown по языкам: en, ru"`
+	Version      string            `json:"version"`
+	MinInstaller string            `json:"min_installer,omitempty"`
+	Published    time.Time         `json:"published"`
+	Image        string            `json:"image" doc:"Образ в GitHub Packages, например ghcr.io/miroshka000/mikan"`
+	Digest       string            `json:"digest" doc:"sha256 multi-arch образа"`
+	Installer    map[string]Asset  `json:"installer" doc:"Установщик по архитектуре: x86_64, aarch64"`
+	Notes        map[string]string `json:"notes" doc:"Что изменилось, markdown по языкам: en, ru"`
 }
 
 type Asset struct {
@@ -52,7 +53,7 @@ func (m Manifest) Ref() string { return m.Image + "@" + m.Digest }
 
 var (
 	ErrSignature = errors.New("release: bad signature")
-	versionRe    = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$`)
+	versionRe    = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?$`)
 	digestRe     = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
@@ -82,8 +83,14 @@ func Parse(data []byte, sig string, pub ed25519.PublicKey) (Manifest, error) {
 	if err := json.Unmarshal(data, &m); err != nil {
 		return m, fmt.Errorf("release: manifest: %w", err)
 	}
-	if !versionRe.MatchString(m.Version) {
+	if versionParts(m.Version) == nil {
 		return m, fmt.Errorf("release: version %q", m.Version)
+	}
+	if m.MinInstaller != "" && versionParts(m.MinInstaller) == nil {
+		return m, fmt.Errorf("release: minimum installer version %q", m.MinInstaller)
+	}
+	if Newer(m.MinInstaller, m.Version) {
+		return m, errors.New("release: minimum installer is newer than the release")
 	}
 	if !digestRe.MatchString(m.Digest) || !strings.HasPrefix(m.Image, "ghcr.io/") {
 		return m, fmt.Errorf("release: image %s@%s", m.Image, m.Digest)
@@ -98,7 +105,7 @@ func Newer(a, b string) bool {
 }
 
 func compare(a, b string) int {
-	pa, pb := versionRe.FindStringSubmatch(a), versionRe.FindStringSubmatch(b)
+	pa, pb := versionParts(a), versionParts(b)
 	switch {
 	case pa == nil && pb == nil:
 		return 0
@@ -107,9 +114,9 @@ func compare(a, b string) int {
 	case pb == nil:
 		return 1
 	}
-	for i := 1; i <= 3; i++ {
-		x, _ := strconv.Atoi(pa[i])
-		y, _ := strconv.Atoi(pb[i])
+	for i := 1; i <= 4; i++ {
+		x, _ := strconv.ParseUint(pa[i], 10, 64)
+		y, _ := strconv.ParseUint(pb[i], 10, 64)
 		if x != y {
 			if x > y {
 				return 1
@@ -118,14 +125,74 @@ func compare(a, b string) int {
 		}
 	}
 	switch {
-	case pa[4] == pb[4]:
+	case pa[5] == pb[5]:
 		return 0
-	case pa[4] == "":
+	case pa[5] == "":
 		return 1
-	case pb[4] == "":
+	case pb[5] == "":
 		return -1
 	}
-	return strings.Compare(pa[4], pb[4])
+	return comparePrerelease(pa[5], pb[5])
+}
+
+func versionParts(v string) []string {
+	p := versionRe.FindStringSubmatch(v)
+	if p == nil {
+		return nil
+	}
+	for i := 1; i <= 4; i++ {
+		if p[i] != "" {
+			if _, err := strconv.ParseUint(p[i], 10, 64); err != nil {
+				return nil
+			}
+		}
+	}
+	if p[5] != "" {
+		for _, s := range strings.Split(p[5], ".") {
+			if s == "" {
+				return nil
+			}
+		}
+	}
+	return p
+}
+
+func comparePrerelease(a, b string) int {
+	x, y := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(x) && i < len(y); i++ {
+		if x[i] == y[i] {
+			continue
+		}
+		numeric := func(s string) bool { return strings.Trim(s, "0123456789") == "" }
+		xn, yn := numeric(x[i]), numeric(y[i])
+		if xn != yn {
+			if xn {
+				return -1
+			}
+			return 1
+		}
+		if xn {
+			xs, ys := strings.TrimLeft(x[i], "0"), strings.TrimLeft(y[i], "0")
+			if len(xs) < len(ys) {
+				return -1
+			}
+			if len(xs) > len(ys) {
+				return 1
+			}
+			if c := strings.Compare(xs, ys); c != 0 {
+				return c
+			}
+			continue
+		}
+		return strings.Compare(x[i], y[i])
+	}
+	if len(x) < len(y) {
+		return -1
+	}
+	if len(x) > len(y) {
+		return 1
+	}
+	return 0
 }
 
 // Notes takes a version's section out of CHANGELOG.md:

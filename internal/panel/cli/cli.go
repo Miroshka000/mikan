@@ -79,6 +79,8 @@ func Run(ctx context.Context, args []string, version string, web fs.FS) error {
 		return app.Serve(ctx, cfg, version, web)
 	case "admin":
 		return adminCmd(ctx, args[1:])
+	case "database":
+		return databaseCmd(ctx, args[1:])
 	case "openapi":
 		_, humaAPI, err := api.New(api.Deps{Version: version, Now: time.Now})
 		if err != nil {

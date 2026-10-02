@@ -30,6 +30,8 @@ pub fn latest_url() -> String {
 #[derive(Deserialize, Debug, Clone)]
 pub struct Manifest {
     pub version: String,
+    #[serde(default)]
+    pub min_installer: String,
     pub published: String,
     pub image: String,
     pub digest: String,
@@ -84,6 +86,12 @@ pub fn parse(data: &[u8], sig: &str, key: &VerifyingKey) -> Result<Manifest> {
     if semver(&m.version).is_none() {
         bail!("the manifest has a bad version {:?}", m.version);
     }
+    if !m.min_installer.is_empty() && semver(&m.min_installer).is_none() {
+        bail!("the manifest has a bad minimum installer version");
+    }
+    if newer(&m.min_installer, &m.version) {
+        bail!("the manifest requires an installer newer than its release");
+    }
     let hex = m.digest.strip_prefix("sha256:").unwrap_or("");
     if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) || !valid_image(&m.image) {
         bail!("the manifest names a bad image {}@{}", m.image, m.digest);
@@ -105,7 +113,7 @@ fn valid_image(image: &str) -> bool {
     })
 }
 
-type Version<'a> = ([u64; 3], Option<&'a str>);
+type Version<'a> = ([u64; 4], Option<&'a str>);
 
 fn semver(v: &str) -> Option<Version<'_>> {
     let (core, pre) = match v.split_once('-') {
@@ -113,14 +121,25 @@ fn semver(v: &str) -> Option<Version<'_>> {
         Some(_) => return None,
         None => (v, None),
     };
-    let mut n = [0u64; 3];
+    if let Some(p) = pre
+        && p.split('.').any(|part| part.is_empty() || !part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+    {
+        return None;
+    }
+    let mut n = [0u64; 4];
     let mut parts = core.split('.');
-    for x in &mut n {
+    for x in &mut n[..3] {
         let p = parts.next()?;
         if p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()) {
             return None;
         }
         *x = p.parse().ok()?;
+    }
+    if let Some(p) = parts.next() {
+        if p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        n[3] = p.parse().ok()?;
     }
     parts.next().is_none().then_some((n, pre))
 }
@@ -134,11 +153,40 @@ pub fn newer(a: &str, b: &str) -> bool {
         (Some((x, xp)), Some((y, yp))) => match x.cmp(&y) {
             std::cmp::Ordering::Equal => match (xp, yp) {
                 (None, Some(_)) => true,
-                (Some(p), Some(q)) => p > q,
+                (Some(p), Some(q)) => compare_prerelease(p, q).is_gt(),
                 _ => false,
             },
             o => o.is_gt(),
         },
+    }
+}
+
+fn compare_prerelease(a: &str, b: &str) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    let mut x = a.split('.');
+    let mut y = b.split('.');
+    loop {
+        let (p, q) = match (x.next(), y.next()) {
+            (None, None) => return Ordering::Equal,
+            (Some(_), None) => return Ordering::Greater,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(p), Some(q)) => (p, q),
+        };
+        let pn = p.bytes().all(|b| b.is_ascii_digit());
+        let qn = q.bytes().all(|b| b.is_ascii_digit());
+        let order = match (pn, qn) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            (true, true) => {
+                let p = p.trim_start_matches('0');
+                let q = q.trim_start_matches('0');
+                p.len().cmp(&q.len()).then_with(|| p.cmp(q))
+            }
+            _ => p.cmp(q),
+        };
+        if order != Ordering::Equal {
+            return order;
+        }
     }
 }
 
@@ -195,6 +243,13 @@ mod tests {
         let m = parse(extended.as_bytes(), &sig, &key).expect("a manifest with new fields");
         assert_eq!(m.version, "0.4.4");
         assert!(m.installer.contains_key("x86_64"));
+        assert_eq!(m.min_installer, "0.4.4");
+        let malformed = extended.replace("\"min_installer\":\"0.4.4\"", "\"min_installer\":\"0.4.4.1.2\"");
+        let sig = STANDARD.encode(signer.sign(malformed.as_bytes()).to_bytes());
+        assert!(parse(malformed.as_bytes(), &sig, &key).is_err());
+        let future = extended.replace("\"min_installer\":\"0.4.4\"", "\"min_installer\":\"0.4.5.0\"");
+        let sig = STANDARD.encode(signer.sign(future.as_bytes()).to_bytes());
+        assert!(parse(future.as_bytes(), &sig, &key).is_err());
     }
 
     #[test]
@@ -253,6 +308,17 @@ mod tests {
 
     #[test]
     fn versions() {
+        assert!(newer("0.4.4.1", "0.4.4"));
+        assert!(!newer("0.4.4", "0.4.4.0"));
+        assert!(newer("0.4.4.10", "0.4.4.9"));
+        assert!(newer("0.4.5.0", "0.4.4.99"));
+        assert!(newer("0.4.4.1", "0.4.4.1-rc.1"));
+        assert!(newer("0.4.4.1-rc.10", "0.4.4.1-rc.9"));
+        assert!(newer("0.4.4.1-99999999999999999999999", "0.4.4.1-9"));
+        assert!(semver("0.4.4.1-rc..1").is_none());
+        assert!(semver("0.4.4.18446744073709551616").is_none());
+        assert!(semver("0.4.4.1.2").is_none());
+        assert!(semver("0.4.4.").is_none());
         assert!(newer("0.3.10", "0.3.9"));
         assert!(newer("0.4.0", "0.3.99"));
         assert!(newer("1.0.0", "0.9.9"));
