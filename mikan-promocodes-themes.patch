@@ -1,0 +1,372 @@
+diff --git a/internal/panel/store/migrations/0018_promocodes.sql b/internal/panel/store/migrations/0018_promocodes.sql
+new file mode 100644
+--- /dev/null
++++ b/internal/panel/store/migrations/0018_promocodes.sql
+@@ -0,0 +1,18 @@
++-- +goose Up
++CREATE TABLE promo_codes (
++  id         INTEGER PRIMARY KEY,
++  code       TEXT NOT NULL UNIQUE COLLATE NOCASE,
++  kind       TEXT NOT NULL CHECK (kind IN ('percent', 'fixed')),
++  value      INTEGER NOT NULL CHECK (value > 0),
++  max_uses   INTEGER NOT NULL DEFAULT 0 CHECK (max_uses >= 0),
++  used       INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
++  expires_at INTEGER,
++  active     INTEGER NOT NULL DEFAULT 1,
++  created_at INTEGER NOT NULL
++);
++
++CREATE INDEX promo_codes_active ON promo_codes(active, expires_at);
++
++-- +goose Down
++DROP TABLE promo_codes;
+diff --git a/internal/panel/api/promocodes.go b/internal/panel/api/promocodes.go
+new file mode 100644
+--- /dev/null
++++ b/internal/panel/api/promocodes.go
+@@ -0,0 +1,255 @@
++package api
++
++import (
++	"context"
++	"database/sql"
++	"net/http"
++	"strconv"
++	"strings"
++
++	"github.com/danielgtaylor/huma/v2"
++	"mikan/internal/panel/store"
++)
++
++type PromoCodeView struct {
++	ID        int64  `json:"id"`
++	Code      string `json:"code"`
++	Kind      string `json:"kind" enum:"percent,fixed"`
++	Value     int64  `json:"value"`
++	MaxUses   int64  `json:"max_uses"`
++	Used      int64  `json:"used"`
++	ExpiresAt *int64 `json:"expires_at"`
++	Active    bool   `json:"active"`
++	CreatedAt int64  `json:"created_at"`
++}
++
++type promoCodeBody struct {
++	Code      string `json:"code" minLength:"1" maxLength:"64"`
++	Kind      string `json:"kind" enum:"percent,fixed"`
++	Value     int64  `json:"value" minimum:"1"`
++	MaxUses   int64  `json:"max_uses" minimum:"0" default:"0" doc:"0 — без ограничения"`
++	ExpiresAt *int64 `json:"expires_at,omitempty" doc:"Unix timestamp; null — без срока"`
++	Active    bool   `json:"active"`
++}
++
++type promoCodeInput struct{ Body promoCodeBody }
++type promoCodePatchInput struct {
++	ID   int64 `path:"id" minimum:"1"`
++	Body promoCodeBody
++}
++type promoCodeIDInput struct {
++	ID int64 `path:"id" minimum:"1"`
++}
++type promoCodesOutput struct{ Body []PromoCodeView }
++type promoCodeOutput struct{ Body PromoCodeView }
++
++func (h *handlers) registerPromoCodes() {
++	tag := []string{"promocodes"}
++	huma.Register(h.api, huma.Operation{OperationID: "list-promocodes", Method: http.MethodGet, Path: "/api/v1/promocodes", Summary: "Промокоды", Tags: tag}, h.listPromoCodes)
++	huma.Register(h.api, huma.Operation{OperationID: "create-promocode", Method: http.MethodPost, Path: "/api/v1/promocodes", Summary: "Создать промокод", Tags: tag, DefaultStatus: http.StatusCreated}, h.createPromoCode)
++	huma.Register(h.api, huma.Operation{OperationID: "update-promocode", Method: http.MethodPatch, Path: "/api/v1/promocodes/{id}", Summary: "Изменить промокод", Tags: tag}, h.updatePromoCode)
++	huma.Register(h.api, huma.Operation{OperationID: "delete-promocode", Method: http.MethodDelete, Path: "/api/v1/promocodes/{id}", Summary: "Удалить промокод", Tags: tag, DefaultStatus: http.StatusNoContent}, h.deletePromoCode)
++}
++
++func (b promoCodeBody) check() error {
++	b.Code = strings.TrimSpace(b.Code)
++	if b.Code == "" {
++		return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.code", Message: "code_blank"})
++	}
++	if b.Kind != "percent" && b.Kind != "fixed" {
++		return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.kind", Message: "kind_invalid"})
++	}
++	if b.Kind == "percent" && b.Value > 100 {
++		return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.value", Message: "percent_too_large"})
++	}
++	return nil
++}
++
++func scanPromo(rows *sql.Rows) (PromoCodeView, error) {
++	var v PromoCodeView
++	var expires int64
++	var active int64
++	if err := rows.Scan(&v.ID, &v.Code, &v.Kind, &v.Value, &v.MaxUses, &v.Used, &expires, &active, &v.CreatedAt); err != nil {
++		return v, err
++	}
++	if expires != 0 {
++		v.ExpiresAt = &expires
++	}
++	v.Active = active != 0
++	return v, nil
++}
++
++func (h *handlers) listPromoCodes(ctx context.Context, _ *struct{}) (*promoCodesOutput, error) {
++	rows, err := h.d.Store.DB.QueryContext(ctx, `SELECT id, code, kind, value, max_uses, used, COALESCE(expires_at, 0), active, created_at FROM promo_codes ORDER BY id DESC`)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++	out := &promoCodesOutput{Body: []PromoCodeView{}}
++	for rows.Next() {
++		v, err := scanPromo(rows)
++		if err != nil {
++			return nil, err
++		}
++		out.Body = append(out.Body, v)
++	}
++	if err := rows.Err(); err != nil {
++		return nil, err
++	}
++	return out, nil
++}
++
++func (h *handlers) createPromoCode(ctx context.Context, in *promoCodeInput) (*promoCodeOutput, error) {
++	b := in.Body
++	b.Code = strings.ToUpper(strings.TrimSpace(b.Code))
++	if err := b.check(); err != nil {
++		return nil, err
++	}
++	now := h.d.Now().Unix()
++	res, err := h.d.Store.DB.ExecContext(ctx, `INSERT INTO promo_codes(code, kind, value, max_uses, expires_at, active, created_at) VALUES(?,?,?,?,?,?,?)`,
++		b.Code, b.Kind, b.Value, b.MaxUses, nullableUnix(b.ExpiresAt), boolInt(b.Active), now)
++	if err != nil {
++		if store.IsUnique(err) {
++			return nil, huma.Error409Conflict("code_taken", &huma.ErrorDetail{Location: "body.code", Message: "code_taken"})
++		}
++		return nil, err
++	}
++	id, _ := res.LastInsertId()
++	h.audit(ctx, sessionOf(ctx).AdminID, "promocode.create", "promocode", strconv.FormatInt(id, 10), map[string]any{"code": b.Code})
++	return h.getPromoCode(ctx, id)
++}
++
++func (h *handlers) updatePromoCode(ctx context.Context, in *promoCodePatchInput) (*promoCodeOutput, error) {
++	b := in.Body
++	b.Code = strings.ToUpper(strings.TrimSpace(b.Code))
++	if err := b.check(); err != nil {
++		return nil, err
++	}
++	res, err := h.d.Store.DB.ExecContext(ctx, `UPDATE promo_codes SET code=?, kind=?, value=?, max_uses=?, expires_at=?, active=? WHERE id=?`,
++		b.Code, b.Kind, b.Value, b.MaxUses, nullableUnix(b.ExpiresAt), boolInt(b.Active), in.ID)
++	if err != nil {
++		if store.IsUnique(err) {
++			return nil, huma.Error409Conflict("code_taken", &huma.ErrorDetail{Location: "body.code", Message: "code_taken"})
++		}
++		return nil, err
++	}
++	n, _ := res.RowsAffected()
++	if n == 0 {
++		return nil, huma.Error404NotFound("not_found")
++	}
++	h.audit(ctx, sessionOf(ctx).AdminID, "promocode.update", "promocode", strconv.FormatInt(in.ID, 10), nil)
++	return h.getPromoCode(ctx, in.ID)
++}
++
++func (h *handlers) deletePromoCode(ctx context.Context, in *promoCodeIDInput) (*struct{}, error) {
++	res, err := h.d.Store.DB.ExecContext(ctx, `DELETE FROM promo_codes WHERE id=?`, in.ID)
++	if err != nil {
++		return nil, err
++	}
++	n, _ := res.RowsAffected()
++	if n == 0 {
++		return nil, huma.Error404NotFound("not_found")
++	}
++	h.audit(ctx, sessionOf(ctx).AdminID, "promocode.delete", "promocode", strconv.FormatInt(in.ID, 10), nil)
++	return nil, nil
++}
++
++func (h *handlers) getPromoCode(ctx context.Context, id int64) (*promoCodeOutput, error) {
++	row := h.d.Store.DB.QueryRowContext(ctx, `SELECT id, code, kind, value, max_uses, used, COALESCE(expires_at, 0), active, created_at FROM promo_codes WHERE id=?`, id)
++	var v PromoCodeView
++	var expires int64
++	var active int64
++	if err := row.Scan(&v.ID, &v.Code, &v.Kind, &v.Value, &v.MaxUses, &v.Used, &expires, &active, &v.CreatedAt); err != nil {
++		if err == sql.ErrNoRows {
++			return nil, huma.Error404NotFound("not_found")
++		}
++		return nil, err
++	}
++	if expires != 0 {
++		v.ExpiresAt = &expires
++	}
++	v.Active = active != 0
++	return &promoCodeOutput{Body: v}, nil
++}
++
++func nullableUnix(v *int64) any {
++	if v == nil {
++		return nil
++	}
++	return *v
++}
++
++func boolInt(v bool) int64 {
++	if v {
++		return 1
++	}
++	return 0
++}
+diff --git a/internal/panel/api/api.go b/internal/panel/api/api.go
+--- a/internal/panel/api/api.go
++++ b/internal/panel/api/api.go
+@@ -100,6 +100,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
+ 	h.registerPools()
+ 	h.registerPackages()
++	h.registerPromoCodes()
+ 	h.registerAudit()
+ 	return noStore(mux), api, nil
+ }
+diff --git a/web/src/admin/router.tsx b/web/src/admin/router.tsx
+--- a/web/src/admin/router.tsx
++++ b/web/src/admin/router.tsx
+@@ -68,6 +68,7 @@ export function createAppRouter(queryClient: QueryClient) {
+   const payments = createRoute({ getParentRoute: () => app, path: "/payments", component: page(() => import("./pages/payments"), "PaymentsPage") });
++  const promoCodes = createRoute({ getParentRoute: () => app, path: "/promocodes", component: page(() => import("./pages/promocodes"), "PromoCodesPage") });
++  const themes = createRoute({ getParentRoute: () => app, path: "/themes", component: page(() => import("./pages/themes"), "ThemesPage") });
+   const apiDocs = createRoute({ getParentRoute: () => app, path: "/settings/api", component: page(() => import("./pages/api"), "ApiPage") });
+@@ -73,7 +74,7 @@ export function createAppRouter(queryClient: QueryClient) {
+-  const routeTree = root.addChildren([login, app.addChildren([dashboard, users, tariffs, inbounds, nodes, payments, telegram, apiDocs, apiDocsOld, settings])]);
++  const routeTree = root.addChildren([login, app.addChildren([dashboard, users, tariffs, inbounds, nodes, payments, telegram, promoCodes, themes, apiDocs, apiDocsOld, settings])]);
+diff --git a/web/src/admin/shell.tsx b/web/src/admin/shell.tsx
+--- a/web/src/admin/shell.tsx
++++ b/web/src/admin/shell.tsx
+@@ -1,7 +1,7 @@
+ import { ArrowUpCircle, Bot, LayoutDashboard, LogOut, MoreHorizontal, Network, Server, SlidersHorizontal, Tag, Users, Wallet } from "lucide-react";
++// Promo codes and themes are intentionally separate admin sections.
+@@ -11,6 +11,8 @@ const NAV = [
+   { to: "/payments", key: "payments", icon: Wallet },
++  { to: "/promocodes", key: "promocodes", icon: Tag },
++  { to: "/themes", key: "themes", icon: SlidersHorizontal },
+   { to: "/telegram", key: "telegram", icon: Bot },
+diff --git a/web/src/admin/pages/promocodes.tsx b/web/src/admin/pages/promocodes.tsx
+new file mode 100644
+--- /dev/null
++++ b/web/src/admin/pages/promocodes.tsx
+@@ -0,0 +1,222 @@
++import { useEffect, useState } from "react";
++import { basePath } from "../../api/client";
++
++type Promo = { id:number; code:string; kind:"percent"|"fixed"; value:number; max_uses:number; used:number; expires_at:number|null; active:boolean; created_at:number };
++const empty={code:"",kind:"percent" as const,value:10,max_uses:0,expires_at:null as number|null,active:true};
++
++async function json<T>(url:string, init?:RequestInit):Promise<T>{
++  const r=await fetch(basePath+url,{credentials:"same-origin",headers:{"Content-Type":"application/json",...(init?.headers||{})},...init});
++  if(!r.ok) throw new Error((await r.json().catch(()=>({}))).detail||`HTTP ${r.status}`);
++  return r.status===204 ? undefined as T : r.json();
++}
++
++export function PromoCodesPage(){
++  const [items,setItems]=useState<Promo[]>([]);
++  const [form,setForm]=useState(empty);
++  const [editing,setEditing]=useState<number|null>(null);
++  const [error,setError]=useState("");
++  const load=()=>json<Promo[]>("/api/v1/promocodes").then(setItems).catch(e=>setError(String(e.message||e)));
++  useEffect(()=>{void load()},[]);
++  const save=async()=>{
++    setError("");
++    try{
++      const url=editing?`/api/v1/promocodes/${editing}`:"/api/v1/promocodes";
++      const method=editing?"PATCH":"POST";
++      await json(url,{method,body:JSON.stringify(form)});
++      setForm(empty);setEditing(null);await load();
++    }catch(e){setError(String((e as Error).message||e))}
++  };
++  const remove=async(id:number)=>{if(!confirm("Удалить промокод?"))return;await json(`/api/v1/promocodes/${id}`,{method:"DELETE"});await load()};
++  return <section className="page">
++    <div className="topbar"><div><div className="page-title">Промокоды</div><div className="page-sub">Управление скидочными кодами</div></div></div>
++    <div className="card glass">
++      <div className="card-head"><div><div className="card-title">{editing?"Изменить":"Новый промокод"}</div></div></div>
++      <div className="promo-form">
++        <input className="field" placeholder="PROMO2026" value={form.code} onChange={e=>setForm({...form,code:e.target.value.toUpperCase()})}/>
++        <select className="field" value={form.kind} onChange={e=>setForm({...form,kind:e.target.value as Promo["kind"]})}><option value="percent">Процент</option><option value="fixed">Фиксированная скидка</option></select>
++        <input className="field" type="number" min="1" value={form.value} onChange={e=>setForm({...form,value:Number(e.target.value)})}/>
++        <input className="field" type="number" min="0" value={form.max_uses} onChange={e=>setForm({...form,max_uses:Number(e.target.value)})} placeholder="Лимит использований, 0 = без лимита"/>
++        <input className="field" type="datetime-local" onChange={e=>setForm({...form,expires_at:e.target.value?Math.floor(new Date(e.target.value).getTime()/1000):null})}/>
++        <label className="check-row"><input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})}/> Активен</label>
++        <button className="btn btn-primary" onClick={()=>void save()}>{editing?"Сохранить":"Создать"}</button>
++        {editing?<button className="btn btn-ghost" onClick={()=>{setEditing(null);setForm(empty)}}>Отмена</button>:null}
++      </div>
++      {error?<div className="form-error">{error}</div>:null}
++    </div>
++    <div className="card glass"><div className="card-head"><div className="card-title">Коды</div></div>
++      <div className="row-list">{items.map(p=><div className="promo-row" key={p.id}><div><b>{p.code}</b><div className="muted">{p.kind==="percent"?`${p.value}%`:`${p.value} ед.`} · использовано {p.used}{p.max_uses?` / ${p.max_uses}`:""}</div></div><span className={`pill ${p.active?"ok":"off"}`}>{p.active?"активен":"выкл."}</span><button className="btn btn-sm btn-glass" onClick={()=>{setEditing(p.id);setForm({code:p.code,kind:p.kind,value:p.value,max_uses:p.max_uses,expires_at:p.expires_at,active:p.active})}}>Изменить</button><button className="btn btn-sm danger" onClick={()=>void remove(p.id)}>Удалить</button></div>)}</div>
++    </div>
++  </section>
++}
+diff --git a/web/src/admin/pages/themes.tsx b/web/src/admin/pages/themes.tsx
+new file mode 100644
+--- /dev/null
++++ b/web/src/admin/pages/themes.tsx
+@@ -0,0 +1,82 @@
++import { useEffect, useState } from "react";
++
++const themes={
++  dawn:{name:"Dawn",bg:"#fbf1e8",ink:"#161a24",accent:"#f07a2e"},
++  midnight:{name:"Midnight",bg:"#11151d",ink:"#f4f6fa",accent:"#8ab4ff"},
++  mint:{name:"Mint",bg:"#edf8f2",ink:"#17231d",accent:"#2f9e6b"},
++} as const;
++type Theme=keyof typeof themes;
++
++function apply(name:Theme){
++  const t=themes[name];
++  document.documentElement.style.setProperty("--bg",t.bg);
++  document.documentElement.style.setProperty("--ink-900",t.ink);
++  document.documentElement.style.setProperty("--mikan-500",t.accent);
++  document.documentElement.style.setProperty("--mikan-600",t.accent);
++  localStorage.setItem("mikan-theme",name);
++}
++
++export function ThemesPage(){
++  const [theme,setTheme]=useState<Theme>((localStorage.getItem("mikan-theme") as Theme)||"dawn");
++  useEffect(()=>apply(theme),[]);
++  return <section className="page">
++    <div className="topbar"><div><div className="page-title">Темы</div><div className="page-sub">Внешний вид панели сохраняется в браузере</div></div></div>
++    <div className="card glass"><div className="card-head"><div className="card-title">Цветовая тема</div></div>
++      <div className="theme-grid">{(Object.keys(themes) as Theme[]).map(k=><button key={k} className={`theme-card ${theme===k?"selected":""}`} onClick={()=>{setTheme(k);apply(k)}}><span className="theme-preview" style={{background:themes[k].bg,borderColor:themes[k].accent}}><i style={{background:themes[k].accent}}/></span><b>{themes[k].name}</b></button>)}</div>
++    </div>
++  </section>
++}
+diff --git a/web/src/i18n/ru.json b/web/src/i18n/ru.json
+--- a/web/src/i18n/ru.json
++++ b/web/src/i18n/ru.json
+@@ -17,6 +17,8 @@
+     "overview": "Обзор",
+     "users": "Пользователи",
+     "tariffs": "Тарифы",
++    "promocodes": "Промокоды",
++    "themes": "Темы",
+     "inbounds": "Подключения",
+diff --git a/web/src/i18n/en.json b/web/src/i18n/en.json
+--- a/web/src/i18n/en.json
++++ b/web/src/i18n/en.json
+@@ -17,6 +17,8 @@
+     "overview": "Overview",
+     "users": "Users",
+     "tariffs": "Plans",
++    "promocodes": "Promo codes",
++    "themes": "Themes",
+     "inbounds": "Protocols",
+diff --git a/web/src/styles/app.css b/web/src/styles/app.css
+--- a/web/src/styles/app.css
++++ b/web/src/styles/app.css
+@@ -1,3 +1,8 @@
+ @import "tailwindcss";
+ @import "./fonts.css";
++
++.promo-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
++.field{height:40px;border:1px solid var(--hairline);border-radius:12px;background:rgba(255,255,255,.72);padding:0 12px;color:var(--ink-900)}
++.check-row{display:flex;align-items:center;gap:8px;min-height:40px}
++.promo-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:12px 0}
++.form-error{margin-top:12px;color:var(--berry-600)}
++.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
++.theme-card{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--hairline);border-radius:16px;background:rgba(255,255,255,.45);text-align:left}
++.theme-card.selected{box-shadow:0 0 0 2px var(--mikan-500)}
++.theme-preview{display:grid;place-items:center;width:52px;height:36px;border:2px solid;border-radius:10px;background:var(--bg)}
++.theme-preview i{width:18px;height:18px;border-radius:50%}
++@media(max-width:700px){.promo-form,.theme-grid{grid-template-columns:1fr}.promo-row{grid-template-columns:1fr auto}}
