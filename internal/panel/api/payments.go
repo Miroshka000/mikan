@@ -15,10 +15,12 @@ import (
 )
 
 type PaymentSettingsView struct {
-	Enabled            bool `json:"enabled" doc:"Продажа подписок: выключено — бот и Mini App ничего не продают, новые счета не создаются, уже открытые засчитываются"`
-	Stars              bool `json:"stars" doc:"Telegram Stars: нужен только запущенный бот"`
-	AllowNew           bool `json:"allow_new" doc:"Новые люди могут купить подписку в боте; иначе — только продление"`
-	RenewResetsTraffic bool `json:"renew_resets_traffic" doc:"Оплаченное продление обнуляет трафик и начинает новый период; иначе только добавляет срок"`
+	Enabled            bool   `json:"enabled" doc:"Продажа подписок: выключено — бот и Mini App ничего не продают, новые счета не создаются, уже открытые засчитываются"`
+	Stars              bool   `json:"stars" doc:"Telegram Stars: нужен только запущенный бот"`
+	AllowNew           bool   `json:"allow_new" doc:"Новые люди могут купить подписку в боте; иначе — только продление"`
+	RenewResetsTraffic bool   `json:"renew_resets_traffic" doc:"Оплаченное продление обнуляет трафик и начинает новый период; иначе только добавляет срок"`
+	TrialTariffID      *int64 `json:"trial_tariff_id" doc:"Тариф пробного периода: один раз на Telegram-аккаунт без подписки и оплат, кнопка в приветствии бота; null — пробного периода нет. Работает и при выключенной продаже"`
+	Trials             int64  `json:"trials" doc:"Сколько пробных подписок выдано"`
 	Available          struct {
 		Stars  bool     `json:"stars"`
 		Addons []string `json:"addons" doc:"Адаптеры маркетплейса, которые принимают оплату прямо сейчас"`
@@ -33,10 +35,11 @@ type paymentSettingsOutput struct{ Body PaymentSettingsView }
 
 type patchPaymentSettingsInput struct {
 	Body struct {
-		Enabled            *bool `json:"enabled,omitempty"`
-		Stars              *bool `json:"stars,omitempty"`
-		AllowNew           *bool `json:"allow_new,omitempty"`
-		RenewResetsTraffic *bool `json:"renew_resets_traffic,omitempty"`
+		Enabled            *bool  `json:"enabled,omitempty"`
+		Stars              *bool  `json:"stars,omitempty"`
+		AllowNew           *bool  `json:"allow_new,omitempty"`
+		RenewResetsTraffic *bool  `json:"renew_resets_traffic,omitempty"`
+		TrialTariffID      *int64 `json:"trial_tariff_id,omitempty" minimum:"0" doc:"Тариф пробного периода; 0 — выключить"`
 	}
 }
 
@@ -97,6 +100,12 @@ func (h *handlers) paymentSettings(ctx context.Context) (PaymentSettingsView, er
 		return PaymentSettingsView{}, err
 	}
 	v := PaymentSettingsView{Enabled: c.Enabled, Stars: c.Stars, AllowNew: c.AllowNew, RenewResetsTraffic: c.RenewResetsTraffic}
+	if t, ok := h.d.Billing.TrialTariff(ctx); ok {
+		v.TrialTariffID = &t.ID
+	}
+	if v.Trials, err = h.d.Store.Q.CountTrials(ctx); err != nil {
+		return v, err
+	}
 	av := h.d.Billing.Available(ctx)
 	v.Available.Stars, v.Available.Addons = av.Stars, av.Addons
 	if v.Available.Addons == nil {
@@ -135,11 +144,19 @@ func (h *handlers) updatePaymentSettings(ctx context.Context, in *patchPaymentSe
 			*dst = *v
 		}
 	}
+	if b.TrialTariffID != nil {
+		if id := *b.TrialTariffID; id != 0 {
+			if t, err := h.d.Store.Q.GetTariff(ctx, id); err != nil || t.Archived != 0 {
+				return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.trial_tariff_id", Message: "tariff_not_found"})
+			}
+		}
+		c.TrialTariffID = *b.TrialTariffID
+	}
 	if err := settings.Set(ctx, h.d.Settings, billing.KeyConfig, c); err != nil {
 		return nil, err
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "payments.settings", "", "", map[string]any{"enabled": c.Enabled, "stars": c.Stars,
-		"allow_new": c.AllowNew, "renew_resets_traffic": c.RenewResetsTraffic})
+		"allow_new": c.AllowNew, "renew_resets_traffic": c.RenewResetsTraffic, "trial_tariff_id": c.TrialTariffID})
 	v, err := h.paymentSettings(ctx)
 	if err != nil {
 		return nil, err

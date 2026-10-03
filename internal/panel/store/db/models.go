@@ -372,6 +372,13 @@ type TrafficPool struct {
 	CreatedAt int64
 }
 
+type Trial struct {
+	TgID      int64
+	UserID    sql.NullInt64
+	TariffID  sql.NullInt64
+	CreatedAt int64
+}
+
 type User struct {
 	ID            int64
 	Name          string

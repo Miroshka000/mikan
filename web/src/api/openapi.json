@@ -1204,6 +1204,18 @@
         ],
         "type": "object"
       },
+      "Enable-promocodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
       "ErrorDetail": {
         "additionalProperties": false,
         "properties": {
@@ -2728,6 +2740,12 @@
           },
           "stars": {
             "type": "boolean"
+          },
+          "trial_tariff_id": {
+            "description": "Тариф пробного периода; 0 — выключить",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -2975,6 +2993,19 @@
           "stars": {
             "description": "Telegram Stars: нужен только запущенный бот",
             "type": "boolean"
+          },
+          "trial_tariff_id": {
+            "description": "Тариф пробного периода: один раз на Telegram-аккаунт без подписки и оплат, кнопка в приветствии бота; null — пробного периода нет. Работает и при выключенной продаже",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "trials": {
+            "description": "Сколько пробных подписок выдано",
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -2982,6 +3013,8 @@
           "stars",
           "allow_new",
           "renew_resets_traffic",
+          "trial_tariff_id",
+          "trials",
           "available",
           "on_sale",
           "moving"
@@ -3304,6 +3337,398 @@
         "required": [
           "ok",
           "checked_at"
+        ],
+        "type": "object"
+      },
+      "PromoBody": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "currency": {
+            "description": "Для fixed: RUB или XTR; RUB — копейки, XTR — Stars. Для остальных типов не используется.",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 500,
+            "type": "string"
+          },
+          "discount_ttl": {
+            "description": "Срок действия резерва скидки в секундах; 0 = 30 минут",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "ends_at": {
+            "description": "Unix time в секундах; значение не может быть в прошлом",
+            "format": "int64",
+            "type": "integer"
+          },
+          "first_purchase_only": {
+            "type": "boolean"
+          },
+          "max_discount": {
+            "description": "Максимальная скидка в минимальных единицах оплаты: RUB — копейки, XTR — Stars",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "max_uses": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "min_order": {
+            "description": "Минимальная сумма заказа в минимальных единицах оплаты: RUB — копейки, XTR — Stars",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 120,
+            "type": "string"
+          },
+          "new_users_only": {
+            "type": "boolean"
+          },
+          "per_user_limit": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pool_id": {
+            "description": "Пул для бонусного трафика; без значения — основной трафик",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "starts_at": {
+            "description": "Unix time в секундах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tariff_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "days",
+              "traffic",
+              "percent",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "description": "days: дни; traffic: байты (минимум 1 GiB); percent: проценты 1-100; fixed: сумма в минимальных единицах оплаты",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "description",
+          "type",
+          "value",
+          "currency",
+          "per_user_limit",
+          "discount_ttl",
+          "min_order",
+          "max_discount",
+          "tariff_ids",
+          "first_purchase_only",
+          "new_users_only",
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "PromoCodeView": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "discount_ttl": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "first_purchase_only": {
+            "type": "boolean"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_discount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_uses": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "min_order": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "new_users_only": {
+            "type": "boolean"
+          },
+          "per_user_limit": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pool_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tariff_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "days",
+              "traffic",
+              "percent",
+              "fixed"
+            ],
+            "type": "string"
+          },
+          "used_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "value": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "type",
+          "value",
+          "currency",
+          "used_count",
+          "per_user_limit",
+          "discount_ttl",
+          "min_order",
+          "max_discount",
+          "tariff_ids",
+          "first_purchase_only",
+          "new_users_only",
+          "enabled",
+          "status",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "PromoListOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromoCodeView"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
+      "PromoRedemptionView": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "days": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "discount_amount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "final_amount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "original_amount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "payment_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "promo_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "redeemed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "tg_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "promo_id",
+          "tg_id",
+          "status",
+          "redeemed_at",
+          "days",
+          "bytes",
+          "discount_amount",
+          "original_amount",
+          "final_amount",
+          "currency",
+          "code"
+        ],
+        "type": "object"
+      },
+      "PromoRedemptionsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PromoRedemptionView"
+            },
+            "type": "array"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
+      "PromoStatsView": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "bonus_bytes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "bonus_days": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "discount_amount": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "discount_orders": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "promo_codes": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "successful_activations": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "promo_codes",
+          "active",
+          "successful_activations",
+          "bonus_days",
+          "bonus_bytes",
+          "discount_orders",
+          "discount_amount"
         ],
         "type": "object"
       },
@@ -7251,6 +7676,325 @@
         "summary": "Доступные пресеты подключений",
         "tags": [
           "inbounds"
+        ]
+      }
+    },
+    "/api/v1/promocodes": {
+      "get": {
+        "operationId": "list-promocodes",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoListOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Промокоды",
+        "tags": [
+          "promocodes"
+        ]
+      },
+      "post": {
+        "operationId": "create-promocode",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoCodeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Создать промокод",
+        "tags": [
+          "promocodes"
+        ]
+      }
+    },
+    "/api/v1/promocodes/redemptions": {
+      "get": {
+        "operationId": "list-promocode-redemptions",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoRedemptionsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "История промокодов",
+        "tags": [
+          "promocodes"
+        ]
+      }
+    },
+    "/api/v1/promocodes/stats": {
+      "get": {
+        "operationId": "promocode-stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoStatsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Статистика промокодов",
+        "tags": [
+          "promocodes"
+        ]
+      }
+    },
+    "/api/v1/promocodes/{id}": {
+      "delete": {
+        "operationId": "delete-promocode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить промокод",
+        "tags": [
+          "promocodes"
+        ]
+      },
+      "put": {
+        "operationId": "update-promocode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoCodeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить промокод",
+        "tags": [
+          "promocodes"
+        ]
+      }
+    },
+    "/api/v1/promocodes/{id}/enabled": {
+      "post": {
+        "operationId": "enable-promocode",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Enable-promocodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromoCodeView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Включить или выключить промокод",
+        "tags": [
+          "promocodes"
         ]
       }
     },

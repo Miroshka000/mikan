@@ -271,3 +271,27 @@ func (b *Bot) Paid(ctx context.Context, p db.Payment, u db.User, created bool) {
 	}, nil)
 	b.freshMenu(out, chat, "")
 }
+
+// takeTrial gives the chat its free trial and says what it got; a chat that had one (or
+// is a customer) is told why not.
+func (b *Bot) takeTrial(ctx context.Context, w *words, chat int64) (string, *Keyboard) {
+	home := &Keyboard{[][]Button{{{Text: w.back, CallbackData: "m"}}}}
+	if b.d.Billing == nil {
+		return html.EscapeString(w.trialOff), home
+	}
+	u, err := b.d.Billing.Trial(ctx, chat)
+	switch {
+	case errors.Is(err, billing.ErrTrialUsed):
+		return html.EscapeString(w.trialUsed), home
+	case errors.Is(err, billing.ErrTrialOff):
+		return html.EscapeString(w.trialOff), home
+	case err != nil:
+		b.d.Log.Warn("telegram: trial", "tg", chat, "err", err)
+		return html.EscapeString(w.payUnavailable), home
+	}
+	what := u.Name
+	if t, err := b.d.Store.Q.GetTariff(ctx, u.TariffID.Int64); err == nil {
+		what = billing.Describe(t, b.lang(ctx))
+	}
+	return fmt.Sprintf(html.EscapeString(w.trialDone), html.EscapeString(what)), &Keyboard{[][]Button{{{Text: w.trialOpen, CallbackData: "m"}}}}
+}

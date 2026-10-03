@@ -763,6 +763,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/promocodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Промокоды */
+        get: operations["list-promocodes"];
+        put?: never;
+        /** Создать промокод */
+        post: operations["create-promocode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promocodes/redemptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** История промокодов */
+        get: operations["list-promocode-redemptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promocodes/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Статистика промокодов */
+        get: operations["promocode-stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promocodes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Изменить промокод */
+        put: operations["update-promocode"];
+        post?: never;
+        /** Удалить промокод */
+        delete: operations["delete-promocode"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/promocodes/{id}/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Включить или выключить промокод */
+        post: operations["enable-promocode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -1687,6 +1774,9 @@ export interface components {
             last_seen: string;
             online: boolean;
         };
+        "Enable-promocodeRequest": {
+            enabled: boolean;
+        };
         ErrorDetail: {
             /** @description Where the error occurred, e.g. 'body.items[3].tags' or 'path.thing-id' */
             location?: string;
@@ -2248,6 +2338,11 @@ export interface components {
             enabled?: boolean;
             renew_resets_traffic?: boolean;
             stars?: boolean;
+            /**
+             * Format: int64
+             * @description Тариф пробного периода; 0 — выключить
+             */
+            trial_tariff_id?: number;
         };
         PatchSettingsInputBody: {
             app_branding?: boolean;
@@ -2342,6 +2437,16 @@ export interface components {
             renew_resets_traffic: boolean;
             /** @description Telegram Stars: нужен только запущенный бот */
             stars: boolean;
+            /**
+             * Format: int64
+             * @description Тариф пробного периода: один раз на Telegram-аккаунт без подписки и оплат, кнопка в приветствии бота; null — пробного периода нет. Работает и при выключенной продаже
+             */
+            trial_tariff_id: number | null;
+            /**
+             * Format: int64
+             * @description Сколько пробных подписок выдано
+             */
+            trials: number;
         };
         PaymentSettingsViewAvailableStruct: {
             /** @description Адаптеры маркетплейса, которые принимают оплату прямо сейчас */
@@ -2453,6 +2558,152 @@ export interface components {
             /** @description Адрес, который видят сайты */
             ip?: string;
             ok: boolean;
+        };
+        PromoBody: {
+            code: string;
+            /** @description Для fixed: RUB или XTR; RUB — копейки, XTR — Stars. Для остальных типов не используется. */
+            currency: string;
+            description: string;
+            /**
+             * Format: int64
+             * @description Срок действия резерва скидки в секундах; 0 = 30 минут
+             */
+            discount_ttl: number;
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description Unix time в секундах; значение не может быть в прошлом
+             */
+            ends_at?: number;
+            first_purchase_only: boolean;
+            /**
+             * Format: int64
+             * @description Максимальная скидка в минимальных единицах оплаты: RUB — копейки, XTR — Stars
+             */
+            max_discount: number;
+            /** Format: int64 */
+            max_uses?: number;
+            /**
+             * Format: int64
+             * @description Минимальная сумма заказа в минимальных единицах оплаты: RUB — копейки, XTR — Stars
+             */
+            min_order: number;
+            name: string;
+            new_users_only: boolean;
+            /** Format: int64 */
+            per_user_limit: number;
+            /**
+             * Format: int64
+             * @description Пул для бонусного трафика; без значения — основной трафик
+             */
+            pool_id?: number;
+            /**
+             * Format: int64
+             * @description Unix time в секундах
+             */
+            starts_at?: number;
+            tariff_ids: number[];
+            /** @enum {string} */
+            type: "days" | "traffic" | "percent" | "fixed";
+            /**
+             * Format: int64
+             * @description days: дни; traffic: байты (минимум 1 GiB); percent: проценты 1-100; fixed: сумма в минимальных единицах оплаты
+             */
+            value: number;
+        };
+        PromoCodeView: {
+            code: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            created_by?: number;
+            currency: string;
+            description: string;
+            /** Format: int64 */
+            discount_ttl: number;
+            enabled: boolean;
+            /** Format: date-time */
+            ends_at?: string;
+            first_purchase_only: boolean;
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            max_discount: number;
+            /** Format: int64 */
+            max_uses?: number;
+            /** Format: int64 */
+            min_order: number;
+            name: string;
+            new_users_only: boolean;
+            /** Format: int64 */
+            per_user_limit: number;
+            /** Format: int64 */
+            pool_id?: number;
+            /** Format: date-time */
+            starts_at?: string;
+            status: string;
+            tariff_ids: number[];
+            /** @enum {string} */
+            type: "days" | "traffic" | "percent" | "fixed";
+            /** Format: int64 */
+            used_count: number;
+            /** Format: int64 */
+            value: number;
+        };
+        PromoListOutputBody: {
+            items: components["schemas"]["PromoCodeView"][];
+            /** Format: int64 */
+            total: number;
+        };
+        PromoRedemptionView: {
+            /** Format: int64 */
+            bytes: number;
+            code: string;
+            currency: string;
+            /** Format: int64 */
+            days: number;
+            /** Format: int64 */
+            discount_amount: number;
+            /** Format: date-time */
+            expires_at?: string;
+            /** Format: int64 */
+            final_amount: number;
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            original_amount: number;
+            /** Format: int64 */
+            payment_id?: number;
+            /** Format: int64 */
+            promo_id: number;
+            /** Format: date-time */
+            redeemed_at: string;
+            status: string;
+            /** Format: int64 */
+            tg_id: number;
+            /** Format: int64 */
+            user_id?: number;
+        };
+        PromoRedemptionsOutputBody: {
+            items: components["schemas"]["PromoRedemptionView"][];
+            /** Format: int64 */
+            total: number;
+        };
+        PromoStatsView: {
+            /** Format: int64 */
+            active: number;
+            /** Format: int64 */
+            bonus_bytes: number;
+            /** Format: int64 */
+            bonus_days: number;
+            /** Format: int64 */
+            discount_amount: number;
+            /** Format: int64 */
+            discount_orders: number;
+            /** Format: int64 */
+            promo_codes: number;
+            /** Format: int64 */
+            successful_activations: number;
         };
         RecoveryOutputBody: {
             /** @description Показываются один раз */
@@ -4846,6 +5097,231 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Info"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-promocodes": {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoListOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-promocode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoCodeView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-promocode-redemptions": {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoRedemptionsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "promocode-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoStatsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-promocode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromoBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoCodeView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-promocode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "enable-promocode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Enable-promocodeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromoCodeView"];
                 };
             };
             /** @description Error */

@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Undo2 } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
-import { qk, usePaymentSettings } from "../../api/hooks";
+import { qk, usePaymentSettings, useTariffs } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { useToast } from "../../components/toast";
 import { QueryBoundary, StaleNotice } from "../../components/query";
@@ -221,7 +221,8 @@ function PaymentRow({ p, provider, onRefund }: { p: Payment; provider: string; o
 function SettingsCard({ s }: { s: Settings }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const { draft: form, setDraft: setForm } = useDraft({ stars: s.stars, allowNew: s.allow_new, resetTraffic: s.renew_resets_traffic });
+  const tariffs = useTariffs();
+  const { draft: form, setDraft: setForm } = useDraft({ stars: s.stars, allowNew: s.allow_new, resetTraffic: s.renew_resets_traffic, trial: s.trial_tariff_id ?? 0 });
   const save = useMutation({
     mutationFn: (body: Schemas["PatchPaymentSettingsInputBody"]) => unwrap(api.PATCH("/api/v1/payments/settings", { body })),
     onSuccess: (v) => {
@@ -231,9 +232,9 @@ function SettingsCard({ s }: { s: Settings }) {
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ stars: form.stars, allow_new: form.allowNew, renew_resets_traffic: form.resetTraffic });
+    save.mutate({ stars: form.stars, allow_new: form.allowNew, renew_resets_traffic: form.resetTraffic, trial_tariff_id: form.trial });
   };
-  const set = (k: keyof typeof form) => (v: boolean) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: "stars" | "allowNew" | "resetTraffic") => (v: boolean) => setForm((f) => ({ ...f, [k]: v }));
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
       <form onSubmit={submit} noValidate>
@@ -269,6 +270,21 @@ function SettingsCard({ s }: { s: Settings }) {
             <div className="text-xs text-[var(--ink-500)]">{form.resetTraffic ? t("payments.resetTrafficOn") : t("payments.resetTrafficOff")}</div>
           </div>
           <Switch checked={form.resetTraffic} onChange={set("resetTraffic")} label={t("payments.resetTraffic")} />
+        </div>
+        <div className="mb-4 border-t border-[var(--hairline)] pt-4">
+          <label htmlFor="pay-trial" className="text-[13px] font-semibold">
+            {t("payments.trial")}
+          </label>
+          <div className="mb-2 text-xs text-[var(--ink-500)]">{t("payments.trialSub")}</div>
+          <select id="pay-trial" className="input" value={form.trial} onChange={(e) => setForm((f) => ({ ...f, trial: Number(e.target.value) }))}>
+            <option value={0}>{t("payments.trialOff")}</option>
+            {(tariffs.data ?? []).map((tr) => (
+              <option key={tr.id} value={tr.id}>
+                {tr.name}
+              </option>
+            ))}
+          </select>
+          {s.trials ? <div className="mt-1 text-xs text-[var(--ink-500)]">{t("payments.trialsGiven", { n: s.trials })}</div> : null}
         </div>
         <Button type="submit" variant="primary" loading={save.isPending}>
           {t("common.save")}

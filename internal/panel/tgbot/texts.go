@@ -32,6 +32,7 @@ type words struct {
 	// The shop.
 	buy, buyTitle, renewTitle, payHow, payStars, payCard, payCrypto, payAddon, payButton, invoice, payNew, payRenew string
 	notForSale, payUnavailable, tooManyInvoices, payStale, paidNew, paidRenew                                       string
+	trial, trialDone, trialUsed, trialOff, trialOpen                                                                string
 	poolOut                                                                                                         string // a traffic pool used up
 
 	// Traffic packages.
@@ -89,6 +90,11 @@ var ru = words{
 	payUnavailable:  "Оплата сейчас недоступна. Попробуйте позже или напишите в поддержку.",
 	tooManyInvoices: "Слишком много счетов подряд. Попробуйте через час.",
 	payStale:        "Счёт устарел. Откройте меню бота и оплатите заново.",
+	trial:           "🎁 Попробовать бесплатно",
+	trialDone:       "🎁 Пробная подписка готова: %s.\n\nСсылка и инструкции — в меню.",
+	trialUsed:       "Пробный период даётся один раз, и только тем, у кого ещё не было подписки.",
+	trialOff:        "Пробный период сейчас недоступен.",
+	trialOpen:       "📱 Открыть подписку",
 	paidNew:         "✅ Оплата получена — подписка «%s» готова (тариф «%s»).\n\nДобавьте ссылку в приложение:\n<code>%s</code>",
 	paidRenew:       "✅ Оплата получена — подписка «%s» продлена до %s.",
 	poolOut:         "закончился до сброса",
@@ -152,6 +158,11 @@ var en = words{
 	payUnavailable:  "Payment is not available right now. Try later or message support.",
 	tooManyInvoices: "Too many invoices in a row. Try again in an hour.",
 	payStale:        "The invoice is out of date. Open the bot's menu and pay again.",
+	trial:           "🎁 Try it for free",
+	trialDone:       "🎁 Your trial subscription is ready: %s.\n\nThe link and instructions are in the menu.",
+	trialUsed:       "The trial is given once, and only to people who have not had a subscription.",
+	trialOff:        "The trial is not available now.",
+	trialOpen:       "📱 Open the subscription",
 	paidNew:         "✅ Payment received — subscription “%s” is ready (plan “%s”).\n\nAdd the link to your app:\n<code>%s</code>",
 	paidRenew:       "✅ Payment received — subscription “%s” is renewed until %s.",
 	poolOut:         "used up until the reset",

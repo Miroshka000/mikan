@@ -56,6 +56,9 @@ type Config struct {
 	// RenewResetsTraffic: a paid renewal also starts a new traffic period; off, the
 	// counter keeps running and only the term is extended.
 	RenewResetsTraffic bool `json:"renew_resets_traffic"`
+	// TrialTariffID is the tariff of the free trial a Telegram account may take once in
+	// the bot; 0: no trial. It works with selling off too: it takes no payment.
+	TrialTariffID int64 `json:"trial_tariff_id,omitempty"`
 }
 
 // DefaultConfig: selling off until the admin turns it on; then Stars (it needs nothing but
