@@ -194,14 +194,24 @@ func (s *Service) Available(ctx context.Context) Available {
 	}
 }
 
-// Offer is a tariff on sale with the prices the available providers take.
+// Offer is a tariff on sale with the terms a buyer can pay for now. Stars and Rub are
+// the first term's.
 type Offer struct {
 	Tariff db.Tariff
-	Stars  int64 // 0: not for Stars
-	Rub    int64 // kopecks; 0: not for rubles
+	Terms  []OfferTerm // at least one
+	Stars  int64       // 0: not for Stars
+	Rub    int64       // kopecks; 0: not for rubles
 }
 
-// Offers lists the tariffs a buyer can pay for now.
+// OfferTerm is a term of a tariff on sale with the prices the available providers take.
+type OfferTerm struct {
+	Days  int64
+	Stars int64 // 0: not for Stars
+	Rub   int64 // kopecks; 0: not for rubles
+}
+
+// Offers lists the tariffs a buyer can pay for now, each with the terms that have a price
+// an available provider takes.
 func (s *Service) Offers(ctx context.Context) ([]Offer, Available, error) {
 	av := s.Available(ctx)
 	if !av.Any() {
@@ -211,22 +221,48 @@ func (s *Service) Offers(ctx context.Context) ([]Offer, Available, error) {
 	if err != nil {
 		return nil, av, err
 	}
+	rows, err := s.d.Store.Q.ListAllTariffTerms(ctx)
+	if err != nil {
+		return nil, av, err
+	}
 	var out []Offer
 	for _, t := range ts {
 		o := Offer{Tariff: t}
-		o.Stars, o.Rub = av.prices(t.PriceStars, t.PriceRub)
-		if o.Stars > 0 || o.Rub > 0 {
+		for _, term := range domain.TariffTerms(t, rows) {
+			ot := OfferTerm{Days: term.Days}
+			ot.Stars, ot.Rub = av.prices(term.PriceStars, term.PriceRub)
+			if ot.Stars > 0 || ot.Rub > 0 {
+				o.Terms = append(o.Terms, ot)
+			}
+		}
+		if len(o.Terms) > 0 {
+			o.Stars, o.Rub = o.Terms[0].Stars, o.Terms[0].Rub
 			out = append(out, o)
 		}
 	}
 	return out, av, nil
 }
 
-// InvoiceRequest: who buys which tariff with what. UserID 0 buys a new subscription.
+// Term is the offer's term of so many days; nil days: the first one.
+func (o Offer) Term(days *int64) (OfferTerm, bool) {
+	if days == nil {
+		return o.Terms[0], true
+	}
+	for _, t := range o.Terms {
+		if t.Days == *days {
+			return t, true
+		}
+	}
+	return OfferTerm{}, false
+}
+
+// InvoiceRequest: who buys which tariff for which term with what. UserID 0 buys a new
+// subscription.
 type InvoiceRequest struct {
 	TgID      int64
 	UserID    int64
 	TariffID  int64
+	TermDays  *int64 // the term's days; nil: the tariff's first term
 	Provider  string
 	PromoCode string
 }
@@ -250,10 +286,22 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 	if err != nil {
 		return db.Payment{}, err
 	}
-	amount, currency, ok := s.Available(ctx).price(req.Provider, t.PriceStars, t.PriceRub)
+	terms, err := domain.TermsOf(ctx, q, t)
+	if err != nil {
+		return db.Payment{}, err
+	}
+	term := terms[0]
+	if req.TermDays != nil {
+		var found bool
+		if term, found = domain.FindTerm(terms, *req.TermDays); !found {
+			return db.Payment{}, ErrNotForSale
+		}
+	}
+	amount, currency, ok := s.Available(ctx).price(req.Provider, term.PriceStars, term.PriceRub)
 	if !ok {
 		return db.Payment{}, ErrProviderOff
 	}
+	termDays := sql.NullInt64{Int64: term.Days, Valid: true}
 	kind := "renew"
 	if req.UserID == 0 {
 		kind = "new"
@@ -282,11 +330,14 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 				UserID: req.UserID, Since: now.Add(-invoiceReuse).Unix()})
 		},
 		func(q *db.Queries, existing db.Payment) (bool, error) {
+			if existing.TermDays != termDays {
+				return false, nil
+			}
 			return s.matchesOpenPayment(ctx, q, existing, amount, req.PromoCode)
 		},
 		func(q *db.Queries) (db.Payment, error) {
 			p, err := q.CreatePayment(ctx, db.CreatePaymentParams{Provider: req.Provider, Payload: secure.Token(32), TgID: req.TgID, Kind: kind, UserID: userID,
-				TariffID: tariffID, TariffName: t.Name, Amount: amount, Currency: currency, CreatedAt: now.Unix()})
+				TariffID: tariffID, TariffName: t.Name, Amount: amount, Currency: currency, CreatedAt: now.Unix(), TermDays: termDays})
 			if err != nil {
 				return db.Payment{}, err
 			}
@@ -309,7 +360,7 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 		return p, nil
 	}
 	lang, _ := s.d.Settings.Lang(ctx)
-	return s.openPayment(ctx, p, t.Name, Describe(t, lang))
+	return s.openPayment(ctx, p, t.Name, Describe(t, term.Days, lang))
 }
 
 // lockBuyer lets one invoice of a Telegram account be opened at a time, the provider's
@@ -486,9 +537,60 @@ func (s *Service) openInvoice(ctx context.Context, p db.Payment, title, desc str
 	return sql.NullString{}, "", ErrProviderOff
 }
 
-// Describe is a tariff in a line, "30 days · 100 GB · 3 devices", in lang ("en", else
-// Russian): invoices, the bot and the Mini App show it.
-func Describe(t db.Tariff, lang string) string {
+// Describe is tariff t bought for a term of days in a line, "30 days · 100 GB · 3
+// devices", in lang ("en", else Russian): invoices, the bot and the Mini App show it.
+func Describe(t db.Tariff, days int64, lang string) string {
+	return TermLabel(t, days, lang) + " · " + DescribeLimits(t, lang)
+}
+
+// TermLabel is a term of tariff t in a few words: "30 days", "3 months" for a tariff that
+// ends on a billing day, "no end date".
+func TermLabel(t db.Tariff, days int64, lang string) string {
+	pick := func(ru, en string) string {
+		if lang == "en" {
+			return en
+		}
+		return ru
+	}
+	switch {
+	case days <= 0:
+		return pick("бессрочно", "no end date")
+	case t.BillingDay.Valid:
+		n := max(1, (days+15)/30) // domain.termMonths
+		if n == 1 {
+			return pick("1 мес.", "1 month")
+		}
+		return fmt.Sprintf(pick("%d мес.", "%d months"), n)
+	}
+	return fmt.Sprintf(pick("%d дн.", "%d days"), days)
+}
+
+// DescribeOffer is a tariff on sale in a line: Describe with its one term, or the range
+// of its terms, "7 days – 90 days · 100 GB · 3 devices".
+func DescribeOffer(o Offer, lang string) string {
+	if len(o.Terms) < 2 {
+		return Describe(o.Tariff, o.Tariff.DurationDays, lang)
+	}
+	var lo, hi int64 = -1, -1
+	forever := false
+	for _, t := range o.Terms {
+		if t.Days <= 0 {
+			forever = true
+			continue
+		}
+		if lo < 0 || t.Days < lo {
+			lo = t.Days
+		}
+		hi = max(hi, t.Days)
+	}
+	if forever {
+		hi = 0
+	}
+	return TermLabel(o.Tariff, lo, lang) + " – " + TermLabel(o.Tariff, hi, lang) + " · " + DescribeLimits(o.Tariff, lang)
+}
+
+// DescribeLimits is what tariff t gives whatever the term: "100 GB · 3 devices".
+func DescribeLimits(t db.Tariff, lang string) string {
 	en := lang == "en"
 	pick := func(ru, en_ string) string {
 		if en {
@@ -497,11 +599,6 @@ func Describe(t db.Tariff, lang string) string {
 		return ru
 	}
 	parts := []string{}
-	if t.DurationDays > 0 {
-		parts = append(parts, fmt.Sprintf(pick("%d дн.", "%d days"), t.DurationDays))
-	} else {
-		parts = append(parts, pick("бессрочно", "no end date"))
-	}
 	if t.TrafficLimit.Valid {
 		parts = append(parts, fmt.Sprintf(pick("%d ГБ", "%d GB"), t.TrafficLimit.Int64>>30))
 	} else {
@@ -530,6 +627,16 @@ func (s *Service) PreCheckout(ctx context.Context, tgID int64, payload, currency
 	t, err := s.d.Store.Q.GetTariff(ctx, p.TariffID.Int64)
 	if err != nil || t.Archived != 0 || t.OnSale == 0 {
 		return ErrNotForSale
+	}
+	// A term taken off the tariff since the invoice is no longer sold either.
+	if p.TermDays.Valid {
+		terms, err := domain.TermsOf(ctx, s.d.Store.Q, t)
+		if err != nil {
+			return err
+		}
+		if _, ok := domain.FindTerm(terms, p.TermDays.Int64); !ok {
+			return ErrNotForSale
+		}
 	}
 	return nil
 }
@@ -773,7 +880,7 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		if pay.Kind == "renew" && pay.UserID.Valid {
 			userID = pay.UserID.Int64
 		}
-		if u, created, err = s.d.Users.Purchase(ctx, q, userID, pay.TariffID.Int64, buyerName(ctx, q, pay.TgID), reset); err != nil {
+		if u, created, err = s.d.Users.Purchase(ctx, q, userID, pay.TariffID.Int64, pay.TermDays, buyerName(ctx, q, pay.TgID), reset); err != nil {
 			return err
 		}
 		if created {

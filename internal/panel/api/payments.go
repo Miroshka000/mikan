@@ -50,6 +50,7 @@ type PaymentView struct {
 	UserID     *int64     `json:"user_id,omitempty"`
 	UserName   string     `json:"user_name,omitempty"`
 	TariffName string     `json:"tariff_name"`
+	TermDays   *int64     `json:"term_days,omitempty" doc:"Купленный срок в днях (0 — бессрочно); нет у пакетов и у платежей до сроков в тарифах"`
 	Amount     int64      `json:"amount" doc:"Stars или копейки"`
 	Currency   string     `json:"currency" enum:"XTR,RUB"`
 	ExternalID string     `json:"external_id,omitempty" doc:"Номер платежа у провайдера"`
@@ -157,7 +158,7 @@ func unixPtr(n sql.NullInt64) *time.Time {
 
 // paymentView is a payment without the names; the list's query brings those along.
 func paymentView(p db.Payment) PaymentView {
-	v := PaymentView{ID: p.ID, Provider: p.Provider, Kind: p.Kind, Status: p.Status, TgID: p.TgID, TariffName: p.TariffName, Amount: p.Amount,
+	v := PaymentView{ID: p.ID, Provider: p.Provider, Kind: p.Kind, Status: p.Status, TgID: p.TgID, TariffName: p.TariffName, TermDays: ptrInt(p.TermDays.Int64, p.TermDays.Valid), Amount: p.Amount,
 		Currency: p.Currency, ExternalID: p.ExternalID.String, Error: p.Error, CreatedAt: time.Unix(p.CreatedAt, 0).UTC(),
 		PaidAt: unixPtr(p.PaidAt), AppliedAt: unixPtr(p.AppliedAt), RefundedAt: unixPtr(p.RefundedAt)}
 	if p.UserID.Valid {

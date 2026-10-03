@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -26,15 +27,37 @@ type TariffView struct {
 	PriceStars    *int64      `json:"price_stars" doc:"Цена в Telegram Stars; null — не продаётся за Stars"`
 	PriceRub      *int64      `json:"price_rub" doc:"Цена в копейках (ЮKassa, CryptoBot); null — не продаётся за рубли"`
 	OnSale        bool        `json:"on_sale" doc:"Продаётся в боте и Mini App"`
+	Terms         []TermView  `json:"terms" doc:"Сроки, на которые продаётся тариф, по порядку; первый — тот же, что duration_days, price_stars и price_rub"`
 	Pools         []PoolLimit `json:"pools" doc:"Лимиты пулов трафика; пул не в списке — без лимита"`
 	Sort          int64       `json:"sort"`
 }
 
-func viewTariff(t db.Tariff) TariffView {
-	return TariffView{ID: t.ID, Name: t.Name, TrafficLimit: ptrInt(t.TrafficLimit.Int64, t.TrafficLimit.Valid),
+// TermView is one term a tariff is sold for.
+type TermView struct {
+	Days       int64  `json:"days" doc:"0 — бессрочно; с днём оплаты — месяцы по 30 дней"`
+	PriceStars *int64 `json:"price_stars" doc:"Цена в Telegram Stars; null — не за Stars"`
+	PriceRub   *int64 `json:"price_rub" doc:"Цена в копейках; null — не за рубли"`
+}
+
+func viewTariff(t db.Tariff, terms []db.TariffTerm) TariffView {
+	v := TariffView{ID: t.ID, Name: t.Name, TrafficLimit: ptrInt(t.TrafficLimit.Int64, t.TrafficLimit.Valid),
 		DurationDays: t.DurationDays, DeviceLimit: ptrInt(t.DeviceLimit.Int64, t.DeviceLimit.Valid),
 		ResetStrategy: t.ResetStrategy, BillingDay: ptrInt(t.BillingDay.Int64, t.BillingDay.Valid), PriceLabel: t.PriceLabel, Sort: t.Sort,
 		PriceStars: ptrInt(t.PriceStars.Int64, t.PriceStars.Valid), PriceRub: ptrInt(t.PriceRub.Int64, t.PriceRub.Valid), OnSale: t.OnSale != 0}
+	for _, term := range domain.TariffTerms(t, terms) {
+		v.Terms = append(v.Terms, TermView{Days: term.Days, PriceStars: ptrInt(term.PriceStars.Int64, term.PriceStars.Valid), PriceRub: ptrInt(term.PriceRub.Int64, term.PriceRub.Valid)})
+	}
+	return v
+}
+
+type termBody struct {
+	Days       int64  `json:"days" minimum:"0" maximum:"3650" doc:"0 — бессрочно; с днём оплаты — месяцы по 30 дней"`
+	PriceStars *int64 `json:"price_stars,omitempty" minimum:"1" maximum:"10000" doc:"Цена в Telegram Stars"`
+	PriceRub   *int64 `json:"price_rub,omitempty" minimum:"100" maximum:"100000000" doc:"Цена в копейках: 19900 — 199 ₽"`
+}
+
+func (b termBody) term() domain.Term {
+	return domain.Term{Days: b.Days, PriceStars: nullable(b.PriceStars), PriceRub: nullable(b.PriceRub)}
 }
 
 type tariffBody struct {
@@ -48,6 +71,7 @@ type tariffBody struct {
 	PriceStars    *int64      `json:"price_stars,omitempty" minimum:"1" maximum:"10000" doc:"Цена в Telegram Stars"`
 	PriceRub      *int64      `json:"price_rub,omitempty" minimum:"100" maximum:"100000000" doc:"Цена в копейках: 19900 — 199 ₽"`
 	OnSale        bool        `json:"on_sale,omitempty" doc:"Продавать в боте и Mini App; нужна хотя бы одна цена"`
+	Terms         []termBody  `json:"terms,omitempty" maxItems:"12" doc:"Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений"`
 	Pools         []PoolLimit `json:"pools,omitempty" maxItems:"100" doc:"Лимиты пулов трафика; не передан — без изменений"`
 	Sort          int64       `json:"sort,omitempty"`
 }
@@ -76,9 +100,13 @@ func (h *handlers) listTariffs(ctx context.Context, _ *struct{}) (*tariffsOutput
 	if err != nil {
 		return nil, err
 	}
+	terms, err := h.d.Store.Q.ListAllTariffTerms(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := &tariffsOutput{Body: make([]TariffView, 0, len(rows))}
 	for _, t := range rows {
-		v := viewTariff(t)
+		v := viewTariff(t, terms)
 		v.Pools = tariffPoolsOf(pools, t.ID)
 		out.Body = append(out.Body, v)
 	}
@@ -96,18 +124,23 @@ func nullable(p *int64) sql.NullInt64 {
 // refused pool list leaves the tariff, and the limits it had, as they were.
 func (h *handlers) createTariff(ctx context.Context, in *tariffInput) (*tariffOutput, error) {
 	b := in.Body
-	if err := b.check(); err != nil {
+	terms, err := b.terms(nil)
+	if err != nil {
 		return nil, err
 	}
+	first := terms[0]
 	var t db.Tariff
 	// The catalog holds no invariant across rows (a pool deleted meanwhile fails on its
 	// foreign key): READ COMMITTED.
-	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+	err = h.d.Store.TxRC(ctx, func(q *db.Queries) error {
 		var err error
 		t, err = q.CreateTariff(ctx, db.CreateTariffParams{Name: strings.TrimSpace(b.Name), TrafficLimit: nullable(b.TrafficLimit),
-			DurationDays: b.DurationDays, DeviceLimit: nullable(b.DeviceLimit), ResetStrategy: b.ResetStrategy, PriceLabel: b.PriceLabel,
-			Sort: b.Sort, CreatedAt: h.d.Now().Unix(), BillingDay: nullable(b.BillingDay), PriceStars: nullable(b.PriceStars), PriceRub: nullable(b.PriceRub), OnSale: domain.Flag(b.OnSale)})
-		if err != nil || b.Pools == nil {
+			DurationDays: first.Days, DeviceLimit: nullable(b.DeviceLimit), ResetStrategy: b.ResetStrategy, PriceLabel: b.PriceLabel,
+			Sort: b.Sort, CreatedAt: h.d.Now().Unix(), BillingDay: nullable(b.BillingDay), PriceStars: first.PriceStars, PriceRub: first.PriceRub, OnSale: domain.Flag(b.OnSale)})
+		if err != nil {
+			return err
+		}
+		if err := domain.SetTariffTerms(ctx, q, t.ID, terms); err != nil || b.Pools == nil {
 			return err
 		}
 		return setTariffPools(ctx, q, t.ID, b.Pools)
@@ -121,16 +154,31 @@ func (h *handlers) createTariff(ctx context.Context, in *tariffInput) (*tariffOu
 
 func (h *handlers) updateTariff(ctx context.Context, in *tariffUpdateInput) (*tariffOutput, error) {
 	b := in.Body
-	if err := b.check(); err != nil {
-		return nil, err
-	}
 	var t db.Tariff
 	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
-		var err error
+		// Without terms in the body the tariff keeps the ones after the first.
+		var kept []domain.Term
+		if b.Terms == nil {
+			rows, err := q.ListTariffTerms(ctx, in.ID)
+			if err != nil {
+				return err
+			}
+			for _, r := range rows {
+				kept = append(kept, domain.Term{Days: r.Days, PriceStars: r.PriceStars, PriceRub: r.PriceRub})
+			}
+		}
+		terms, err := b.terms(kept)
+		if err != nil {
+			return err
+		}
+		first := terms[0]
 		t, err = q.UpdateTariff(ctx, db.UpdateTariffParams{Name: strings.TrimSpace(b.Name), TrafficLimit: nullable(b.TrafficLimit),
-			DurationDays: b.DurationDays, DeviceLimit: nullable(b.DeviceLimit), ResetStrategy: b.ResetStrategy, PriceLabel: b.PriceLabel,
-			Sort: b.Sort, BillingDay: nullable(b.BillingDay), PriceStars: nullable(b.PriceStars), PriceRub: nullable(b.PriceRub), OnSale: domain.Flag(b.OnSale), ID: in.ID})
-		if err != nil || b.Pools == nil {
+			DurationDays: first.Days, DeviceLimit: nullable(b.DeviceLimit), ResetStrategy: b.ResetStrategy, PriceLabel: b.PriceLabel,
+			Sort: b.Sort, BillingDay: nullable(b.BillingDay), PriceStars: first.PriceStars, PriceRub: first.PriceRub, OnSale: domain.Flag(b.OnSale), ID: in.ID})
+		if err != nil {
+			return err
+		}
+		if err := domain.SetTariffTerms(ctx, q, t.ID, terms); err != nil || b.Pools == nil {
 			return err
 		}
 		return setTariffPools(ctx, q, t.ID, b.Pools)
@@ -157,12 +205,50 @@ func (h *handlers) archiveTariff(ctx context.Context, in *userIDInput) (*struct{
 	return nil, nil
 }
 
-// check: a tariff on sale needs a price to sell it for.
-func (b tariffBody) check() error {
-	if b.OnSale && b.PriceStars == nil && b.PriceRub == nil {
-		return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.on_sale", Message: "on_sale_no_price"})
+// terms are the tariff's terms after this body: the body's own, or the first from its
+// duration and prices followed by kept (the tariff's stored terms) after their first.
+// Days tell the terms apart; with several, each needs a price, and a tariff on sale needs
+// one at all.
+func (b tariffBody) terms(kept []domain.Term) ([]domain.Term, error) {
+	bad := func(loc, msg string) error {
+		return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: loc, Message: msg})
 	}
-	return nil
+	var terms []domain.Term
+	loc := "body.terms[%d]"
+	if b.Terms != nil {
+		if len(b.Terms) == 0 {
+			return nil, bad("body.terms", "terms_empty")
+		}
+		for _, t := range b.Terms {
+			terms = append(terms, t.term())
+		}
+	} else {
+		terms = []domain.Term{{Days: b.DurationDays, PriceStars: nullable(b.PriceStars), PriceRub: nullable(b.PriceRub)}}
+		if len(kept) > 1 {
+			terms = append(terms, kept[1:]...)
+		}
+		loc = "body.duration_days"
+	}
+	at := func(i int, field string) string {
+		if b.Terms == nil {
+			return loc
+		}
+		return fmt.Sprintf(loc, i) + "." + field
+	}
+	seen := map[int64]bool{}
+	for i, t := range terms {
+		if seen[t.Days] {
+			return nil, bad(at(i, "days"), "term_days_repeat")
+		}
+		seen[t.Days] = true
+		if len(terms) > 1 && !t.PriceStars.Valid && !t.PriceRub.Valid {
+			return nil, bad(at(i, "price_rub"), "term_no_price")
+		}
+	}
+	if b.OnSale && !terms[0].PriceStars.Valid && !terms[0].PriceRub.Valid {
+		return nil, bad("body.on_sale", "on_sale_no_price")
+	}
+	return terms, nil
 }
 
 func (h *handlers) tariffOut(ctx context.Context, t db.Tariff) (*tariffOutput, error) {
@@ -170,7 +256,11 @@ func (h *handlers) tariffOut(ctx context.Context, t db.Tariff) (*tariffOutput, e
 	if err != nil {
 		return nil, err
 	}
-	v := viewTariff(t)
+	terms, err := h.d.Store.Q.ListTariffTerms(ctx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	v := viewTariff(t, terms)
 	v.Pools = tariffPoolsOf(pools, t.ID)
 	return &tariffOutput{Body: v}, nil
 }

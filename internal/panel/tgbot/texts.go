@@ -32,6 +32,7 @@ type words struct {
 	// The shop.
 	buy, buyTitle, renewTitle, payHow, payStars, payCard, payCrypto, payAddon, payButton, invoice, payNew, payRenew string
 	notForSale, payUnavailable, tooManyInvoices, payStale, paidNew, paidRenew                                       string
+	pickTerm, priceFrom                                                                                             string
 	poolOut                                                                                                         string // a traffic pool used up
 
 	// Traffic packages.
@@ -86,6 +87,8 @@ var ru = words{
 	payNew:          "подписка будет готова",
 	payRenew:        "подписка продлится",
 	notForSale:      "Этот тариф больше не продаётся.",
+	pickTerm:        "На какой срок?",
+	priceFrom:       "от %s",
 	payUnavailable:  "Оплата сейчас недоступна. Попробуйте позже или напишите в поддержку.",
 	tooManyInvoices: "Слишком много счетов подряд. Попробуйте через час.",
 	payStale:        "Счёт устарел. Откройте меню бота и оплатите заново.",
@@ -149,6 +152,8 @@ var en = words{
 	payNew:          "subscription is ready",
 	payRenew:        "subscription is renewed",
 	notForSale:      "This plan is no longer sold.",
+	pickTerm:        "For how long?",
+	priceFrom:       "from %s",
 	payUnavailable:  "Payment is not available right now. Try later or message support.",
 	tooManyInvoices: "Too many invoices in a row. Try again in an hour.",
 	payStale:        "The invoice is out of date. Open the bot's menu and pay again.",

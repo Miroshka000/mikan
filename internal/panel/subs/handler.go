@@ -301,6 +301,7 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 	var in struct {
 		InitData  string `json:"init_data"`
 		TariffID  int64  `json:"tariff_id"`
+		TermDays  *int64 `json:"term_days"` // the tariff's term; absent: its first
 		PackageID int64  `json:"package_id"`
 		Provider  string `json:"provider"`
 		Token     string `json:"token"`
@@ -346,12 +347,21 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 			fail(http.StatusInternalServerError, "internal")
 			return
 		}
+		// A tariff's terms, the first one also in the offer itself (as before terms).
+		type term struct {
+			Days        int64  `json:"days"`
+			Label       string `json:"label"`
+			Description string `json:"description"`
+			Stars       int64  `json:"stars,omitempty"`
+			Rub         int64  `json:"rub,omitempty"`
+		}
 		type offer struct {
 			ID          int64  `json:"id"`
 			Name        string `json:"name"`
 			Description string `json:"description"`
 			Stars       int64  `json:"stars,omitempty"`
 			Rub         int64  `json:"rub,omitempty"`
+			Terms       []term `json:"terms"`
 		}
 		// Marketplace adapters take rubles; the buyer sees each by its own name.
 		type addon struct {
@@ -370,7 +380,12 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 			out.Addons = append(out.Addons, addon{Provider: billing.AddonPrefix + id, Name: h.shop.AddonName(ctx, id, cfg.Lang)})
 		}
 		for _, o := range offers {
-			out.Offers = append(out.Offers, offer{ID: o.Tariff.ID, Name: o.Tariff.Name, Description: billing.Describe(o.Tariff, cfg.Lang), Stars: o.Stars, Rub: o.Rub})
+			v := offer{ID: o.Tariff.ID, Name: o.Tariff.Name, Description: billing.DescribeOffer(o, cfg.Lang), Stars: o.Stars, Rub: o.Rub}
+			for _, t := range o.Terms {
+				v.Terms = append(v.Terms, term{Days: t.Days, Label: billing.TermLabel(o.Tariff, t.Days, cfg.Lang),
+					Description: billing.Describe(o.Tariff, t.Days, cfg.Lang), Stars: t.Stars, Rub: t.Rub})
+			}
+			out.Offers = append(out.Offers, v)
 		}
 		_ = json.NewEncoder(w).Encode(out)
 		return
@@ -383,7 +398,7 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 	if in.PackageID != 0 {
 		p, err = h.shop.PackageInvoice(ctx, billing.PackageRequest{TgID: tgID, UserID: userID, PackageID: in.PackageID, Provider: billing.AdapterOf(in.Provider), PromoCode: in.PromoCode})
 	} else {
-		p, err = h.shop.Invoice(ctx, billing.InvoiceRequest{TgID: tgID, UserID: userID, TariffID: in.TariffID, Provider: billing.AdapterOf(in.Provider), PromoCode: in.PromoCode})
+		p, err = h.shop.Invoice(ctx, billing.InvoiceRequest{TgID: tgID, UserID: userID, TariffID: in.TariffID, TermDays: in.TermDays, Provider: billing.AdapterOf(in.Provider), PromoCode: in.PromoCode})
 	}
 	if err != nil {
 		if strings.TrimSpace(in.PromoCode) != "" && promoError(err) {
@@ -420,6 +435,7 @@ func (h *Handler) miniAppPromo(w http.ResponseWriter, r *http.Request) {
 		Token        string `json:"token"`
 		Code         string `json:"code"`
 		TariffID     int64  `json:"tariff_id"`
+		TermDays     *int64 `json:"term_days"`
 		PackageID    int64  `json:"package_id"`
 		Provider     string `json:"provider"`
 		ValidateOnly bool   `json:"validate_only"`
@@ -457,7 +473,7 @@ func (h *Handler) miniAppPromo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if in.ValidateOnly {
-		tariffID, amount, currency, err := h.miniAppPromoOrder(r.Context(), userID, in.TariffID, in.PackageID, billing.AdapterOf(in.Provider))
+		tariffID, amount, currency, err := h.miniAppPromoOrder(r.Context(), userID, in.TariffID, in.TermDays, in.PackageID, billing.AdapterOf(in.Provider))
 		if err != nil {
 			fail(http.StatusConflict, "promo_unavailable")
 			return
@@ -488,7 +504,9 @@ func (h *Handler) miniAppPromo(w http.ResponseWriter, r *http.Request) {
 	fail(http.StatusConflict, "promo_unavailable")
 }
 
-func (h *Handler) miniAppPromoOrder(ctx context.Context, userID, tariffID, packageID int64, provider string) (int64, int64, string, error) {
+// miniAppPromoOrder is the order a discount code is checked against: the tariff, and the
+// price of the chosen term (days nil: the first) or of the package, with provider.
+func (h *Handler) miniAppPromoOrder(ctx context.Context, userID, tariffID int64, days *int64, packageID int64, provider string) (int64, int64, string, error) {
 	if h.shop == nil || provider == "" {
 		return 0, 0, "", promo.ErrUnavailable
 	}
@@ -516,7 +534,11 @@ func (h *Handler) miniAppPromoOrder(ctx context.Context, userID, tariffID, packa
 	}
 	for _, offer := range offers {
 		if offer.Tariff.ID == tariffID {
-			if amount, currency, ok := promoOrderPrice(provider, offer.Stars, offer.Rub); ok {
+			t, ok := offer.Term(days)
+			if !ok {
+				break
+			}
+			if amount, currency, ok := promoOrderPrice(provider, t.Stars, t.Rub); ok {
 				return offer.Tariff.ID, amount, currency, nil
 			}
 		}

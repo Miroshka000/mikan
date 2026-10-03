@@ -306,4 +306,43 @@ func TestPaymentsOverHTTP(t *testing.T) {
 	if _, body := h.do(http.MethodGet, api+"/payments?status=applied", nil, nil); !strings.Contains(string(body), `"kind":"package"`) {
 		t.Fatalf("history: %s", body)
 	}
+
+	// The plan for several terms: the Mini App lists them, and pays for the one chosen.
+	termsBody := map[string]any{"name": "Месяц", "reset_strategy": sale.ResetStrategy, "duration_days": 30, "on_sale": true,
+		"terms": []map[string]any{{"days": 30, "price_rub": 19900}, {"days": 90, "price_rub": 49900}}}
+	if resp, body := h.do(http.MethodPut, api+"/tariffs/"+strconv.FormatInt(sale.ID, 10), termsBody, csrf); resp.StatusCode != http.StatusOK {
+		t.Fatalf("terms: %d %s", resp.StatusCode, body)
+	}
+	resp, body = h.do(http.MethodPost, shop, map[string]any{"init_data": initData(tgToken, 555, h.now)}, same)
+	var withTerms struct {
+		Offers []struct {
+			ID    int64 `json:"id"`
+			Rub   int64 `json:"rub"`
+			Terms []struct {
+				Days  int64  `json:"days"`
+				Label string `json:"label"`
+				Rub   int64  `json:"rub"`
+			} `json:"terms"`
+		} `json:"offers"`
+	}
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &withTerms) != nil || len(withTerms.Offers) != 1 || len(withTerms.Offers[0].Terms) != 2 ||
+		withTerms.Offers[0].Terms[1].Days != 90 || withTerms.Offers[0].Terms[1].Rub != 49900 || withTerms.Offers[0].Rub != 19900 || withTerms.Offers[0].Terms[1].Label == "" {
+		t.Fatalf("shop with terms: %d %s", resp.StatusCode, body)
+	}
+	resp, body = h.do(http.MethodPost, pay, map[string]any{"init_data": initData(tgToken, 555, h.now), "tariff_id": sale.ID, "term_days": 90, "provider": "addon:yookassa"}, same)
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &inv) != nil || inv.URL != "https://yoomoney.ru/checkout/yk-3" {
+		t.Fatalf("pay for 90 days: %d %s", resp.StatusCode, body)
+	}
+	yk.mu.Lock()
+	amount := yk.pays["yk-3"].Amount
+	yk.mu.Unlock()
+	if amount != 49900 {
+		t.Fatalf("90 days invoiced for %d", amount)
+	}
+	if resp, body := h.do(http.MethodPost, pay, map[string]any{"init_data": initData(tgToken, 555, h.now), "tariff_id": sale.ID, "term_days": 14, "provider": "addon:yookassa"}, same); resp.StatusCode == http.StatusOK {
+		t.Fatalf("a term the plan has not: %d %s", resp.StatusCode, body)
+	}
+	if _, body := h.do(http.MethodGet, api+"/payments?status=pending", nil, nil); !strings.Contains(string(body), `"term_days":90`) {
+		t.Fatalf("the payment's term: %s", body)
+	}
 }

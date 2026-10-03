@@ -91,6 +91,8 @@ type CreateInput struct {
 	Note     string
 	Tags     []string
 	TariffID int64
+	// TermDays is the term bought (a payment's); invalid: the tariff's own.
+	TermDays sql.NullInt64
 }
 
 func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
@@ -145,7 +147,7 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 		Name: strings.TrimSpace(in.Name), Contact: strings.TrimSpace(in.Contact), Note: in.Note, Tags: tags,
 		TariffID: sql.NullInt64{Int64: t.ID, Valid: true}, TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit,
 		ResetStrategy: t.ResetStrategy, PeriodDays: 30, PeriodStart: now,
-		ExpiresAt:  tariffExpiry(time.Unix(now, 0), durationTariff{t.DurationDays, t.BillingDay}),
+		ExpiresAt:  tariffExpiry(time.Unix(now, 0), durationTariff{termDays(t, in.TermDays), t.BillingDay}),
 		BillingDay: t.BillingDay, SubToken: secure.Token(24), SlotID: sql.NullInt64{Int64: slot.ID, Valid: true}, CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
@@ -158,14 +160,15 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 // together. userID 0 (or a user deleted since the invoice) makes a new subscription named
 // name. A renewal takes the tariff's limits, adds its term after the current one (from
 // now when that already ended) and turns the user on; resetTraffic also starts a new
-// traffic period (the payment buys a full quota). ErrNoSlots: refill and run again.
+// traffic period (the payment buys a full quota). term is the term bought, as it was
+// when bought (invalid: the tariff's own). ErrNoSlots: refill and run again.
 // The caller calls Changed after the commit.
-func (s *Users) Purchase(ctx context.Context, q *db.Queries, userID, tariffID int64, name string, resetTraffic bool) (u db.User, created bool, err error) {
+func (s *Users) Purchase(ctx context.Context, q *db.Queries, userID, tariffID int64, term sql.NullInt64, name string, resetTraffic bool) (u db.User, created bool, err error) {
 	if userID != 0 {
 		u, err = q.GetUser(ctx, userID)
 	}
 	if userID == 0 || errors.Is(err, sql.ErrNoRows) {
-		u, err = s.createTx(ctx, q, CreateInput{Name: name, Note: "Telegram", TariffID: tariffID}, true)
+		u, err = s.createTx(ctx, q, CreateInput{Name: name, Note: "Telegram", TariffID: tariffID, TermDays: term}, true)
 		return u, err == nil, err
 	}
 	if err != nil {
@@ -187,7 +190,7 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, userID, tariffID in
 	u, err = q.UpdateUser(ctx, db.UpdateUserParams{
 		Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: "active", TariffID: sql.NullInt64{Int64: t.ID, Valid: true},
 		TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit, ResetStrategy: t.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
-		ExpiresAt: tariffExpiry(base, durationTariff{t.DurationDays, billingDay}), Inbounds: u.Inbounds, BillingDay: billingDay,
+		ExpiresAt: tariffExpiry(base, durationTariff{termDays(t, term), billingDay}), Inbounds: u.Inbounds, BillingDay: billingDay,
 		UpdatedAt: now.Unix(), ID: u.ID,
 	})
 	if err != nil {

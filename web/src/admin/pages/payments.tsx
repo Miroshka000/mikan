@@ -11,7 +11,7 @@ import { Switch } from "../../components/switch";
 import { Button, EmptyState, ErrorState, PageHeader, Pill, Skeleton, Spinner } from "../../components/ui";
 import { t, tMaybe } from "../../i18n";
 import { useDraft } from "../../lib/draft";
-import { dateShort, money, num, time } from "../../lib/format";
+import { dateShort, days, money, num, time } from "../../lib/format";
 import { AddonsCard, addonName, useAddons } from "./payment-addons";
 
 type Settings = Schemas["PaymentSettingsView"];
@@ -191,7 +191,7 @@ function PaymentRow({ p, provider, onRefund }: { p: Payment; provider: string; o
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <b className="num text-[13px]">{money(p.amount, p.currency)}</b>
-          <span className="truncate text-[13px]">{p.tariff_name}</span>
+          <span className="truncate text-[13px]">{p.term_days != null ? `${p.tariff_name} · ${p.term_days ? days(p.term_days) : t("time.forever")}` : p.tariff_name}</span>
           <Pill tone={STATUS_TONE[p.status]}>{t(`payments.statuses.${p.status}`)}</Pill>
         </div>
         <div className="mt-1 text-xs text-[var(--ink-500)]">

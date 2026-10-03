@@ -7,7 +7,9 @@ import { Button } from "../components/ui";
 import { t, type Key } from "../i18n";
 import { rubles } from "../lib/format";
 
-export type Offer = { id: number; name: string; description: string; stars?: number; rub?: number };
+/** A term of a plan sold for several: its own price; label is "30 days", "3 months". */
+export type Term = { days: number; label: string; description: string; stars?: number; rub?: number };
+export type Offer = { id: number; name: string; description: string; stars?: number; rub?: number; terms?: Term[] };
 export type ShopData = {
   allow_new: boolean;
   providers: { stars: boolean };
@@ -70,12 +72,20 @@ export function Shop({
   promoCode?: string;
 }) {
   const [picked, setPicked] = useState<number | null>(offers.length === 1 ? offers[0]!.id : null);
+  // The chosen term of a plan sold for several; the first until another is chosen.
+  const [termDays, setTermDays] = useState<number | null>(null);
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState("");
   const [promoPreview, setPromoPreview] = useState<{ discount: number; final_amount: number; currency: string } | null>(null);
   const [opened, setOpened] = useState(false);
-  useEffect(() => { setError(""); setPromoPreview(null); }, [picked, promoCode]);
+  useEffect(() => { setError(""); setPromoPreview(null); }, [picked, termDays, promoCode]);
+  useEffect(() => setTermDays(null), [picked]);
   const offer = offers.find((o) => o.id === picked);
+  const terms = offer?.terms && offer.terms.length > 1 ? offer.terms : null;
+  const term = terms ? (terms.find((x) => x.days === termDays) ?? terms[0]!) : null;
+  // What is paid for: the chosen term's prices, or the offer's own.
+  const price = term ?? offer;
+  const order = { [field]: offer?.id, ...(term ? { term_days: term.days } : {}) };
   const failText = (code: string) => (field === "package_id" && code === "not_for_sale" ? t("sub.packageNotForSale") : t(FAIL[code] ?? "sub.shopFail"));
 
   const pay = async (provider: Provider) => {
@@ -87,7 +97,7 @@ export function Shop({
         const preview = await fetch(subRoot + "/tg/promo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ init_data: initData, token, code: promoCode, [field]: offer.id, provider, validate_only: true }),
+          body: JSON.stringify({ init_data: initData, token, code: promoCode, ...order, provider, validate_only: true }),
           cache: "no-store",
         });
         const result = (await preview.json().catch(() => ({}))) as { code?: string; discount?: number; final_amount?: number; currency?: string };
@@ -102,7 +112,7 @@ export function Shop({
       const r = await fetch(subRoot + "/tg/pay", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ init_data: initData, [field]: offer.id, provider, token, promo_code: promoCode }),
+        body: JSON.stringify({ init_data: initData, ...order, provider, token, promo_code: promoCode }),
         cache: "no-store",
       });
       const body = (await r.json().catch(() => ({}))) as { url?: string; code?: string };
@@ -123,10 +133,10 @@ export function Shop({
   };
 
   const methods: { id: Provider; label: string; price?: string }[] = [];
-  if (offer?.stars && data.providers.stars) methods.push({ id: "stars", label: t("sub.shopStars"), price: `⭐ ${offer.stars}` });
-  if (offer?.rub) {
+  if (price?.stars && data.providers.stars) methods.push({ id: "stars", label: t("sub.shopStars"), price: `⭐ ${price.stars}` });
+  if (price?.rub) {
     const adapters = [...(data.addons ?? [])].sort((a, b) => rank(a.provider) - rank(b.provider) || a.provider.localeCompare(b.provider));
-    for (const a of adapters) methods.push({ id: a.provider, label: KNOWN[a.provider] ? t(KNOWN[a.provider]!) : a.name, price: rubles(offer.rub) });
+    for (const a of adapters) methods.push({ id: a.provider, label: KNOWN[a.provider] ? t(KNOWN[a.provider]!) : a.name, price: rubles(price.rub) });
   }
 
   return (
@@ -139,12 +149,22 @@ export function Shop({
           <button key={o.id} type="button" role="radio" aria-checked={picked === o.id} className="opt" onClick={() => setPicked(o.id)}>
             <span className="flex items-center justify-between gap-2">
               <span className="font-semibold">{o.name}</span>
-              <span className="num text-[13px] text-[var(--ink-700)]">{o.rub ? rubles(o.rub) : `⭐ ${o.stars}`}</span>
+              <span className="num text-[13px] text-[var(--ink-700)]">{listPrice(o)}</span>
             </span>
             <span className="text-xs text-[var(--ink-500)]">{o.description}</span>
           </button>
         ))}
       </div>
+      {terms ? (
+        <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label={t("sub.shopPickTerm")}>
+          {terms.map((x) => (
+            <button key={x.days} type="button" role="radio" aria-checked={term?.days === x.days} className="opt flex-1" style={{ minWidth: 96 }} onClick={() => setTermDays(x.days)}>
+              <span className="font-semibold">{x.label}</span>
+              <span className="num text-xs text-[var(--ink-600)]">{x.rub ? rubles(x.rub) : `⭐ ${x.stars}`}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       {offer ? (
         <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, methods.length))}, minmax(0, 1fr))` }}>
           {methods.map((m, i) => (
@@ -172,4 +192,13 @@ export function Shop({
       ) : null}
     </section>
   );
+}
+
+/** The price a list shows: rubles when sold for them, else Stars; "from" the cheapest term
+ * of a plan sold for several. */
+function listPrice(o: Offer): string {
+  const terms = o.terms && o.terms.length > 1 ? o.terms : [o];
+  const rub = Math.min(...terms.map((x) => x.rub || Infinity));
+  const price = Number.isFinite(rub) ? rubles(rub) : `⭐ ${Math.min(...terms.map((x) => x.stars || Infinity))}`;
+  return terms.length > 1 ? t("sub.shopFrom", { price }) : price;
 }

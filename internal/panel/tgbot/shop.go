@@ -14,9 +14,12 @@ import (
 )
 
 // Callback data of the shop: b buy a new subscription, tn:<tariff> its tariff, pn:<tariff>:<p>
-// pay for it; r renew the shown one, t:<tariff>, py:<tariff>:<p>. <p> is s (Stars) or
-// a-<id> (a marketplace adapter); y and c are YooKassa's and CryptoBot's, short, and as
-// messages sent before 0.4.4 carry them for the built-in providers those adapters replaced.
+// pay for it; r renew the shown one, t:<tariff>, py:<tariff>:<p>. <tariff> is the tariff's
+// id, or <id>.<days> for one of its terms (a tariff sold for several); the id alone is its
+// first term, as on buttons sent before terms. <p> is s (Stars) or a-<id> (a marketplace
+// adapter); y and c are YooKassa's and CryptoBot's, short, and as messages sent before
+// 0.4.4 carry them for the built-in providers those adapters replaced. The longest,
+// py:<19 digits>.<4 digits>:a-<32>, is 62 bytes: Telegram takes 64.
 
 var providerCodes = map[string]string{"s": billing.Stars, "y": billing.AddonPrefix + "yookassa", "c": billing.AddonPrefix + "cryptobot"}
 
@@ -96,7 +99,8 @@ func (b *Bot) shopList(ctx context.Context, w *words, title, prefix, notice stri
 	}
 	rows := [][]Button{}
 	for _, o := range offers {
-		lines = append(lines, "• <b>"+html.EscapeString(o.Tariff.Name)+"</b> — "+html.EscapeString(billing.Describe(o.Tariff, lang)))
+		desc := billing.DescribeOffer(o, lang)
+		lines = append(lines, "• <b>"+html.EscapeString(o.Tariff.Name)+"</b> — "+html.EscapeString(desc))
 		rows = append(rows, []Button{{Text: o.Tariff.Name + " · " + w.cheapest(o), CallbackData: prefix + ":" + strconv.FormatInt(o.Tariff.ID, 10)}})
 	}
 	if len(offers) == 0 {
@@ -105,38 +109,98 @@ func (b *Bot) shopList(ctx context.Context, w *words, title, prefix, notice stri
 	return strings.Join(lines, "\n"), &Keyboard{append(rows, back)}
 }
 
-// cheapest is the price a list shows: rubles when sold for them, else Stars.
+// cheapest is the price a list shows: rubles when sold for them, else Stars; "from" the
+// cheapest term of a tariff sold for several.
 func (w *words) cheapest(o billing.Offer) string {
-	if o.Rub > 0 {
-		return w.price(o.Rub, "RUB")
+	terms := o.Terms
+	if len(terms) == 0 {
+		terms = []billing.OfferTerm{{Stars: o.Stars, Rub: o.Rub}}
 	}
-	return w.price(o.Stars, "XTR")
+	var rub, stars int64
+	for _, t := range terms {
+		if t.Rub > 0 && (rub == 0 || t.Rub < rub) {
+			rub = t.Rub
+		}
+		if t.Stars > 0 && (stars == 0 || t.Stars < stars) {
+			stars = t.Stars
+		}
+	}
+	price := w.price(stars, "XTR")
+	if rub > 0 {
+		price = w.price(rub, "RUB")
+	}
+	if len(terms) > 1 {
+		return fmt.Sprintf(w.priceFrom, price)
+	}
+	return price
 }
 
-// shopTariff: one tariff and a button per way to pay; prefix "py" (renew) or "pn" (new).
-func (b *Bot) shopTariff(ctx context.Context, w *words, id int64, prefix string, back []Button) (string, *Keyboard) {
+// tariffArg reads <id> or <id>.<days> from callback data; days is nil without them.
+func tariffArg(s string) (id int64, days *int64) {
+	idStr, daysStr, found := strings.Cut(s, ".")
+	id, _ = strconv.ParseInt(idStr, 10, 64)
+	if found {
+		if d, err := strconv.ParseInt(daysStr, 10, 64); err == nil && d >= 0 {
+			days = &d
+		}
+	}
+	return id, days
+}
+
+// shopTariff: one tariff and a button per way to pay. A tariff sold for several terms
+// shows its terms first, a button each. arg is <id> or <id>.<days>; prefix is the screen's
+// ("tn" new, "t" renew), pay the pay buttons' ("pn", "py").
+func (b *Bot) shopTariff(ctx context.Context, w *words, arg, prefix, pay string, back []Button) (string, *Keyboard) {
+	id, days := tariffArg(arg)
 	offers, av := b.offers(ctx)
+	lang := b.lang(ctx)
 	for _, o := range offers {
 		if o.Tariff.ID != id {
 			continue
 		}
-		text := "<b>" + html.EscapeString(o.Tariff.Name) + "</b>\n" + html.EscapeString(billing.Describe(o.Tariff, b.lang(ctx))) + "\n\n" + w.payHow
-		rows := w.payButtons(prefix+":"+strconv.FormatInt(id, 10)+":", o.Stars, o.Rub, av, b.addonName(ctx))
+		name := "<b>" + html.EscapeString(o.Tariff.Name) + "</b>\n"
+		ref := strconv.FormatInt(id, 10)
+		if days == nil && len(o.Terms) > 1 {
+			rows := [][]Button{}
+			for _, t := range o.Terms {
+				label := billing.TermLabel(o.Tariff, t.Days, lang) + " · " + w.cheapest(billing.Offer{Stars: t.Stars, Rub: t.Rub})
+				rows = append(rows, []Button{{Text: label, CallbackData: prefix + ":" + ref + "." + strconv.FormatInt(t.Days, 10)}})
+			}
+			return name + html.EscapeString(billing.DescribeLimits(o.Tariff, lang)) + "\n\n" + w.pickTerm, &Keyboard{append(rows, back)}
+		}
+		t, ok := o.Term(days)
+		if !ok {
+			break
+		}
+		if days != nil {
+			ref += "." + strconv.FormatInt(t.Days, 10)
+		}
+		text := name + html.EscapeString(billing.Describe(o.Tariff, t.Days, lang)) + "\n\n" + w.payHow
+		rows := w.payButtons(pay+":"+ref+":", t.Stars, t.Rub, av, b.addonName(ctx))
 		return text, &Keyboard{append(rows, back)}
 	}
 	return html.EscapeString(w.notForSale), &Keyboard{[][]Button{back}}
 }
 
+// shopBack is where the back button of a tariff screen leads: the term list of a tariff
+// sold for several when a term is shown, else the list of tariffs.
+func shopBack(w *words, prefix, arg, list string) []Button {
+	if id, _, found := strings.Cut(arg, "."); found {
+		return []Button{{Text: w.back, CallbackData: prefix + ":" + id}}
+	}
+	return []Button{{Text: w.back, CallbackData: list}}
+}
+
 // shopInvoice opens the invoice and shows its pay button. It runs when the chat's screen
 // is drawn, off the update loop: the provider may take seconds to answer.
 func (b *Bot) shopInvoice(ctx context.Context, w *words, chat, userID int64, arg string, back []Button) (string, *Keyboard) {
-	idStr, code, _ := strings.Cut(arg, ":")
-	id, _ := strconv.ParseInt(idStr, 10, 64)
+	ref, code, _ := strings.Cut(arg, ":")
+	id, days := tariffArg(ref)
 	provider, ok := providerOf(code)
 	if !ok || b.d.Billing == nil {
 		return html.EscapeString(w.payUnavailable), &Keyboard{[][]Button{back}}
 	}
-	p, err := b.d.Billing.Invoice(ctx, billing.InvoiceRequest{TgID: chat, UserID: userID, TariffID: id, Provider: provider})
+	p, err := b.d.Billing.Invoice(ctx, billing.InvoiceRequest{TgID: chat, UserID: userID, TariffID: id, TermDays: days, Provider: provider})
 	if err != nil {
 		return html.EscapeString(w.payError(err)), &Keyboard{[][]Button{back}}
 	}
@@ -144,7 +208,14 @@ func (b *Bot) shopInvoice(ctx context.Context, w *words, chat, userID int64, arg
 	if userID != 0 {
 		done = w.payRenew
 	}
-	text := fmt.Sprintf(w.invoice, html.EscapeString(p.TariffName), html.EscapeString(w.price(p.Amount, p.Currency)), done)
+	name := p.TariffName
+	if days != nil && p.TermDays.Valid {
+		// A tariff sold for several terms: the invoice says which one.
+		if t, err := b.d.Store.Q.GetTariff(ctx, id); err == nil {
+			name += " · " + billing.TermLabel(t, p.TermDays.Int64, b.lang(ctx))
+		}
+	}
+	text := fmt.Sprintf(w.invoice, html.EscapeString(name), html.EscapeString(w.price(p.Amount, p.Currency)), done)
 	return text, &Keyboard{[][]Button{{{Text: fmt.Sprintf(w.payButton, w.price(p.Amount, p.Currency)), URL: p.PayUrl}}, back}}
 }
 

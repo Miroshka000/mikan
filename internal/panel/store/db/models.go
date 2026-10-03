@@ -185,6 +185,7 @@ type Payment struct {
 	PaidAt     sql.NullInt64
 	AppliedAt  sql.NullInt64
 	RefundedAt sql.NullInt64
+	TermDays   sql.NullInt64
 }
 
 type PromoCode struct {
@@ -296,6 +297,15 @@ type TariffPool struct {
 	TariffID     int64
 	PoolID       int64
 	TrafficLimit int64
+}
+
+type TariffTerm struct {
+	ID         int64
+	TariffID   int64
+	Days       int64
+	PriceStars sql.NullInt64
+	PriceRub   sql.NullInt64
+	Sort       int64
 }
 
 type TgChat struct {

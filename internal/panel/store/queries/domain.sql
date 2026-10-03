@@ -19,6 +19,18 @@ SET name = $1, traffic_limit = $2, duration_days = $3, device_limit = $4, reset_
 WHERE id = $12
 RETURNING *;
 
+-- name: ListTariffTerms :many
+SELECT * FROM tariff_terms WHERE tariff_id = $1 ORDER BY sort, id;
+
+-- name: ListAllTariffTerms :many
+SELECT * FROM tariff_terms ORDER BY tariff_id, sort, id;
+
+-- name: DeleteTariffTerms :exec
+DELETE FROM tariff_terms WHERE tariff_id = $1;
+
+-- name: AddTariffTerm :exec
+INSERT INTO tariff_terms (tariff_id, days, price_stars, price_rub, sort) VALUES ($1, $2, $3, $4, $5);
+
 -- name: ArchiveTariff :execrows
 UPDATE tariffs SET archived = 1 WHERE id = $1;
 

@@ -10,6 +10,29 @@ import (
 	"database/sql"
 )
 
+const addTariffTerm = `-- name: AddTariffTerm :exec
+INSERT INTO tariff_terms (tariff_id, days, price_stars, price_rub, sort) VALUES ($1, $2, $3, $4, $5)
+`
+
+type AddTariffTermParams struct {
+	TariffID   int64
+	Days       int64
+	PriceStars sql.NullInt64
+	PriceRub   sql.NullInt64
+	Sort       int64
+}
+
+func (q *Queries) AddTariffTerm(ctx context.Context, arg AddTariffTermParams) error {
+	_, err := q.db.ExecContext(ctx, addTariffTerm,
+		arg.TariffID,
+		arg.Days,
+		arg.PriceStars,
+		arg.PriceRub,
+		arg.Sort,
+	)
+	return err
+}
+
 const addTrafficDaily = `-- name: AddTrafficDaily :exec
 INSERT INTO traffic_daily (user_id, day, up, down) VALUES ($1, $2, $3, $4)
 ON CONFLICT (user_id, day) DO UPDATE SET up = traffic_daily.up + excluded.up, down = traffic_daily.down + excluded.down
@@ -350,6 +373,15 @@ func (q *Queries) DeleteNodeStateOf(ctx context.Context, nodeID string) error {
 	return err
 }
 
+const deleteTariffTerms = `-- name: DeleteTariffTerms :exec
+DELETE FROM tariff_terms WHERE tariff_id = $1
+`
+
+func (q *Queries) DeleteTariffTerms(ctx context.Context, tariffID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTariffTerms, tariffID)
+	return err
+}
+
 const getInbound = `-- name: GetInbound :one
 SELECT id, node_id, name, preset, port, enabled, settings, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen FROM inbounds WHERE id = $1
 `
@@ -528,6 +560,40 @@ func (q *Queries) InsertSlot(ctx context.Context, arg InsertSlotParams) error {
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const listAllTariffTerms = `-- name: ListAllTariffTerms :many
+SELECT id, tariff_id, days, price_stars, price_rub, sort FROM tariff_terms ORDER BY tariff_id, sort, id
+`
+
+func (q *Queries) ListAllTariffTerms(ctx context.Context) ([]TariffTerm, error) {
+	rows, err := q.db.QueryContext(ctx, listAllTariffTerms)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TariffTerm{}
+	for rows.Next() {
+		var i TariffTerm
+		if err := rows.Scan(
+			&i.ID,
+			&i.TariffID,
+			&i.Days,
+			&i.PriceStars,
+			&i.PriceRub,
+			&i.Sort,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listBoundDeviceSlots = `-- name: ListBoundDeviceSlots :many
@@ -709,6 +775,40 @@ func (q *Queries) ListSlots(ctx context.Context) ([]Slot, error) {
 			&i.State,
 			&i.CreatedAt,
 			&i.BurnedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTariffTerms = `-- name: ListTariffTerms :many
+SELECT id, tariff_id, days, price_stars, price_rub, sort FROM tariff_terms WHERE tariff_id = $1 ORDER BY sort, id
+`
+
+func (q *Queries) ListTariffTerms(ctx context.Context, tariffID int64) ([]TariffTerm, error) {
+	rows, err := q.db.QueryContext(ctx, listTariffTerms, tariffID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TariffTerm{}
+	for rows.Next() {
+		var i TariffTerm
+		if err := rows.Scan(
+			&i.ID,
+			&i.TariffID,
+			&i.Days,
+			&i.PriceStars,
+			&i.PriceRub,
+			&i.Sort,
 		); err != nil {
 			return nil, err
 		}

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Archive, Layers, Package, Pencil, Plus, Tag } from "lucide-react";
+import { Archive, Layers, Package, Pencil, Plus, Tag, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas, type Tariff } from "../../api/client";
 import { qk, usePaymentSettings, usePools, useTariffs } from "../../api/hooks";
@@ -132,6 +132,7 @@ export function TariffsPage() {
                               <Pill tone="ok">{t("tariffs.onSale")}</Pill>
                               {tr.price_stars != null ? <span className="num">⭐ {tr.price_stars}</span> : null}
                               {tr.price_rub != null ? <span className="num">{rubles(tr.price_rub)}</span> : null}
+                              {tr.terms.length > 1 ? <span>{t("tariffs.termsCount", { n: tr.terms.length })}</span> : null}
                             </div>
                           ) : null}
                         </div>
@@ -207,6 +208,8 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
   const [poolGB, setPoolGB] = useState<Record<number, string>>({});
   const [stars, setStars] = useState("");
   const [rub, setRub] = useState("");
+  // The terms after the first: days, or months with a billing day, and their prices.
+  const [more, setMore] = useState<ExtraTerm[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -227,6 +230,14 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     setPoolGB(Object.fromEntries((tr?.pools ?? []).map((p) => [p.pool_id, p.traffic_limit != null ? String(+(p.traffic_limit / GiB).toFixed(2)) : ""])));
     setStars(tr?.price_stars != null ? String(tr.price_stars) : "");
     setRub(tr?.price_rub != null ? String(tr.price_rub / 100) : "");
+    setMore(
+      (tr?.terms ?? []).slice(1).map((x) => ({
+        key: nextKey++,
+        days: tr?.billing_day != null ? (x.days ? String(termMonths(x.days)) : "0") : String(x.days),
+        stars: x.price_stars != null ? String(x.price_stars) : "",
+        rub: x.price_rub != null ? String(x.price_rub / 100) : "",
+      })),
+    );
     setErrors({});
   }, [tariff]);
 
@@ -270,6 +281,24 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     if (stars.trim() && (!Number.isInteger(starsN) || starsN < 1 || starsN > 10000)) errs.price_stars = t("tariffs.errStars");
     if (rub.trim() && (!Number.isFinite(rubN) || rubN < 100 || rubN > 100000000)) errs.price_rub = t("tariffs.errRub");
     if (onSale && !stars.trim() && !rub.trim()) errs.on_sale = t("errors.api.on_sale_no_price");
+    const firstDays = toDay ? monN * 30 : durN;
+    const seen = new Set([firstDays]);
+    const terms: Schemas["TermBody"][] = [{ days: firstDays, price_stars: stars.trim() ? starsN : undefined, price_rub: rub.trim() ? rubN : undefined }];
+    if (more.length && !stars.trim() && !rub.trim()) errs.price_rub = t("errors.api.term_no_price");
+    more.forEach((m, i) => {
+      const at = `terms[${i + 1}]`;
+      const n = Number(m.days);
+      const d = toDay ? n * 30 : n;
+      if (!Number.isInteger(n) || n < 0 || (toDay ? n > 120 : n > 3650)) errs[`${at}.days`] = t(toDay ? "tariffs.errMonths" : "tariffs.errDuration");
+      else if (seen.has(d)) errs[`${at}.days`] = t("errors.api.term_days_repeat");
+      seen.add(d);
+      const s = Number(m.stars);
+      const r = Math.round(Number(m.rub.replace(",", ".")) * 100);
+      if (m.stars.trim() && (!Number.isInteger(s) || s < 1 || s > 10000)) errs[`${at}.price_stars`] = t("tariffs.errStars");
+      if (m.rub.trim() && (!Number.isFinite(r) || r < 100 || r > 100000000)) errs[`${at}.price_rub`] = t("tariffs.errRub");
+      if (!m.stars.trim() && !m.rub.trim()) errs[`${at}.price_rub`] = t("errors.api.term_no_price");
+      terms.push({ days: d, price_stars: m.stars.trim() ? s : undefined, price_rub: m.rub.trim() ? r : undefined });
+    });
     setErrors(errs);
     if (Object.keys(errs).length) return;
     save.mutate({
@@ -283,6 +312,7 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
       price_label: price.trim() || undefined,
       price_stars: stars.trim() ? starsN : undefined,
       price_rub: rub.trim() ? rubN : undefined,
+      terms,
       on_sale: onSale,
       pools: poolLimits,
       // PUT replaces the tariff: keep its place in the list.
@@ -414,6 +444,7 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
                   </div>
                 </Field>
               </div>
+              <MoreTerms value={more} onChange={setMore} toDay={term === "day"} errors={errors} />
             </>
           ) : null}
           <Field label={t("tariffs.price")} htmlFor="t-price" hint={t("tariffs.priceHint")}>
@@ -422,5 +453,64 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
         </div>
       </form>
     </Drawer>
+  );
+}
+
+type ExtraTerm = { key: number; days: string; stars: string; rub: string };
+
+let nextKey = 0;
+
+/** The terms a tariff is sold for after its first: each its own days (or months up to the
+ * billing day) and prices. The bot and the Mini App let the buyer pick one. */
+function MoreTerms({ value, onChange, toDay, errors }: { value: ExtraTerm[]; onChange: (v: ExtraTerm[]) => void; toDay: boolean; errors: Record<string, string> }) {
+  const set = (i: number, k: "days" | "stars" | "rub", v: string) => onChange(value.map((m, j) => (j === i ? { ...m, [k]: v } : m)));
+  return (
+    <div className="mb-4" role="group" aria-label={t("tariffs.moreTerms")}>
+      <div className="text-[13px] font-semibold">{t("tariffs.moreTerms")}</div>
+      <div className="mb-2 text-xs text-[var(--ink-500)]">{t("tariffs.moreTermsSub")}</div>
+      {value.map((m, i) => {
+        const at = `terms[${i + 1}]`;
+        const err = errors[`${at}.days`] ?? errors[`${at}.price_stars`] ?? errors[`${at}.price_rub`];
+        return (
+          <div key={m.key} className="mb-2">
+            <div className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
+              <label className="input-unit min-w-0">
+                <input
+                  className="input num"
+                  style={{ paddingRight: 48 }}
+                  inputMode="numeric"
+                  value={m.days}
+                  onChange={(e) => set(i, "days", e.target.value)}
+                  aria-label={t(toDay ? "tariffs.termMonthsLabel" : "tariffs.termDaysLabel", { n: i + 2 })}
+                  aria-invalid={!!errors[`${at}.days`]}
+                />
+                <span>{t(toDay ? "tariffs.monthsShort" : "tariffs.daysShort")}</span>
+              </label>
+              <label className="input-unit min-w-0">
+                <input className="input num" inputMode="numeric" value={m.stars} onChange={(e) => set(i, "stars", e.target.value)} aria-label={t("tariffs.priceStars")} aria-invalid={!!errors[`${at}.price_stars`]} />
+                <span>⭐</span>
+              </label>
+              <label className="input-unit min-w-0">
+                <input className="input num" inputMode="decimal" value={m.rub} onChange={(e) => set(i, "rub", e.target.value)} aria-label={t("tariffs.priceRub")} aria-invalid={!!errors[`${at}.price_rub`]} />
+                <span>₽</span>
+              </label>
+              <button type="button" className="icon-btn" aria-label={t("tariffs.removeTerm")} onClick={() => onChange(value.filter((_, j) => j !== i))}>
+                <X size={16} />
+              </button>
+            </div>
+            {err ? (
+              <p className="mt-1 text-xs text-[var(--berry-600)]" role="alert">
+                {err}
+              </p>
+            ) : null}
+          </div>
+        );
+      })}
+      {value.length < 11 ? (
+        <Button type="button" size="sm" variant="ghost" onClick={() => onChange([...value, { key: nextKey++, days: "", stars: "", rub: "" }])}>
+          <Plus size={16} aria-hidden /> {t("tariffs.addTerm")}
+        </Button>
+      ) : null}
+    </div>
   );
 }
