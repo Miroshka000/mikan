@@ -91,7 +91,15 @@ export function Confirm({
               <motion.div className="scrim" style={{ zIndex: 55 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
             </Dialog.Overlay>
             <Dialog.Content asChild forceMount>
-              <motion.div className="dialog glass-strong" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.18 }}>
+              {/* motion owns the transform: the centring shift goes with the scale, or the scale
+                  would replace the CSS translate and leave the dialog's corner at the centre. */}
+              <motion.div
+                className="dialog glass-strong"
+                initial={{ opacity: 0, scale: 0.96, x: "-50%", y: "-50%" }}
+                animate={{ opacity: 1, scale: 1, x: "-50%", y: "-50%" }}
+                exit={{ opacity: 0, scale: 0.98, x: "-50%", y: "-50%" }}
+                transition={{ duration: 0.18 }}
+              >
                 <Dialog.Title asChild>
                   <h2>{title}</h2>
                 </Dialog.Title>
