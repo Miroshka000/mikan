@@ -71,7 +71,7 @@
         "ru": "Протокол VLESS с обычным TLS и настоящим сертификатом домена вашей панели, как у обычного сайта. Ещё один вариант подключения рядом с REALITY.",
         "en": "VLESS with plain TLS and the real certificate of your panel domain, like any website. One more way to connect next to REALITY."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qZ"
+      "target": 10, "raised": 10, "currency": "USD", "status": "working", "url": "https://t.me/tribute/app?startapp=g6qZ"
     },
     {
       "id": "node-clients",
