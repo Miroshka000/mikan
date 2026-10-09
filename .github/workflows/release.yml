@@ -121,8 +121,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Only the digest goes out: GitHub drops a job output that contains a secret's value,
+    # and the image name holds the owner, which is also DOCKERHUB_USERNAME. The jobs that
+    # need the name make it from GITHUB_REPOSITORY_OWNER themselves.
     outputs:
-      image: ${{ steps.name.outputs.image }}
       digest: ${{ steps.build.outputs.digest }}
     env:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -242,7 +244,7 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           go run ./cmd/mikan-release manifest -version "$version" \
-            -image "${{ needs.image.outputs.image }}" -digest "${{ needs.image.outputs.digest }}" \
+            -image "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mikan" -digest "${{ needs.image.outputs.digest }}" \
             -asset x86_64=dist/mikan-x86_64 -asset aarch64=dist/mikan-aarch64 \
             -min-installer-file .github/min-installer -out dist
           go run ./cmd/mikan-release verify dist/manifest.json
@@ -319,6 +321,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: tag latest
         env:
-          IMAGE: ${{ needs.image.outputs.image }}
           DIGEST: ${{ needs.image.outputs.digest }}
-        run: docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mikan"
+          docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
