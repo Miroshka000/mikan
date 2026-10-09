@@ -3,6 +3,15 @@
 Each release has a section in English and in Russian; the release workflow puts them in
 the signed manifest, and the panel shows the one in its language.
 
+## 0.5.0.5
+### en
+- Platega payments stayed "awaiting payment" although the buyer had paid: once the buyer picks a method, Platega adds its fee on top (5% for SBP), and the panel refused a paid amount that differed from the invoice. A payment that covers the invoice now counts; less, or another currency, is still refused. Payments that expired while awaiting have to be given by hand.
+- When the panel's own check of an open invoice fails (the provider is down, the keys stopped working), it now says so in its log.
+
+### ru
+- Платежи через Platega висели в «Ждёт оплаты», хотя покупатель заплатил: после выбора способа Platega добавляет свою комиссию сверху (5% для СБП), а панель не принимала сумму, отличную от счёта. Теперь оплата, покрывающая счёт, засчитывается; меньше или в другой валюте по-прежнему отклоняется. Платежи, которые уже истекли в ожидании, нужно выдать вручную.
+- Если собственная проверка открытого счёта не удалась (провайдер недоступен, ключи перестали работать), панель теперь пишет это в лог.
+
 ## 0.5.0.4
 ### en
 - With a domain, Hysteria2, TUIC, AnyTLS and TrustTunnel on the panel's own node failed their handshakes after the update to 0.5.0.3: the links no longer pinned a certificate, while the node could keep serving the self-signed one. The node now starts with the panel's public certificate and gets a new one as soon as it is issued, renewed or uploaded.
