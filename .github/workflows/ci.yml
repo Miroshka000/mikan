@@ -20,11 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:18-alpine
-        # Pulled as the Docker Hub account: anonymous pulls are limited per runner address.
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        # Google's Docker Hub mirror: Docker Hub limits anonymous pulls and has outages.
+        image: mirror.gcr.io/library/postgres:18-alpine
         env:
           POSTGRES_USER: mikan_test
           POSTGRES_PASSWORD: mikan_test
@@ -138,17 +135,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Docker Hub limits anonymous pulls per runner address; with the secrets binfmt,
-      # buildkit and the base images are pulled as an account.
+      # binfmt, buildkit and the base images come through Google's Docker Hub mirror;
+      # whatever still falls back to Docker Hub is pulled as the account.
       - if: env.DOCKERHUB_USERNAME != ''
+        # A Docker Hub outage must not stop the build: everything comes through the mirror.
+        continue-on-error: true
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       # arm64 too: a wrong-architecture binary fails the build (see the Dockerfile).
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: mirror.gcr.io/tonistiigi/binfmt:latest
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
+          driver-opts: image=mirror.gcr.io/moby/buildkit:buildx-stable-1
           # Base images through Google's Docker Hub mirror, Docker Hub itself when it fails.
           buildkitd-config-inline: |
             [registry."docker.io"]
