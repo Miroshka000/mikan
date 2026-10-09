@@ -5,12 +5,12 @@ the signed manifest, and the panel shows the one in its language.
 
 ## 0.5.0.5
 ### en
-- Platega payments stayed "awaiting payment" although the buyer had paid: once the buyer picks a method, Platega adds its fee on top (5% for SBP), and the panel refused a paid amount that differed from the invoice. A payment that covers the invoice now counts; less, or another currency, is still refused. Payments that expired while awaiting have to be given by hand.
+- Platega payments stayed "awaiting payment" although the buyer had paid: once the buyer picks a method, Platega adds its fee on top (5% for SBP), and the panel refused a paid amount that differed from the invoice. A payment that covers the invoice now counts; less, or another currency, is still refused. Update the Platega addon to 1.0.5 as well: the one before could not read the amount Platega sends, so it failed every check and Platega reported its notifications as failed. Payments that expired while awaiting have to be given by hand.
 - When the panel's own check of an open invoice fails (the provider is down, the keys stopped working), it now says so in its log.
 - "Telegram through a node" could not be saved without a bot token: the check followed Telegram's redirect to core.telegram.org, which a node does not open a way to, and reported "Telegram does not answer this way". Any answer of the Bot API now passes. When a way to Telegram does fail, the panel's log says why (`telegram: route check failed`).
 
 ### ru
-- Платежи через Platega висели в «Ждёт оплаты», хотя покупатель заплатил: после выбора способа Platega добавляет свою комиссию сверху (5% для СБП), а панель не принимала сумму, отличную от счёта. Теперь оплата, покрывающая счёт, засчитывается; меньше или в другой валюте по-прежнему отклоняется. Платежи, которые уже истекли в ожидании, нужно выдать вручную.
+- Платежи через Platega висели в «Ждёт оплаты», хотя покупатель заплатил: после выбора способа Platega добавляет свою комиссию сверху (5% для СБП), а панель не принимала сумму, отличную от счёта. Теперь оплата, покрывающая счёт, засчитывается; меньше или в другой валюте по-прежнему отклоняется. Обновите и дополнение Platega до 1.0.5: прежнее не читало сумму в том виде, в каком её присылает Platega, поэтому каждая проверка падала, а Platega показывала уведомления неуспешными. Платежи, которые уже истекли в ожидании, нужно выдать вручную.
 - Если собственная проверка открытого счёта не удалась (провайдер недоступен, ключи перестали работать), панель теперь пишет это в лог.
 - «Связь с Telegram через ноду» не сохранялась без токена бота: проверка шла за редиректом Telegram на core.telegram.org, куда нода путь не открывает, и сообщала «Этим путём Telegram не отвечает». Теперь достаточно любого ответа Bot API. Если путь к Telegram и правда не работает, причина есть в логе панели (`telegram: route check failed`).
 
