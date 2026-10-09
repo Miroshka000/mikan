@@ -21,6 +21,10 @@ jobs:
     services:
       postgres:
         image: postgres:18-alpine
+        # Pulled as the Docker Hub account: anonymous pulls are limited per runner address.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: mikan_test
           POSTGRES_PASSWORD: mikan_test
