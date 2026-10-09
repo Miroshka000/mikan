@@ -369,3 +369,29 @@ func TestAddonPayment(t *testing.T) {
 		t.Fatal("the adapter's secret is in the log")
 	}
 }
+
+// A provider that adds its fee on top for the buyer (Platega adds 5% once a method is
+// picked) reports more than the invoice: that is paid. Less, or another currency, is not.
+func TestAddonPaymentWithBuyerFee(t *testing.T) {
+	e, fa := addonEnv(t)
+	ctx := context.Background()
+	if _, err := e.s.SetAddonConfig(ctx, "fake", true, addons.Settings{"shop_id": "12", "secret_key": adapterSecret}); err != nil {
+		t.Fatal(err)
+	}
+	short := e.invoice(555, 0, "addon:fake")
+	foreign := e.invoice(556, 0, "addon:fake")
+	fee := e.invoice(557, 0, "addon:fake")
+	fa.set(short.ExternalID.String, func(s *addons.Status) { s.Status, s.Amount = "paid", 19899 })
+	fa.set(foreign.ExternalID.String, func(s *addons.Status) { s.Status, s.Amount, s.Currency = "paid", 20895, "USD" })
+	fa.set(fee.ExternalID.String, func(s *addons.Status) { s.Status, s.Amount = "paid", 20895 })
+	e.s.Reconcile(ctx)
+	if e.payment(short.ID).Status != "pending" || e.payment(foreign.ID).Status != "pending" {
+		t.Fatalf("a short or foreign payment was accepted: %s %s", e.payment(short.ID).Status, e.payment(foreign.ID).Status)
+	}
+	if e.payment(fee.ID).Status != "applied" {
+		t.Fatalf("with the buyer's fee: %s", e.payment(fee.ID).Status)
+	}
+	if !strings.Contains(e.logs.String(), "adapter amount differs") {
+		t.Fatal("a refused amount is not logged")
+	}
+}

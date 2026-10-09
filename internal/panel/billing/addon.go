@@ -286,8 +286,9 @@ func (s *Service) addonWebhook(ctx context.Context, w http.ResponseWriter, r *ht
 	w.WriteHeader(http.StatusOK)
 }
 
-// checkAddon asks the adapter about an invoice and records what it says: the status, the
-// amount and the currency must match the payment.
+// checkAddon asks the adapter about an invoice and records what it says: the currency must
+// match the payment and the amount must cover it. More is the provider's fee charged to the
+// buyer on top (Platega adds it once a method is picked); the invoice is ours, so it is paid.
 func (s *Service) checkAddon(ctx context.Context, provider, ext string) error {
 	pay, err := s.d.Store.Q.GetPaymentByExternal(ctx, db.GetPaymentByExternalParams{Provider: provider, ExternalID: sql.NullString{String: ext, Valid: true}})
 	if err != nil {
@@ -303,9 +304,12 @@ func (s *Service) checkAddon(ctx context.Context, provider, ext string) error {
 	}
 	switch st.Status {
 	case "paid":
-		if st.Amount != pay.Amount || st.Currency != pay.Currency {
+		if st.Amount < pay.Amount || st.Currency != pay.Currency {
 			s.d.Log.Error("billing: adapter amount differs", "payment", pay.ID, "provider", provider, "amount", st.Amount, "currency", st.Currency)
 			return ErrBadPayment
+		}
+		if st.Amount > pay.Amount {
+			s.d.Log.Info("billing: the buyer paid the provider's fee", "payment", pay.ID, "provider", provider, "amount", st.Amount, "invoice", pay.Amount)
 		}
 		if s.d.Promo != nil {
 			r, redemptionErr := s.d.Promo.GetPaymentRedemption(ctx, pay.ID)
