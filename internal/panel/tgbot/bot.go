@@ -923,7 +923,12 @@ func (b *Bot) CheckTokenVia(ctx context.Context, token string, route Route) (Use
 	if err != nil {
 		return User{}, err
 	}
-	return NewClient(b.d.API, token, rt).Me(ctx)
+	me, err := NewClient(b.d.API, token, rt).Me(ctx)
+	var ae *APIError
+	if err != nil && !errors.As(err, &ae) {
+		b.routeFailed(route, err)
+	}
+	return me, err
 }
 
 // MiniAppURL is where the bot's Mini App opens; "" when Telegram could not load it.

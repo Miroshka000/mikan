@@ -148,16 +148,27 @@ func (b *Bot) CheckRoute(ctx context.Context, r Route, token string) error {
 		if err == nil || errors.As(err, &ae) {
 			return nil
 		}
+		b.routeFailed(r, err)
 		return ErrUnreachable
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.d.API+"/", nil)
 	if err != nil {
 		return err
 	}
-	resp, err := (&http.Client{Transport: rt}).Do(req)
+	// Any answer will do. Telegram's is a redirect to core.telegram.org, which a node does
+	// not tunnel to and which may be blocked where api.telegram.org is not.
+	hc := &http.Client{Transport: rt, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := hc.Do(req)
 	if err != nil {
+		b.routeFailed(r, err)
 		return ErrUnreachable
 	}
 	resp.Body.Close()
 	return nil
+}
+
+// routeFailed logs why a route did not reach Telegram: the admin sees only that it did not.
+// The error carries no token: Client.do keeps the cause, not the URL.
+func (b *Bot) routeFailed(r Route, err error) {
+	b.d.Log.Warn("telegram: route check failed", "mode", r.Mode, "node", r.NodeID, "err", err)
 }

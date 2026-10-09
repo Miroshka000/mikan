@@ -12,6 +12,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -90,8 +91,12 @@ func (c *Client) do(parent context.Context, req *http.Request, out any) error {
 		if parent.Err() != nil {
 			return parent.Err()
 		}
-		// The error text would carry the URL, and the URL the token.
-		return ErrUnreachable
+		// The error text would carry the URL, and the URL the token: only the cause is kept.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
 	defer resp.Body.Close()
 	var r struct {
@@ -104,7 +109,7 @@ func (c *Client) do(parent context.Context, req *http.Request, out any) error {
 		} `json:"parameters"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return ErrUnreachable
+		return fmt.Errorf("%w: HTTP %d is not a Bot API answer", ErrUnreachable, resp.StatusCode)
 	}
 	if !r.OK {
 		return &APIError{Code: r.ErrorCode, Description: r.Description, RetryAfter: time.Duration(r.Parameters.RetryAfter) * time.Second}
