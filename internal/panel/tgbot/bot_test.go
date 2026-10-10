@@ -619,7 +619,7 @@ func TestConfigSavedBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := b.Config(ctx)
-	if !c.QuietNight {
+	if !c.QuietNight || !c.PromoButton {
 		t.Fatal("an option added later keeps its default")
 	}
 	if c.CleanChat || c.Notify.Expire1d || c.Texts.Main != "Привет" || len(c.Buttons) != 2 || c.Buttons[1].Label != "Продлить" || c.Buttons[1].Row {

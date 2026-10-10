@@ -187,7 +187,8 @@ func (b *Bot) menu(ctx context.Context, cfg Config, w *words, subs int) *Keyboar
 			rows = append(rows, []Button{btn})
 		}
 	}
-	if url := b.miniAppURL(ctx, cfg); url != "" {
+	// The promo codes entry is the admin's to hide; the Mini App page keeps its field.
+	if url := b.miniAppURL(ctx, cfg); url != "" && cfg.PromoButton {
 		rows = append(rows, []Button{{Text: w.promo, WebApp: &WebApp{URL: url + "#promocodes"}}})
 	}
 	if subs > 1 {

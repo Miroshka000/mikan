@@ -2333,6 +2333,8 @@ export interface components {
             /** @description Кнопка Mini App со страницей подписки */
             mini_app: boolean;
             notify: components["schemas"]["Notify"];
+            /** @description Кнопка «Промокоды» в главном меню (нужен Mini App) */
+            promo_button: boolean;
             /** @description Уведомления с 22:00 до 9:00 МСК приходят без звука */
             quiet_night: boolean;
             texts: components["schemas"]["Texts"];

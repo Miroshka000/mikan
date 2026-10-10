@@ -1194,6 +1194,10 @@
           "notify": {
             "$ref": "#/components/schemas/Notify"
           },
+          "promo_button": {
+            "description": "Кнопка «Промокоды» в главном меню (нужен Mini App)",
+            "type": "boolean"
+          },
           "quiet_night": {
             "description": "Уведомления с 22:00 до 9:00 МСК приходят без звука",
             "type": "boolean"
@@ -1209,7 +1213,8 @@
           "notify",
           "mini_app",
           "clean_chat",
-          "quiet_night"
+          "quiet_night",
+          "promo_button"
         ],
         "type": "object"
       },

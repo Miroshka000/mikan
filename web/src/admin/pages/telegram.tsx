@@ -809,6 +809,7 @@ function OptionsCard({ draft, setDraft, v }: { draft: Config; setDraft: (c: Conf
       </div>
       <ul className="row-list">
         {row(t("telegram.miniApp"), v.mini_app_url ? t("telegram.miniAppSub") : t("telegram.miniAppNoCert"), draft.mini_app, (on) => setDraft({ ...draft, mini_app: on }))}
+        {row(t("telegram.promoButton"), draft.mini_app ? t("telegram.promoButtonSub") : t("telegram.promoButtonNeedsApp"), draft.promo_button, (on) => setDraft({ ...draft, promo_button: on }))}
         {row(t("telegram.cleanChat"), t("telegram.cleanChatSub"), draft.clean_chat, (on) => setDraft({ ...draft, clean_chat: on }))}
         {row(t("telegram.quietNight"), t("telegram.quietNightSub"), draft.quiet_night, (on) => setDraft({ ...draft, quiet_night: on }))}
         {NOTICES.map((k) => row(t(`telegram.notice.${k}`), t("telegram.noticeSub"), draft.notify[k], (on) => setDraft({ ...draft, notify: { ...draft.notify, [k]: on } })))}
@@ -935,6 +936,10 @@ function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean })
     const last = rows[rows.length - 1];
     if (b.row && last && last.length < 3) last.push(b);
     else rows.push([b]);
+  }
+  // The bot adds «Промокоды» under the buttons itself while the Mini App is on.
+  if (draft.promo_button && draft.mini_app && v.mini_app_url) {
+    rows.push([{ id: "promo", action: "app", label: t("telegram.promoLabel"), on: true, row: false }]);
   }
   return (
     <section {...(bare ? {} : rise(1))} aria-label={t("telegram.preview")}>
