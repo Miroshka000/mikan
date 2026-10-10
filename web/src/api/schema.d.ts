@@ -3454,6 +3454,16 @@ export interface components {
             stars?: boolean;
             /**
              * Format: int64
+             * @description Цена пробного периода в копейках, от 100 (1 ₽); 0 — не за рубли. Обе 0 — пробный период бесплатный
+             */
+            trial_rub?: number;
+            /**
+             * Format: int64
+             * @description Цена пробного периода в Stars; 0 — не за Stars
+             */
+            trial_stars?: number;
+            /**
+             * Format: int64
              * @description Тариф пробного периода; 0 — выключить
              */
             trial_tariff_id?: number;
@@ -3599,6 +3609,16 @@ export interface components {
             stars: boolean;
             /**
              * Format: int64
+             * @description Цена пробного периода в копейках; с ценой пробный период покупают один раз в боте и Mini App, нужна включённая продажа
+             */
+            trial_rub: number;
+            /**
+             * Format: int64
+             * @description Цена пробного периода в Stars; 0 вместе с trial_rub — бесплатно
+             */
+            trial_stars: number;
+            /**
+             * Format: int64
              * @description Тариф пробного периода: один раз на Telegram-аккаунт без подписки и оплат, кнопка в приветствии бота; null — пробного периода нет. Работает и при выключенной продаже
              */
             trial_tariff_id: number | null;
@@ -3640,10 +3660,10 @@ export interface components {
             /** Format: int64 */
             id: number;
             /**
-             * @description package — пакет трафика: tariff_name — название пакета
+             * @description package — пакет трафика: tariff_name — название пакета; trial — платный пробный период
              * @enum {string}
              */
-            kind: "new" | "renew" | "package";
+            kind: "new" | "renew" | "package" | "trial";
             /** Format: date-time */
             paid_at?: string;
             /** @description stars или addon:<id> — адаптер маркетплейса */

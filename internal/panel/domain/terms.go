@@ -10,6 +10,32 @@ import (
 // MaxTerms caps the terms one tariff is sold for.
 const MaxTerms = 12
 
+// What a term may cost. Traffic packages and the trial are sold on the same scale, so the
+// API, the admin pages and these checks all mean the same numbers.
+const (
+	MinPriceStars = 1
+	MaxPriceStars = 10_000
+	MinPriceRub   = 100 // kopecks: a ruble
+	MaxPriceRub   = 100_000_000
+)
+
+// PriceStarsOK, PriceRubOK: n is a price the panel sells at. No price at all (0: not sold
+// in that currency) is not one, and whether it is allowed is the caller's.
+func PriceStarsOK(n int64) bool { return n >= MinPriceStars && n <= MaxPriceStars }
+func PriceRubOK(n int64) bool   { return n >= MinPriceRub && n <= MaxPriceRub }
+
+// CheckPrices: a pair of prices as a tariff's; an unset price is not sold in that currency
+// and passes. The error names the price that is out of range.
+func CheckPrices(stars, rub sql.NullInt64) error {
+	switch {
+	case stars.Valid && !PriceStarsOK(stars.Int64):
+		return fieldErr("price_stars", "bad_price")
+	case rub.Valid && !PriceRubOK(rub.Int64):
+		return fieldErr("price_rub", "bad_price")
+	}
+	return nil
+}
+
 // Term is one way a tariff is sold: for so many days (0: no end date; with a billing day,
 // months of 30 days each) at these prices.
 type Term struct {

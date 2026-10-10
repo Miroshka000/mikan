@@ -12,7 +12,7 @@ import (
 
 const countLaterTariffPayments = `-- name: CountLaterTariffPayments :one
 SELECT count(*) FROM payments
-WHERE user_id = $1 AND status = 'applied' AND kind IN ('new', 'renew') AND id <> $2
+WHERE user_id = $1 AND status = 'applied' AND kind IN ('new', 'renew', 'trial') AND id <> $2
   AND (applied_at > CAST($3 AS BIGINT) OR (applied_at = CAST($3 AS BIGINT) AND id > $2))
 `
 
@@ -565,23 +565,6 @@ func (q *Queries) ListTariffsOnSale(ctx context.Context) ([]Tariff, error) {
 	return items, nil
 }
 
-const markLatePromoRefunded = `-- name: MarkLatePromoRefunded :execrows
-UPDATE payments SET status = 'refunded', refunded_at = $1, error = '' WHERE id = $2 AND status IN ('pending','expired','paid','failed')
-`
-
-type MarkLatePromoRefundedParams struct {
-	RefundedAt sql.NullInt64
-	ID         int64
-}
-
-func (q *Queries) MarkLatePromoRefunded(ctx context.Context, arg MarkLatePromoRefundedParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, markLatePromoRefunded, arg.RefundedAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const markPaymentApplied = `-- name: MarkPaymentApplied :execrows
 UPDATE payments SET status = 'applied', user_id = $1, applied_at = $2, error = ''
 WHERE id = $3 AND status = 'paid'
@@ -631,6 +614,24 @@ type MarkPaymentRefundedParams struct {
 
 func (q *Queries) MarkPaymentRefunded(ctx context.Context, arg MarkPaymentRefundedParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, markPaymentRefunded, arg.RefundedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const markRefundedUnapplied = `-- name: MarkRefundedUnapplied :execrows
+UPDATE payments SET status = 'refunded', refunded_at = $1, error = '' WHERE id = $2 AND status IN ('pending','expired','paid','failed')
+`
+
+type MarkRefundedUnappliedParams struct {
+	RefundedAt sql.NullInt64
+	ID         int64
+}
+
+// A refund of what was never applied: the invoice gave nothing back to take away.
+func (q *Queries) MarkRefundedUnapplied(ctx context.Context, arg MarkRefundedUnappliedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markRefundedUnapplied, arg.RefundedAt, arg.ID)
 	if err != nil {
 		return 0, err
 	}

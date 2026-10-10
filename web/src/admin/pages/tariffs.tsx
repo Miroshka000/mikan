@@ -12,6 +12,7 @@ import { Button, EmptyState, Field, PageHeader, Pill, Segmented, Skeleton } from
 import { Switch } from "../../components/switch";
 import { t } from "../../i18n";
 import { bytes, days, GiB, months, rubles, termMonths } from "../../lib/format";
+import { badRub, badStars, kopecks } from "../../lib/price";
 import { TARIFF_TABS } from "../search";
 import { PackagesCard } from "./packages";
 import { PoolLimitsField, PoolsCard } from "./pools";
@@ -309,9 +310,9 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     if (!devicesUnlimited && (!Number.isInteger(devN) || devN < 1 || devN > 100)) errs.device_limit = t("tariffs.errDevices");
     if (!speedUnlimited && (!Number.isInteger(speedN) || speedN < 1 || speedN > 100000)) errs.speed_limit = t("tariffs.errSpeed");
     const starsN = Number(stars);
-    const rubN = Math.round(Number(rub.replace(",", ".")) * 100);
-    if (stars.trim() && (!Number.isInteger(starsN) || starsN < 1 || starsN > 10000)) errs.price_stars = t("tariffs.errStars");
-    if (rub.trim() && (!Number.isFinite(rubN) || rubN < 100 || rubN > 100000000)) errs.price_rub = t("tariffs.errRub");
+    const rubN = kopecks(rub);
+    if (badStars(stars)) errs.price_stars = t("tariffs.errStars");
+    if (badRub(rub)) errs.price_rub = t("tariffs.errRub");
     if (onSale && !stars.trim() && !rub.trim()) errs.on_sale = t("errors.api.on_sale_no_price");
     const firstDays = toDay ? monN * 30 : durN;
     const seen = new Set([firstDays]);
@@ -325,9 +326,9 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
       else if (seen.has(d)) errs[`${at}.days`] = t("errors.api.term_days_repeat");
       seen.add(d);
       const s = Number(m.stars);
-      const r = Math.round(Number(m.rub.replace(",", ".")) * 100);
-      if (m.stars.trim() && (!Number.isInteger(s) || s < 1 || s > 10000)) errs[`${at}.price_stars`] = t("tariffs.errStars");
-      if (m.rub.trim() && (!Number.isFinite(r) || r < 100 || r > 100000000)) errs[`${at}.price_rub`] = t("tariffs.errRub");
+      const r = kopecks(m.rub);
+      if (badStars(m.stars)) errs[`${at}.price_stars`] = t("tariffs.errStars");
+      if (badRub(m.rub)) errs[`${at}.price_rub`] = t("tariffs.errRub");
       if (!m.stars.trim() && !m.rub.trim()) errs[`${at}.price_rub`] = t("errors.api.term_no_price");
       terms.push({ days: d, price_stars: m.stars.trim() ? s : undefined, price_rub: m.rub.trim() ? r : undefined });
     });

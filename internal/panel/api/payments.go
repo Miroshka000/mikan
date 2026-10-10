@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 )
@@ -20,6 +21,8 @@ type PaymentSettingsView struct {
 	AllowNew           bool   `json:"allow_new" doc:"Новые люди могут купить подписку в боте; иначе — только продление"`
 	RenewResetsTraffic bool   `json:"renew_resets_traffic" doc:"Оплаченное продление обнуляет трафик и начинает новый период; иначе только добавляет срок"`
 	TrialTariffID      *int64 `json:"trial_tariff_id" doc:"Тариф пробного периода: один раз на Telegram-аккаунт без подписки и оплат, кнопка в приветствии бота; null — пробного периода нет. Работает и при выключенной продаже"`
+	TrialStars         int64  `json:"trial_stars" doc:"Цена пробного периода в Stars; 0 вместе с trial_rub — бесплатно"`
+	TrialRub           int64  `json:"trial_rub" doc:"Цена пробного периода в копейках; с ценой пробный период покупают один раз в боте и Mini App, нужна включённая продажа"`
 	Trials             int64  `json:"trials" doc:"Сколько пробных подписок выдано"`
 	Available          struct {
 		Stars  bool     `json:"stars"`
@@ -40,13 +43,17 @@ type patchPaymentSettingsInput struct {
 		AllowNew           *bool  `json:"allow_new,omitempty"`
 		RenewResetsTraffic *bool  `json:"renew_resets_traffic,omitempty"`
 		TrialTariffID      *int64 `json:"trial_tariff_id,omitempty" minimum:"0" doc:"Тариф пробного периода; 0 — выключить"`
+		// The bounds are domain.MaxPriceStars and domain.MaxPriceRub, which a tag cannot
+		// name; the handler checks the prices against them.
+		TrialStars *int64 `json:"trial_stars,omitempty" minimum:"0" maximum:"10000" doc:"Цена пробного периода в Stars; 0 — не за Stars"`
+		TrialRub   *int64 `json:"trial_rub,omitempty" minimum:"0" maximum:"100000000" doc:"Цена пробного периода в копейках, от 100 (1 ₽); 0 — не за рубли. Обе 0 — пробный период бесплатный"`
 	}
 }
 
 type PaymentView struct {
 	ID         int64      `json:"id"`
 	Provider   string     `json:"provider" doc:"stars или addon:<id> — адаптер маркетплейса"`
-	Kind       string     `json:"kind" enum:"new,renew,package" doc:"package — пакет трафика: tariff_name — название пакета"`
+	Kind       string     `json:"kind" enum:"new,renew,package,trial" doc:"package — пакет трафика: tariff_name — название пакета; trial — платный пробный период"`
 	Status     string     `json:"status" enum:"pending,paid,applied,expired,failed,refunded"`
 	TgID       int64      `json:"tg_id"`
 	TgUsername string     `json:"tg_username,omitempty"`
@@ -100,7 +107,7 @@ func (h *handlers) paymentSettings(ctx context.Context) (PaymentSettingsView, er
 	if err != nil {
 		return PaymentSettingsView{}, err
 	}
-	v := PaymentSettingsView{Enabled: c.Enabled, Stars: c.Stars, AllowNew: c.AllowNew, RenewResetsTraffic: c.RenewResetsTraffic}
+	v := PaymentSettingsView{Enabled: c.Enabled, Stars: c.Stars, AllowNew: c.AllowNew, RenewResetsTraffic: c.RenewResetsTraffic, TrialStars: c.TrialStars, TrialRub: c.TrialRub}
 	if t, ok := h.d.Billing.TrialTariff(ctx); ok {
 		v.TrialTariffID = &t.ID
 	}
@@ -158,11 +165,31 @@ func (h *handlers) updatePaymentSettings(ctx context.Context, in *patchPaymentSe
 		}
 		c.TrialTariffID = *b.TrialTariffID
 	}
+	// The trial costs what a tariff may cost (domain.CheckPrices); 0 is no price at all,
+	// and both prices at 0 make it free.
+	if b.TrialStars != nil {
+		if n := *b.TrialStars; n != 0 && !domain.PriceStarsOK(n) {
+			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.trial_stars", Message: "bad_price"})
+		}
+		c.TrialStars = *b.TrialStars
+	}
+	if b.TrialRub != nil {
+		if n := *b.TrialRub; n != 0 && !domain.PriceRubOK(n) {
+			// A price under a ruble is the mistake worth its own words.
+			message := "bad_price"
+			if n < domain.MinPriceRub {
+				message = "trial_rub_min"
+			}
+			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.trial_rub", Message: message})
+		}
+		c.TrialRub = *b.TrialRub
+	}
 	if err := settings.Set(ctx, h.d.Settings, billing.KeyConfig, c); err != nil {
 		return nil, err
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "payments.settings", "", "", map[string]any{"enabled": c.Enabled, "stars": c.Stars,
-		"allow_new": c.AllowNew, "renew_resets_traffic": c.RenewResetsTraffic, "trial_tariff_id": c.TrialTariffID})
+		"allow_new": c.AllowNew, "renew_resets_traffic": c.RenewResetsTraffic, "trial_tariff_id": c.TrialTariffID,
+		"trial_stars": c.TrialStars, "trial_rub": c.TrialRub})
 	v, err := h.paymentSettings(ctx)
 	if err != nil {
 		return nil, err

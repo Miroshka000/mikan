@@ -38,7 +38,8 @@ UPDATE payments SET status = sqlc.arg(new_status) WHERE id = sqlc.arg(id) AND st
 -- name: MarkPaymentRefunded :execrows
 UPDATE payments SET status = 'refunded', refunded_at = $1 WHERE id = $2 AND status = 'applied';
 
--- name: MarkLatePromoRefunded :execrows
+-- name: MarkRefundedUnapplied :execrows
+-- A refund of what was never applied: the invoice gave nothing back to take away.
 UPDATE payments SET status = 'refunded', refunded_at = sqlc.arg(refunded_at), error = '' WHERE id = sqlc.arg(id) AND status IN ('pending','expired','paid','failed');
 
 -- name: FindOpenPayment :one
@@ -91,5 +92,5 @@ UPDATE payments SET revert = $1 WHERE id = $2;
 -- name: CountLaterTariffPayments :one
 -- Tariff payments of the user applied after the given one: they build on what it set.
 SELECT count(*) FROM payments
-WHERE user_id = sqlc.arg(user_id) AND status = 'applied' AND kind IN ('new', 'renew') AND id <> sqlc.arg(id)
+WHERE user_id = sqlc.arg(user_id) AND status = 'applied' AND kind IN ('new', 'renew', 'trial') AND id <> sqlc.arg(id)
   AND (applied_at > CAST(sqlc.arg(applied_at) AS BIGINT) OR (applied_at = CAST(sqlc.arg(applied_at) AS BIGINT) AND id > sqlc.arg(id)));

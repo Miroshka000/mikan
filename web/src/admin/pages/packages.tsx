@@ -13,6 +13,7 @@ import { Button, Field, Pill, Segmented, Skeleton } from "../../components/ui";
 import { Switch } from "../../components/switch";
 import { t } from "../../i18n";
 import { bytes, days as daysText, GiB, rubles } from "../../lib/format";
+import { badRub, badStars, kopecks } from "../../lib/price";
 
 type Package = Schemas["PackageView"];
 type Pool = Schemas["PoolView"];
@@ -159,12 +160,12 @@ function PackageDrawer({ pkg, pools, selling, onClose }: { pkg: Package | "new" 
     const gbN = Number(gb.replace(",", "."));
     const daysN = Number(days);
     const starsN = Number(stars);
-    const rubN = Math.round(Number(rub.replace(",", ".")) * 100);
+    const rubN = kopecks(rub);
     if (!name.trim()) errs.name = t("packages.errName");
     if (!Number.isFinite(gbN) || gbN < 1 || gbN > 102400) errs.bytes = t("errors.api.bad_bytes");
     if (lifetime === "days" && (!Number.isInteger(daysN) || daysN < 1 || daysN > 3650)) errs.days = t("errors.api.bad_days");
-    if (stars.trim() && (!Number.isInteger(starsN) || starsN < 1 || starsN > 10000)) errs.price_stars = t("tariffs.errStars");
-    if (rub.trim() && (!Number.isFinite(rubN) || rubN < 100 || rubN > 100000000)) errs.price_rub = t("tariffs.errRub");
+    if (badStars(stars)) errs.price_stars = t("tariffs.errStars");
+    if (badRub(rub)) errs.price_rub = t("tariffs.errRub");
     if (onSale && !stars.trim() && !rub.trim()) errs.on_sale = t("errors.api.on_sale_no_price");
     setErrors(errs);
     if (Object.keys(errs).length) return;

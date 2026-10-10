@@ -396,12 +396,15 @@ func (b *Bot) Refunded(ctx context.Context, p db.Payment, u db.User, disabled bo
 	b.freshMenu(out, chat, "")
 }
 
-// takeTrial gives the chat its free trial and says what it got; a chat that had one (or
-// is a customer) is told why not.
+// takeTrial gives the chat its free trial and says what it got, or shows the ways to pay
+// for a priced one; a chat that had one (or is a customer) is told why not.
 func (b *Bot) takeTrial(ctx context.Context, w *words, chat int64) (string, *Keyboard) {
 	home := &Keyboard{[][]Button{{{Text: w.back, CallbackData: "m"}}}}
 	if b.d.Billing == nil {
 		return html.EscapeString(w.trialOff), home
+	}
+	if b.d.Billing.Config(ctx).TrialPaid() {
+		return b.trialPay(ctx, w, chat)
 	}
 	u, err := b.d.Billing.Trial(ctx, chat)
 	switch {
@@ -418,4 +421,44 @@ func (b *Bot) takeTrial(ctx context.Context, w *words, chat int64) (string, *Key
 		what = billing.Describe(t, t.DurationDays, b.lang(ctx))
 	}
 	return fmt.Sprintf(html.EscapeString(w.trialDone), html.EscapeString(what)), &Keyboard{[][]Button{{{Text: w.trialOpen, CallbackData: "m"}}}}
+}
+
+// trialPay shows what the priced trial gives and a button for each way to pay for it.
+func (b *Bot) trialPay(ctx context.Context, w *words, chat int64) (string, *Keyboard) {
+	home := []Button{{Text: w.back, CallbackData: "m"}}
+	o, av, ok := b.d.Billing.TrialOffer(ctx, chat)
+	if !ok {
+		why := w.trialOff
+		if _, on := b.d.Billing.TrialTariff(ctx); on {
+			// Offered, but not to this account, or for a price nobody takes now.
+			why = w.payUnavailable
+			if !b.d.Billing.TrialAllowed(ctx, chat) {
+				why = w.trialUsed
+			}
+		}
+		return html.EscapeString(why), &Keyboard{[][]Button{home}}
+	}
+	text := "<b>" + html.EscapeString(w.trialTitle) + "</b>\n" + html.EscapeString(billing.Describe(o.Tariff, o.Tariff.DurationDays, b.lang(ctx))) + "\n\n" + w.payHow
+	rows := w.payButtons("tp:", o.Stars, o.Rub, av, b.addonName(ctx))
+	return text, &Keyboard{append(rows, home)}
+}
+
+// trialInvoice opens the invoice for the priced trial with the provider a button names.
+func (b *Bot) trialInvoice(ctx context.Context, w *words, chat int64, code string) (string, *Keyboard) {
+	back := []Button{{Text: w.back, CallbackData: "tr"}}
+	provider, ok := providerOf(code)
+	if !ok || b.d.Billing == nil {
+		return html.EscapeString(w.payUnavailable), &Keyboard{[][]Button{back}}
+	}
+	p, err := b.d.Billing.TrialInvoice(ctx, chat, provider)
+	switch {
+	case errors.Is(err, billing.ErrTrialUsed):
+		return html.EscapeString(w.trialUsed), &Keyboard{[][]Button{{{Text: w.back, CallbackData: "m"}}}}
+	case errors.Is(err, billing.ErrTrialOff):
+		return html.EscapeString(w.trialOff), &Keyboard{[][]Button{{{Text: w.back, CallbackData: "m"}}}}
+	case err != nil:
+		return html.EscapeString(w.payError(err)), &Keyboard{[][]Button{back}}
+	}
+	text := fmt.Sprintf(w.invoice, html.EscapeString(w.trialTitle+" · "+p.TariffName), html.EscapeString(w.price(p.Amount, p.Currency)), w.payNew)
+	return text, &Keyboard{[][]Button{{{Text: fmt.Sprintf(w.payButton, w.price(p.Amount, p.Currency)), URL: p.PayUrl}}, back}}
 }

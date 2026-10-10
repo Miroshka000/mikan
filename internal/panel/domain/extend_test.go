@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"database/sql"
 	"sync"
 	"testing"
 	"time"
@@ -39,7 +38,7 @@ func TestExtendKeepsConcurrentPayments(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			errs <- st.Tx(ctx, func(q *db.Queries) error {
-				_, _, err := users.Purchase(ctx, q, u.ID, std.ID, sql.NullInt64{}, "", false)
+				_, _, err := users.Purchase(ctx, q, PurchaseInput{UserID: u.ID, TariffID: std.ID})
 				return err
 			})
 		}()

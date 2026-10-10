@@ -14,6 +14,7 @@ import { Button, EmptyState, ErrorState, Field, PageHeader, Pill, Skeleton, Spin
 import { t, tMaybe } from "../../i18n";
 import { useDraft } from "../../lib/draft";
 import { dateShort, days, money, num, time } from "../../lib/format";
+import { badRub, badStars, kopecks } from "../../lib/price";
 import { PAYMENT_TABS, type PaymentsSearch } from "../search";
 import { AddonsCard, addonName, useAddons } from "./payment-addons";
 import { PromoSection } from "./promocodes";
@@ -244,7 +245,7 @@ function PaymentRow({ p, provider, onRefund }: { p: Payment; provider: string; o
           <Pill tone={STATUS_TONE[p.status]}>{t(`payments.statuses.${p.status}`)}</Pill>
         </div>
         <div className="mt-1 text-xs text-[var(--ink-500)]">
-          {dateShort(p.created_at)} {time(p.created_at)} · {provider} · {p.kind === "new" ? t("payments.kindNew") : p.kind === "package" ? t("payments.kindPackage") : t("payments.kindRenew")} · {buyer}
+          {dateShort(p.created_at)} {time(p.created_at)} · {provider} · {p.kind === "new" ? t("payments.kindNew") : p.kind === "package" ? t("payments.kindPackage") : p.kind === "trial" ? t("payments.kindTrial") : t("payments.kindRenew")} · {buyer}
           {p.user_id != null ? (
             <>
               {" → "}
@@ -303,10 +304,32 @@ function StarsCard({ s }: { s: Settings }) {
 function RulesCard({ s }: { s: Settings }) {
   const tariffs = useTariffs();
   const save = useSavePayments();
-  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({ allowNew: s.allow_new, resetTraffic: s.renew_resets_traffic, trial: s.trial_tariff_id ?? 0 });
+  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({
+    allowNew: s.allow_new,
+    resetTraffic: s.renew_resets_traffic,
+    trial: s.trial_tariff_id ?? 0,
+    trialStars: s.trial_stars ? String(s.trial_stars) : "",
+    trialRub: s.trial_rub ? String(s.trial_rub / 100) : "",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ allow_new: form.allowNew, renew_resets_traffic: form.resetTraffic, trial_tariff_id: form.trial });
+    // The trial's price as a tariff's: empty is no price, both empty a free trial.
+    const errs: Record<string, string> = {};
+    const starsN = Number(form.trialStars);
+    const rubN = kopecks(form.trialRub);
+    if (badStars(form.trialStars)) errs.trial_stars = t("tariffs.errStars");
+    if (badRub(form.trialRub)) errs.trial_rub = t("tariffs.errRub");
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    save.mutate({
+      allow_new: form.allowNew,
+      renew_resets_traffic: form.resetTraffic,
+      trial_tariff_id: form.trial,
+      // No trial, no price: a price left in the hidden fields does not come back later.
+      trial_stars: form.trial && form.trialStars.trim() ? starsN : 0,
+      trial_rub: form.trial && form.trialRub.trim() ? rubN : 0,
+    });
   };
   return (
     <section className="card glass reveal">
@@ -327,8 +350,11 @@ function RulesCard({ s }: { s: Settings }) {
             onChange={(v) => setForm((f) => ({ ...f, resetTraffic: v }))}
           />
           <div className="pt-4">
-            <Field label={t("payments.trial")} htmlFor="pay-trial" hint={s.trials ? `${t("payments.trialSub")} ${t("payments.trialsGiven", { n: s.trials })}` : t("payments.trialSub")}>
-              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => setForm((f) => ({ ...f, trial: Number(e.target.value) }))}>
+            <Field label={t("payments.trial")} htmlFor="pay-trial" hint={`${form.trialStars.trim() || form.trialRub.trim() ? t("payments.trialSubPaid") : t("payments.trialSub")}${s.trials ? ` ${t("payments.trialsGiven", { n: s.trials })}` : ""}`}>
+              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => {
+                  const trial = Number(e.target.value);
+                  setForm((f) => (trial ? { ...f, trial } : { ...f, trial, trialStars: "", trialRub: "" }));
+                }}>
                 <option value={0}>{t("payments.trialOff")}</option>
                 {(tariffs.data ?? []).map((tr) => (
                   <option key={tr.id} value={tr.id}>
@@ -337,9 +363,20 @@ function RulesCard({ s }: { s: Settings }) {
                 ))}
               </select>
             </Field>
+            {form.trial ? (
+              <div className="grid gap-x-3 sm:grid-cols-2" role="group" aria-label={t("payments.trialPrice")}>
+                <Field label={`${t("payments.trialPrice")}, ⭐`} htmlFor="pay-trial-stars" error={errors.trial_stars}>
+                  <input id="pay-trial-stars" className="input max-w-[140px]" inputMode="numeric" value={form.trialStars} onChange={(e) => setForm((f) => ({ ...f, trialStars: e.target.value }))} aria-invalid={!!errors.trial_stars} />
+                </Field>
+                <Field label={`${t("payments.trialPrice")}, ₽`} htmlFor="pay-trial-rub" error={errors.trial_rub}>
+                  <input id="pay-trial-rub" className="input max-w-[140px]" inputMode="decimal" value={form.trialRub} onChange={(e) => setForm((f) => ({ ...f, trialRub: e.target.value }))} aria-invalid={!!errors.trial_rub} />
+                </Field>
+                <p className="text-xs text-[var(--ink-500)] sm:col-span-2">{t("payments.trialPriceSub")}</p>
+              </div>
+            ) : null}
           </div>
         </div>
-        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
+        <FormActions dirty={dirty} saving={save.isPending} onReset={() => { reset(); setErrors({}); }} />
       </form>
     </section>
   );

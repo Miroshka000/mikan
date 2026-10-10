@@ -407,6 +407,7 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 		TariffID  int64  `json:"tariff_id"`
 		TermDays  *int64 `json:"term_days"` // the tariff's term; absent: its first
 		PackageID int64  `json:"package_id"`
+		Trial     bool   `json:"trial"` // the priced trial, for an account without a subscription
 		Provider  string `json:"provider"`
 		Token     string `json:"token"`
 		PromoCode string `json:"promo_code"`
@@ -478,8 +479,13 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 			Addons    []addon         `json:"addons"`
 			Offers    []offer         `json:"offers"`
 			Packages  []shopPackage   `json:"packages"`
+			// Trial is the priced trial this account may buy now, if any.
+			Trial *offer `json:"trial,omitempty"`
 		}{AllowNew: h.shop.Config(ctx).AllowNew, Offers: []offer{}, Packages: packages, Addons: []addon{},
 			Providers: map[string]bool{billing.Stars: av.Stars}}
+		if to, _, ok := h.shop.TrialOffer(ctx, tgID); ok {
+			out.Trial = &offer{ID: to.Tariff.ID, Name: to.Tariff.Name, Description: billing.Describe(to.Tariff, to.Tariff.DurationDays, cfg.Lang), Stars: to.Stars, Rub: to.Rub, Terms: []term{}}
+		}
 		for _, id := range av.Addons {
 			out.Addons = append(out.Addons, addon{Provider: billing.AddonPrefix + id, Name: h.shop.AddonName(ctx, id, cfg.Lang)})
 		}
@@ -499,7 +505,17 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 		return
 	}
 	var p db.Payment
-	if in.PackageID != 0 {
+	if in.Trial {
+		if strings.TrimSpace(in.PromoCode) != "" || in.Token != "" {
+			fail(http.StatusBadRequest, "bad_request")
+			return
+		}
+		p, err = h.shop.TrialInvoice(ctx, tgID, billing.AdapterOf(in.Provider))
+		if errors.Is(err, billing.ErrTrialUsed) || errors.Is(err, billing.ErrTrialOff) {
+			fail(http.StatusConflict, err.Error())
+			return
+		}
+	} else if in.PackageID != 0 {
 		p, err = h.shop.PackageInvoice(ctx, billing.PackageRequest{TgID: tgID, UserID: userID, PackageID: in.PackageID, Provider: billing.AdapterOf(in.Provider), PromoCode: in.PromoCode})
 	} else {
 		p, err = h.shop.Invoice(ctx, billing.InvoiceRequest{TgID: tgID, UserID: userID, TariffID: in.TariffID, TermDays: in.TermDays, Provider: billing.AdapterOf(in.Provider), PromoCode: in.PromoCode})
