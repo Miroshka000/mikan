@@ -17,6 +17,8 @@ export type ShopData = {
   addons?: { provider: `addon:${string}`; name: string }[];
   offers: Offer[];
   packages?: Offer[];
+  /** The priced trial the account may buy now: once, before any plan. */
+  trial?: Offer;
 };
 type Provider = "stars" | `addon:${string}`;
 
@@ -30,6 +32,8 @@ const FAIL: Record<string, Key> = {
   too_many_subs: "sub.shopTooManySubs",
   promo_unavailable: "sub.promoUnavailable",
   promo_try_later: "sub.promoTryLater",
+  trial_used: "sub.trialUsed",
+  trial_off: "sub.trialOff",
 };
 
 /** What the account can buy; with token, the traffic packages of that subscription too. */
@@ -40,9 +44,9 @@ export function loadShop(subRoot: string, initData: string, token = ""): Promise
 }
 
 /**
- * Offers and pay buttons: plans (field tariff_id) or traffic packages (package_id). token
- * is the subscription to renew or add traffic to; "" buys a new one. openInvoice/openLink
- * go through the Mini App bridge.
+ * Offers and pay buttons: plans (field tariff_id), traffic packages (package_id) or the
+ * priced trial (trial). token is the subscription to renew or add traffic to; "" buys a
+ * new one. openInvoice/openLink go through the Mini App bridge.
  */
 export function Shop({
   data,
@@ -60,7 +64,7 @@ export function Shop({
 }: {
   data: ShopData;
   offers: Offer[];
-  field?: "tariff_id" | "package_id";
+  field?: "tariff_id" | "package_id" | "trial";
   pick?: string;
   subRoot: string;
   initData: string;
@@ -88,7 +92,7 @@ export function Shop({
   // A single term the providers take now is named too: it may not be the plan's first,
   // which a request without days is for.
   const sold = term ?? offer?.terms?.[0];
-  const order = { [field]: offer?.id, ...(sold ? { term_days: sold.days } : {}) };
+  const order = field === "trial" ? { trial: true } : { [field]: offer?.id, ...(sold ? { term_days: sold.days } : {}) };
   const failText = (code: string) => (field === "package_id" && code === "not_for_sale" ? t("sub.packageNotForSale") : t(FAIL[code] ?? "sub.shopFail"));
 
   const pay = async (provider: Provider) => {

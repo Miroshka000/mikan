@@ -59,7 +59,15 @@ type Config struct {
 	// TrialTariffID is the tariff of the free trial a Telegram account may take once in
 	// the bot; 0: no trial. It works with selling off too: it takes no payment.
 	TrialTariffID int64 `json:"trial_tariff_id,omitempty"`
+	// TrialStars and TrialRub (kopecks) put a price on the trial; both 0: it is free. A
+	// priced trial is bought in the bot and the Mini App, once per account like the free
+	// one, through the providers that take its price: it needs selling on.
+	TrialStars int64 `json:"trial_stars,omitempty"`
+	TrialRub   int64 `json:"trial_rub,omitempty"`
 }
+
+// TrialPaid: the trial has a price and is bought, not taken.
+func (c Config) TrialPaid() bool { return c.TrialStars > 0 || c.TrialRub > 0 }
 
 // DefaultConfig: selling off until the admin turns it on; then Stars (it needs nothing but
 // the bot) and new buyers are welcome.
@@ -644,6 +652,13 @@ func (s *Service) PreCheckout(ctx context.Context, tgID int64, payload, currency
 	if p.Kind == KindPackage {
 		return s.packageOnSale(ctx, p)
 	}
+	if p.Kind == KindTrial {
+		// The trial's tariff is seldom on sale itself: the price is the trial's.
+		if t, err := s.d.Store.Q.GetTariff(ctx, p.TariffID.Int64); err != nil || t.Archived != 0 {
+			return ErrNotForSale
+		}
+		return nil
+	}
 	t, err := s.d.Store.Q.GetTariff(ctx, p.TariffID.Int64)
 	if err != nil || t.Archived != 0 || t.OnSale == 0 {
 		return ErrNotForSale
@@ -887,6 +902,16 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 				}
 			}
 			return markApplied(ctx, q, id, u.ID, s.d.Now())
+		}
+		if pay.Kind == KindTrial {
+			if u, err = s.applyTrial(ctx, q, pay); err != nil {
+				return err
+			}
+			created = true
+			if err := markApplied(ctx, q, id, u.ID, s.d.Now()); err != nil {
+				return err
+			}
+			return q.SetPaymentRevert(ctx, db.SetPaymentRevertParams{Revert: purchaseRevert(true, false, db.User{}, u), ID: id})
 		}
 		var userID int64
 		var prior db.User

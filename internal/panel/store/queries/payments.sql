@@ -91,5 +91,5 @@ UPDATE payments SET revert = $1 WHERE id = $2;
 -- name: CountLaterTariffPayments :one
 -- Tariff payments of the user applied after the given one: they build on what it set.
 SELECT count(*) FROM payments
-WHERE user_id = sqlc.arg(user_id) AND status = 'applied' AND kind IN ('new', 'renew') AND id <> sqlc.arg(id)
+WHERE user_id = sqlc.arg(user_id) AND status = 'applied' AND kind IN ('new', 'renew', 'trial') AND id <> sqlc.arg(id)
   AND (applied_at > CAST(sqlc.arg(applied_at) AS BIGINT) OR (applied_at = CAST(sqlc.arg(applied_at) AS BIGINT) AND id > sqlc.arg(id)));

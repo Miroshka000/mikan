@@ -12,7 +12,7 @@ import (
 
 const countLaterTariffPayments = `-- name: CountLaterTariffPayments :one
 SELECT count(*) FROM payments
-WHERE user_id = $1 AND status = 'applied' AND kind IN ('new', 'renew') AND id <> $2
+WHERE user_id = $1 AND status = 'applied' AND kind IN ('new', 'renew', 'trial') AND id <> $2
   AND (applied_at > CAST($3 AS BIGINT) OR (applied_at = CAST($3 AS BIGINT) AND id > $2))
 `
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -36,8 +37,11 @@ func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice s
 			return b.shopInvoice(ctx, w, chat, 0, arg, []Button{{Text: w.back, CallbackData: "tn:" + id}})
 		}
 	}
-	if cmd == "tr" {
+	switch cmd {
+	case "tr":
 		return b.takeTrial(ctx, w, chat)
+	case "tp":
+		return b.trialInvoice(ctx, w, chat, arg)
 	}
 	if !ok {
 		return b.welcome(ctx, cfg, w, chat, notice)
@@ -131,8 +135,12 @@ func (b *Bot) welcome(ctx context.Context, cfg Config, w *words, chat int64, not
 		text = html.EscapeString(notice) + "\n\n" + text
 	}
 	var rows [][]Button
-	if b.d.Billing != nil && b.d.Billing.TrialOpen(ctx, chat) {
-		rows = append(rows, []Button{{Text: w.trial, CallbackData: "tr"}})
+	if b.d.Billing != nil {
+		if o, _, ok := b.d.Billing.TrialOffer(ctx, chat); ok {
+			rows = append(rows, []Button{{Text: fmt.Sprintf(w.trialPaid, w.cheapest(billing.Offer{Stars: o.Stars, Rub: o.Rub})), CallbackData: "tr"}})
+		} else if b.d.Billing.TrialOpen(ctx, chat) {
+			rows = append(rows, []Button{{Text: w.trial, CallbackData: "tr"}})
+		}
 	}
 	if b.canBuyNew(ctx) {
 		rows = append(rows, []Button{{Text: w.buy, CallbackData: "b"}})

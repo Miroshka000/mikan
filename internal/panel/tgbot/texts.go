@@ -39,6 +39,7 @@ type words struct {
 	buy, buyTitle, renewTitle, payHow, payStars, payCard, payCrypto, payAddon, payButton, invoice, payNew, payRenew string
 	notForSale, payUnavailable, tooManyInvoices, payStale, paidNew, paidRenew                                       string
 	trial, trialDone, trialUsed, trialOff, trialOpen, trialFail                                                     string
+	trialPaid, trialTitle                                                                                           string // the priced trial: its button with the price, its title over the ways to pay
 	pickTerm, priceFrom                                                                                             string
 	poolOut                                                                                                         string // a traffic pool used up
 
@@ -120,6 +121,8 @@ var ru = words{
 	trialOff:        "Пробный период сейчас недоступен.",
 	trialOpen:       "📱 Открыть подписку",
 	trialFail:       "Не получилось выдать пробный период. Попробуйте позже или напишите в поддержку.",
+	trialPaid:       "🎁 Попробовать за %s",
+	trialTitle:      "🎁 Пробный период",
 	paidNew:         "✅ Оплата получена — подписка «%s» готова (тариф «%s»).\n\nДобавьте ссылку в приложение:\n<code>%s</code>",
 	paidRenew:       "✅ Оплата получена — подписка «%s» продлена до %s.",
 	poolOut:         "закончился до сброса",
@@ -208,6 +211,8 @@ var en = words{
 	trialOff:        "The trial is not available now.",
 	trialOpen:       "📱 Open the subscription",
 	trialFail:       "Could not give the trial. Try later or message support.",
+	trialPaid:       "🎁 Try it for %s",
+	trialTitle:      "🎁 Trial",
 	paidNew:         "✅ Payment received — subscription “%s” is ready (plan “%s”).\n\nAdd the link to your app:\n<code>%s</code>",
 	paidRenew:       "✅ Payment received — subscription “%s” is renewed until %s.",
 	poolOut:         "used up until the reset",

@@ -272,15 +272,37 @@ function SubPage() {
       />
     ) : null;
 
-  if (tg.state === "none" && shop?.allow_new && shop.offers.length > 0) {
+  // The priced trial comes first for an account without a subscription; plans after it.
+  const trialShop = shop?.trial ? (
+    <Shop
+      data={shop}
+      offers={[shop.trial]}
+      field="trial"
+      pick={t("sub.trialPick")}
+      subRoot={subRoot}
+      initData={initData}
+      token=""
+      title={t("sub.trialTitle")}
+      openInvoice={(slug) => tgEvent("web_app_open_invoice", { slug })}
+      openLink={openOutside}
+      onRefresh={refresh}
+    />
+  ) : null;
+  const plansForNew = !!shop?.allow_new && !!shop.offers.length;
+  if (tg.state === "none" && (plansForNew || trialShop)) {
     return (
       <Shell>
         <section className="glass sub-card p-6 text-center">
           <h1 className="font-display text-xl font-medium">{t("sub.tgNoSubTitle")}</h1>
           <p className="mt-2 text-[13px] text-[var(--ink-500)]">{t("sub.tgNoSubText")}</p>
         </section>
-        <PromoSection token="" activeCode={promoCode} onApplied={(c) => setPromoCode(c)} onBonusApplied={refresh} title={titleOf(config, "promo")} />
-        {shopFor("", t("sub.shopNew"))}
+        {trialShop}
+        {plansForNew ? (
+          <>
+            <PromoSection token="" activeCode={promoCode} onApplied={(c) => setPromoCode(c)} onBonusApplied={refresh} title={titleOf(config, "promo")} />
+            {shopFor("", t("sub.shopNew"))}
+          </>
+        ) : null}
       </Shell>
     );
   }

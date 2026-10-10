@@ -126,7 +126,7 @@ func (s *Service) takeBackTariff(ctx context.Context, q *db.Queries, p db.Paymen
 	if !rv.Exact {
 		// Applied before the snapshot existed: a new subscription is turned off, a renewal
 		// loses the days of its term.
-		ri = revertInfo{Created: p.Kind == "new"}
+		ri = revertInfo{Created: p.Kind == "new" || p.Kind == KindTrial}
 	}
 	now := s.d.Now().Unix()
 	// Payments after this one build on it: the subscription stays, only this term goes.
