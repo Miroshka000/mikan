@@ -167,6 +167,13 @@ pub fn lines(h: &Hello, api_port: Option<u16>) -> Vec<(Level, String)> {
             let url = h.param("url").map(|u| format!(" at {u}")).unwrap_or_default();
             (Level::Warn, format!("This server cannot reach the panel{url}: the panel still connects on its own, see its Nodes page"))
         }
+        "panel_untrusted" => {
+            let url = h.param("url").map(|u| format!(" at {u}")).unwrap_or_default();
+            (
+                Level::Warn,
+                format!("The panel{url} has no public certificate yet, so this server did not ask it: the panel still connects on its own, see its Nodes page"),
+            )
+        }
         "panel_unverified" => (
             Level::Warn,
             "The panel's answer was not signed by it: the panel still connects on its own, see its Nodes page; if it does not, take a new key there".to_owned(),

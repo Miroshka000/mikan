@@ -502,11 +502,17 @@ func (c *Checker) nodePort(ctx context.Context, n Node, p Port) CertCheck {
 	return ch
 }
 
-// dialChain completes a TLS handshake with addr and returns what the server presented,
-// trusted or not: the check judges it itself.
+// dialChain does a TLS handshake with addr and returns what the server presented, trusted
+// or not: the check judges it itself.
 func dialChain(ctx context.Context, addr, sni string) ([]*x509.Certificate, error) {
-	d := tls.Dialer{NetDialer: &net.Dialer{Timeout: 5 * time.Second}, Config: &tls.Config{ServerName: sni, InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}} //nolint:gosec // the chain is inspected, not trusted
+	// Verified as any client would; a certificate that fails still comes back with the
+	// error, so the check sees what an untrusted server presented without trusting it.
+	d := tls.Dialer{NetDialer: &net.Dialer{Timeout: 5 * time.Second}, Config: &tls.Config{ServerName: sni, MinVersion: tls.VersionTLS12}}
 	conn, err := d.DialContext(ctx, "tcp", addr)
+	var bad *tls.CertificateVerificationError
+	if errors.As(err, &bad) && len(bad.UnverifiedCertificates) > 0 {
+		return bad.UnverifiedCertificates, nil
+	}
 	if err != nil {
 		return nil, err
 	}

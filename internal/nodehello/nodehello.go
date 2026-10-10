@@ -51,6 +51,9 @@ const (
 	PanelRejected = "panel_rejected"
 	// PanelUnverified: the answer is not signed by the panel the key names.
 	PanelUnverified = "panel_unverified"
+	// PanelUntrusted: the panel's HTTPS certificate is not a public one yet (still its
+	// self-signed one): the node does not talk to it. The panel still dials the node.
+	PanelUntrusted = "panel_untrusted"
 )
 
 // IPDiffers is the Result.Params flag of a node whose address in the panel is not the one
@@ -186,6 +189,10 @@ func Send(ctx context.Context, key nodetls.Key, hc *http.Client, now time.Time) 
 	hr.Header.Set("Content-Type", "application/json")
 	resp, err := hc.Do(hr)
 	if err != nil {
+		var bad *tls.CertificateVerificationError
+		if errors.As(err, &bad) {
+			return Result{Code: PanelUntrusted, Error: err.Error(), Params: map[string]string{"url": key.PanelURL}}
+		}
 		return Result{Code: PanelUnreachable, Error: err.Error(), Params: map[string]string{"url": key.PanelURL}}
 	}
 	defer resp.Body.Close()
@@ -204,12 +211,14 @@ func Send(ctx context.Context, key nodetls.Key, hc *http.Client, now time.Time) 
 	return r
 }
 
-// Client is the HTTP client for hellos. The panel's certificate may be its self-signed
-// one: the answer's signature is what proves the panel, not the TLS chain.
+// Client is the HTTP client for hellos. It checks the panel's certificate as any client
+// would: a panel on its self-signed one gets no hello (PanelUntrusted) until its public
+// certificate comes, which it gets by itself. The answer's signature proves the panel
+// on top of that.
 func Client() *http.Client {
 	return &http.Client{Timeout: 25 * time.Second, Transport: &http.Transport{
 		Proxy:               nil,
-		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true}, //nolint:gosec // the answer is signed
+		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS12},
 		TLSHandshakeTimeout: 10 * time.Second,
 	}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
@@ -218,7 +227,7 @@ func Client() *http.Client {
 // trying again cannot change the answer.
 func Final(r Result) bool {
 	switch r.Code {
-	case "", NoPanelURL, PanelRejected, PanelUnverified, "pin_mismatch":
+	case "", NoPanelURL, PanelRejected, PanelUnverified, PanelUntrusted, "pin_mismatch":
 		return true
 	}
 	return r.OK

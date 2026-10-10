@@ -2874,6 +2874,7 @@
       "failed": "Did not start, the details say why",
       "low": "Low on space",
       "panel_unreachable": "The node's server cannot reach the panel. This breaks nothing: the panel is the one that connects",
+      "panel_untrusted": "The panel has no public certificate yet, so the node's server did not ask it. This breaks nothing: the panel is the one that connects",
       "panel_rejected": "The panel does not know the node's key: it was reissued or the node removed",
       "panel_unverified": "The answer did not come from this panel",
       "no_panel_url": "The key has no panel address: an older version issued it"

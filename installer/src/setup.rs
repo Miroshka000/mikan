@@ -1001,7 +1001,10 @@ mod tests {
         assert!(summary(&silent, true).contains("The panel connects within 30 seconds"));
         let ok = Outcome { hello: Some(vec![(system::Level::Ok, "The panel connected to this node.".into())]), ..silent.clone() };
         let text = summary(&ok, true);
-        assert!(text.contains("\n✓ The panel connected to this node.\n") && !text.contains("within 30 seconds"), "{text}");
+        assert!(
+            text.contains("\n✓ The panel connected to this node.\n") && !text.contains("within 30 seconds"),
+            "the summary does not tell the panel connected"
+        );
         let blocked = Outcome { hello: Some(vec![(system::Level::Error, "The panel could not reach port 31234 here".into())]), ..silent };
         assert!(summary(&blocked, true).contains("\n✗ The panel could not reach port 31234 here\n"));
     }
