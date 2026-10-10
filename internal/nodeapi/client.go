@@ -166,6 +166,18 @@ func (c *Client) RequestUpdate(ctx context.Context, version string) error {
 	return c.do(ctx, http.MethodPost, "/v1/update", UpdateRequest{Version: version}, nil, 10*time.Second)
 }
 
+// PresentChallenge has the node answer an ACME HTTP-01 challenge on its port 80 until
+// CleanUpChallenge. Nodes that predate it answer 404 (a *StatusError); a port 80 held by
+// another program is *Error{Code: CodePort80Busy}, its Message the holder when known.
+func (c *Client) PresentChallenge(ctx context.Context, token, keyAuth string) error {
+	return c.do(ctx, http.MethodPut, "/v1/acme/challenge/"+url.PathEscape(token), ChallengeRequest{KeyAuth: keyAuth}, nil, 15*time.Second)
+}
+
+// CleanUpChallenge stops answering token; the node gives port 80 back once none is left.
+func (c *Client) CleanUpChallenge(ctx context.Context, token string) error {
+	return c.do(ctx, http.MethodDelete, "/v1/acme/challenge/"+url.PathEscape(token), nil, nil, 15*time.Second)
+}
+
 // Torrents returns the torrent blocker's hits after seq of epoch. Nodes that predate the
 // blocker answer 404.
 func (c *Client) Torrents(ctx context.Context, epoch string, after int64) (TorrentHits, error) {

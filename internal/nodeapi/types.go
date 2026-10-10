@@ -123,6 +123,21 @@ type TLSFiles struct {
 	KeyPEM  string `json:"key_pem"`
 }
 
+// ChallengeRequest asks the node to answer an ACME HTTP-01 challenge for its own address
+// (PUT /v1/acme/challenge/{token}): the panel orders the node's certificate, the CA comes
+// to the node's port 80. Nodes that predate it answer 404 and stay on a pinned
+// self-signed certificate.
+type ChallengeRequest struct {
+	KeyAuth string `json:"key_auth"`
+}
+
+// The node's answers to a challenge it cannot take: port 80 held by another program (the
+// message names it when the node can tell), or too many pending at once.
+const (
+	CodePort80Busy        = "port80_busy"
+	CodeTooManyChallenges = "too_many_challenges"
+)
+
 // Counters is a batch of traffic deltas. The node returns the same batch until it is
 // acknowledged, so the panel can apply it idempotently by (Epoch, Seq).
 type Counters struct {

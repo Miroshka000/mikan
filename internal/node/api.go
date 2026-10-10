@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"mikan/internal/acmechallenge"
 	"mikan/internal/nodeapi"
 	"mikan/internal/scan"
 )
@@ -87,6 +88,36 @@ func Handler(e *Engine, log *slog.Logger) http.Handler {
 		default:
 			w.WriteHeader(http.StatusAccepted)
 		}
+	})
+	// The panel orders the node's certificate; the CA asks for the token on the node's port
+	// 80, which is held only while a token is pending.
+	mux.HandleFunc("PUT /v1/acme/challenge/{token}", func(w http.ResponseWriter, r *http.Request) {
+		var req nodeapi.ChallengeRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, nodeapi.Error{Code: "bad_request", Message: err.Error()})
+			return
+		}
+		token := r.PathValue("token")
+		if !acmechallenge.ValidToken(token) || !acmechallenge.ValidKeyAuth(token, req.KeyAuth) {
+			writeJSON(w, http.StatusBadRequest, nodeapi.Error{Code: "bad_request", Message: "not an ACME token and key authorization"})
+			return
+		}
+		var be *acmechallenge.BusyError
+		switch err := e.Challenge.Present(token, req.KeyAuth); {
+		case errors.As(err, &be):
+			writeJSON(w, http.StatusConflict, nodeapi.Error{Code: nodeapi.CodePort80Busy, Message: be.Holder})
+		case errors.Is(err, acmechallenge.ErrTooMany):
+			writeJSON(w, http.StatusTooManyRequests, nodeapi.Error{Code: nodeapi.CodeTooManyChallenges, Message: "too many challenges at once"})
+		case err != nil:
+			log.Error("acme challenge", "err", err)
+			writeJSON(w, http.StatusInternalServerError, nodeapi.Error{Code: "challenge_failed", Message: err.Error()})
+		default:
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	mux.HandleFunc("DELETE /v1/acme/challenge/{token}", func(w http.ResponseWriter, r *http.Request) {
+		e.Challenge.CleanUp(r.PathValue("token"))
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("GET /v1/warp", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 18*time.Second)

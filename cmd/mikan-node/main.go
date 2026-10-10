@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"mikan/internal/acmechallenge"
 	"mikan/internal/node"
 	"mikan/internal/nodetls"
 )
@@ -61,7 +62,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("MIKAN_ALLOW_PRIVATE: %w", err)
 	}
-	eng, err := node.Start(node.Options{DataDir: dataDir, Version: version, Log: log, DeviceRelease: release, AllowPrivate: allowPrivate})
+	// The panel's HTTP-01 challenges for this node's certificate: port 80, unless a web
+	// server of the admin's holds it and passes /.well-known/acme-challenge/ on.
+	acmeListen, err := acmechallenge.ParseListen(os.Getenv("MIKAN_ACME_LISTEN"))
+	if err != nil {
+		return fmt.Errorf("MIKAN_ACME_LISTEN: %w", err)
+	}
+	eng, err := node.Start(node.Options{DataDir: dataDir, Version: version, Log: log, DeviceRelease: release, AllowPrivate: allowPrivate, ACMEListen: acmeListen})
 	if err != nil {
 		return err
 	}

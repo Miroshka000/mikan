@@ -1,6 +1,7 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -27,6 +28,7 @@ import (
 	mlog "github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
 
+	"mikan/internal/acmechallenge"
 	"mikan/internal/fsutil"
 	"mikan/internal/nodeapi"
 	"mikan/internal/proto"
@@ -46,6 +48,9 @@ type Options struct {
 	DeviceRelease time.Duration
 	// AllowPrivate lets VPN users reach private and loopback networks of the server.
 	AllowPrivate bool
+	// ACMEListen is where the panel's HTTP-01 challenges for this node are answered
+	// (acmechallenge.ParseListen); "" is port 80.
+	ACMEListen string
 }
 
 type Engine struct {
@@ -58,6 +63,9 @@ type Engine struct {
 
 	Reg *Registry
 	tun *Tunnel
+	// Challenge answers the ACME challenges the panel orders for the node's address, on
+	// port 80 while one is pending.
+	Challenge *acmechallenge.Server
 
 	mu         sync.Mutex // serializes Apply
 	savedShape string     // policyShape of the policies in the state file
@@ -166,6 +174,7 @@ func Start(o Options) (*Engine, error) {
 		dataDir: dataDir, home: home, log: log, version: version, started: time.Now(), allowPrivate: o.AllowPrivate,
 		listeners: map[string]nodeapi.ListenerStatus{},
 		errs:      map[string]string{}, marker: make(chan string, 8), sys: newSysSampler(),
+		Challenge: acmechallenge.New(cmp.Or(o.ACMEListen, acmechallenge.DefaultListen)),
 	}
 	go e.pumpLogs()
 
