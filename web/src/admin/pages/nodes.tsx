@@ -4,7 +4,7 @@ import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud,
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
-import { AcmeProblem, caName } from "../../components/acme";
+import { AcmeAttempts, AcmeProblem, caName } from "../../components/acme";
 import { CertDrawer, certUntil } from "../../components/cert-drawer";
 import { Confirm, Drawer } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
@@ -506,8 +506,9 @@ function NodeCertRow({ n }: { n: Node }) {
             <LoaderCircle size={14} className="spin" aria-hidden /> {t("certs.nodeOrdering")}
           </span>
         ) : order?.error ? (
-          <AcmeProblem code={order.error} detail={order.error_detail} holder={order.holder} retryAt={order.retry_at} className="mt-1" />
+          <AcmeProblem code={order.error} detail={order.error_detail} holder={order.holder} retryAt={order.retry_at} host={order.identifier} node className="mt-1" />
         ) : null}
+        <AcmeAttempts attempts={order?.attempts} className="mt-1" />
         {tls?.pinned && tls.kind !== "acme" ? <p className="mt-1 text-xs text-[var(--ink-500)]">{t("certs.pinnedNoteNode")}</p> : null}
         {canOrder && needed && order?.error !== "node_outdated" ? (
           <div className="mt-2">

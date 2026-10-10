@@ -13,7 +13,7 @@ use anyhow::{Context, Result, anyhow, bail};
 
 use crate::envfile::EnvFile;
 use crate::setup;
-use crate::{DIR, addon, docker, hello, host, lock, release, system};
+use crate::{DIR, acme, addon, docker, hello, host, lock, release, system};
 
 pub struct Install {
     pub env: EnvFile,
@@ -85,6 +85,73 @@ const MAX_PEM: u64 = 64 << 10;
 
 /// Installs an own certificate: both files go to the panel on stdin, never on the
 /// command line or into another file; the panel checks them and serves them at once.
+/// `mikan cert proxy <domain>`: Let's Encrypt checks domain on port 80, which nginx or Caddy
+/// may hold on this server. The rule that passes the check to mikan goes into that web
+/// server (backed up, tested, reloaded; or shown when it cannot be added), and mikan
+/// answers on a local port behind it. With port 80 free again, mikan takes it back.
+pub fn cert_proxy(domain: &str, yes: bool) -> Result<()> {
+    let domain = domain.trim().trim_end_matches('.').to_ascii_lowercase();
+    if !crate::net::valid_domain(&domain) && domain.parse::<IpAddr>().is_err() {
+        bail!("{domain:?} is not a domain or an IP address: give the address clients reach this server by");
+    }
+    let mut install = Install::load()?;
+    let _lock = lock::acquire(lock::Wait::Block, &mut crate::out)?;
+    let what = if install.node { "node" } else { "panel" };
+    let owner = system::port_owner(80, system::Proto::Tcp);
+    match acme::port80(owner.as_deref(), install.env.get("MIKAN_ACME_LISTEN"), acme::free_port) {
+        acme::Port80::Own { drop: false } => {
+            crate::out(&format!("Port 80 is free: the {what} answers Let's Encrypt there by itself, nothing to change."));
+            Ok(())
+        }
+        acme::Port80::Own { drop: true } => {
+            install.env.remove("MIKAN_ACME_LISTEN");
+            install.env.save()?;
+            recreate(&install)?;
+            crate::out(&format!("Port 80 is free now: the {what} answers Let's Encrypt there by itself again."));
+            Ok(())
+        }
+        acme::Port80::Other(who) => bail!(
+            "port 80 is held by {who}, which mikan cannot configure. Free port 80, or make {who} pass /.well-known/acme-challenge/ to 127.0.0.1:{port}, set MIKAN_ACME_LISTEN=127.0.0.1:{port} in {DIR}/.env and run: mikan restart",
+            port = acme::free_port()
+        ),
+        acme::Port80::Front(front, port) => {
+            let question = format!(
+                "{} holds port 80, where Let's Encrypt checks {domain}. Add a rule that passes only those checks to the {what}? Its config is backed up and tested before a reload.",
+                front.name()
+            );
+            if !yes && !confirm(&question) {
+                crate::out(&format!(
+                    "Nothing changed. What to add by hand:
+
+{}",
+                    acme::manual_text(front, &domain, port)
+                ));
+                return Ok(());
+            }
+            let report = acme::setup(front, &domain, port, true);
+            // The rule may be in, or left for the admin: mikan answers behind it either way.
+            install.env.set("MIKAN_ACME_LISTEN", &acme::listen(port))?;
+            install.env.save()?;
+            recreate(&install)?;
+            crate::out(&report.note());
+            match report.text() {
+                Some(t) => crate::out(&t),
+                None => crate::out(&format!(
+                    "Done. The {what} gets its certificate by itself within minutes; on the panel's {} page Retry asks for it now.",
+                    if install.node { "Nodes" } else { "Settings → Security" }
+                )),
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Starts the containers again with what .env says now.
+fn recreate(install: &Install) -> Result<()> {
+    docker::compose_run(&["up", "-d"])?;
+    setup::wait_ready(install.node_port(), Duration::from_secs(90))
+}
+
 pub fn cert_set(cert: &Path, key: &Path, node: Option<u32>) -> Result<()> {
     Install::load()?.panel_only()?;
     let mut pem = String::new();

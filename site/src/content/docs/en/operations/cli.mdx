@@ -57,6 +57,7 @@ The panel's own node has number 1, and its address and domain are changed in the
 | `mikan cert set --cert fullchain.pem --key privkey.pem [--node N]` | your own certificate for the panel or a node |
 | `mikan cert show [--node N]` | what is installed now |
 | `mikan cert clear [--node N]` | go back to Let's Encrypt (for a node: self-signed) |
+| `mikan cert proxy <domain>` | nginx or Caddy holds port 80: pass Let's Encrypt's checks through it to the panel or node (the rule is backed up, the config tested and reloaded) |
 
 ## REALITY masking sites
 

@@ -33,6 +33,9 @@ the signed manifest, and the panel shows the one in its language.
 - A read-only API key no longer sees the Mini App's address in the Telegram settings: it carried the subscription path. Thanks to amnesiaof (#130).
 - Promo codes moved into Payments, as a tab next to the history, the methods and the rules: one menu item fewer. Old links lead there.
 - The Mini App in Telegram's full screen keeps its header clear of Telegram's own buttons (Close, the menu): the page now takes the room Telegram reports for them.
+- A node whose port 80 nginx or Caddy holds gets its public certificate with one command on its server: `mikan cert proxy <the node's domain>` adds a rule for Let's Encrypt's checks only (backed up, tested, reloaded) and has the node answer behind it. The node's card shows that command with the node's address and names the web server: a node now tells it by the server's answer when it cannot see the process. The node installer prints the command too, and `mikan doctor` checks port 80.
+- The certificate cards of the panel and of every node keep a log of the latest attempts: when, at which CA, how each ended and the CA's own words.
+- The node's hello checks the panel's certificate like any client, and the certificate check reads an untrusted chain without turning verification off.
 
 ### ru
 - Платежи через Platega висели в «Ждёт оплаты», хотя покупатель заплатил: после выбора способа Platega добавляет свою комиссию сверху (5% для СБП), а панель не принимала сумму, отличную от счёта. Теперь оплата, покрывающая счёт, засчитывается; меньше или в другой валюте по-прежнему отклоняется. Обновите и дополнение Platega до 1.0.5: прежнее не читало сумму в том виде, в каком её присылает Platega, поэтому каждая проверка падала, а Platega показывала уведомления неуспешными. Платежи, которые уже истекли в ожидании, нужно выдать вручную.
@@ -63,6 +66,9 @@ the signed manifest, and the panel shows the one in its language.
 - API-ключ только на чтение больше не видит адрес Mini App в настройках Telegram: в нём был путь подписок. Спасибо amnesiaof (#130).
 - Промокоды переехали в «Платежи», вкладкой рядом с историей, способами и правилами: в меню на пункт меньше. Старые ссылки ведут туда.
 - Mini App в полноэкранном режиме Telegram больше не прячет шапку под кнопками Telegram («Закрыть», меню): страница отступает на столько, сколько они занимают.
+- Нода, у которой порт 80 держит nginx или Caddy, получает публичный сертификат одной командой на её сервере: `mikan cert proxy <домен ноды>` добавляет правило только для проверок Let's Encrypt (с бэкапом, проверкой конфига и перезагрузкой), и нода отвечает за ним. Карточка ноды показывает эту команду с адресом ноды и называет веб-сервер: нода теперь узнаёт его по ответу, даже когда не видит процесс. Установщик ноды тоже подсказывает команду, а `mikan doctor` проверяет порт 80.
+- Карточки сертификата панели и каждой ноды хранят журнал последних попыток: когда, у какого центра, чем закончилась и что ответил центр.
+- Hello ноды проверяет сертификат панели как обычный клиент, а проверка сертификата читает недоверенную цепочку, не отключая проверку.
 
 ## 0.5.0.4
 ### en

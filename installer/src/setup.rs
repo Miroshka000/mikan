@@ -238,6 +238,8 @@ pub struct Outcome {
     /// A node: how the panel's first contact with it went. None for a panel, and for a
     /// node whose image does not report it.
     pub hello: Option<Vec<(system::Level, String)>>,
+    /// A node whose port 80 another program holds: how its public certificate can come.
+    pub port80: Option<String>,
 }
 
 /// Port 80 of a panel with a domain, when something else holds it.
@@ -501,9 +503,17 @@ fn run(plan: &Plan, tx: &Sender<Event>) -> StepResult<()> {
     // Everything is done: the install is not unfinished any more.
     let _ = fs::remove_file(Path::new(DIR).join(UNFINISHED));
 
+    let port80 = match &plan.join {
+        Some(key) => node_port80(system::port_owner(80, Proto::Tcp).as_deref(), node_host(&image, key).as_deref()),
+        None => None,
+    };
     let outcome = match creds {
-        Some(c) => Outcome { version, node_port: None, url: c.url, login: c.login, password: c.password.unwrap_or_default(), acme, hello },
-        None => Outcome { version, node_port: api_port, url: String::new(), login: String::new(), password: String::new(), acme, hello },
+        Some(c) => {
+            Outcome { version, node_port: None, url: c.url, login: c.login, password: c.password.unwrap_or_default(), acme, hello, port80 }
+        }
+        None => {
+            Outcome { version, node_port: api_port, url: String::new(), login: String::new(), password: String::new(), acme, hello, port80 }
+        }
     };
     let _ = tx.send(Event::Finished(Box::new(outcome)));
     Ok(())
@@ -591,6 +601,34 @@ pub fn image_version(image: &str) -> Result<String> {
         bail!("the image does not start: {}", String::from_utf8_lossy(&out.stderr).trim());
     }
     Ok(v)
+}
+
+/// The node's address as the panel has it, from the join key; None for a key of an older
+/// panel, or an image that does not tell.
+fn node_host(image: &str, key: &str) -> Option<String> {
+    let out = sandboxed()
+        .env("MIKAN_NODE_JOIN", key)
+        .args(["-e", "MIKAN_NODE_JOIN", "--entrypoint", "/usr/local/bin/mikan-node", image, "key-host"])
+        .output()
+        .ok()?;
+    let host = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    (out.status.success() && !host.is_empty() && !host.contains(char::is_whitespace)).then_some(host)
+}
+
+/// What a node with port 80 held by another program needs for its public certificate: the
+/// node takes the port only while Let's Encrypt checks it. None when the port is free.
+pub fn node_port80(owner: Option<&str>, host: Option<&str>) -> Option<String> {
+    let who = owner.filter(|w| !matches!(*w, "mikan" | "mikan-node"))?;
+    let command = format!("mikan cert proxy {}", host.unwrap_or("<the node's domain>"));
+    Some(match acme::Front::from_process(who) {
+        Some(front) => format!(
+            "Let's Encrypt: {} holds port 80, where it checks this node for its public certificate. To pass those checks on to the node, run: {command}",
+            front.name()
+        ),
+        None => format!(
+            "Let's Encrypt: port 80 is taken ({who}), where it checks this node for its public certificate. Free it and the node gets one by itself; until then it uses a self-signed one."
+        ),
+    })
 }
 
 /// The image checks a node's join key and names the port the panel will connect to. The
@@ -732,7 +770,7 @@ pub fn summary(o: &Outcome, with_password: bool) -> String {
             )
         }
     };
-    if let Some(t) = o.acme.as_ref().and_then(acme::Report::text) {
+    for t in o.acme.as_ref().and_then(acme::Report::text).into_iter().chain(o.port80.clone()) {
         text.push_str("\n\n");
         text.push_str(&t);
     }
@@ -971,6 +1009,7 @@ mod tests {
             password: "p4ssw0rd".into(),
             acme: None,
             hello: None,
+            port80: None,
         };
         assert!(summary(&shown, true).contains("Password  p4ssw0rd"));
         // after the installer's screen the terminal gets the link and login, not the password
@@ -997,6 +1036,7 @@ mod tests {
             password: String::new(),
             acme: None,
             hello: None,
+            port80: None,
         };
         assert!(summary(&silent, true).contains("The panel connects within 30 seconds"));
         let ok = Outcome { hello: Some(vec![(system::Level::Ok, "The panel connected to this node.".into())]), ..silent.clone() };
@@ -1005,8 +1045,19 @@ mod tests {
             text.contains("\n✓ The panel connected to this node.\n") && !text.contains("within 30 seconds"),
             "the summary does not tell the panel connected"
         );
-        let blocked = Outcome { hello: Some(vec![(system::Level::Error, "The panel could not reach port 31234 here".into())]), ..silent };
+        let blocked =
+            Outcome { hello: Some(vec![(system::Level::Error, "The panel could not reach port 31234 here".into())]), ..silent.clone() };
         assert!(summary(&blocked, true).contains("\n✗ The panel could not reach port 31234 here\n"));
+        let behind = Outcome { port80: node_port80(Some("nginx"), Some("node.example.com")), ..silent };
+        assert!(summary(&behind, true).ends_with("To pass those checks on to the node, run: mikan cert proxy node.example.com"));
+    }
+
+    #[test]
+    fn a_node_behind_a_web_server_is_told_the_command() {
+        assert_eq!(node_port80(None, Some("node.example.com")), None);
+        assert_eq!(node_port80(Some("mikan-node"), None), None);
+        assert!(node_port80(Some("caddy"), None).unwrap().ends_with("mikan cert proxy <the node's domain>"));
+        assert!(node_port80(Some("apache2"), None).unwrap().contains("port 80 is taken (apache2)"));
     }
 
     #[test]

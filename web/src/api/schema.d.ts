@@ -2037,6 +2037,18 @@ export interface components {
             public_enabled?: boolean;
             public_summary?: boolean;
         };
+        Attempt: {
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            ca: "letsencrypt" | "zerossl" | "google";
+            /** @description Слова центра сертификации или системы как есть */
+            detail?: string;
+            /** @description Код errors.acme; пусто — сертификат получен */
+            error?: string;
+            /** @description Кто держал порт 80 (port80_busy), если это видно */
+            holder?: string;
+        };
         AuditEntry: {
             /** @description Например user.create, settings.update, auth.login_failed */
             action: string;
@@ -3022,6 +3034,8 @@ export interface components {
             total: number;
         };
         NodeStatus: {
+            /** @description Последние попытки получить сертификат, свежие первыми */
+            attempts?: components["schemas"]["Attempt"][];
             /**
              * @description Кто выдал сертификат, который у ноды сейчас
              * @enum {string}
@@ -4118,6 +4132,8 @@ export interface components {
             up_bps: number;
         };
         Status: {
+            /** @description Последние попытки получить сертификат, свежие первыми */
+            attempts?: components["schemas"]["Attempt"][];
             /** @enum {string} */
             ca?: "letsencrypt" | "zerossl" | "google";
             /**

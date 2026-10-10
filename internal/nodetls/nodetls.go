@@ -108,6 +108,10 @@ type Key struct {
 	// panel then dials it back at once and the installer prints how that went. Keys of
 	// panels before it have none, and a node of such a key just waits for its panel.
 	PanelURL string `json:"panel,omitempty"`
+	// Host is where clients reach the node, its domain or IP: the name its certificate is
+	// ordered for. The installer names it in the command that lets Let's Encrypt through a
+	// web server on port 80. Keys of older panels have none.
+	Host string `json:"host,omitempty"`
 }
 
 const keyPrefix = "mikan1."

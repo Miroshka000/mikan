@@ -37,6 +37,17 @@ func main() {
 		fmt.Println(key.Port)
 		return
 	}
+	// The node's address as the panel has it, for the installer's advice; empty for keys of
+	// older panels.
+	if len(os.Args) > 1 && os.Args[1] == "key-host" {
+		key, err := nodetls.DecodeKey(os.Getenv("MIKAN_NODE_JOIN"))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "mikan-node:", err)
+			os.Exit(1)
+		}
+		fmt.Println(key.Host)
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "hello" {
 		helloOnce()
 		return

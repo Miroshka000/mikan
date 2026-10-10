@@ -59,7 +59,13 @@ The **Certificate** row shows which certificate is in use right now: a public on
 The panel itself orders a public certificate for each remote node: for its domain if it has one, otherwise for its IP (a six-day Let's Encrypt certificate, renewed automatically). The certificate authority checks the node on port 80 (HTTP-01). The node opens port 80 only for the few seconds of a check and releases it after.
 
 - **Port 80/tcp** must be open on the node's server. The installer opens it in ufw, and `mikan update` opens it on nodes installed earlier. Open your hosting provider's firewall yourself.
-- If port 80 on the node is held by another program (nginx, Caddy), the panel says so and names the program when the node can tell. You can set a port for the check on the node with the line `MIKAN_ACME_LISTEN=127.0.0.1:18080` in `/opt/mikan/.env` on the node's server (then `cd /opt/mikan && docker compose up -d`), and pass `/.well-known/acme-challenge/` there from the web server, like on the panel.
+- If port 80 on the node is held by another program, the panel says so and names it. For nginx and Caddy one command on the node's server is enough; the panel shows it with the node's address:
+
+  ```bash
+  mikan cert proxy node.example.com
+  ```
+
+  It adds a rule for `/.well-known/acme-challenge/` only to nginx or Caddy (the config is backed up, tested and reloaded, other sites are left alone), sets `MIKAN_ACME_LISTEN` and restarts the node. Then press Retry on the node's card. `mikan doctor` on the node checks port 80 too and suggests this command. Once port 80 is free again, the same command gives it back to the node.
 - With a public certificate, links carry no pin and no "insecure": the node's TLS protocols also appear in sing-box apps, and TUIC checks the certificate. Links switch only after the node has taken the new certificate.
 - A node older than the panel cannot get a public certificate: the card says "update the node". It keeps working on the self-signed certificate with a pin.
 - Your own certificate uploaded with the **Certificate** button wins over the public one.

@@ -56,6 +56,51 @@ pub fn listen_port(value: &str) -> Option<u16> {
     value.strip_prefix("127.0.0.1:")?.parse().ok()
 }
 
+/// What `mikan cert proxy` does about port 80 on an installed panel or node.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Port80 {
+    /// Port 80 is mikan's: free between challenges, or mikan's own. A MIKAN_ACME_LISTEN
+    /// left from a web server that has gone goes too (drop).
+    Own { drop: bool },
+    /// nginx or Caddy holds it: the rule passes the challenge to mikan on port.
+    Front(Front, u16),
+    /// Something mikan cannot configure holds it.
+    Other(String),
+}
+
+/// What to do about port 80, from who holds it (`ss`), MIKAN_ACME_LISTEN in .env and a
+/// free local port for a new rule. A port chosen before is kept: a rule may point there.
+pub fn port80(owner: Option<&str>, listen: Option<&str>, free: impl FnOnce() -> u16) -> Port80 {
+    let set = listen.map(str::trim).filter(|l| !l.is_empty() && *l != ":80");
+    match owner {
+        None | Some("mikan" | "mikan-node") => Port80::Own { drop: set.is_some() },
+        Some(who) => match Front::from_process(who) {
+            Some(front) => Port80::Front(front, set.and_then(listen_port).unwrap_or_else(free)),
+            None => Port80::Other(who.to_owned()),
+        },
+    }
+}
+
+/// What to add by hand when the admin keeps the web server's config to themselves: the
+/// block, where it goes, and the line of .env that makes mikan answer behind it.
+pub fn manual_text(front: Front, domain: &str, port: u16) -> String {
+    let (place, block) = match front {
+        Front::Nginx => (
+            "as a new file in nginx's config (conf.d or sites-enabled), then: nginx -t && nginx -s reload",
+            nginx_server(domain, port, false),
+        ),
+        Front::Caddy => ("at the end of the Caddyfile, then: caddy reload", caddy_site(domain, port)),
+    };
+    format!(
+        "Add this {place}
+
+{block}
+Then set MIKAN_ACME_LISTEN={} in {}/.env and run: mikan restart",
+        listen(port),
+        crate::DIR
+    )
+}
+
 /// What became of the rule.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Report {
@@ -93,7 +138,7 @@ impl Report {
     /// One line for the install's step.
     pub fn note(&self) -> String {
         match (&self.added, &self.manual) {
-            (Some(file), _) => format!("{} passes Let's Encrypt to the panel ({})", self.front, file.display()),
+            (Some(file), _) => format!("{} passes Let's Encrypt to mikan ({})", self.front, file.display()),
             _ if self.front_known() => format!("{} holds port 80: add its rule for Let's Encrypt (shown at the end)", self.front),
             _ => format!("port 80 is taken ({}): no Let's Encrypt until it is free", self.front),
         }
@@ -108,12 +153,12 @@ impl Report {
         let m = self.manual.as_ref()?;
         if !self.front_known() {
             return Some(format!(
-                "Let's Encrypt: {}. Free port 80 and the panel gets its certificate by itself: it tries again on its own. Until then it works with a self-signed certificate.",
+                "Let's Encrypt: {}. Free port 80 and mikan gets its certificate by itself: it tries again on its own. Until then it works with a self-signed certificate.",
                 m.why
             ));
         }
         Some(format!(
-            "Let's Encrypt: {}. Add this {}, then reload {}:\n\n{}\nUntil then the panel works with a self-signed certificate; it tries again by itself.",
+            "Let's Encrypt: {}. Add this {}, then reload {}:\n\n{}\nUntil then mikan works with a self-signed certificate; it tries again by itself.",
             m.why, m.place, self.front, m.snippet
         ))
     }
@@ -215,7 +260,7 @@ pub fn nginx_server(domain: &str, port: u16, ipv6: bool) -> String {
 /// The file the installer writes: the server block, and who wrote it.
 fn nginx_file(domain: &str, port: u16, ipv6: bool) -> String {
     format!(
-        "# Written by the mikan installer: Let's Encrypt checks {domain} here for the panel's certificate.\n{}",
+        "# Written by the mikan installer: Let's Encrypt checks {domain} here for mikan's certificate.\n{}",
         nginx_server(domain, port, ipv6)
     )
 }
@@ -661,6 +706,28 @@ fn caddy(run: &mut dyn Run, domain: &str, port: u16, consent: bool, file: Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // `mikan cert proxy` on a node or a panel: who holds port 80 decides, and a port chosen
+    // before stays (the web server's rule points there).
+    #[test]
+    fn port80_is_decided_by_its_holder() {
+        assert_eq!(port80(None, None, || 18080), Port80::Own { drop: false });
+        assert_eq!(port80(Some("mikan-node"), Some(":80"), || 18080), Port80::Own { drop: false });
+        assert_eq!(port80(None, Some("127.0.0.1:18081"), || 18080), Port80::Own { drop: true }, "the web server has gone");
+        assert_eq!(port80(Some("nginx"), None, || 18085), Port80::Front(Front::Nginx, 18085));
+        assert_eq!(port80(Some("nginx"), Some("127.0.0.1:18081"), || 18085), Port80::Front(Front::Nginx, 18081));
+        assert_eq!(port80(Some("caddy"), None, || 18080), Port80::Front(Front::Caddy, 18080));
+        assert_eq!(port80(Some("apache2"), None, || 18080), Port80::Other("apache2".into()));
+    }
+
+    #[test]
+    fn the_manual_rule_names_the_port_and_the_env_line() {
+        let text = manual_text(Front::Nginx, "node.example.com", 18080);
+        assert!(text.contains("server_name node.example.com;") && text.contains("proxy_pass http://127.0.0.1:18080;"), "{text}");
+        assert!(text.contains("MIKAN_ACME_LISTEN=127.0.0.1:18080 in /opt/mikan/.env"), "{text}");
+        let text = manual_text(Front::Caddy, "node.example.com", 18080);
+        assert!(text.contains("http://node.example.com {") && text.contains("reverse_proxy 127.0.0.1:18080"), "{text}");
+    }
 
     /// Answers commands from a script and records them.
     #[derive(Default)]

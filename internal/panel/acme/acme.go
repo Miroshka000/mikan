@@ -48,6 +48,8 @@ type Status struct {
 	Issuer  string   `json:"issuer,omitempty"`
 	Names   []string `json:"names,omitempty"`
 	Trusted bool     `json:"trusted,omitempty" doc:"Сертификат публично доверенный для адреса панели"`
+	// Attempts are the latest orders at the CA, the latest first.
+	Attempts []Attempt `json:"attempts,omitempty" doc:"Последние попытки получить сертификат, свежие первыми"`
 }
 
 type Manager struct {
@@ -72,6 +74,8 @@ type Manager struct {
 	// the CA while valid. customMod is when its files last changed, as ensure saw.
 	customDir string
 	customMod time.Time
+	// journal keeps the latest orders, for the admin panel to list.
+	journal *journal
 	// onChange hears of every change of Public: the local node gets that certificate with
 	// its state, which is sent again only on a change. announced is the last one told.
 	annMu     sync.Mutex
@@ -92,7 +96,8 @@ func New(dataDir string, holder *tlscert.Holder, fallback *tls.Certificate, set 
 	}
 	root := filepath.Join(dataDir, "tls", "acme")
 	m := &Manager{dir: root, iss: newIssuer(root, set), holder: holder, fallback: fallback,
-		set: set, log: log, now: now, wake: make(chan struct{}, 1), challenge: acmechallenge.New(listen), customDir: filepath.Join(dataDir, "tls", "custom")}
+		set: set, log: log, now: now, wake: make(chan struct{}, 1), challenge: acmechallenge.New(listen), customDir: filepath.Join(dataDir, "tls", "custom"),
+		journal: newJournal(root)}
 	m.status.Store(&Status{Kind: "self-signed", WantCA: CALetsEncrypt, CheckedAt: now()})
 	return m
 }
@@ -107,6 +112,7 @@ func (m *Manager) Status() Status {
 	m.attMu.Lock()
 	st.Ordering = m.cur != nil
 	m.attMu.Unlock()
+	st.Attempts = m.journal.List()
 	return st
 }
 
@@ -340,7 +346,8 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 	if err != nil {
 		host, _ := m.set.String(ctx, settings.KeyPublicHost)
 		p := Classify(err, dnscheck.Own(host), m.now())
-		m.log.Warn("acme: certificate not obtained", "identifier", id, "ca", ca, "code", p.Code, "err", err)
+		m.log.Warn("acme: certificate not obtained", "identifier", id, "ca", ca, "code", p.Code, "holder", p.Holder, "err", err)
+		m.journal.Add(Attempt{At: m.now(), CA: ca, Error: p.Code, Detail: p.Detail, Holder: p.Holder})
 		m.mu.Lock()
 		st := *m.status.Load()
 		if st.Kind == "custom" {
@@ -362,6 +369,7 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 		return true
 	}
 	m.log.Info("acme: certificate installed", "identifier", id, "ca", ca)
+	m.journal.Add(Attempt{At: m.now(), CA: ca})
 	m.settle(ctx) // now on disk: served, unless the admin's own certificate has come in the meantime
 	return false
 }

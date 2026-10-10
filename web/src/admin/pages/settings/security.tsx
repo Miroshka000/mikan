@@ -9,7 +9,7 @@ import { Confirm } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Pill, QR, Segmented, Skeleton } from "../../../components/ui";
-import { AcmeProblem, caName, CertCheckDrawer } from "../../../components/acme";
+import { AcmeAttempts, AcmeProblem, caName, CertCheckDrawer } from "../../../components/acme";
 import { getLocale, t, tMaybe } from "../../../i18n";
 import { useCopy } from "../../../lib/copy";
 import { CertDrawer, certUntil, type CertInfo } from "../../../components/cert-drawer";
@@ -111,7 +111,7 @@ export function CertificateCard({ s }: { s: Schemas["SettingsView"] }) {
             {tMaybe(`errors.acme.${c.error}`) ?? c.error}
           </p>
         ) : (
-          <AcmeProblem code={c.error} detail={c.error_detail} holder={c.holder} retryAt={c.retry_at} className="mb-3" />
+          <AcmeProblem code={c.error} detail={c.error_detail} holder={c.holder} retryAt={c.retry_at} host={c.identifier} className="mb-3" />
         )
       ) : outcome ? (
         <p className="mb-3 text-[13px] text-[var(--leaf-700)]" role="status">
@@ -123,6 +123,7 @@ export function CertificateCard({ s }: { s: Schemas["SettingsView"] }) {
         </p>
       ) : null}
       <p className="mb-3 text-xs text-[var(--ink-500)]">{custom ? t("settings.certOwnNote") : t("settings.certNote")}</p>
+      <AcmeAttempts attempts={c.attempts} className="mb-3" />
       <div className="flex flex-wrap gap-2">
         {!custom && c.error !== "no_public_host" ? (
           <Button size="sm" loading={renew.isPending} disabled={renew.isPending || c.ordering} onClick={() => renew.mutate()}>

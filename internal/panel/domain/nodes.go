@@ -137,7 +137,7 @@ func issueKey(ctx context.Context, q *db.Queries, panel nodetls.Pair, n db.Node,
 	if !nodetls.ValidPanelURL(panelURL) {
 		panelURL = ""
 	}
-	return nodetls.Key{Port: port, PanelPin: panelPin, CertPEM: cert.CertPEM, KeyPEM: cert.KeyPEM, NodeLabel: n.Name, PanelURL: panelURL}.Encode()
+	return nodetls.Key{Port: port, PanelPin: panelPin, CertPEM: cert.CertPEM, KeyPEM: cert.KeyPEM, NodeLabel: n.Name, PanelURL: panelURL, Host: NodeHost(n)}.Encode()
 }
 
 // NodeInbounds keeps the inbounds of one node.

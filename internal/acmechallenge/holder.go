@@ -1,16 +1,57 @@
 package acmechallenge
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
-// Holder names the program listening on TCP port, as the kernel's tables tell: "nginx",
-// "caddy", "apache2"… "" when it cannot be told: not Linux, or the program runs as
-// another user (a node's container reads only its own processes' descriptors).
-func Holder(port int) string { return holderIn("/proc", port) }
+// Holder names the program listening on TCP port: as the kernel's tables tell ("nginx",
+// "caddy", "apache2"…) when this process may read them, else by the Server header it
+// answers with on the loopback ("nginx", "caddy", "apache"): a node's container reads only
+// its own processes' descriptors, and a web server of the admin's runs as another user.
+// "" when neither tells.
+func Holder(port int) string {
+	if h := holderIn("/proc", port); h != "" {
+		return h
+	}
+	return serverOn("http://127.0.0.1:" + strconv.Itoa(port) + "/")
+}
+
+// serverOn asks url once and names the program by its Server header.
+func serverOn(url string) string {
+	c := http.Client{
+		Timeout:       2 * time.Second,
+		Transport:     &http.Transport{Proxy: nil, DisableKeepAlives: true},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := c.Get(url)
+	if err != nil {
+		return ""
+	}
+	_ = resp.Body.Close()
+	return serverName(resp.Header.Get("Server"))
+}
+
+// serverName is the product of a Server header in lower case: "nginx/1.24.0 (Ubuntu)" is
+// "nginx", "Caddy" is "caddy". "" for a header that names nothing readable.
+func serverName(h string) string {
+	name, _, _ := strings.Cut(strings.TrimSpace(h), "/")
+	name, _, _ = strings.Cut(name, " ")
+	name = strings.ToLower(name)
+	if name == "" || len(name) > 32 {
+		return ""
+	}
+	for _, c := range []byte(name) {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.') {
+			return ""
+		}
+	}
+	return name
+}
 
 func holderIn(proc string, port int) string {
 	inodes := map[string]bool{}

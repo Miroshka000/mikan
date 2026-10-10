@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -165,5 +166,29 @@ func TestHolderFromProc(t *testing.T) {
 	}
 	if got := holderIn(proc, 443); got != "" {
 		t.Fatalf("443: %q", got)
+	}
+}
+
+// A web server of another user is named by what it answers with, not by its process.
+func TestServerNameFromItsAnswer(t *testing.T) {
+	for in, want := range map[string]string{
+		"nginx/1.24.0 (Ubuntu)":  "nginx",
+		"nginx":                  "nginx",
+		"Caddy":                  "caddy",
+		"Apache/2.4.58 (Ubuntu)": "apache",
+		"":                       "",
+		"<script>":               "",
+	} {
+		if got := serverName(in); got != want {
+			t.Errorf("serverName(%q) = %q, want %q", in, got, want)
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Server", "nginx/1.26.3")
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	if got := serverOn(srv.URL + "/"); got != "nginx" {
+		t.Fatalf("serverOn = %q", got)
 	}
 }

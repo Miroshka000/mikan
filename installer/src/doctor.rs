@@ -17,7 +17,7 @@ use crate::docker::{self, Service};
 use crate::ops::Install;
 use crate::setup::mark;
 use crate::system::{self, Level, Proto};
-use crate::{DIR, clock, hello, net};
+use crate::{DIR, acme, clock, hello, net};
 
 /// How long one request to the outside may take.
 const NET_TIMEOUT: Duration = Duration::from_secs(8);
@@ -116,6 +116,7 @@ pub fn run() -> Result<()> {
         report.add(containers(docker::services().map_err(|e| format!("{e:#}"))));
     }
     report.add(ports(&install, engine.is_some()));
+    report.add([port80_item(system::port_owner(80, Proto::Tcp).as_deref(), install.env.get("MIKAN_ACME_LISTEN"))]);
     report.add(firewall(&install));
 
     let github = answer(&github, deadline);
@@ -205,6 +206,33 @@ fn ports(install: &Install, engine: bool) -> Vec<Item> {
         };
         Item::error("Panel", detail, "mikan logs panel; mikan restart")
     }]
+}
+
+/// Port 80, where Let's Encrypt checks the server before it gives a certificate: free for
+/// mikan, or a web server that passes the check on.
+fn port80_item(owner: Option<&str>, listen: Option<&str>) -> Item {
+    const LABEL: &str = "Port 80";
+    const FIX: &str = "mikan cert proxy <the server's domain, as the panel shows it>";
+    let behind = listen.map(str::trim).filter(|l| !l.is_empty() && *l != ":80").unwrap_or_default();
+    match acme::port80(owner, listen, || 0) {
+        acme::Port80::Own { drop: false } => Item::ok(LABEL, "free: mikan answers Let's Encrypt there when it gets a certificate"),
+        acme::Port80::Own { drop: true } => Item::warn(
+            LABEL,
+            format!("free, yet mikan waits for Let's Encrypt on {behind} behind a web server that is gone: no public certificate"),
+            FIX,
+        ),
+        acme::Port80::Front(front, _) if !behind.is_empty() => {
+            Item::ok(LABEL, format!("{} holds it and passes Let's Encrypt to mikan on {behind}", front.name()))
+        }
+        acme::Port80::Front(front, _) => {
+            Item::warn(LABEL, format!("{} holds it, and Let's Encrypt checks the server there: no public certificate", front.name()), FIX)
+        }
+        acme::Port80::Other(who) => Item::warn(
+            LABEL,
+            format!("held by {who}, and Let's Encrypt checks the server there: no public certificate"),
+            "free port 80, or pass /.well-known/acme-challenge/ to mikan (MIKAN_ACME_LISTEN)",
+        ),
+    }
 }
 
 /// A port or a range the firewall must let through.
@@ -555,6 +583,21 @@ fn capture(mut cmd: Command, limit: Duration) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn port80_tells_whether_the_certificate_can_come() {
+        assert_eq!(port80_item(None, None).level, Level::Ok);
+        let gone = port80_item(None, Some("127.0.0.1:18080"));
+        assert_eq!(gone.level, Level::Warn);
+        assert!(gone.detail.contains("127.0.0.1:18080"), "{}", gone.detail);
+        let bare = port80_item(Some("nginx"), None);
+        assert_eq!(bare.level, Level::Warn);
+        assert!(bare.fix.as_deref().is_some_and(|f| f.starts_with("mikan cert proxy")), "{bare:?}");
+        let passed = port80_item(Some("nginx"), Some("127.0.0.1:18080"));
+        assert_eq!(passed.level, Level::Ok);
+        assert!(passed.detail.contains("nginx holds it and passes"), "{}", passed.detail);
+        assert_eq!(port80_item(Some("apache2"), None).level, Level::Warn);
+    }
 
     const UFW: &str = "Status: active
 

@@ -105,6 +105,7 @@ func Handler(e *Engine, log *slog.Logger) http.Handler {
 		var be *acmechallenge.BusyError
 		switch err := e.Challenge.Present(token, req.KeyAuth); {
 		case errors.As(err, &be):
+			log.Warn("acme challenge: the port is held by another program", "addr", be.Addr, "holder", be.Holder)
 			writeJSON(w, http.StatusConflict, nodeapi.Error{Code: nodeapi.CodePort80Busy, Message: be.Holder})
 		case errors.Is(err, acmechallenge.ErrTooMany):
 			writeJSON(w, http.StatusTooManyRequests, nodeapi.Error{Code: nodeapi.CodeTooManyChallenges, Message: "too many challenges at once"})

@@ -385,6 +385,40 @@
         },
         "type": "object"
       },
+      "Attempt": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "ca": {
+            "enum": [
+              "letsencrypt",
+              "zerossl",
+              "google"
+            ],
+            "type": "string"
+          },
+          "detail": {
+            "description": "Слова центра сертификации или системы как есть",
+            "type": "string"
+          },
+          "error": {
+            "description": "Код errors.acme; пусто — сертификат получен",
+            "type": "string"
+          },
+          "holder": {
+            "description": "Кто держал порт 80 (port80_busy), если это видно",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "ca"
+        ],
+        "type": "object"
+      },
       "AuditEntry": {
         "additionalProperties": false,
         "properties": {
@@ -3104,6 +3138,13 @@
       "NodeStatus": {
         "additionalProperties": false,
         "properties": {
+          "attempts": {
+            "description": "Последние попытки получить сертификат, свежие первыми",
+            "items": {
+              "$ref": "#/components/schemas/Attempt"
+            },
+            "type": "array"
+          },
           "ca": {
             "description": "Кто выдал сертификат, который у ноды сейчас",
             "enum": [
@@ -6153,6 +6194,13 @@
       "Status": {
         "additionalProperties": false,
         "properties": {
+          "attempts": {
+            "description": "Последние попытки получить сертификат, свежие первыми",
+            "items": {
+              "$ref": "#/components/schemas/Attempt"
+            },
+            "type": "array"
+          },
           "ca": {
             "enum": [
               "letsencrypt",

@@ -33,15 +33,78 @@ function when(iso?: string): string {
 
 /** Why a certificate was not issued: the text for the code, the program on port 80, when the
  * CA lets an order in again, and the CA's own words folded under "More". */
-export function AcmeProblem({ code, detail, holder, retryAt, className }: { code: string; detail?: string; holder?: string; retryAt?: string | null; className?: string }) {
+export function AcmeProblem({
+  code,
+  detail,
+  holder,
+  retryAt,
+  host,
+  node,
+  className,
+}: {
+  code: string;
+  detail?: string;
+  holder?: string;
+  retryAt?: string | null;
+  /** The address the certificate is for: with it, a web server on port 80 gets the command that lets the check through. */
+  host?: string;
+  /** The certificate is a node's: the command is for the node's server. */
+  node?: boolean;
+  className?: string;
+}) {
   const text = tMaybe(`errors.acme.${code}`) ?? t("errors.acme.acme_failed");
+  // mikan configures nginx and Caddy itself; another program on port 80 it cannot.
+  const proxy = host && (code === "port80_busy" || code === "port80_foreign") && (!holder || PROXIES.has(holder.toLowerCase()));
   return (
     <div className={className} role="alert">
       <p className="text-[13px] text-[var(--berry-600)]">{text}</p>
       {holder ? <p className="mt-1 text-xs text-[var(--ink-600)]">{t("certs.holder", { holder })}</p> : null}
       {retryAt ? <p className="mt-1 text-xs text-[var(--ink-600)]">{t("certs.retryAt", { at: when(retryAt) })}</p> : null}
+      {proxy ? (
+        <>
+          <CommandToCopy command={`mikan cert proxy ${host}`} label={t(node ? "certs.proxyOnNode" : "certs.proxyOnServer")} />
+          <p className="mt-1 text-xs text-[var(--ink-500)]">{t("certs.proxyNote")}</p>
+        </>
+      ) : null}
       <Details text={detail ?? (tMaybe(`errors.acme.${code}`) ? "" : code)} />
     </div>
+  );
+}
+
+/** Web servers on port 80 `mikan cert proxy` adds its rule to (openresty is nginx). */
+const PROXIES = new Set(["nginx", "openresty", "caddy"]);
+
+type Attempt = Schemas["Attempt"];
+
+/** The first sentence of a long explanation, for a line of the list. */
+function firstSentence(s: string): string {
+  const i = s.search(/\.(\s|$)/);
+  return i > 0 ? s.slice(0, i) : s;
+}
+
+/** The latest orders at the CA, folded: when, where and how each ended, with the CA's own words. */
+export function AcmeAttempts({ attempts, className }: { attempts?: Attempt[] | null; className?: string }) {
+  if (!attempts?.length) return null;
+  return (
+    <details className={`text-xs text-[var(--ink-500)] ${className ?? ""}`}>
+      <summary className="cursor-pointer font-medium text-[var(--ink-600)]">{t("certs.attempts", { n: attempts.length })}</summary>
+      <ol className="mt-2 space-y-2 border-l border-[var(--line)] pl-3">
+        {attempts.map((a, i) => (
+          <li key={`${a.at}-${i}`}>
+            <p className="flex flex-wrap items-center gap-x-1.5">
+              {a.error ? <XCircle size={14} className="shrink-0 text-[var(--berry-600)]" aria-hidden /> : <CheckCircle2 size={14} className="shrink-0 text-[var(--leaf-500)]" aria-hidden />}
+              <span className="tabular-nums text-[var(--ink-600)]">{when(a.at)}</span>
+              <span>· {caName(a.ca)} ·</span>
+              <span className={a.error ? "text-[var(--berry-600)]" : "text-[var(--leaf-700)]"}>
+                {a.error ? firstSentence(tMaybe(`errors.acme.${a.error}`) ?? a.error) : t("certs.attemptOk")}
+              </span>
+            </p>
+            {a.holder ? <p className="mt-0.5">{t("certs.holder", { holder: a.holder })}</p> : null}
+            {a.detail ? <p className="mono mt-0.5 break-all whitespace-pre-wrap">{a.detail}</p> : null}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 

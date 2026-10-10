@@ -170,6 +170,15 @@ enum CertCmd {
         #[arg(long)]
         node: Option<u32>,
     },
+    /// nginx or Caddy holds port 80: pass Let's Encrypt's checks for the domain through it
+    /// to this panel or node (the rule is backed up, tested and reloaded)
+    Proxy {
+        /// The address clients reach this server by: its domain, or its IP
+        domain: String,
+        /// Do not ask
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -190,6 +199,7 @@ fn main() -> ExitCode {
             CertCmd::Set { cert, key, node } => ops::cert_set(&cert, &key, node),
             CertCmd::Clear { node } => ops::cert(&["clear"], node),
             CertCmd::Show { node } => ops::cert(&["show"], node),
+            CertCmd::Proxy { domain, yes } => ops::cert_proxy(&domain, yes),
         },
         Some(Cmd::Inbound { args }) => ops::inbound(&args),
         Some(Cmd::Backup) => backup::backup(&mut out).map(|f| out(&format!("Backup: {}", f.display()))),

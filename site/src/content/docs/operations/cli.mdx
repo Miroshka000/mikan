@@ -57,6 +57,7 @@ description: Справочник по команде управления се�
 | `mikan cert set --cert fullchain.pem --key privkey.pem [--node N]` | свой сертификат панели или ноды |
 | `mikan cert show [--node N]` | что стоит сейчас |
 | `mikan cert clear [--node N]` | вернуть Let's Encrypt (для ноды: самоподписанный) |
+| `mikan cert proxy <домен>` | порт 80 держит nginx или Caddy: пропустить через него проверки Let's Encrypt к панели или ноде (правило с бэкапом, проверкой конфига и перезагрузкой) |
 
 ## Сайты маскировки REALITY
 

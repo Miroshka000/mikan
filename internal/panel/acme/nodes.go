@@ -58,6 +58,7 @@ type NodeStatus struct {
 	RetryAt     *time.Time `json:"retry_at,omitempty"`
 	Ordering    bool       `json:"ordering,omitempty"`
 	CheckedAt   *time.Time `json:"checked_at,omitempty"`
+	Attempts    []Attempt  `json:"attempts,omitempty" doc:"Последние попытки получить сертификат, свежие первыми"`
 }
 
 // ErrNoTarget: the node is not one the panel orders for (the panel's own node, a node with
@@ -78,6 +79,7 @@ type Nodes struct {
 	attempts map[int64]*attempt
 	next     map[int64]time.Time // when each node is looked at again
 	cache    map[int64]cachedPair
+	journals map[int64]*journal
 	onChange func(id int64)
 }
 
@@ -91,7 +93,8 @@ type cachedPair struct {
 // kept under <data>/tls/acme-nodes.
 func (m *Manager) Nodes(source NodeSource) *Nodes {
 	return &Nodes{root: filepath.Join(filepath.Dir(m.dir), "acme-nodes"), iss: m.iss, set: m.set, log: m.log, now: m.now, source: source,
-		wake: make(chan struct{}, 1), status: map[int64]NodeStatus{}, attempts: map[int64]*attempt{}, next: map[int64]time.Time{}, cache: map[int64]cachedPair{}}
+		wake: make(chan struct{}, 1), status: map[int64]NodeStatus{}, attempts: map[int64]*attempt{}, next: map[int64]time.Time{}, cache: map[int64]cachedPair{},
+		journals: map[int64]*journal{}}
 }
 
 // OnChange sets what hears of a node's new certificate: the node gets it with its state.
@@ -132,10 +135,28 @@ func (n *Nodes) Cert(id int64, host string) (*tls.Certificate, string) {
 // Status is what is known of the node's certificate; ok is false before the first look.
 func (n *Nodes) Status(id int64) (NodeStatus, bool) {
 	n.mu.Lock()
-	defer n.mu.Unlock()
 	st, ok := n.status[id]
 	st.Ordering = n.attempts[id] != nil
+	j := n.journalLocked(id)
+	n.mu.Unlock()
+	st.Attempts = j.List()
 	return st, ok || st.Ordering
+}
+
+// journal is the node's list of attempts.
+func (n *Nodes) journal(id int64) *journal {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.journalLocked(id)
+}
+
+func (n *Nodes) journalLocked(id int64) *journal {
+	j := n.journals[id]
+	if j == nil {
+		j = newJournal(n.dir(id))
+		n.journals[id] = j
+	}
+	return j
 }
 
 // Forget drops what the panel keeps of a deleted node.
@@ -143,6 +164,7 @@ func (n *Nodes) Forget(id int64) error {
 	n.mu.Lock()
 	delete(n.status, id)
 	delete(n.cache, id)
+	delete(n.journals, id)
 	n.mu.Unlock()
 	pairMu.Lock()
 	defer pairMu.Unlock()
@@ -304,6 +326,7 @@ func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (again time.Duration) 
 	if err := t.Client.CleanUpChallenge(ctx, probeToken); err != nil {
 		p := Classify(err, t.Own, now)
 		st.Error, st.ErrorDetail = p.Code, p.Detail
+		n.log.Warn("acme: node not ready for its certificate", "node", t.ID, "identifier", t.Host, "code", p.Code, "err", err)
 		return nodeRetry
 	}
 	certPEM, keyPEM, err := n.iss.obtain(ctx, t.Host, ca, &nodeProvider{ctx: ctx, c: t.Client})
@@ -313,7 +336,8 @@ func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (again time.Duration) 
 	if err != nil {
 		p := Classify(err, t.Own, n.now())
 		st.Error, st.ErrorDetail, st.Holder, st.RetryAt = p.Code, p.Detail, p.Holder, p.RetryAt
-		n.log.Warn("acme: node certificate not obtained", "node", t.ID, "identifier", t.Host, "ca", ca, "code", p.Code, "err", err)
+		n.log.Warn("acme: node certificate not obtained", "node", t.ID, "identifier", t.Host, "ca", ca, "code", p.Code, "holder", p.Holder, "err", err)
+		n.journal(t.ID).Add(Attempt{At: now, CA: ca, Error: p.Code, Detail: p.Detail, Holder: p.Holder})
 		if p.RetryAt != nil && p.RetryAt.After(now) {
 			return max(p.RetryAt.Sub(now), retryAfter)
 		}
@@ -326,6 +350,7 @@ func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (again time.Duration) 
 	}
 	n.describe(&st, cert, have)
 	n.log.Info("acme: node certificate installed", "node", t.ID, "identifier", t.Host, "ca", ca)
+	n.journal(t.ID).Add(Attempt{At: now, CA: ca})
 	n.mu.Lock()
 	f := n.onChange
 	n.mu.Unlock()
