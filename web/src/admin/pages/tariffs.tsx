@@ -33,6 +33,7 @@ export function tariffSummary(tr: Tariff): string {
     tr.traffic_limit != null ? bytes(tr.traffic_limit) : t("users.unlimited"),
     tariffTerm(tr),
     tr.device_limit != null ? t("userDrawer.devicesShort", { n: tr.device_limit }) : t("tariffs.devicesUnlimitedShort"),
+    ...(tr.speed_limit != null ? [t("tariffs.speedShort", { n: tr.speed_limit })] : []),
   ];
   return parts.join(" · ");
 }
@@ -145,6 +146,7 @@ export function TariffsPage() {
                         <Item label={t("users.colTraffic")} value={tr.traffic_limit != null ? bytes(tr.traffic_limit) : t("users.unlimited")} />
                         <Item label={t("users.colExpiry")} value={tariffTerm(tr)} />
                         <Item label={t("users.colDevices")} value={tr.device_limit != null ? String(tr.device_limit) : t("users.unlimited")} />
+                        <Item label={t("tariffs.speed")} value={tr.speed_limit != null ? t("tariffs.speedShort", { n: tr.speed_limit }) : t("users.unlimited")} />
                         <Item label={t("tariffs.reset")} value={resetLabel(tr)} />
                         {poolLimitsText(tr, poolNames) ? (
                           <div className="col-span-2">
@@ -195,6 +197,8 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
   const [billingDay, setBillingDay] = useState("1");
   const [devices, setDevices] = useState("3");
   const [devicesUnlimited, setDevicesUnlimited] = useState(false);
+  const [speed, setSpeed] = useState("100");
+  const [speedUnlimited, setSpeedUnlimited] = useState(true);
   const [reset, setReset] = useState<Tariff["reset_strategy"]>("period");
   const [price, setPrice] = useState("");
   const [onSale, setOnSale] = useState(false);
@@ -221,6 +225,8 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     setBillingDay(String(tr?.billing_day ?? new Date().getDate()));
     setDevicesUnlimited(tr ? tr.device_limit == null : false);
     setDevices(String(tr?.device_limit ?? 3));
+    setSpeedUnlimited(tr?.speed_limit == null);
+    setSpeed(String(tr?.speed_limit ?? 100));
     setReset(tr?.reset_strategy ?? "period");
     setPrice(tr?.price_label ?? "");
     setOnSale(tr?.on_sale ?? false);
@@ -262,6 +268,7 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     const monN = Number(monthsN);
     const dayN = Number(billingDay);
     const devN = Number(devices);
+    const speedN = Number(speed);
     const poolLimits = (allPools.data ?? []).map((p) => {
       if (poolClosed[p.id]) return { pool_id: p.id, traffic_limit: null, excluded: true };
       const v = (poolGB[p.id] ?? "").trim().replace(",", ".");
@@ -275,6 +282,7 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     if (toDay && (!Number.isInteger(monN) || monN < 0 || monN > 120)) errs.duration_days = t("tariffs.errMonths");
     if (toDay && (!Number.isInteger(dayN) || dayN < 1 || dayN > 31)) errs.billing_day = t("tariffs.errBillingDay");
     if (!devicesUnlimited && (!Number.isInteger(devN) || devN < 1 || devN > 100)) errs.device_limit = t("tariffs.errDevices");
+    if (!speedUnlimited && (!Number.isInteger(speedN) || speedN < 1 || speedN > 100000)) errs.speed_limit = t("tariffs.errSpeed");
     const starsN = Number(stars);
     const rubN = Math.round(Number(rub.replace(",", ".")) * 100);
     if (stars.trim() && (!Number.isInteger(starsN) || starsN < 1 || starsN > 10000)) errs.price_stars = t("tariffs.errStars");
@@ -307,6 +315,7 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
       duration_days: toDay ? monN * 30 : durN,
       billing_day: toDay ? dayN : undefined,
       device_limit: devicesUnlimited ? undefined : devN,
+      speed_limit: speedUnlimited ? undefined : speedN,
       reset_strategy: unlimited ? "none" : reset,
       price_label: price.trim() || undefined,
       price_stars: stars.trim() ? starsN : undefined,
@@ -392,6 +401,17 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
             <input id="t-dev" className="input max-w-[100px]" inputMode="numeric" value={devicesUnlimited ? "" : devices} disabled={devicesUnlimited} onChange={(e) => setDevices(e.target.value)} />
             <label className="ml-auto flex items-center gap-2 text-[13px]">
               <input type="checkbox" className="check" checked={devicesUnlimited} onChange={(e) => setDevicesUnlimited(e.target.checked)} /> {t("users.unlimited")}
+            </label>
+          </div>
+        </Field>
+        <Field label={t("tariffs.speed")} htmlFor="t-speed" hint={t("tariffs.speedHint")} error={errors.speed_limit}>
+          <div className="flex items-center gap-2">
+            <span className="input-unit max-w-[160px] flex-1">
+              <input id="t-speed" className="input" inputMode="numeric" value={speedUnlimited ? "" : speed} disabled={speedUnlimited} onChange={(e) => setSpeed(e.target.value)} aria-invalid={!!errors.speed_limit} />
+              <span>{t("tariffs.mbps")}</span>
+            </span>
+            <label className="ml-auto flex items-center gap-2 text-[13px]">
+              <input type="checkbox" className="check" checked={speedUnlimited} onChange={(e) => setSpeedUnlimited(e.target.checked)} /> {t("users.unlimited")}
             </label>
           </div>
         </Field>

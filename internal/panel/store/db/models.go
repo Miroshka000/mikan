@@ -130,19 +130,21 @@ type MikanSqliteImport struct {
 }
 
 type Node struct {
-	ID         int64
-	Name       string
-	Address    string
-	PublicHost string
-	Domain     string
-	CertSha256 string
-	Enabled    int64
-	CreatedAt  int64
-	UpdatedAt  int64
-	PublicName string
-	Sort       int64
-	TotalUp    int64
-	TotalDown  int64
+	ID          int64
+	Name        string
+	Address     string
+	PublicHost  string
+	Domain      string
+	CertSha256  string
+	Enabled     int64
+	CreatedAt   int64
+	UpdatedAt   int64
+	PublicName  string
+	Sort        int64
+	TotalUp     int64
+	TotalDown   int64
+	FairShare   int64
+	ChannelMbps sql.NullInt64
 }
 
 type NodeRelay struct {
@@ -351,6 +353,7 @@ type Tariff struct {
 	PriceStars    sql.NullInt64
 	PriceRub      sql.NullInt64
 	OnSale        int64
+	SpeedLimit    sql.NullInt64
 }
 
 type TariffPool struct {
@@ -494,6 +497,7 @@ type User struct {
 	Source        string
 	Hidden        int64
 	FolderID      sql.NullInt64
+	SpeedLimit    sql.NullInt64
 }
 
 type UserFolder struct {

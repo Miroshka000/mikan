@@ -2829,6 +2829,14 @@
           "certificate": {
             "$ref": "#/components/schemas/NodeCertView"
           },
+          "channel_mbps": {
+            "description": "Ширина канала ноды, Мбит/с в каждую сторону; null — не задана",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "checked_at": {
             "format": "date-time",
             "type": "string"
@@ -2882,6 +2890,10 @@
             "description": "С какого момента нет связи",
             "format": "date-time",
             "type": "string"
+          },
+          "fair_share": {
+            "description": "Канал ноды делится поровну между теми, кто сейчас качает",
+            "type": "boolean"
           },
           "hello": {
             "$ref": "#/components/schemas/NodeHello",
@@ -2982,7 +2994,9 @@
           "mem_total",
           "traffic_24h",
           "behind",
-          "can_update"
+          "can_update",
+          "fair_share",
+          "channel_mbps"
         ],
         "type": "object"
       },
@@ -4119,11 +4133,22 @@
       "PatchNodeInputBody": {
         "additionalProperties": false,
         "properties": {
+          "channel_mbps": {
+            "description": "Ширина канала ноды, Мбит/с в каждую сторону",
+            "format": "int64",
+            "maximum": 100000,
+            "minimum": 1,
+            "type": "integer"
+          },
           "domain": {
             "maxLength": 253,
             "type": "string"
           },
           "enabled": {
+            "type": "boolean"
+          },
+          "fair_share": {
+            "description": "Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps",
             "type": "boolean"
           },
           "host": {
@@ -4453,6 +4478,17 @@
           "note": {
             "maxLength": 2000,
             "type": "string"
+          },
+          "speed_limit": {
+            "description": "Скорость, Мбит/с в каждую сторону",
+            "format": "int64",
+            "maximum": 100000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "speed_unlimited": {
+            "description": "Снять ограничение скорости",
+            "type": "boolean"
           },
           "tags": {
             "items": {
@@ -6410,6 +6446,13 @@
             "format": "int64",
             "type": "integer"
           },
+          "speed_limit": {
+            "description": "Скорость, Мбит/с в каждую сторону; не передана — без ограничения",
+            "format": "int64",
+            "maximum": 100000,
+            "minimum": 1,
+            "type": "integer"
+          },
           "terms": {
             "description": "Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений",
             "items": {
@@ -6503,6 +6546,14 @@
             "format": "int64",
             "type": "integer"
           },
+          "speed_limit": {
+            "description": "Мбит/с в каждую сторону; null — без ограничения",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "terms": {
             "description": "Сроки, на которые продаётся тариф, по порядку; первый — тот же, что duration_days, price_stars и price_rub",
             "items": {
@@ -6525,6 +6576,7 @@
           "traffic_limit",
           "duration_days",
           "device_limit",
+          "speed_limit",
           "reset_strategy",
           "billing_day",
           "price_label",
@@ -7487,6 +7539,14 @@
             ],
             "type": "string"
           },
+          "speed_limit": {
+            "description": "Мбит/с в каждую сторону; null — без ограничения",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "state": {
             "enum": [
               "active",
@@ -7570,6 +7630,7 @@
           "total_up",
           "total_down",
           "device_limit",
+          "speed_limit",
           "reset_strategy",
           "resets_at",
           "expires_at",

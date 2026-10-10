@@ -38,7 +38,7 @@ export function Drawer({
             <Dialog.Overlay asChild forceMount>
               <motion.div className="scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
             </Dialog.Overlay>
-            <Dialog.Content asChild forceMount aria-describedby={undefined}>
+            <Dialog.Content asChild forceMount aria-describedby={undefined} onEscapeKeyDown={keepOpenForLocalEscape}>
               <motion.aside
                 className={wide ? "drawer wide glass-strong" : "drawer glass-strong"}
                 initial={reduce ? { opacity: 0 } : { x: "110%" }}
@@ -114,7 +114,7 @@ export function NameDialog({
             <Dialog.Overlay asChild forceMount>
               <motion.div className="scrim" style={{ zIndex: 55 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
             </Dialog.Overlay>
-            <Dialog.Content asChild forceMount aria-describedby={undefined}>
+            <Dialog.Content asChild forceMount aria-describedby={undefined} onEscapeKeyDown={keepOpenForLocalEscape}>
               <motion.div className="dialog glass-strong" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.18 }}>
                 <Dialog.Title asChild>
                   <h2>{title}</h2>
@@ -213,7 +213,7 @@ export function Confirm({
             <Dialog.Overlay asChild forceMount>
               <motion.div className="scrim" style={{ zIndex: 55 }} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
             </Dialog.Overlay>
-            <Dialog.Content asChild forceMount>
+            <Dialog.Content asChild forceMount onEscapeKeyDown={keepOpenForLocalEscape}>
               {/* Centred by CSS layout, not by the transform: motion owns the transform and drops
                   it with reduced motion (Android's battery saver), which left the corner at the centre. */}
               <motion.div
@@ -244,4 +244,12 @@ export function Confirm({
       </AnimatePresence>
     </Dialog.Root>
   );
+}
+
+/**
+ * Escape in a field marked data-local-escape (an inline editor inside a drawer or a dialog)
+ * is the field's own: it closes the field, the window around it stays open.
+ */
+function keepOpenForLocalEscape(e: KeyboardEvent) {
+  if (e.target instanceof Element && e.target.closest("[data-local-escape]")) e.preventDefault();
 }

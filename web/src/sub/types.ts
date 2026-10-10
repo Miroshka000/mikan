@@ -17,6 +17,7 @@ export type Info = {
   expires_at?: string;
   resets_at?: string;
   device_limit: number;
+  speed_limit?: number;
   protocols: string[];
   binding: boolean;
   devices?: Device[];

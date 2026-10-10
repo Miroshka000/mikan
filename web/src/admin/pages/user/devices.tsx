@@ -8,6 +8,7 @@ import { Button, ErrorState, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { DEVICE_NAME_MAX, desktopOS, deviceDetails, deviceLabel, reportedName } from "../../../lib/devices";
 import { ago, dateShort, maskIP } from "../../../lib/format";
+import { LimitPicker } from "./limit-picker";
 import { Section } from "./section";
 
 export function DevicesSection({ u }: { u: User }) {
@@ -17,26 +18,24 @@ export function DevicesSection({ u }: { u: User }) {
   const toast = useToast();
   const update = useUserMutation(userActions.update);
   const list = devices.data ?? [];
-  const setLimit = (n: number | null) =>
-    update.mutate({ id: u.id, body: n === null ? { devices_unlimited: true } : { device_limit: n } }, { onError: (e) => toast.error(errorText(e)) });
   return (
     <Section title={t("userDrawer.devices")} aside={
         binding
           ? t("userDrawer.devicesAsideBound", { used: u.bound_devices, limit: u.device_limit ?? "∞", online: u.online_ips.length })
           : t("userDrawer.devicesAside", { online: u.online_ips.length, limit: u.device_limit ?? "∞" })
       }>
-      <div className="mb-4 flex items-center gap-2 text-[13px]">
-        <span className="text-[var(--ink-600)]">{t("userDrawer.deviceLimit")}</span>
-        <div className="seg" role="group" aria-label={t("userDrawer.deviceLimit")}>
-          {[1, 2, 3, 5, 10].map((n) => (
-            <button key={n} type="button" aria-pressed={u.device_limit === n} onClick={() => setLimit(n)}>
-              {n}
-            </button>
-          ))}
-          <button type="button" aria-pressed={u.device_limit == null} onClick={() => setLimit(null)}>
-            ∞
-          </button>
-        </div>
+      <div className="mb-4">
+        <LimitPicker
+          label={t("userDrawer.deviceLimit")}
+          value={u.device_limit}
+          presets={[1, 2, 3, 5, 10]}
+          min={1}
+          max={100}
+          busy={update.isPending}
+          onChange={(n, done) =>
+            update.mutate({ id: u.id, body: n === null ? { devices_unlimited: true } : { device_limit: n } }, { onSuccess: done, onError: (e) => toast.error(errorText(e)) })
+          }
+        />
       </div>
       <BoundDevices u={u} />
       <h4 className="mt-5 mb-2 text-xs font-medium text-[var(--ink-500)]">{t("userDrawer.addresses")}</h4>

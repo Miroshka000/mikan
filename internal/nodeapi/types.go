@@ -43,6 +43,15 @@ type DesiredState struct {
 	// Filters keep users' traffic from places and strangers from the node; nil: none.
 	// Nodes older than the filters ignore it.
 	Filters *Filters `json:"filters,omitempty"`
+	// Shaping splits the node's channel evenly between the users moving traffic; nil: off.
+	// Nodes older than it ignore it.
+	Shaping *Shaping `json:"shaping,omitempty"`
+}
+
+// Shaping is the fair share of a node: ChannelMbps (each way) is split evenly between the
+// groups (users) moving traffic at the moment, a user's own cap staying the ceiling.
+type Shaping struct {
+	ChannelMbps int `json:"channel_mbps"`
 }
 
 // Filters are the ingress and egress filters of the node.
@@ -106,6 +115,10 @@ type Policy struct {
 	// BannedUntil (unix seconds) keeps the slot out until then: the torrent blocker
 	// caught it on some node of the panel. 0: no ban.
 	BannedUntil int64 `json:"banned_until,omitempty"`
+	// SpeedMbps caps the slot's traffic each way, in Mbit/s; 0: no cap. Slots of one Group
+	// (a user's devices) share one cap. Nodes older than the caps ignore both.
+	SpeedMbps int    `json:"speed_mbps,omitempty"`
+	Group     string `json:"group,omitempty"`
 }
 
 type PoliciesRequest struct {

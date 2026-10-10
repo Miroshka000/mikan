@@ -209,6 +209,7 @@ func Start(o Options) (*Engine, error) {
 	}
 	e.restoreCounters(cs)
 	go e.sys.run()
+	go e.Reg.RunShaper(context.Background())
 	return e, nil
 }
 
@@ -270,6 +271,7 @@ func (e *Engine) Apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	}
 
 	e.Reg.SetSlots(st.Slots)
+	e.Reg.SetShaping(st.Shaping)
 	e.Reg.SetPolicies(st.Epoch, st.Policies)
 	e.Reg.SetShared(sharedListeners(st))
 	e.Reg.SetTorrent(st.Torrent)
@@ -397,7 +399,7 @@ func policyShape(ps []nodeapi.Policy) string {
 			pools = append(pools, q.Pool+strconv.FormatBool(q.Remaining < 0))
 		}
 		_ = enc.Encode([]any{p.Slot, p.Allowed, p.Inbounds, p.DeviceLimit, p.QuotaRemaining < 0, p.OtherIPs, pools,
-			p.TorrentExempt, p.BannedUntil})
+			p.TorrentExempt, p.BannedUntil, p.SpeedMbps, p.Group})
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

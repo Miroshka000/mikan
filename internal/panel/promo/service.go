@@ -326,7 +326,7 @@ func (s *Service) RedeemBonus(ctx context.Context, tgID, userID int64, code stri
 			}
 			next := base + p.Value*int64(24*time.Hour/time.Second)
 			_, err = q.UpdateUser(ctx, db.UpdateUserParams{
-				Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID, TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit,
+				Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID, TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, SpeedLimit: u.SpeedLimit,
 				ResetStrategy: u.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
 				ExpiresAt: sql.NullInt64{Int64: next, Valid: true}, Inbounds: u.Inbounds, BillingDay: u.BillingDay, UpdatedAt: now.Unix(), ID: u.ID,
 			})

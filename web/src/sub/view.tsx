@@ -195,6 +195,12 @@ function Traffic({ block: b, info }: { block: PageBlock; info: Info }) {
             <b className="num block text-base font-medium text-[var(--ink-900)]">{t("sub.upTo", { n: info.device_limit })}</b>
           </div>
         ) : null}
+        {info.speed_limit ? (
+          <div>
+            {t("sub.speed")}
+            <b className="num block text-base font-medium text-[var(--ink-900)]">{t("sub.speedUpTo", { n: info.speed_limit })}</b>
+          </div>
+        ) : null}
       </div>
     </>
   );

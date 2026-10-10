@@ -2893,6 +2893,11 @@ export interface components {
             /** @description Панель может обновить ноду сама: удалённая, отвечает, версия 0.5.0.2 или новее; старую обновляют один раз вручную командой mikan update на её сервере */
             can_update: boolean;
             certificate?: components["schemas"]["NodeCertView"];
+            /**
+             * Format: int64
+             * @description Ширина канала ноды, Мбит/с в каждую сторону; null — не задана
+             */
+            channel_mbps: number | null;
             /** Format: date-time */
             checked_at?: string;
             /**
@@ -2925,6 +2930,8 @@ export interface components {
              * @description С какого момента нет связи
              */
             error_since?: string;
+            /** @description Канал ноды делится поровну между теми, кто сейчас качает */
+            fair_share: boolean;
             /** @description Последний hello ноды после запуска: достучалась ли панель в ответ */
             hello?: components["schemas"]["NodeHello"];
             /** @description Адрес для клиентов */
@@ -3369,8 +3376,15 @@ export interface components {
             secret?: string;
         };
         PatchNodeInputBody: {
+            /**
+             * Format: int64
+             * @description Ширина канала ноды, Мбит/с в каждую сторону
+             */
+            channel_mbps?: number;
             domain?: string;
             enabled?: boolean;
+            /** @description Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps */
+            fair_share?: boolean;
             host?: string;
             name?: string;
             /** @description Публичное имя ноды; пустое — не публиковать её в канале */
@@ -3490,6 +3504,13 @@ export interface components {
             name?: string;
             never_expires?: boolean;
             note?: string;
+            /**
+             * Format: int64
+             * @description Скорость, Мбит/с в каждую сторону
+             */
+            speed_limit?: number;
+            /** @description Снять ограничение скорости */
+            speed_unlimited?: boolean;
             tags?: string[];
             /**
              * Format: int64
@@ -4205,6 +4226,11 @@ export interface components {
             reset_strategy: "none" | "month_start" | "period";
             /** Format: int64 */
             sort?: number;
+            /**
+             * Format: int64
+             * @description Скорость, Мбит/с в каждую сторону; не передана — без ограничения
+             */
+            speed_limit?: number;
             /** @description Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений */
             terms?: components["schemas"]["TermBody"][];
             /** Format: int64 */
@@ -4245,6 +4271,11 @@ export interface components {
             reset_strategy: "none" | "month_start" | "period";
             /** Format: int64 */
             sort: number;
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; null — без ограничения
+             */
+            speed_limit: number | null;
             /** @description Сроки, на которые продаётся тариф, по порядку; первый — тот же, что duration_days, price_stars и price_rub */
             terms: components["schemas"]["TermView"][];
             /**
@@ -4629,6 +4660,11 @@ export interface components {
              * @enum {string}
              */
             source: "admin" | "bot" | "trial" | "import";
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; null — без ограничения
+             */
+            speed_limit: number | null;
             /** @enum {string} */
             state: "active" | "expiring" | "limited" | "expired" | "disabled";
             sub_url: string;

@@ -24,6 +24,7 @@ type userState struct {
 	TariffID      *int64 `json:"tariff_id"`
 	TrafficLimit  *int64 `json:"traffic_limit"`
 	DeviceLimit   *int64 `json:"device_limit"`
+	SpeedLimit    *int64 `json:"speed_limit,omitempty"` // payments before speed caps have none: no cap then
 	ResetStrategy string `json:"reset_strategy"`
 	BillingDay    *int64 `json:"billing_day"`
 	ExpiresAt     *int64 `json:"expires_at"`
@@ -53,14 +54,14 @@ func ptrNull(p *int64) sql.NullInt64 {
 
 func stateOf(u db.User) *userState {
 	return &userState{Status: u.Status, TariffID: nullPtr(u.TariffID), TrafficLimit: nullPtr(u.TrafficLimit), DeviceLimit: nullPtr(u.DeviceLimit),
-		ResetStrategy: u.ResetStrategy, BillingDay: nullPtr(u.BillingDay), ExpiresAt: nullPtr(u.ExpiresAt)}
+		SpeedLimit: nullPtr(u.SpeedLimit), ResetStrategy: u.ResetStrategy, BillingDay: nullPtr(u.BillingDay), ExpiresAt: nullPtr(u.ExpiresAt)}
 }
 
 // sameOffer: the user still has the tariff and limits the payment set. The term and the
 // status are the admin's to change, so they are not compared.
 func (s *userState) sameOffer(u db.User) bool {
 	o := stateOf(u)
-	return eqPtr(s.TariffID, o.TariffID) && eqPtr(s.TrafficLimit, o.TrafficLimit) && eqPtr(s.DeviceLimit, o.DeviceLimit) && eqPtr(s.BillingDay, o.BillingDay) &&
+	return eqPtr(s.TariffID, o.TariffID) && eqPtr(s.TrafficLimit, o.TrafficLimit) && eqPtr(s.DeviceLimit, o.DeviceLimit) && eqPtr(s.SpeedLimit, o.SpeedLimit) && eqPtr(s.BillingDay, o.BillingDay) &&
 		s.ResetStrategy == o.ResetStrategy
 }
 
@@ -156,7 +157,7 @@ func (s *Service) takeBackTariff(ctx context.Context, q *db.Queries, p db.Paymen
 		}
 		if ok {
 			par.Status, par.TariffID, par.TrafficLimit, par.DeviceLimit = ri.Prior.Status, ptrNull(ri.Prior.TariffID), ptrNull(ri.Prior.TrafficLimit), ptrNull(ri.Prior.DeviceLimit)
-			par.ResetStrategy, par.BillingDay = ri.Prior.ResetStrategy, ptrNull(ri.Prior.BillingDay)
+			par.ResetStrategy, par.BillingDay, par.SpeedLimit = ri.Prior.ResetStrategy, ptrNull(ri.Prior.BillingDay), ptrNull(ri.Prior.SpeedLimit)
 			rv.TariffRestored = true
 			if ri.Prior.TariffID != nil {
 				restoreTariff = *ri.Prior.TariffID
@@ -206,7 +207,7 @@ func (s *Service) termOf(ctx context.Context, q *db.Queries, p db.Payment) (int6
 // userParams is u as it is, to change some of it.
 func userParams(u db.User, now int64) db.UpdateUserParams {
 	return db.UpdateUserParams{Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID,
-		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, ResetStrategy: u.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
+		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, SpeedLimit: u.SpeedLimit, ResetStrategy: u.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
 		ExpiresAt: u.ExpiresAt, Inbounds: u.Inbounds, BillingDay: u.BillingDay, UpdatedAt: now, ID: u.ID}
 }
 

@@ -264,6 +264,9 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	}
 	st.Torrent = snap.torrent.Block()
 	st.Filters = snap.filters.State()
+	if n.FairShare != 0 && n.ChannelMbps.Valid {
+		st.Shaping = &nodeapi.Shaping{ChannelMbps: int(n.ChannelMbps.Int64)}
+	}
 	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
 	return st, pin, nil
 }
@@ -495,6 +498,12 @@ func userPolicy(u db.User, grants int64, name string, seq int64, now time.Time, 
 	if u.DeviceLimit.Valid {
 		p.DeviceLimit = int(u.DeviceLimit.Int64)
 	}
+	if u.SpeedLimit.Valid {
+		p.SpeedMbps = int(u.SpeedLimit.Int64)
+	}
+	// The user's devices are slots of their own: they share the user's speed and the
+	// node's fair share as one.
+	p.Group = strconv.FormatInt(u.ID, 10)
 	allowed := domain.DecodeInbounds(u.Inbounds)
 	if len(allowed) == 0 && len(shut) > 0 {
 		// "All" but the excluded: the list is spelled out.
@@ -804,7 +813,8 @@ func stateKey(st nodeapi.DesiredState) string {
 		E []nodeapi.Exit
 		B *nodeapi.TorrentBlock
 		F *nodeapi.Filters
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters})
+		H *nodeapi.Shaping
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters, st.Shaping})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -815,7 +825,7 @@ func policyKey(ps []nodeapi.Policy) string {
 	h := sha256.New()
 	for _, p := range ps {
 		raw, _ := json.Marshal([]any{p.Slot, p.Allowed, p.Inbounds, p.DeviceLimit, p.QuotaRemaining < 0, p.OtherIPs, poolKey(p.Pools),
-			p.TorrentExempt, p.BannedUntil})
+			p.TorrentExempt, p.BannedUntil, p.SpeedMbps, p.Group})
 		h.Write(raw)
 	}
 	return hex.EncodeToString(h.Sum(nil))

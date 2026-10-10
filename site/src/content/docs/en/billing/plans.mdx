@@ -10,6 +10,7 @@ description: Plans with a term, traffic and several sale terms, users, devices a
 - **Traffic per period** in GB, or unlimited.
 - **Term**: "In days" (0 means no expiry) or "To a day of the month": N months and a billing day. The first term ends on the nearest such day, but not sooner than 15 days from now. In a month without that day, the term ends on the last day.
 - **Devices at once**: from 1 to 100, or unlimited.
+- **Speed** in Mbit/s, or unlimited: each way, for all of the user's devices together. A user's own speed is set in their card next to the plan: 10, 25, 50, 100, other or ∞. Each node holds the cap on its own, and with [channel sharing](/mikan/en/nodes/nodes/#share-the-channel-evenly) the plan's speed stays the ceiling.
 - **When to reset traffic**: every 30 days, on the 1st (or on the billing day), never.
 - **Price label**: shown only in the panel.
 - **Pool limits**, if you have [traffic pools](/mikan/en/billing/pools/).

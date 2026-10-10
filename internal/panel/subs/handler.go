@@ -876,6 +876,7 @@ type Info struct {
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	ResetsAt   *time.Time `json:"resets_at,omitempty"`
 	Devices    int        `json:"device_limit"`
+	Speed      int64      `json:"speed_limit,omitempty"` // Mbit/s each way; 0: no cap
 	Protocols  []string   `json:"protocols"`
 	Locations  []string   `json:"locations,omitempty"`
 	// Telegram opens the bot with this subscription tied to the account; empty without a bot.
@@ -959,6 +960,9 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 	}
 	if u.DeviceLimit.Valid {
 		out.Devices = int(u.DeviceLimit.Int64)
+	}
+	if u.SpeedLimit.Valid {
+		out.Speed = u.SpeedLimit.Int64
 	}
 	onNode := map[int64]bool{}
 	for _, in := range prof.Inbounds {

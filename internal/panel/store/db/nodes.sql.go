@@ -7,12 +7,13 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createNode = `-- name: CreateNode :one
 INSERT INTO nodes (name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, sort)
 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, (SELECT COALESCE(MAX(sort), 0) + 1 FROM nodes))
-RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down
+RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps
 `
 
 type CreateNodeParams struct {
@@ -51,6 +52,8 @@ func (q *Queries) CreateNode(ctx context.Context, arg CreateNodeParams) (Node, e
 		&i.Sort,
 		&i.TotalUp,
 		&i.TotalDown,
+		&i.FairShare,
+		&i.ChannelMbps,
 	)
 	return i, err
 }
@@ -65,7 +68,7 @@ func (q *Queries) DeleteNode(ctx context.Context, id int64) error {
 }
 
 const getNode = `-- name: GetNode :one
-SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down FROM nodes WHERE id = $1
+SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps FROM nodes WHERE id = $1
 `
 
 func (q *Queries) GetNode(ctx context.Context, id int64) (Node, error) {
@@ -85,12 +88,14 @@ func (q *Queries) GetNode(ctx context.Context, id int64) (Node, error) {
 		&i.Sort,
 		&i.TotalUp,
 		&i.TotalDown,
+		&i.FairShare,
+		&i.ChannelMbps,
 	)
 	return i, err
 }
 
 const listNodes = `-- name: ListNodes :many
-SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down FROM nodes ORDER BY sort, id
+SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps FROM nodes ORDER BY sort, id
 `
 
 func (q *Queries) ListNodes(ctx context.Context) ([]Node, error) {
@@ -116,6 +121,8 @@ func (q *Queries) ListNodes(ctx context.Context) ([]Node, error) {
 			&i.Sort,
 			&i.TotalUp,
 			&i.TotalDown,
+			&i.FairShare,
+			&i.ChannelMbps,
 		); err != nil {
 			return nil, err
 		}
@@ -145,6 +152,27 @@ func (q *Queries) SetNodeCert(ctx context.Context, arg SetNodeCertParams) error 
 	return err
 }
 
+const setNodeShaping = `-- name: SetNodeShaping :exec
+UPDATE nodes SET fair_share = $1, channel_mbps = $2, updated_at = $3 WHERE id = $4
+`
+
+type SetNodeShapingParams struct {
+	FairShare   int64
+	ChannelMbps sql.NullInt64
+	UpdatedAt   int64
+	ID          int64
+}
+
+func (q *Queries) SetNodeShaping(ctx context.Context, arg SetNodeShapingParams) error {
+	_, err := q.db.ExecContext(ctx, setNodeShaping,
+		arg.FairShare,
+		arg.ChannelMbps,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const setNodeSort = `-- name: SetNodeSort :exec
 UPDATE nodes SET sort = $1 WHERE id = $2
 `
@@ -160,7 +188,7 @@ func (q *Queries) SetNodeSort(ctx context.Context, arg SetNodeSortParams) error 
 }
 
 const updateNode = `-- name: UpdateNode :one
-UPDATE nodes SET name = $1, address = $2, public_host = $3, domain = $4, public_name = $5, enabled = $6, updated_at = $7 WHERE id = $8 RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down
+UPDATE nodes SET name = $1, address = $2, public_host = $3, domain = $4, public_name = $5, enabled = $6, updated_at = $7 WHERE id = $8 RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps
 `
 
 type UpdateNodeParams struct {
@@ -200,6 +228,8 @@ func (q *Queries) UpdateNode(ctx context.Context, arg UpdateNodeParams) (Node, e
 		&i.Sort,
 		&i.TotalUp,
 		&i.TotalDown,
+		&i.FairShare,
+		&i.ChannelMbps,
 	)
 	return i, err
 }

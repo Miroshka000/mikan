@@ -67,6 +67,9 @@ type NodeInfo struct {
 	Certificate *NodeCertView `json:"certificate,omitempty"`
 	// TLS is the certificate its protocols on TLS use now; nil when not known.
 	TLS *NodeTLSView `json:"tls,omitempty"`
+	// FairShare splits ChannelMbps evenly between the users moving traffic through the node.
+	FairShare   bool   `json:"fair_share" doc:"Канал ноды делится поровну между теми, кто сейчас качает"`
+	ChannelMbps *int64 `json:"channel_mbps" doc:"Ширина канала ноды, Мбит/с в каждую сторону; null — не задана"`
 }
 
 type nodesOutput struct{ Body []NodeInfo }
@@ -97,6 +100,9 @@ type patchNodeInput struct {
 		Host       *string `json:"host,omitempty" maxLength:"253"`
 		Domain     *string `json:"domain,omitempty" maxLength:"253"`
 		Enabled    *bool   `json:"enabled,omitempty"`
+		FairShare  *bool   `json:"fair_share,omitempty" doc:"Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps"`
+		// The node's channel each way, which the fair share splits.
+		ChannelMbps *int64 `json:"channel_mbps,omitempty" minimum:"1" maximum:"100000" doc:"Ширина канала ноды, Мбит/с в каждую сторону"`
 	}
 }
 
@@ -160,7 +166,8 @@ func (h *handlers) orderNodes(ctx context.Context, in *orderNodesInput) (*struct
 
 func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inbound) NodeInfo {
 	v := NodeInfo{ID: n.ID, Name: n.Name, PublicName: n.PublicName, Local: n.Address == "", Address: n.Address, Host: domain.NodeHost(n), Domain: n.Domain,
-		Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown"}
+		Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
+		FairShare: n.FairShare != 0, ChannelMbps: ptrInt(n.ChannelMbps.Int64, n.ChannelMbps.Valid)}
 	if v.Local {
 		// The panel's own node is reached at the panel's address.
 		ep, _ := h.d.Settings.Endpoint(ctx)
@@ -377,6 +384,21 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 			n.Enabled = 1
 		}
 	}
+	shaping := b.FairShare != nil || b.ChannelMbps != nil
+	if b.ChannelMbps != nil {
+		n.ChannelMbps = sql.NullInt64{Int64: *b.ChannelMbps, Valid: true}
+	}
+	if b.FairShare != nil {
+		n.FairShare = domain.Flag(*b.FairShare)
+	}
+	if n.FairShare != 0 && !n.ChannelMbps.Valid {
+		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.channel_mbps", Message: "channel_required"})
+	}
+	if shaping {
+		if err := h.d.Store.Q.SetNodeShaping(ctx, db.SetNodeShapingParams{FairShare: n.FairShare, ChannelMbps: n.ChannelMbps, UpdatedAt: h.d.Now().Unix(), ID: n.ID}); err != nil {
+			return nil, err
+		}
+	}
 	n, err = h.d.Store.Q.UpdateNode(ctx, db.UpdateNodeParams{Name: n.Name, Address: n.Address, PublicHost: n.PublicHost, Domain: n.Domain, PublicName: n.PublicName,
 		Enabled: n.Enabled, UpdatedAt: h.d.Now().Unix(), ID: n.ID})
 	if err != nil {
@@ -384,7 +406,8 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 	}
 	h.nodesChanged()
 	h.d.Changes.SlotsChanged()
-	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0})
+	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0,
+		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64})
 	return h.nodeInfo(ctx, n.ID)
 }
 

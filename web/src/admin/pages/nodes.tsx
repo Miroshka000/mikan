@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, RefreshCw, ShieldCheck, Stethoscope, Trash2, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
@@ -677,14 +677,21 @@ function KeyDrawer({ joined, onClose, actions }: { joined: Joined | null; onClos
 function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true });
+  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   useEffect(() => {
     if (node) {
-      setForm({ name: node.name, public_name: node.public_name, host: node.host, domain: node.domain, enabled: node.enabled });
+      setForm({ name: node.name, public_name: node.public_name, host: node.host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "" });
       setErrors({});
     }
   }, [node]);
+  // The last speed test of the node, to fill the channel in with one click.
+  const tests = useQuery({
+    queryKey: qk.speedTests(node?.id ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/speedtests", { params: { path: { id: node!.id }, query: { limit: 30 } }, signal })),
+    enabled: !!node,
+  });
+  const measured = tests.data?.[0]?.down_bps ? Math.floor(tests.data[0].down_bps / 1_000_000) : 0;
   const save = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Schemas["PatchNodeInputBody"] }) => unwrap(api.PATCH("/api/v1/nodes/{id}", { params: { path: { id } }, body })),
     onSuccess: () => {
@@ -703,7 +710,15 @@ function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => v
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!node) return;
-    const body: Schemas["PatchNodeInputBody"] = { name: form.name.trim(), public_name: form.public_name.trim(), enabled: form.enabled };
+    const body: Schemas["PatchNodeInputBody"] = { name: form.name.trim(), public_name: form.public_name.trim(), enabled: form.enabled, fair_share: form.fair_share };
+    const channel = Number(form.channel);
+    if (form.channel.trim() || form.fair_share) {
+      if (!Number.isInteger(channel) || channel < 1 || channel > 100000) {
+        setErrors({ channel_mbps: t("nodes.channelErr") });
+        return;
+      }
+      body.channel_mbps = channel;
+    }
     if (!node.local) {
       body.host = form.host.trim();
       body.domain = form.domain.trim();
@@ -753,6 +768,39 @@ function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => v
         <Field label={t("nodes.serving")} hint={t("nodes.servingHint")}>
           <Switch checked={form.enabled} onChange={(v) => setForm((f) => ({ ...f, enabled: v }))} label={t("nodes.serving")} />
         </Field>
+        <div className="dr-sec">
+          <div className="switch-row pt-0">
+            <div>
+              <div className="switch-row-title">{t("nodes.fairShare")}</div>
+              <div className="switch-row-sub">{t("nodes.fairShareHint")}</div>
+            </div>
+            <Switch checked={form.fair_share} onChange={(v) => setForm((f) => ({ ...f, fair_share: v }))} label={t("nodes.fairShare")} />
+          </div>
+          <Field label={t("nodes.channel")} htmlFor="e-channel" hint={form.fair_share ? t("nodes.channelHint") : t("nodes.channelHintOff")} error={errors.channel_mbps}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="input-unit max-w-[180px] flex-1">
+                <input
+                  id="e-channel"
+                  className="input"
+                  inputMode="numeric"
+                  value={form.channel}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, channel: e.target.value }));
+                    setErrors(({ channel_mbps: _, ...rest }) => rest);
+                  }}
+                  aria-invalid={!!errors.channel_mbps}
+                />
+                <span>{t("tariffs.mbps")}</span>
+              </span>
+              {measured > 0 && String(measured) !== form.channel ? (
+                <Button size="sm" variant="ghost" type="button" onClick={() => setForm((f) => ({ ...f, channel: String(measured) }))}>
+                  {t("nodes.channelFromTest", { n: measured })}
+                </Button>
+              ) : null}
+            </div>
+          </Field>
+          {form.fair_share && !node?.fair_share ? <p className="text-xs text-[var(--honey-600)]">{t("nodes.fairShareReconnect")}</p> : null}
+        </div>
       </form>
     </Drawer>
   );

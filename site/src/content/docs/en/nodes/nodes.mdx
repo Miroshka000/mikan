@@ -129,6 +129,14 @@ A node installs only signed releases and never rolls back to an older version.
 They need the `mikan update` command once on their server, and the panel shows it on the card. After that they update from the panel.
 :::
 
+## Share the channel evenly
+
+In **Edit node**, the **Share the channel evenly** switch and the **Channel width** in Mbit/s: what the node really gives each way. "From the test" takes the number from the last [speed check](#speed-check).
+
+Every second the node looks at who is downloading now and splits the channel evenly between them. Light users get what they need, and the rest goes to those who hit their share, so the channel does not sit idle. A user alone gets the whole channel. A plan's speed stays the ceiling.
+
+Once it is on, the node's clients reconnect once; the apps do it themselves. While sharing is on, Vision runs without the kernel's splice: a bit more CPU.
+
 ## Speed check
 
 The **Speed** button on the card measures the node's own connection to the internet: latency, jitter and loss over 20 DNS queries to 1.1.1.1, then download and upload speed through speed.cloudflare.com. Results are saved in the history.

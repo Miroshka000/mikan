@@ -624,6 +624,9 @@ func DescribeLimits(t db.Tariff, lang string) string {
 	if t.DeviceLimit.Valid {
 		parts = append(parts, fmt.Sprintf(pick("устройств: %d", "devices: %d"), t.DeviceLimit.Int64))
 	}
+	if t.SpeedLimit.Valid {
+		parts = append(parts, fmt.Sprintf(pick("до %d Мбит/с", "up to %d Mbit/s"), t.SpeedLimit.Int64))
+	}
 	return strings.Join(parts, " · ")
 }
 
