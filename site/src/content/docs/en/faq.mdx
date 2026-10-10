@@ -53,7 +53,15 @@ They wait for cut-off devices from at least two different networks and 30 minute
 
 ### A node shows "No connection"
 
-The panel could not reach the node's API port. Check that the node is running (`mikan status` on its server) and that the API port is open in the hosting provider's firewall for the panel's address. If the key may have been lost, issue a new one with the "New key" button and accept it on the node with `mikan join`.
+The panel could not reach the node. The reason and what to do are written right on the card, for example "the API port does not answer: open it in the hoster's firewall". Click **Check node**: it has a full list of checks with hints, and the "Copy a report for the chat" button gives text without IPs and keys for support. If the panel cannot reach the node at all, run `mikan doctor` on its server. All reasons are listed in the [Nodes](/mikan/en/nodes/nodes/#if-a-node-does-not-connect) section.
+
+### A node did not update
+
+Open **Check node**: the update line says in words what happened, for example "the node did not update to X, it stayed on Y". Click "Update node". If the node is on 0.5.0.1 or older, run `mikan update` once on its server. More in [Updating nodes from the panel](/mikan/en/nodes/nodes/#updating-nodes-from-the-panel).
+
+### The panel says the node's IP is different
+
+The node's server goes out to the internet from a different address than the one set in the panel ("the node reported from IP Y, the panel has X"). If clients cannot connect, fix the address with the "Change address" button or in **Configure**.
 
 ### WARP fails the check
 
