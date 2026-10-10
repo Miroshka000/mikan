@@ -35,6 +35,13 @@
   --shadow-lg: 0 2px 8px rgba(22, 26, 36, 0.06), 0 32px 64px -24px rgba(22, 26, 36, 0.28);
   --font-display-stack: "Unbounded Variable", "Onest Variable", system-ui, sans-serif;
   --font-ui-stack: "Onest Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fill-hover: var(--ink-700);
+  --ring: color-mix(in srgb, var(--mikan-500) 20%, transparent);
+  --scrim: rgba(22, 26, 36, 0.18);
+  /* The dawn of the panel's Mikan theme, whatever theme the admin previews it in. */
+  --glow-a: rgba(255, 138, 72, 0.72); --glow-b: rgba(255, 122, 150, 0.42); --glow-c: rgba(255, 196, 100, 0.55);
+  --glow-d: rgba(158, 142, 255, 0.42); --glow-e: rgba(98, 184, 230, 0.48);
+  --glow-opacity: 1; --grain-blend: multiply; --grain-opacity: 0.055;
   --r-md: 12px;
   --sub-r: 24px;
   --sub-r-inner: 16px;
@@ -81,6 +88,9 @@
   --glass-highlight: color-mix(in srgb, var(--mikan-500) 18%, transparent);
   --hairline: rgba(255,255,255,.09); --hover: rgba(255,255,255,.06);
   --shadow-sm: 0 1px 2px rgba(0,0,0,.25); --shadow-md: 0 12px 32px -14px rgba(0,0,0,.55); --shadow-lg: 0 32px 64px -24px rgba(0,0,0,.65);
+  --fill-hover: var(--mikan-600);
+  --ring: color-mix(in srgb, var(--mikan-500) 28%, transparent);
+  --scrim: rgba(0, 0, 0, 0.5);
 }
 .sub-look[data-scheme="dark"][data-palette="ocean"] {
   --bg: #0a1419; --mikan-50: #12303a; --mikan-100: #17414d; --mikan-200: #1d5866; --mikan-400: #5cc8da; --mikan-500: #3fb5c9; --mikan-600: #6fd0e0; --mikan-700: #93dde9;

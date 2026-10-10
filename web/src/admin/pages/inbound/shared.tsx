@@ -47,7 +47,7 @@ export function LimitNotes({ clashOnly, shared, domainCert = false }: { clashOnl
   return (
     <div className="mb-4 flex flex-col gap-2" role="note">
       {shared ? (
-        <div className="rounded-2xl border border-[rgba(224,160,33,0.35)] bg-[var(--honey-50)] p-3 text-[13px] text-[var(--ink-700)]">
+        <div className="rounded-2xl border border-[color-mix(in_srgb,var(--honey-500)_35%,transparent)] bg-[var(--honey-50)] p-3 text-[13px] text-[var(--ink-700)]">
           <div className="mb-1 flex items-center gap-2 font-semibold text-[var(--ink-900)]">
             <TriangleAlert size={16} className="text-[var(--honey-600)]" aria-hidden /> {t("inbounds.sharedWarnTitle")}
           </div>

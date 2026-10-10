@@ -1,0 +1,325 @@
+/*
+ * The panel's colour themes. A theme is a whole palette, not an accent: the page and its
+ * backdrop, the glass, the inks, the accent ramp and, on a dark theme, the status colours.
+ *
+ * Three layers, in this order, every selector one attribute so the later one wins:
+ *  1. the light base (:root and [data-tone="light"]): Mikan, every token;
+ *  2. the dark base ([data-tone="dark"]): what every dark theme shares;
+ *  3. one block per theme ([data-theme="…"]): only what makes it itself.
+ *
+ * The attributes sit on <html> (components/theme.tsx, public/theme-boot.js), and on a theme
+ * preview in the picker, which therefore draws itself from the same tokens.
+ *
+ * The backdrop (.atmo in app.css) takes five glows: --glow-a…c on the left ("warm"),
+ * --glow-d…e on the right ("cool"), dimmed by --glow-opacity, with grain on top.
+ * scripts/check-contrast.mjs checks the text pairs of every theme against WCAG AA.
+ */
+
+:root, [data-tone="light"] {
+  color-scheme: light;
+  --font-display-stack: "Unbounded Variable", "Onest Variable", system-ui, sans-serif;
+  --font-ui-stack: "Onest Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono-stack: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  --bg: #fbf1e8;
+  --ink-900: #161a24; --ink-800: #252b38; --ink-700: #394050; --ink-600: #4a5263;
+  --ink-500: #5c6474; --ink-400: #666d7b; --ink-300: #a6adb8; --ink-200: #d0d4db;
+  --ink-100: #e7e9ed; --ink-50: #f2f3f5;
+  --fill: var(--ink-900); --fill-hover: var(--ink-700); --on-fill: #fff; --on-danger: #fff;
+  --code-bg: #161a24; --code-fg: #e7e9ed;
+  --mikan-50: #fff3ea; --mikan-100: #ffe4d0; --mikan-200: #ffcba6; --mikan-400: #f7964f;
+  --mikan-500: #f07a2e; --mikan-600: #db6317; --mikan-700: #b24c0c;
+  --leaf-50: #e4f4eb; --leaf-500: #2f9e6b; --leaf-700: #1f7650;
+  --lagoon-50: #e0f1f4; --lagoon-400: #58afbe; --lagoon-500: #2b8c9e; --lagoon-600: #247685;
+  --honey-50: #fcf1da; --honey-500: #e0a021; --honey-600: #8f5e06;
+  --berry-50: #fce7e4; --berry-600: #bb382f;
+  /* Folder colours that no other token has. */
+  --fc-blue: #3d6fd9; --fc-purple: #7a5bcf; --fc-pink: #cc4f98;
+
+  --surface: rgba(255, 255, 255, 0.8);
+  --surface-soft: rgba(255, 255, 255, 0.55);
+  --surface-hover: rgba(255, 255, 255, 0.92);
+  --surface-solid: #ffffff;
+  /* A selected tab, segment or menu item: above the card it sits on. */
+  --raised: #ffffff;
+  --glass: rgba(255, 255, 255, 0.6);
+  --glass-strong: rgba(255, 255, 255, 0.86);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-edge: rgba(255, 255, 255, 0.78);
+  --hairline: rgba(22, 26, 36, 0.08);
+  --hover: rgba(22, 26, 36, 0.045);
+  --ring: color-mix(in srgb, var(--mikan-500) 20%, transparent);
+  --scrim: rgba(22, 26, 36, 0.18);
+  --shadow-sm: 0 1px 2px rgba(22, 26, 36, 0.05);
+  --shadow-md: 0 1px 2px rgba(22, 26, 36, 0.04), 0 12px 32px -14px rgba(22, 26, 36, 0.16);
+  --shadow-lg: 0 2px 8px rgba(22, 26, 36, 0.06), 0 32px 64px -24px rgba(22, 26, 36, 0.28);
+  --r-md: 12px; --r-lg: 20px; --r-xl: 24px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.3, 1.3, 0.6, 1);
+
+  /* "Dawn": mandarin, rose and honey from the left, lilac and sky from the right. */
+  --glow-a: rgba(255, 138, 72, 0.72);
+  --glow-b: rgba(255, 122, 150, 0.42);
+  --glow-c: rgba(255, 196, 100, 0.55);
+  --glow-d: rgba(158, 142, 255, 0.42);
+  --glow-e: rgba(98, 184, 230, 0.48);
+  --glow-opacity: 1;
+  --grain-blend: multiply; --grain-opacity: 0.055;
+}
+
+[data-tone="dark"] {
+  color-scheme: dark;
+  --on-danger: #161a24;
+  --code-bg: #080b10; --code-fg: #e7e9ed;
+  --leaf-50: #173326; --leaf-500: #45c487; --leaf-700: #73dca8;
+  --lagoon-50: #17343b; --lagoon-400: #66c7d8; --lagoon-500: #42afc2; --lagoon-600: #79d6e4;
+  --honey-50: #3a3018; --honey-500: #efb53b; --honey-600: #ffd36b;
+  --berry-50: #3d2021; --berry-600: #ff7069;
+  --fc-blue: #7aa2ff; --fc-purple: #b39bff; --fc-pink: #ff8cc6;
+  --hairline: rgba(255, 255, 255, 0.09); --hover: rgba(255, 255, 255, 0.06);
+  --ring: color-mix(in srgb, var(--mikan-500) 28%, transparent);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 12px 32px -14px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 32px 64px -24px rgba(0, 0, 0, 0.65);
+  --fill-hover: var(--mikan-600);
+  --grain-blend: overlay; --grain-opacity: 0.04;
+}
+
+/* ---------- light ---------- */
+
+[data-theme="ocean"] {
+  --bg: #e6f2f5;
+  --ink-900: #0d2530; --ink-800: #17323e; --ink-700: #274552; --ink-600: #365563;
+  --ink-500: #476573; --ink-400: #557482; --ink-300: #9fb5bf; --ink-200: #c8d8de;
+  --ink-100: #dde9ed; --ink-50: #edf4f6;
+  --fill: #0f3644; --fill-hover: #1b4a5a; --code-bg: #0d2530;
+  --mikan-50: #e3f4f7; --mikan-100: #c6e8ef; --mikan-200: #9fd7e2; --mikan-400: #3fb3c7;
+  --mikan-500: #1a94aa; --mikan-600: #137d90; --mikan-700: #0c5f6e;
+  --surface: rgba(250, 254, 255, 0.8); --surface-soft: rgba(246, 252, 254, 0.55);
+  --surface-hover: rgba(252, 255, 255, 0.92); --surface-solid: #fbfeff; --raised: #fdffff;
+  --glass: rgba(244, 251, 253, 0.6); --glass-strong: rgba(248, 253, 255, 0.86);
+  --glass-edge: rgba(255, 255, 255, 0.75);
+  --hairline: rgba(13, 37, 48, 0.09); --hover: rgba(13, 37, 48, 0.05);
+  --glow-a: rgba(56, 182, 206, 0.55);
+  --glow-b: rgba(120, 200, 255, 0.4);
+  --glow-c: rgba(110, 226, 200, 0.48);
+  --glow-d: rgba(80, 130, 230, 0.34);
+  --glow-e: rgba(40, 170, 190, 0.48);
+}
+
+[data-theme="sakura"] {
+  --bg: #fbecf2;
+  --ink-900: #2b1421; --ink-800: #3c1f2f; --ink-700: #522c41; --ink-600: #633a51;
+  --ink-500: #764a62; --ink-400: #865870; --ink-300: #c7a6b6; --ink-200: #e3cbd6;
+  --ink-100: #f1e1e8; --ink-50: #f8eef2;
+  --fill: #4d1a35; --fill-hover: #66264a; --code-bg: #2b1421;
+  --mikan-50: #fff0f5; --mikan-100: #ffd9e7; --mikan-200: #ffb8d1; --mikan-400: #f080a6;
+  --mikan-500: #e05f8d; --mikan-600: #c94676; --mikan-700: #a3335d;
+  --surface: rgba(255, 251, 253, 0.8); --surface-soft: rgba(255, 248, 251, 0.55);
+  --surface-hover: rgba(255, 252, 254, 0.92); --surface-solid: #fffcfd; --raised: #fffdfe;
+  --glass: rgba(255, 247, 251, 0.6); --glass-strong: rgba(255, 250, 252, 0.86);
+  --glass-edge: rgba(255, 255, 255, 0.78);
+  --hairline: rgba(43, 20, 33, 0.09); --hover: rgba(43, 20, 33, 0.05);
+  --glow-a: rgba(255, 140, 180, 0.55);
+  --glow-b: rgba(255, 190, 150, 0.42);
+  --glow-c: rgba(255, 170, 200, 0.45);
+  --glow-d: rgba(200, 150, 255, 0.32);
+  --glow-e: rgba(255, 120, 160, 0.38);
+}
+
+[data-theme="forest"] {
+  --bg: #ebf3e8;
+  --ink-900: #13221a; --ink-800: #1d3125; --ink-700: #2c4434; --ink-600: #3a5443;
+  --ink-500: #4a6553; --ink-400: #577261; --ink-300: #a2b8a9; --ink-200: #cbdacf;
+  --ink-100: #e1ebe3; --ink-50: #eef4ef;
+  --fill: #1c3a27; --fill-hover: #285037; --code-bg: #13221a;
+  --mikan-50: #e6f4e8; --mikan-100: #c9e7ce; --mikan-200: #a3d5ad; --mikan-400: #55b06b;
+  --mikan-500: #33924c; --mikan-600: #277a3c; --mikan-700: #1d5e2e;
+  --surface: rgba(252, 255, 251, 0.8); --surface-soft: rgba(249, 253, 248, 0.55);
+  --surface-hover: rgba(253, 255, 252, 0.92); --surface-solid: #fcfefb; --raised: #fdfffc;
+  --glass: rgba(247, 252, 246, 0.6); --glass-strong: rgba(250, 254, 249, 0.86);
+  --glass-edge: rgba(255, 255, 255, 0.76);
+  --hairline: rgba(19, 34, 26, 0.09); --hover: rgba(19, 34, 26, 0.05);
+  --glow-a: rgba(120, 200, 110, 0.5);
+  --glow-b: rgba(214, 214, 112, 0.4);
+  --glow-c: rgba(90, 180, 150, 0.44);
+  --glow-d: rgba(150, 210, 190, 0.38);
+  --glow-e: rgba(60, 150, 100, 0.4);
+}
+
+/* ---------- dark ---------- */
+
+/* Blue-black with the mandarin: the dawn turned down. */
+[data-theme="midnight"] {
+  --bg: #0d1118;
+  --ink-900: #f4f7fb; --ink-800: #e3e8ef; --ink-700: #c4ccd7; --ink-600: #a8b2c0;
+  --ink-500: #8b97a8; --ink-400: #7a8697; --ink-300: #515d6d; --ink-200: #394453;
+  --ink-100: #252e3a; --ink-50: #1b232e;
+  --fill: #ff843d; --on-fill: #161a24;
+  --mikan-50: #3a2418; --mikan-100: #55311e; --mikan-200: #774322; --mikan-400: #ff9a57;
+  --mikan-500: #ff843d; --mikan-600: #ff9b5d; --mikan-700: #ffb27a;
+  --surface: rgba(22, 29, 39, 0.92); --surface-soft: rgba(24, 31, 42, 0.72);
+  --surface-hover: rgba(40, 50, 64, 0.96); --surface-solid: #161d27; --raised: #263142;
+  --glass: rgba(24, 31, 42, 0.72); --glass-strong: rgba(22, 29, 39, 0.92);
+  --glass-edge: rgba(255, 132, 61, 0.18); --glass-highlight: rgba(255, 132, 61, 0.18);
+  --glow-a: rgba(255, 138, 72, 0.72);
+  --glow-b: rgba(255, 122, 150, 0.42);
+  --glow-c: rgba(255, 196, 100, 0.55);
+  --glow-d: rgba(158, 142, 255, 0.42);
+  --glow-e: rgba(98, 184, 230, 0.48);
+  --glow-opacity: 0.3;
+}
+
+/* Near-black and grey, no hue: for OLED and for those who want the data only. */
+[data-theme="graphite"] {
+  --bg: #0a0a0b;
+  --ink-900: #f2f2f3; --ink-800: #dedee0; --ink-700: #c2c2c6; --ink-600: #a6a6ab;
+  --ink-500: #909096; --ink-400: #7c7c82; --ink-300: #4f4f55; --ink-200: #3a3a3f;
+  --ink-100: #26262a; --ink-50: #1a1a1d;
+  --fill: #ececee; --on-fill: #111113; --fill-hover: #ffffff;
+  --mikan-50: #232326; --mikan-100: #2e2e33; --mikan-200: #45454c; --mikan-400: #d6d6da;
+  --mikan-500: #c8c8cd; --mikan-600: #e2e2e6; --mikan-700: #f0f0f2;
+  --surface: rgba(22, 22, 24, 0.92); --surface-soft: rgba(26, 26, 29, 0.72);
+  --surface-hover: rgba(38, 38, 42, 0.96); --surface-solid: #151517; --raised: #242428;
+  --glass: rgba(20, 20, 22, 0.72); --glass-strong: rgba(18, 18, 20, 0.92);
+  --glass-edge: rgba(255, 255, 255, 0.08); --glass-highlight: rgba(255, 255, 255, 0.06);
+  --code-bg: #000000;
+  --glow-a: rgba(255, 255, 255, 0.07);
+  --glow-b: rgba(190, 190, 200, 0.05);
+  --glow-c: rgba(255, 255, 255, 0.04);
+  --glow-d: rgba(170, 180, 200, 0.06);
+  --glow-e: rgba(255, 255, 255, 0.04);
+  --glow-opacity: 1;
+  --grain-opacity: 0.05;
+}
+
+/* The deep sea: blue-black water, a cyan light. */
+[data-theme="abyss"] {
+  --bg: #061219;
+  --ink-900: #e8f6fa; --ink-800: #d2e9f0; --ink-700: #b0cfd9; --ink-600: #93b6c2;
+  --ink-500: #7d9faa; --ink-400: #6a8c98; --ink-300: #44626d; --ink-200: #2f4952;
+  --ink-100: #1c3139; --ink-50: #13252c;
+  --fill: #36d0e0; --on-fill: #04161d; --fill-hover: #5fdcea;
+  --mikan-50: #0f2e36; --mikan-100: #134049; --mikan-200: #195a66; --mikan-400: #4fd7e6;
+  --mikan-500: #36d0e0; --mikan-600: #62dde9; --mikan-700: #8de8f1;
+  /* The upload line and the info notes: violet-blue, the cyan is the accent's. */
+  --lagoon-50: #1c2347; --lagoon-400: #8b9dff; --lagoon-500: #7c8cff; --lagoon-600: #a7b4ff;
+  --surface: rgba(10, 30, 40, 0.92); --surface-soft: rgba(12, 34, 45, 0.72);
+  --surface-hover: rgba(20, 48, 62, 0.96); --surface-solid: #0b1e27; --raised: #15303c;
+  --glass: rgba(10, 30, 40, 0.72); --glass-strong: rgba(9, 27, 36, 0.92);
+  --glass-edge: rgba(54, 208, 224, 0.14); --glass-highlight: rgba(120, 230, 240, 0.1);
+  --code-bg: #030b10;
+  --glow-a: rgba(30, 140, 200, 0.6);
+  --glow-b: rgba(54, 208, 224, 0.38);
+  --glow-c: rgba(20, 90, 160, 0.55);
+  --glow-d: rgba(70, 120, 220, 0.38);
+  --glow-e: rgba(30, 200, 180, 0.38);
+  --glow-opacity: 0.5;
+}
+
+/* Coffee and embers: a warm brown-black with a gold accent. */
+[data-theme="ember"] {
+  --bg: #120c09;
+  --ink-900: #f8efe7; --ink-800: #eadccf; --ink-700: #d2bfae; --ink-600: #b9a491;
+  --ink-500: #a38d7a; --ink-400: #8f7865; --ink-300: #5c4a3d; --ink-200: #43352b;
+  --ink-100: #2c221c; --ink-50: #211913;
+  --fill: #f2b443; --on-fill: #1a1108; --fill-hover: #f7c766;
+  --mikan-50: #33250f; --mikan-100: #4a3514; --mikan-200: #6b4c19; --mikan-400: #f6c25d;
+  --mikan-500: #f2b443; --mikan-600: #f7c766; --mikan-700: #fad88f;
+  /* Warnings: orange, the gold is the accent's. */
+  --honey-50: #3a2213; --honey-500: #ff8a3d; --honey-600: #ffa466;
+  --surface: rgba(30, 21, 16, 0.92); --surface-soft: rgba(32, 23, 18, 0.72);
+  --surface-hover: rgba(48, 35, 27, 0.96); --surface-solid: #1c1410; --raised: #2d211a;
+  --glass: rgba(30, 21, 16, 0.72); --glass-strong: rgba(27, 19, 14, 0.92);
+  --glass-edge: rgba(242, 180, 67, 0.14); --glass-highlight: rgba(255, 210, 150, 0.08);
+  --code-bg: #0a0604;
+  --glow-a: rgba(200, 70, 30, 0.6);
+  --glow-b: rgba(242, 160, 60, 0.38);
+  --glow-c: rgba(150, 50, 20, 0.55);
+  --glow-d: rgba(120, 60, 30, 0.45);
+  --glow-e: rgba(230, 120, 40, 0.38);
+  --glow-opacity: 0.45;
+}
+
+/* Sakura at night: plum black, a rose accent. */
+[data-theme="plum"] {
+  --bg: #140a12;
+  --ink-900: #fbeef5; --ink-800: #efdbe6; --ink-700: #d9bccb; --ink-600: #c19fb1;
+  --ink-500: #ab889a; --ink-400: #977485; --ink-300: #604656; --ink-200: #46323e;
+  --ink-100: #2e1f29; --ink-50: #22161f;
+  --fill: #ff7eab; --on-fill: #22091a; --fill-hover: #ff9cbf;
+  --mikan-50: #3a1529; --mikan-100: #561d3b; --mikan-200: #7a2a53; --mikan-400: #ff96bb;
+  --mikan-500: #ff7eab; --mikan-600: #ff9cbf; --mikan-700: #ffbcd4;
+  /* Errors: orange-red, the pink is the accent's. */
+  --berry-50: #3d1a16; --berry-600: #ff6a4d;
+  --surface: rgba(30, 17, 27, 0.92); --surface-soft: rgba(32, 19, 29, 0.72);
+  --surface-hover: rgba(48, 30, 43, 0.96); --surface-solid: #1d1019; --raised: #2e1b29;
+  --glass: rgba(30, 17, 27, 0.72); --glass-strong: rgba(27, 15, 24, 0.92);
+  --glass-edge: rgba(255, 126, 171, 0.14); --glass-highlight: rgba(255, 170, 200, 0.08);
+  --code-bg: #0b0509;
+  --glow-a: rgba(220, 60, 130, 0.55);
+  --glow-b: rgba(150, 60, 200, 0.34);
+  --glow-c: rgba(255, 110, 150, 0.38);
+  --glow-d: rgba(110, 50, 160, 0.45);
+  --glow-e: rgba(200, 80, 120, 0.4);
+  --glow-opacity: 0.45;
+}
+
+/* The forest at night: moss black, a young-leaf accent. */
+[data-theme="moss"] {
+  --bg: #0b110c;
+  --ink-900: #eef6ec; --ink-800: #dbe8d8; --ink-700: #bccdb8; --ink-600: #9fb39b;
+  --ink-500: #889c84; --ink-400: #74876f; --ink-300: #4a5947; --ink-200: #354133;
+  --ink-100: #222b21; --ink-50: #182018;
+  --fill: #a6d96a; --on-fill: #0f1a08; --fill-hover: #bce58b;
+  --mikan-50: #1f2e14; --mikan-100: #2b411a; --mikan-200: #3d5c22; --mikan-400: #b4e07f;
+  --mikan-500: #a6d96a; --mikan-600: #bce58b; --mikan-700: #d0eeaa;
+  --surface: rgba(18, 27, 19, 0.92); --surface-soft: rgba(20, 30, 21, 0.72);
+  --surface-hover: rgba(32, 45, 33, 0.96); --surface-solid: #121a13; --raised: #1f2c20;
+  --glass: rgba(18, 27, 19, 0.72); --glass-strong: rgba(16, 24, 17, 0.92);
+  --glass-edge: rgba(166, 217, 106, 0.13); --glass-highlight: rgba(200, 240, 160, 0.07);
+  --code-bg: #050805;
+  --glow-a: rgba(90, 150, 60, 0.5);
+  --glow-b: rgba(160, 190, 80, 0.34);
+  --glow-c: rgba(40, 110, 70, 0.55);
+  --glow-d: rgba(70, 130, 110, 0.4);
+  --glow-e: rgba(120, 170, 60, 0.38);
+  --glow-opacity: 0.45;
+}
+
+/* A phosphor screen: black, green light, the headings in the mono font. */
+[data-theme="terminal"] {
+  --font-display-stack: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --bg: #040604;
+  --ink-900: #d8f5dd; --ink-800: #c0e6c7; --ink-700: #a0cfa9; --ink-600: #85b78f;
+  --ink-500: #70a17a; --ink-400: #5f8f68; --ink-300: #3a5a3f; --ink-200: #29402c;
+  --ink-100: #1a281c; --ink-50: #111b12;
+  --fill: #4af07f; --on-fill: #031007; --fill-hover: #77f59f;
+  --mikan-50: #0e2a16; --mikan-100: #13391e; --mikan-200: #1b5229; --mikan-400: #6ff397;
+  --mikan-500: #4af07f; --mikan-600: #77f59f; --mikan-700: #a3f8bd;
+  /* "Fine": cyan, the green is the accent's. */
+  --leaf-50: #0f2b2a; --leaf-500: #3fd0c9; --leaf-700: #7fe3de;
+  --surface: rgba(8, 14, 9, 0.94); --surface-soft: rgba(10, 17, 11, 0.76);
+  --surface-hover: rgba(18, 30, 20, 0.96); --surface-solid: #080e09; --raised: #132116;
+  --glass: rgba(8, 14, 9, 0.76); --glass-strong: rgba(7, 12, 8, 0.94);
+  --glass-edge: rgba(74, 240, 127, 0.16); --glass-highlight: rgba(74, 240, 127, 0.06);
+  --code-bg: #000000; --code-fg: #b8f5c8;
+  --glow-a: rgba(40, 200, 90, 0.16);
+  --glow-b: rgba(20, 120, 60, 0.18);
+  --glow-c: rgba(40, 200, 90, 0.1);
+  --glow-d: rgba(20, 80, 40, 0.2);
+  --glow-e: rgba(40, 160, 80, 0.12);
+  --glow-opacity: 1;
+  --grain-opacity: 0.06;
+}
+/* Unbounded's tight tracking squeezes a monospace face. */
+[data-theme="terminal"] :is(.page-title, .kpi-value, .kpi-value small, .brand-name, .dr-title h2, .dialog h2, .state-box h2, .gauge-label b, .metric-value, .section-title) { letter-spacing: -0.01em; }
+
+/* ---------- what every dark theme does to the components ---------- */
+
+[data-tone="dark"] .btn-primary:hover:not(:disabled) { background: var(--fill-hover); }
+/* An accent at 45% over a dark card reads as mud: a disabled primary button goes grey. */
+[data-tone="dark"] .btn-primary:disabled { opacity: 1; background: var(--ink-100); color: var(--ink-400); box-shadow: none; }
+/* Pastel avatars with light initials: the colour moves to the letter, the circle gets a tint of it. */
+[data-tone="dark"] .avatar { background: color-mix(in srgb, var(--av, #ede7e1) 20%, var(--surface-solid)); color: var(--av, #ede7e1); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--av, #ede7e1) 25%, transparent); }

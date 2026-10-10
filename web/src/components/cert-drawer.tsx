@@ -158,7 +158,7 @@ export function CertDrawer({
           secret
         />
         <p className="text-xs text-[var(--ink-500)]">{t("cert.cliHint")}</p>
-        <code className="mono mt-2 block overflow-x-auto whitespace-pre rounded-xl bg-[rgba(31,26,23,0.04)] p-3 text-[12px]">{t("cert.cliExample")}</code>
+        <code className="mono mt-2 block overflow-x-auto whitespace-pre rounded-xl bg-[var(--ink-50)] p-3 text-[12px]">{t("cert.cliExample")}</code>
       </form>
       {has ? (
         <div className="mt-5 border-t border-[var(--hairline)] pt-4">
