@@ -1,17 +1,17 @@
-import { useNavigate, useSearch } from "@tanstack/react-router";
-import { History, Pencil, Plus, Search, Ticket, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { errorText } from "../../api/client";
 import { usePools, usePromoMutations, usePromoRedemptions, usePromocodes, useTariffs, type PromoCode, type PromoRedemption } from "../../api/hooks";
 import { Disclosure } from "../../components/layout";
 import { Confirm, Drawer } from "../../components/overlay";
 import { Switch, SwitchRow } from "../../components/switch";
-import { Tabs } from "../../components/tabs";
 import { useToast } from "../../components/toast";
-import { Button, EmptyState, ErrorState, Field, PageHeader, Pill, Skeleton } from "../../components/ui";
+import { Button, EmptyState, ErrorState, Field, Pill, Segmented, Skeleton } from "../../components/ui";
 import { t, tMaybe } from "../../i18n";
 import { dateShort, money, time } from "../../lib/format";
 import { PROMO_TABS } from "../search";
+
+type PromoTab = (typeof PROMO_TABS)[number];
 
 const empty: PromoCode = {
   id: 0, code: "", name: "", description: "", type: "days", value: 30, currency: "", used_count: 0,
@@ -24,7 +24,6 @@ type Draft = Omit<PromoCode, "created_at" | "created_by" | "min_order" | "max_di
 };
 
 const GB = 1073741824;
-const TAB_ICONS = { codes: Ticket, history: History } as const;
 
 // Sums are kept in the payment's smallest unit (kopecks, Stars); the form shows rubles.
 function fromUnits(n: number, currency: string) {
@@ -86,10 +85,12 @@ function valueText(p: PromoCode) {
 }
 
 /** Promo codes: the codes with their switches, and the history of what they gave. */
-export function PromocodesPage() {
+/**
+ * Promo codes, a tab of Payments: the codes and their activations, and the editor. sub is
+ * which of the two shows (the address keeps it), onSub switches it.
+ */
+export function PromoSection({ sub, onSub }: { sub: PromoTab; onSub: (next: PromoTab) => void }) {
   const toast = useToast();
-  const { tab } = useSearch({ from: "/_app/promocodes" });
-  const navigate = useNavigate({ from: "/promocodes" });
   const { create, update } = usePromoMutations();
   const [edit, setEdit] = useState<PromoCode | null>(null);
 
@@ -110,28 +111,17 @@ export function PromocodesPage() {
   };
 
   return (
-    <>
-      <PageHeader
-        title={t("promocodes.title")}
-        sub={t("promocodes.subtitle")}
-        actions={
-          <Button variant="primary" onClick={() => setEdit({ ...empty })}>
-            <Plus size={18} aria-hidden />
-            <span className="max-[760px]:hidden">{t("promocodes.create")}</span>
-          </Button>
-        }
-      />
-      <Tabs
-        id="promocodes"
-        label={t("promocodes.sections")}
-        tabs={PROMO_TABS.map((id) => ({ id, label: t(`promocodes.${id}`), icon: TAB_ICONS[id] }))}
-        value={tab}
-        onChange={(next) => void navigate({ search: { tab: next }, replace: true })}
-      >
-        {tab === "codes" ? <Codes onEdit={setEdit} onCreate={() => setEdit({ ...empty })} /> : <Redemptions />}
-      </Tabs>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented label={t("promocodes.sections")} value={sub} onChange={onSub} options={PROMO_TABS.map((id) => ({ value: id, label: t(`promocodes.${id}`) }))} />
+        <Button variant="primary" size="sm" onClick={() => setEdit({ ...empty })}>
+          <Plus size={16} aria-hidden />
+          {t("promocodes.create")}
+        </Button>
+      </div>
+      {sub === "codes" ? <Codes onEdit={setEdit} onCreate={() => setEdit({ ...empty })} /> : <Redemptions />}
       <PromoEditor value={edit} onClose={() => setEdit(null)} onSave={save} />
-    </>
+    </div>
   );
 }
 

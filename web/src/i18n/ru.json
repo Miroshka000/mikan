@@ -35,8 +35,7 @@
     "nodes": "Ноды",
     "telegram": "Telegram",
     "addons": "Аддоны",
-    "payments": "Платежи",
-    "promocodes": "Промокоды"
+    "payments": "Платежи"
   },
   "navShort": {
     "overview": "Обзор",
@@ -47,8 +46,7 @@
     "nodes": "Ноды",
     "addons": "Аддоны",
     "api": "API",
-    "payments": "Платежи",
-    "promocodes": "Промокоды"
+    "payments": "Платежи"
   },
   "shell": {
     "update": "Вышла {v}",
@@ -2356,6 +2354,7 @@
     "subtitle": "Оплата тарифов в боте и Mini App: подписка выдаётся и продлевается сама.",
     "sections": "Разделы платежей",
     "tabs": {
+      "promocodes": "Промокоды",
       "history": "Оплаты",
       "methods": "Способы оплаты",
       "rules": "Правила продажи"

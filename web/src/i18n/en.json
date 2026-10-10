@@ -35,8 +35,7 @@
     "nodes": "Nodes",
     "telegram": "Telegram",
     "addons": "Addons",
-    "payments": "Payments",
-    "promocodes": "Promo codes"
+    "payments": "Payments"
   },
   "navShort": {
     "overview": "Overview",
@@ -47,8 +46,7 @@
     "nodes": "Nodes",
     "addons": "Addons",
     "api": "API",
-    "payments": "Payments",
-    "promocodes": "Promos"
+    "payments": "Payments"
   },
   "shell": {
     "update": "{v} is out",
@@ -2356,6 +2354,7 @@
     "subtitle": "Plans paid for in the bot and the Mini App: subscriptions are issued and renewed by themselves.",
     "sections": "Payment sections",
     "tabs": {
+      "promocodes": "Promo codes",
       "history": "Payments",
       "methods": "Payment methods",
       "rules": "Sales rules"
