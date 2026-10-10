@@ -24,6 +24,7 @@ An archived plan cannot be chosen for new users; nothing changes for existing on
 
 In the user card:
 
+- **Rename**: the pencil next to the name or **More actions → Rename**. A name is one line of up to 100 characters. The subscription link, keys and devices stay the same; the journal keeps the old name.
 - **Extend**: by 7, 30, 90 days or a year, or, with a billing day, by 1, 3, 6 or 12 months. There is also an exact end date and "No expiry".
 - **Billing day**: extending by a month runs the term to this day.
 - **Change plan**: limits come from the new plan, the term starts again from today, and used traffic is kept.
@@ -49,3 +50,17 @@ Without binding, a device is an IP address with an active connection, and its pl
 With the **Only apps with a device ID** switch, other apps get no subscription. Happ, Koala Clash, INCY, v2RayTun, FlClashX, ClashFest and SlothClash (unless it is turned off in its settings) send a device ID.
 
 A subscriber can unbind one device a day on the subscription page or in the bot; an administrator can do it any time in the user card. An unbound device is cut off immediately. Only bound devices take places, so a phone moving from Wi-Fi to mobile data does not turn into two devices.
+
+### Device names
+
+A device is called what its app reports: the model, the system or the app itself. The administrator (the pencil in the user card) or the subscriber (on the subscription page and in the Mini App) can give it a name of up to 40 characters. An empty name brings back the one from the app. The bot lists devices by these names.
+
+### Banning a device
+
+An unbound device takes a place again on its next subscription update. To stop that, press **Ban** next to the device in the card:
+
+- the device is cut off at once and its keys burn;
+- it can no longer bind to this user by its ID, not with the same link and not after a reissue;
+- instead of servers the app shows "⛔ This device is blocked", with binding turned off too.
+
+A ban covers one user: on someone else's subscription the device works. Only a device with an ID can be banned. The "Connection addresses" rows and the shared place of apps without an ID cannot: one address is often shared by many people. The **Banned** list in the card shows when and by whom, and **Unban** lifts the ban. A subscriber cannot lift it. Bans and unbans go to the journal.

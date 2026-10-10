@@ -82,6 +82,10 @@ Apps refresh the subscription once an hour. Ask them to update the subscription 
 
 Device binding is on and the plan's limit is used up. Unbind the old device in the user's card, or the subscriber can do it on the subscription page or in the bot (once a day).
 
+### The app says "This device is blocked"
+
+The administrator banned this device for this user. Lift the ban in the user's card: **Devices → Banned → Unban**. On its next subscription update the device takes a free place.
+
 ### Automatic fixes do not move a blocked port
 
 They wait for cut-off devices from at least two different networks and 30 minutes of confirmation. They do not work for connections behind a proxy, Hysteria2 port ranges and protocols with a single shared key. More in [Automatic fixes](/mikan/en/protocols/autotune/).
