@@ -17,6 +17,7 @@ import (
 	"mikan/internal/nodetls"
 	"mikan/internal/panel/audit"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/release"
@@ -30,6 +31,14 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 	}
 	panelCert := func() (nodetls.Pair, error) {
 		return nodetls.LoadOrCreate(filepath.Join(dataDir, "tls", "nodes"), time.Now())
+	}
+	// Where the node's hello goes (nodetls.Key.PanelURL).
+	panelURL := func() string {
+		ep, err := settings.New(st.Q).Endpoint(ctx)
+		if err != nil {
+			return ""
+		}
+		return ep.URL()
 	}
 	switch args[0] {
 	case "list":
@@ -67,7 +76,7 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 		if err != nil {
 			return err
 		}
-		n, key, err := domain.AddNode(ctx, st, panel, domain.NodeInput{Name: *name, Host: *host, Domain: *dom, APIPort: *port}, time.Now())
+		n, key, err := domain.AddNode(ctx, st, panel, domain.NodeInput{Name: *name, Host: *host, Domain: *dom, APIPort: *port, PanelURL: panelURL()}, time.Now())
 		switch {
 		case errors.Is(err, domain.ErrBadHost):
 			return errors.New(badHost)
@@ -90,7 +99,7 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 		if err != nil {
 			return err
 		}
-		key, err := domain.RekeyNode(ctx, st, panel, id, time.Now())
+		key, err := domain.RekeyNode(ctx, st, panel, id, panelURL(), time.Now())
 		switch {
 		case errors.Is(err, domain.ErrUnknownNode):
 			return fmt.Errorf("no node %d", id)

@@ -23,6 +23,7 @@ import (
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/checkhost"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/infraalerts"
@@ -113,6 +114,8 @@ type Options struct {
 	// Resolve looks up the names the panel is told to dial (REALITY targets); nil is the
 	// system's resolver, tests set their own.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
+	// CheckHost checks nodes' ports from Russia; nil: the check is not offered (tests).
+	CheckHost *checkhost.Client
 }
 
 type noChanges struct{}
@@ -196,6 +199,8 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	p.Addons = addons.New(o.DataDir, o.AddonsCatalog, o.Version, o.Log, o.Now)
 	deps.Addons = p.Addons
 	deps.DNS = o.DNS
+	deps.CheckHost = o.CheckHost
+	deps.DataDir = o.DataDir
 	promos := promo.New(st, o.Now)
 	promos.Changed = deps.Users.Changed
 	p.Billing = billing.New(billing.Deps{Store: st, Settings: set, Users: deps.Users, Log: o.Log, Now: o.Now, TrustProxy: o.TrustProxy,
@@ -393,6 +398,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		p.server.SetSite(server.OwnSite(filepath.Join(o.DataDir, "www")))
 	}
 	p.server.SetHSTS(o.HSTS)
+	if p.Nodes != nil && o.PanelCert != nil {
+		p.server.SetHello(nodeHello(st, p.Nodes, o).Serve)
+	}
 	p.Handler = p.server
 	return p, nil
 }

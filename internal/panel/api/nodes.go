@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -34,7 +35,15 @@ type NodeInfo struct {
 	Enabled     bool       `json:"enabled"`
 	Inbounds    int        `json:"inbounds"`
 	Status      string     `json:"status" enum:"ok,error,unknown"`
-	Error       string     `json:"error,omitempty"`
+	Error       string     `json:"error,omitempty" doc:"Слова ошибки связи как есть, для «подробнее»"`
+	// Why the panel cannot reach the node, since when, and when it last could; the node's
+	// clock against the panel's; its last hello.
+	ErrorCode   string            `json:"error_code,omitempty" enum:"timeout,refused,unreachable,dns,pin_mismatch,tls,http_status,unknown" doc:"Почему панель не достучалась до ноды"`
+	ErrorParams map[string]string `json:"error_params,omitempty" doc:"host и port адреса API ноды, status ответа"`
+	ErrorSince  *time.Time        `json:"error_since,omitempty" doc:"С какого момента нет связи"`
+	LastOKAt    *time.Time        `json:"last_ok_at,omitempty" doc:"Когда нода последний раз отвечала (с запуска панели)"`
+	ClockSkew   *int64            `json:"clock_skew,omitempty" doc:"Часы ноды минус часы панели, секунды; нет у старых нод"`
+	Hello       *NodeHello        `json:"hello,omitempty" doc:"Последний hello ноды после запуска: достучалась ли панель в ответ"`
 	Version     string     `json:"version,omitempty"`
 	Listeners   int        `json:"listeners"`
 	ListenersOK int        `json:"listeners_ok"`
@@ -166,9 +175,24 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 	}
 	t := hv.CheckedAt
 	v.CheckedAt = &t
+	if !hv.LastOK.IsZero() {
+		last := hv.LastOK
+		v.LastOKAt = &last
+	}
+	if hello, ok := h.d.Nodes.Hello(n.ID); ok {
+		v.Hello = helloView(hello)
+	}
 	if !hv.OK {
-		v.Status, v.Error = "error", hv.Error
+		v.Status, v.Error, v.ErrorCode, v.ErrorParams = "error", hv.Error, hv.Code, hv.Params
+		if !hv.Since.IsZero() {
+			since := hv.Since
+			v.ErrorSince = &since
+		}
 		return v
+	}
+	if hv.Skew != nil {
+		s := int64(math.Round(hv.Skew.Seconds()))
+		v.ClockSkew = &s
 	}
 	v.Status, v.Version, v.Conns = "ok", hv.Health.Version, hv.Health.Conns
 	v.CPUPercent, v.MemUsed, v.MemTotal = hv.Health.System.CPUPercent, hv.Health.System.MemUsed, hv.Health.System.MemTotal
@@ -265,7 +289,7 @@ func (h *handlers) createNode(ctx context.Context, in *createNodeInput) (*nodeKe
 	if err != nil {
 		return nil, err
 	}
-	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: name, Host: host, Domain: dom, APIPort: b.APIPort}, h.d.Now())
+	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: name, Host: host, Domain: dom, APIPort: b.APIPort, PanelURL: h.panelURL(ctx)}, h.d.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -279,6 +303,16 @@ func (h *handlers) createNode(ctx context.Context, in *createNodeInput) (*nodeKe
 	out := &nodeKeyOutput{}
 	out.Body.Node, out.Body.Key, out.Body.Command = h.viewNode(ctx, n, inbounds), key, release.JoinCommand(key)
 	return out, nil
+}
+
+// panelURL is where a node's hello goes: the panel's own address and port ("" while the
+// panel has no address).
+func (h *handlers) panelURL(ctx context.Context) string {
+	ep, err := h.d.Settings.Endpoint(ctx)
+	if err != nil {
+		return ""
+	}
+	return ep.URL()
 }
 
 func (h *handlers) getNode(ctx context.Context, id int64) (db.Node, error) {
@@ -378,7 +412,7 @@ func (h *handlers) rekeyNode(ctx context.Context, in *nodeIDInput) (*nodeKeyOutp
 	if err != nil {
 		return nil, err
 	}
-	key, err := domain.RekeyNode(ctx, h.d.Store, panel, in.ID, h.d.Now())
+	key, err := domain.RekeyNode(ctx, h.d.Store, panel, in.ID, h.panelURL(ctx), h.d.Now())
 	switch {
 	case errors.Is(err, domain.ErrUnknownNode):
 		return nil, huma.Error404NotFound("not_found")

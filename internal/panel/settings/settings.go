@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -300,6 +302,14 @@ func (s *Settings) Paths(ctx context.Context) (Paths, error) {
 type Endpoint struct {
 	Host string
 	Port int
+}
+
+// URL is https://host:port, the panel's base address; "" while it has no host or port.
+func (e Endpoint) URL() string {
+	if e.Host == "" || e.Port <= 0 {
+		return ""
+	}
+	return "https://" + net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
 }
 
 // SubEndpoint is where subscription links point: the subscription port when one is set.

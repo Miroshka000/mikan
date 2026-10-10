@@ -100,3 +100,54 @@ func TestDecodeKeyRejectsGarbage(t *testing.T) {
 		}
 	}
 }
+
+// A key carries the panel's address for the node's hello; keys of older panels have none
+// and still work, and an address that is not a panel's is dropped, not fatal.
+func TestKeyPanelURL(t *testing.T) {
+	now := time.Now()
+	panel, _ := Generate("mikan-panel", x509.ExtKeyUsageClientAuth, now)
+	node, _ := Generate("node-2.mikan", x509.ExtKeyUsageServerAuth, now)
+	panelPin, _ := Fingerprint(panel.CertPEM)
+	for url, want := range map[string]string{
+		"https://panel.example.com:31000": "https://panel.example.com:31000",
+		"https://203.0.113.5:31000/":      "https://203.0.113.5:31000/",
+		"":                                "",
+		"http://panel.example.com":        "",
+		"https://u:p@panel.example.com":   "",
+		"https://panel.example.com/admin": "",
+		"https://panel.example.com/?a=b":  "",
+		"javascript:alert(1)":             "",
+	} {
+		raw, err := Key{Port: 40123, PanelPin: panelPin, CertPEM: node.CertPEM, KeyPEM: node.KeyPEM, PanelURL: url}.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		k, err := DecodeKey(raw)
+		if err != nil || k.PanelURL != want {
+			t.Errorf("%q: %q, %v", url, k.PanelURL, err)
+		}
+	}
+}
+
+func TestSignVerify(t *testing.T) {
+	node, _ := Generate("node-2.mikan", x509.ExtKeyUsageServerAuth, time.Now())
+	other, _ := Generate("node-3.mikan", x509.ExtKeyUsageServerAuth, time.Now())
+	sig, err := Sign(node.KeyPEM, []byte("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pin, err := Verify(node.CertPEM, []byte("hello"), sig)
+	want, _ := Fingerprint(node.CertPEM)
+	if err != nil || pin != want {
+		t.Fatalf("verify: %q %v", pin, err)
+	}
+	if _, err := Verify(node.CertPEM, []byte("hellO"), sig); err == nil {
+		t.Fatal("another message passed")
+	}
+	if _, err := Verify(other.CertPEM, []byte("hello"), sig); err == nil {
+		t.Fatal("another certificate passed")
+	}
+	if !SamePin(want, want) || SamePin(want, want[:10]) {
+		t.Fatal("SamePin")
+	}
+}

@@ -46,9 +46,10 @@ type Syncer struct {
 	id    int64
 	m     *Manager
 	node  Node
-	tls   TLSSource
-	local bool
-	log   *slog.Logger
+	tls     TLSSource
+	local   bool
+	address string
+	log     *slog.Logger
 
 	policiesDirty chan struct{}
 	stateDirty    chan struct{}
@@ -82,9 +83,20 @@ type Syncer struct {
 }
 
 type HealthView struct {
-	OK        bool
-	Error     string
-	Health    nodeapi.Health
+	OK    bool
+	Error string
+	// Code says why the node did not answer (nodeapi.Link*), Params the facts its text
+	// names; empty while it answers.
+	Code   string
+	Params map[string]string
+	// LastOK is when the node last answered; zero when it has not since the panel started.
+	// Since is when the current failure began.
+	LastOK time.Time
+	Since  time.Time
+	// Skew is the node's clock minus the panel's, the round trip taken into account; nil
+	// when the node does not say its time (older nodes) or did not answer.
+	Skew   *time.Duration
+	Health nodeapi.Health
 	Listeners []nodeapi.ListenerStatus
 	// Ports are the listeners' ports in the state the node runs, by name (the relay's too,
 	// as nodeapi.RelayListener), when that is the state this panel last applied; nil
@@ -104,7 +116,7 @@ func (v HealthView) HostPorts() *nodeapi.HostPorts {
 }
 
 func newSyncer(m *Manager, id int64, t Target) *Syncer {
-	s := &Syncer{id: id, m: m, node: t.Node, tls: t.TLS, local: t.Local, log: m.log.With("node", id),
+	s := &Syncer{id: id, m: m, node: t.Node, tls: t.TLS, local: t.Local, address: t.Address, log: m.log.With("node", id),
 		policiesDirty: make(chan struct{}, 1), stateDirty: make(chan struct{}, 1)}
 	empty := map[string]nodeapi.Online{}
 	s.online.Store(&empty)
@@ -709,14 +721,28 @@ func (s *Syncer) saveRevision(ctx context.Context, rev int64) error {
 }
 
 func (s *Syncer) refreshHealth(ctx context.Context) {
+	sent := s.m.now()
 	h, err := s.node.Health(ctx)
 	view := &HealthView{CheckedAt: s.m.now()}
+	prev := s.health.Load()
+	view.LastOK = prev.LastOK
 	if err != nil {
-		view.Error = err.Error()
+		view.Error, view.Code = err.Error(), nodeapi.Classify(err)
+		view.Params = nodeapi.LinkParams(view.Code, s.address, err)
+		// A failure that goes on keeps its start; a new one, or another kind, starts now.
+		view.Since = view.CheckedAt
+		if !prev.OK && prev.Code == view.Code && !prev.Since.IsZero() {
+			view.Since = prev.Since
+		}
 		s.health.Store(view)
 		return
 	}
-	view.OK, view.Health, view.Listeners = true, h, h.Listeners
+	view.OK, view.Health, view.Listeners, view.LastOK = true, h, h.Listeners, view.CheckedAt
+	if !h.Time.IsZero() {
+		// The node read its clock about halfway through the round trip.
+		d := h.Time.Sub(sent.Add(view.CheckedAt.Sub(sent) / 2))
+		view.Skew = &d
+	}
 	s.mu.Lock()
 	applied := s.lastApplied.Revision
 	if applied != 0 && h.Revision == applied {

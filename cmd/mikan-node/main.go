@@ -36,6 +36,10 @@ func main() {
 		fmt.Println(key.Port)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "hello" {
+		helloOnce()
+		return
+	}
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "mikan-node:", err)
 		os.Exit(1)
@@ -99,6 +103,7 @@ func run() error {
 		}
 		go serve(tls.NewListener(tcp, cfg))
 		log.Info("node api for the panel", "port", key.Port)
+		go helloLoop(ctx, key, dataDir, log)
 	}
 
 	t := time.NewTicker(10 * time.Second)
