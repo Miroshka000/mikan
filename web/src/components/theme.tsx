@@ -8,8 +8,8 @@ import { t } from "../i18n";
  * is in public/theme-boot.js, which applies the theme before the first paint.
  */
 
-const LIGHT = ["mikan", "ocean", "sakura", "forest"] as const;
-const DARK = ["midnight", "graphite", "abyss", "ember", "plum", "moss", "terminal"] as const;
+const LIGHT = ["mikan", "ocean", "sakura", "forest", "latte", "snow", "dawn", "dune"] as const;
+const DARK = ["midnight", "graphite", "abyss", "ember", "plum", "moss", "terminal", "nord", "mocha", "tokyo", "dracula", "aurora", "cosmos"] as const;
 export const THEMES = [...LIGHT, ...DARK] as const;
 export type Theme = (typeof THEMES)[number];
 /** What the admin picks: a theme, or the device's light or dark (Mikan or Midnight). */
@@ -55,12 +55,16 @@ const onSchemeChange = () => {
 };
 
 /** Applies a choice to the page and keeps it; "system" also follows the device from now on. */
-export function setTheme(choice: ThemeChoice, opts: { animate?: boolean } = {}) {
+export function setTheme(choice: ThemeChoice, opts: { animate?: boolean; keep?: boolean } = {}) {
   const next: ThemeChoice = valid(choice) ? choice : "mikan";
-  try {
-    window.localStorage.setItem(KEY, next);
-  } catch {
-    // Storage can be unavailable in private/restricted browser contexts.
+  // keep: false only shows it. Another tab's choice is applied without writing it back, so
+  // two tabs of different versions never overwrite each other's theme.
+  if (opts.keep !== false) {
+    try {
+      window.localStorage.setItem(KEY, next);
+    } catch {
+      // Storage can be unavailable in private/restricted browser contexts.
+    }
   }
   const mq = darkQuery();
   if (next === "system" && mq && following !== mq) {
@@ -95,6 +99,16 @@ export function ThemeCard() {
     plum: t("settings.themePlum"),
     moss: t("settings.themeMoss"),
     terminal: t("settings.themeTerminal"),
+    latte: t("settings.themeLatte"),
+    snow: t("settings.themeSnow"),
+    dawn: t("settings.themeDawn"),
+    dune: t("settings.themeDune"),
+    nord: t("settings.themeNord"),
+    mocha: t("settings.themeMocha"),
+    tokyo: t("settings.themeTokyo"),
+    dracula: t("settings.themeDracula"),
+    aurora: t("settings.themeAurora"),
+    cosmos: t("settings.themeCosmos"),
   };
   const groups: { label: string; options: Option[] }[] = [
     { label: t("settings.themeLight"), options: LIGHT.map((id) => ({ id, label: names[id] })) },
@@ -130,14 +144,14 @@ export function ThemeCard() {
       if (e.key !== KEY) return;
       const next = getTheme();
       set(next);
-      setTheme(next);
+      setTheme(next, { keep: false });
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   return (
-    <section className="card glass reveal" style={{ "--i": 4 } as React.CSSProperties}>
+    <section className="card glass reveal span-all" style={{ "--i": 4 } as React.CSSProperties}>
       <div className="card-head">
         <div>
           <h2 className="card-title">{t("settings.theme")}</h2>

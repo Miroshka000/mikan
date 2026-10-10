@@ -42,6 +42,7 @@
   --glow-a: rgba(255, 138, 72, 0.72); --glow-b: rgba(255, 122, 150, 0.42); --glow-c: rgba(255, 196, 100, 0.55);
   --glow-d: rgba(158, 142, 255, 0.42); --glow-e: rgba(98, 184, 230, 0.48);
   --glow-opacity: 1; --grain-blend: multiply; --grain-opacity: 0.055;
+  --pattern: none; --pattern-size: auto; --pattern-opacity: 0; --pattern-blur: 0px;
   --r-md: 12px;
   --sub-r: 24px;
   --sub-r-inner: 16px;

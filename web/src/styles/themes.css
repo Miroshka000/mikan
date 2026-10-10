@@ -65,6 +65,8 @@
   --glow-e: rgba(98, 184, 230, 0.48);
   --glow-opacity: 1;
   --grain-blend: multiply; --grain-opacity: 0.055;
+  /* A theme's own drawing over the glows (stars, waves, a grid); none by default. */
+  --pattern: none; --pattern-size: auto; --pattern-opacity: 0; --pattern-blur: 0px;
 }
 
 [data-tone="dark"] {
@@ -146,6 +148,98 @@
   --glow-c: rgba(90, 180, 150, 0.44);
   --glow-d: rgba(150, 210, 190, 0.38);
   --glow-e: rgba(60, 150, 100, 0.4);
+}
+
+/* Catppuccin Latte: soft paper, a mauve accent. */
+[data-theme="latte"] {
+  --bg: #eff1f5;
+  --ink-900: #303347; --ink-800: #3c3f58; --ink-700: #4c4f69; --ink-600: #5c5f77;
+  --ink-500: #5f6279; --ink-400: #6c6f85; --ink-300: #9ca0b0; --ink-200: #ccd0da;
+  --ink-100: #dce0e8; --ink-50: #e6e9ef;
+  --fill: #8839ef; --fill-hover: #7428d8; --code-bg: #303347;
+  --mikan-50: #f1e8fd; --mikan-100: #e2d0fb; --mikan-200: #c9a8f7; --mikan-400: #a46af3;
+  --mikan-500: #8839ef; --mikan-600: #7a2ee0; --mikan-700: #6420c0;
+  --leaf-50: #e3f1df; --leaf-500: #40a02b; --leaf-700: #2b6e1c;
+  --berry-50: #fbe3e8; --berry-600: #b80c31;
+  --surface: rgba(255, 255, 255, 0.8); --surface-soft: rgba(250, 251, 253, 0.6);
+  --surface-hover: rgba(255, 255, 255, 0.94); --surface-solid: #ffffff;
+  --glass: rgba(249, 250, 252, 0.62); --glass-strong: rgba(252, 253, 254, 0.88);
+  --hairline: rgba(76, 79, 105, 0.1); --hover: rgba(76, 79, 105, 0.05);
+  --glow-a: rgba(136, 57, 239, 0.32);
+  --glow-b: rgba(234, 118, 203, 0.3);
+  --glow-c: rgba(254, 100, 11, 0.22);
+  --glow-d: rgba(30, 102, 245, 0.26);
+  --glow-e: rgba(23, 146, 153, 0.26);
+}
+
+/* Nord, the snow side: cool white, arctic slate, a frost-blue accent and a dot grid. */
+[data-theme="snow"] {
+  --bg: #e9edf3;
+  --ink-900: #2e3440; --ink-800: #3b4252; --ink-700: #434c5e; --ink-600: #4c566a;
+  --ink-500: #505a6e; --ink-400: #5f697d; --ink-300: #a3abb9; --ink-200: #cdd3dd;
+  --ink-100: #dfe4eb; --ink-50: #eceff4;
+  --fill: #3b4252; --fill-hover: #4c566a; --code-bg: #2e3440;
+  --mikan-50: #e3ebf4; --mikan-100: #c9d8ea; --mikan-200: #a7c0dc; --mikan-400: #81a1c1;
+  --mikan-500: #5e81ac; --mikan-600: #4f6f97; --mikan-700: #3e5a7d;
+  --leaf-50: #e6efe0; --leaf-500: #7c9a62; --leaf-700: #4d6b36;
+  --berry-50: #f6e4e6; --berry-600: #a5434d;
+  --surface: rgba(251, 252, 254, 0.82); --surface-soft: rgba(246, 248, 251, 0.6);
+  --surface-hover: rgba(253, 254, 255, 0.94); --surface-solid: #fbfcfe;
+  --glass: rgba(244, 247, 251, 0.64); --glass-strong: rgba(250, 251, 253, 0.9);
+  --hairline: rgba(46, 52, 64, 0.1); --hover: rgba(46, 52, 64, 0.05);
+  --glow-a: rgba(136, 192, 208, 0.45);
+  --glow-b: rgba(129, 161, 193, 0.32);
+  --glow-c: rgba(143, 188, 187, 0.4);
+  --glow-d: rgba(180, 142, 173, 0.22);
+  --glow-e: rgba(94, 129, 172, 0.34);
+  --pattern: radial-gradient(rgba(46, 52, 64, 0.16) 1px, transparent 1.4px);
+  --pattern-size: 22px 22px; --pattern-opacity: 1;
+}
+
+/* Rose Pine Dawn: warm cream, rose and gold light, a pine-green accent. */
+[data-theme="dawn"] {
+  --bg: #faf4ed;
+  --ink-900: #3b3657; --ink-800: #4a4569; --ink-700: #575279; --ink-600: #635e84;
+  --ink-500: #67627f; --ink-400: #736e8c; --ink-300: #b4afc0; --ink-200: #dfd9d7;
+  --ink-100: #f0e7df; --ink-50: #f6efe8;
+  --fill: #286983; --fill-hover: #1f566c; --code-bg: #3b3657;
+  --mikan-50: #e3eff3; --mikan-100: #c6dee7; --mikan-200: #9cc3d1; --mikan-400: #56949f;
+  --mikan-500: #3a7d93; --mikan-600: #286983; --mikan-700: #1f566c;
+  --berry-50: #f8e6ea; --berry-600: #a24f66;
+  --honey-50: #fbefd9; --honey-500: #ea9d34; --honey-600: #8a5a12;
+  --surface: rgba(255, 250, 243, 0.82); --surface-soft: rgba(255, 250, 243, 0.6);
+  --surface-hover: rgba(255, 252, 247, 0.94); --surface-solid: #fffaf3; --raised: #fffcf7;
+  --glass: rgba(255, 249, 241, 0.62); --glass-strong: rgba(255, 251, 245, 0.88);
+  --glass-edge: rgba(255, 255, 255, 0.7);
+  --hairline: rgba(87, 82, 121, 0.11); --hover: rgba(87, 82, 121, 0.05);
+  --glow-a: rgba(215, 130, 126, 0.42);
+  --glow-b: rgba(234, 157, 52, 0.32);
+  --glow-c: rgba(180, 99, 122, 0.26);
+  --glow-d: rgba(144, 122, 169, 0.28);
+  --glow-e: rgba(86, 148, 159, 0.3);
+}
+
+/* Dunes at sunset: sand, terracotta, wind lines across the page. */
+[data-theme="dune"] {
+  --bg: #f4e7d6;
+  --ink-900: #2a1d14; --ink-800: #3a2a1e; --ink-700: #4d3a2b; --ink-600: #5f4a38;
+  --ink-500: #6a5340; --ink-400: #7a624e; --ink-300: #bba58f; --ink-200: #e0d0bd;
+  --ink-100: #ecdfcd; --ink-50: #f3e9db;
+  --fill: #3a2416; --fill-hover: #52341f; --code-bg: #2a1d14;
+  --mikan-50: #fbe9df; --mikan-100: #f6d0bb; --mikan-200: #ebab8a; --mikan-400: #d9774d;
+  --mikan-500: #c2562d; --mikan-600: #a94622; --mikan-700: #87361a;
+  --surface: rgba(255, 250, 243, 0.8); --surface-soft: rgba(253, 246, 237, 0.58);
+  --surface-hover: rgba(255, 251, 246, 0.94); --surface-solid: #fffaf3; --raised: #fffcf8;
+  --glass: rgba(252, 244, 233, 0.6); --glass-strong: rgba(255, 249, 241, 0.88);
+  --glass-edge: rgba(255, 250, 242, 0.72);
+  --hairline: rgba(42, 29, 20, 0.1); --hover: rgba(42, 29, 20, 0.05);
+  --glow-a: rgba(240, 140, 80, 0.55);
+  --glow-b: rgba(230, 110, 110, 0.32);
+  --glow-c: rgba(222, 170, 90, 0.5);
+  --glow-d: rgba(190, 120, 150, 0.28);
+  --glow-e: rgba(205, 120, 70, 0.4);
+  --pattern: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='28'><path d='M0 18 C 40 6, 80 6, 120 16 S 150 26, 160 18' fill='none' stroke='%237a4a2a' stroke-opacity='.13' stroke-width='1.2'/></svg>");
+  --pattern-size: 160px 28px; --pattern-opacity: 1;
 }
 
 /* ---------- dark ---------- */
@@ -288,6 +382,177 @@
   --glow-opacity: 0.45;
 }
 
+/* Nord: arctic night, frost-blue light, the aurora's own status colours. */
+[data-theme="nord"] {
+  --bg: #242933;
+  --ink-900: #eceff4; --ink-800: #e5e9f0; --ink-700: #d8dee9; --ink-600: #c0c8d6;
+  --ink-500: #a7b1c2; --ink-400: #929cae; --ink-300: #616e88; --ink-200: #4c566a;
+  --ink-100: #3b4252; --ink-50: #323947;
+  --fill: #88c0d0; --on-fill: #242933; --fill-hover: #9fd0de;
+  --mikan-50: #2c3b47; --mikan-100: #35505e; --mikan-200: #46707f; --mikan-400: #8fbcbb;
+  --mikan-500: #88c0d0; --mikan-600: #9fd0de; --mikan-700: #b8dde8;
+  --leaf-50: #2f3a33; --leaf-500: #a3be8c; --leaf-700: #b8d0a3;
+  --honey-50: #3d3829; --honey-500: #ebcb8b; --honey-600: #f0d7a4;
+  --berry-50: #3f2d33; --berry-600: #e08a92;
+  --lagoon-50: #2b3646; --lagoon-400: #81a1c1; --lagoon-500: #81a1c1; --lagoon-600: #a3bcd6;
+  --fc-purple: #c9a8c2;
+  --surface: rgba(46, 52, 64, 0.92); --surface-soft: rgba(50, 57, 71, 0.72);
+  --surface-hover: rgba(59, 66, 82, 0.96); --surface-solid: #2e3440; --raised: #3b4252;
+  --glass: rgba(46, 52, 64, 0.72); --glass-strong: rgba(43, 49, 60, 0.92);
+  --glass-edge: rgba(136, 192, 208, 0.14); --glass-highlight: rgba(236, 239, 244, 0.06);
+  --code-bg: #1d2129;
+  --glow-a: rgba(136, 192, 208, 0.4);
+  --glow-b: rgba(163, 190, 140, 0.26);
+  --glow-c: rgba(94, 129, 172, 0.45);
+  --glow-d: rgba(180, 142, 173, 0.3);
+  --glow-e: rgba(143, 188, 187, 0.32);
+  --glow-opacity: 0.45;
+}
+
+/* Catppuccin Mocha: warm dark velvet, a mauve accent, pastel statuses. */
+[data-theme="mocha"] {
+  --bg: #11111b;
+  --ink-900: #cdd6f4; --ink-800: #bac2de; --ink-700: #a6adc8; --ink-600: #9399b2;
+  --ink-500: #9399b2; --ink-400: #7f849c; --ink-300: #585b70; --ink-200: #45475a;
+  --ink-100: #313244; --ink-50: #262637;
+  --fill: #cba6f7; --on-fill: #1e1e2e; --fill-hover: #d8bcfa;
+  --mikan-50: #2f2840; --mikan-100: #42355c; --mikan-200: #5e4a85; --mikan-400: #d4b5f8;
+  --mikan-500: #cba6f7; --mikan-600: #d8bcfa; --mikan-700: #e4d0fc;
+  --leaf-50: #233127; --leaf-500: #a6e3a1; --leaf-700: #b9ebb5;
+  --honey-50: #36322a; --honey-500: #f9e2af; --honey-600: #fae8c0;
+  --berry-50: #3a2433; --berry-600: #f38ba8;
+  --lagoon-50: #1f3238; --lagoon-400: #94e2d5; --lagoon-500: #89dceb; --lagoon-600: #a4e5f0;
+  --fc-blue: #89b4fa; --fc-purple: #b4befe; --fc-pink: #f5c2e7;
+  --surface: rgba(30, 30, 46, 0.92); --surface-soft: rgba(30, 30, 46, 0.72);
+  --surface-hover: rgba(49, 50, 68, 0.96); --surface-solid: #1e1e2e; --raised: #313244;
+  --glass: rgba(30, 30, 46, 0.74); --glass-strong: rgba(24, 24, 37, 0.93);
+  --glass-edge: rgba(203, 166, 247, 0.14); --glass-highlight: rgba(205, 214, 244, 0.06);
+  --code-bg: #0b0b12; --code-fg: #cdd6f4;
+  --glow-a: rgba(203, 166, 247, 0.4);
+  --glow-b: rgba(245, 194, 231, 0.26);
+  --glow-c: rgba(250, 179, 135, 0.26);
+  --glow-d: rgba(137, 180, 250, 0.32);
+  --glow-e: rgba(148, 226, 213, 0.26);
+  --glow-opacity: 0.4;
+}
+
+/* Tokyo Night: city lights after rain, a soft blue accent. */
+[data-theme="tokyo"] {
+  --bg: #16161e;
+  --ink-900: #c0caf5; --ink-800: #a9b1d6; --ink-700: #9aa5ce; --ink-600: #8c95bd;
+  --ink-500: #8a93b8; --ink-400: #737aa2; --ink-300: #565f89; --ink-200: #3b4261;
+  --ink-100: #292e42; --ink-50: #1f2335;
+  --fill: #7aa2f7; --on-fill: #16161e; --fill-hover: #93b4f9;
+  --mikan-50: #1f2a48; --mikan-100: #283a66; --mikan-200: #3a5290; --mikan-400: #89acf8;
+  --mikan-500: #7aa2f7; --mikan-600: #93b4f9; --mikan-700: #b0c8fb;
+  --leaf-50: #243024; --leaf-500: #9ece6a; --leaf-700: #b4da8c;
+  --honey-50: #3a3021; --honey-500: #e0af68; --honey-600: #e9c48c;
+  --berry-50: #3b2129; --berry-600: #f7768e;
+  --lagoon-50: #1c3040; --lagoon-400: #7dcfff; --lagoon-500: #7dcfff; --lagoon-600: #a2dcff;
+  --fc-purple: #bb9af7; --fc-pink: #ff007c;
+  --surface: rgba(26, 27, 38, 0.92); --surface-soft: rgba(26, 27, 38, 0.72);
+  --surface-hover: rgba(41, 46, 66, 0.96); --surface-solid: #1a1b26; --raised: #292e42;
+  --glass: rgba(26, 27, 38, 0.74); --glass-strong: rgba(22, 22, 30, 0.93);
+  --glass-edge: rgba(122, 162, 247, 0.14); --glass-highlight: rgba(192, 202, 245, 0.06);
+  --code-bg: #0f0f14; --code-fg: #c0caf5;
+  --glow-a: rgba(122, 162, 247, 0.4);
+  --glow-b: rgba(187, 154, 247, 0.3);
+  --glow-c: rgba(255, 0, 124, 0.16);
+  --glow-d: rgba(125, 207, 255, 0.3);
+  --glow-e: rgba(255, 158, 100, 0.2);
+  --glow-opacity: 0.45;
+}
+
+/* Dracula: a purple night, a pink accent, the bright classic statuses. */
+[data-theme="dracula"] {
+  --bg: #1e1f29;
+  --ink-900: #f8f8f2; --ink-800: #e9e9e2; --ink-700: #d0d0ca; --ink-600: #b3b3ad;
+  --ink-500: #a3a7c4; --ink-400: #8b91b8; --ink-300: #6272a4; --ink-200: #4a4e66;
+  --ink-100: #383a4c; --ink-50: #2d2f3d;
+  --fill: #ff79c6; --on-fill: #21222c; --fill-hover: #ff94d1;
+  --mikan-50: #3d2638; --mikan-100: #58304f; --mikan-200: #84417a; --mikan-400: #ff92d0;
+  --mikan-500: #ff79c6; --mikan-600: #ff94d1; --mikan-700: #ffb3df;
+  --leaf-50: #1f3a29; --leaf-500: #50fa7b; --leaf-700: #7dfb9c;
+  --honey-50: #3a3a24; --honey-500: #f1fa8c; --honey-600: #f4fba6;
+  --berry-50: #3f2125; --berry-600: #ff6e6e;
+  --lagoon-50: #1f3540; --lagoon-400: #8be9fd; --lagoon-500: #8be9fd; --lagoon-600: #a8eefd;
+  --fc-purple: #bd93f9; --fc-blue: #8be9fd;
+  --surface: rgba(40, 42, 54, 0.92); --surface-soft: rgba(40, 42, 54, 0.72);
+  --surface-hover: rgba(68, 71, 90, 0.96); --surface-solid: #282a36; --raised: #383a4c;
+  --glass: rgba(40, 42, 54, 0.74); --glass-strong: rgba(33, 34, 44, 0.93);
+  --glass-edge: rgba(189, 147, 249, 0.16); --glass-highlight: rgba(248, 248, 242, 0.06);
+  --code-bg: #15161d; --code-fg: #f8f8f2;
+  --glow-a: rgba(189, 147, 249, 0.42);
+  --glow-b: rgba(255, 121, 198, 0.3);
+  --glow-c: rgba(98, 114, 164, 0.5);
+  --glow-d: rgba(139, 233, 253, 0.22);
+  --glow-e: rgba(80, 250, 123, 0.14);
+  --glow-opacity: 0.45;
+}
+
+/* Aurora: a polar night with green and violet ribbons of light across the sky. */
+[data-theme="aurora"] {
+  --bg: #050b14;
+  --ink-900: #e9f6f6; --ink-800: #d3eceb; --ink-700: #b4d4d6; --ink-600: #97bbbe;
+  --ink-500: #82a7ab; --ink-400: #6e9397; --ink-300: #46636a; --ink-200: #2f4650;
+  --ink-100: #1c2e37; --ink-50: #13232b;
+  --fill: #5ef2b8; --on-fill: #04140d; --fill-hover: #85f6ca;
+  --mikan-50: #0f2c24; --mikan-100: #134034; --mikan-200: #1a5c49; --mikan-400: #7ef5c6;
+  --mikan-500: #5ef2b8; --mikan-600: #85f6ca; --mikan-700: #aef9dc;
+  /* "Fine" teal and info violet: the mint is the accent's. */
+  --leaf-50: #12302e; --leaf-500: #48d6c6; --leaf-700: #86e6db;
+  --lagoon-50: #1e2347; --lagoon-400: #9aa6ff; --lagoon-500: #8b98ff; --lagoon-600: #b1baff;
+  --surface: rgba(10, 22, 34, 0.9); --surface-soft: rgba(12, 25, 38, 0.7);
+  --surface-hover: rgba(22, 40, 56, 0.96); --surface-solid: #0b1622; --raised: #172a3a;
+  --glass: rgba(10, 22, 34, 0.68); --glass-strong: rgba(8, 18, 28, 0.9);
+  --glass-edge: rgba(94, 242, 184, 0.14); --glass-highlight: rgba(170, 250, 220, 0.08);
+  --code-bg: #02060b;
+  --glow-a: rgba(40, 200, 140, 0.45);
+  --glow-b: rgba(120, 90, 230, 0.36);
+  --glow-c: rgba(20, 90, 120, 0.5);
+  --glow-d: rgba(150, 80, 220, 0.36);
+  --glow-e: rgba(40, 180, 170, 0.36);
+  --glow-opacity: 0.6;
+  --pattern:
+    linear-gradient(112deg, transparent 18%, rgba(94, 242, 184, 0.35) 27%, rgba(94, 242, 184, 0.08) 33%, transparent 40%),
+    linear-gradient(98deg, transparent 42%, rgba(130, 110, 255, 0.28) 52%, transparent 62%),
+    linear-gradient(120deg, transparent 60%, rgba(60, 220, 200, 0.22) 70%, transparent 80%);
+  --pattern-size: 100% 70%; --pattern-opacity: 1; --pattern-blur: 28px;
+}
+
+/* Deep space: a starfield over a faint nebula, a starlight-gold accent. */
+[data-theme="cosmos"] {
+  --bg: #07060f;
+  --ink-900: #f1effa; --ink-800: #dedbee; --ink-700: #c4c0dc; --ink-600: #a9a4c6;
+  --ink-500: #9792b6; --ink-400: #7f7aa0; --ink-300: #514d6e; --ink-200: #3a3753;
+  --ink-100: #25233a; --ink-50: #1a182b;
+  --fill: #ffe08a; --on-fill: #1a1404; --fill-hover: #ffe9a8;
+  --mikan-50: #2f2a17; --mikan-100: #463d1d; --mikan-200: #6b5c27; --mikan-400: #ffe7a1;
+  --mikan-500: #ffe08a; --mikan-600: #ffe9a8; --mikan-700: #fff1c6;
+  /* Warnings: orange, the gold is the accent's. */
+  --honey-50: #3a2414; --honey-500: #ff9f5a; --honey-600: #ffb880;
+  --surface: rgba(18, 16, 32, 0.9); --surface-soft: rgba(20, 18, 36, 0.7);
+  --surface-hover: rgba(34, 31, 56, 0.96); --surface-solid: #121020; --raised: #221f38;
+  --glass: rgba(18, 16, 32, 0.66); --glass-strong: rgba(14, 12, 26, 0.9);
+  --glass-edge: rgba(255, 224, 138, 0.12); --glass-highlight: rgba(255, 240, 200, 0.06);
+  --code-bg: #030208;
+  --glow-a: rgba(120, 60, 200, 0.4);
+  --glow-b: rgba(220, 80, 160, 0.24);
+  --glow-c: rgba(40, 60, 160, 0.4);
+  --glow-d: rgba(60, 120, 220, 0.3);
+  --glow-e: rgba(160, 70, 200, 0.3);
+  --glow-opacity: 0.55;
+  --pattern:
+    radial-gradient(1.2px 1.2px at 12% 18%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(1px 1px at 68% 34%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1.6px 1.6px at 38% 72%, rgba(255, 236, 190, 0.9), transparent 60%),
+    radial-gradient(1px 1px at 86% 82%, rgba(200, 220, 255, 0.85), transparent 60%),
+    radial-gradient(1px 1px at 24% 54%, rgba(255, 255, 255, 0.6), transparent 60%),
+    radial-gradient(1.4px 1.4px at 54% 8%, rgba(220, 230, 255, 0.85), transparent 60%);
+  --pattern-size: 230px 230px, 310px 310px, 410px 410px, 270px 270px, 190px 190px, 350px 350px;
+  --pattern-opacity: 0.9;
+}
+
 /* A phosphor screen: black, green light, the headings in the mono font. */
 [data-theme="terminal"] {
   --font-display-stack: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -312,6 +577,8 @@
   --glow-e: rgba(40, 160, 80, 0.12);
   --glow-opacity: 1;
   --grain-opacity: 0.06;
+  --pattern: repeating-linear-gradient(0deg, rgba(74, 240, 127, 0.05) 0 1px, transparent 1px 3px);
+  --pattern-size: auto; --pattern-opacity: 1;
 }
 /* Unbounded's tight tracking squeezes a monospace face. */
 [data-theme="terminal"] :is(.page-title, .kpi-value, .kpi-value small, .brand-name, .dr-title h2, .dialog h2, .state-box h2, .gauge-label b, .metric-value, .section-title) { letter-spacing: -0.01em; }

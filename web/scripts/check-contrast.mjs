@@ -18,7 +18,7 @@ function block(selector) {
 const light = block(":root, [data-tone=\"light\"]");
 const dark = block("[data-tone=\"dark\"]");
 const themes = [...css.matchAll(/^\[data-theme="([\w-]+)"\] \{/gm)].map((m) => m[1]);
-const darkThemes = new Set(["midnight", "graphite", "abyss", "ember", "plum", "moss", "terminal"]);
+const darkThemes = new Set(["midnight", "graphite", "abyss", "ember", "plum", "moss", "terminal", "nord", "mocha", "tokyo", "dracula", "aurora", "cosmos"]);
 
 function hex(tokens, name, seen = new Set()) {
   const v = tokens[name];

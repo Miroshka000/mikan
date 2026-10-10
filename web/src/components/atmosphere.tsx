@@ -13,6 +13,7 @@ export function Atmosphere({ calm }: { calm?: boolean }) {
     <div className={clsx("atmo", calm && "calm", idle && "idle")} aria-hidden>
       <span className="glow glow-warm" />
       <span className="glow glow-cool" />
+      <span className="pattern" />
       <span className="grain" />
     </div>
   );

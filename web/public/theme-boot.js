@@ -2,8 +2,8 @@
 // file, not inline: the panel's CSP allows scripts from itself only. The lists are the
 // ones in src/components/theme.tsx, which takes over once the app runs.
 (function () {
-  var dark = ["midnight", "graphite", "abyss", "ember", "plum", "moss", "terminal"];
-  var all = ["mikan", "ocean", "sakura", "forest"].concat(dark);
+  var dark = ["midnight", "graphite", "abyss", "ember", "plum", "moss", "terminal", "nord", "mocha", "tokyo", "dracula", "aurora", "cosmos"];
+  var all = ["mikan", "ocean", "sakura", "forest", "latte", "snow", "dawn", "dune"].concat(dark);
   var theme = "mikan";
   try {
     var saved = localStorage.getItem("mikan-theme");
