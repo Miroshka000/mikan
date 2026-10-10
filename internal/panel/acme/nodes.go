@@ -183,6 +183,9 @@ func (n *Nodes) Wake() {
 // asked again: the panel asks the node itself first, which costs the CA nothing.
 var nodeRetry = 5 * time.Minute
 
+// outdatedRetry is how soon a node that predated the challenge endpoint is asked again.
+var outdatedRetry = time.Minute
+
 func (n *Nodes) Run(ctx context.Context) {
 	tick := time.NewTicker(time.Minute)
 	defer tick.Stop()
@@ -327,6 +330,11 @@ func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (again time.Duration) 
 		p := Classify(err, t.Own, now)
 		st.Error, st.ErrorDetail = p.Code, p.Detail
 		n.log.Warn("acme: node not ready for its certificate", "node", t.ID, "identifier", t.Host, "code", p.Code, "err", err)
+		if p.Code == CodeNodeOutdated {
+			// The admin updates such a node next: the card must not say "too old" for long
+			// after it is new.
+			return outdatedRetry
+		}
 		return nodeRetry
 	}
 	certPEM, keyPEM, err := n.iss.obtain(ctx, t.Host, ca, &nodeProvider{ctx: ctx, c: t.Client})

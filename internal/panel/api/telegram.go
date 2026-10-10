@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/netip"
@@ -420,7 +421,13 @@ func (h *handlers) nextRoute(ctx context.Context, r tgbot.Route, mode string, no
 	switch mode {
 	case tgbot.RouteNode:
 		n, err := h.d.Store.Q.GetNode(ctx, nodeID)
-		if err != nil || n.Address == "" {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return r, tgFieldErr("route", "tg_route_node_missing")
+		case err != nil:
+			h.d.Log.Warn("telegram: the route's node not read", "node", nodeID, "err", err)
+			return r, err
+		case n.Address == "":
 			// The panel's own node shares its server, and with it the block.
 			return r, tgFieldErr("route", "tg_route_node")
 		}

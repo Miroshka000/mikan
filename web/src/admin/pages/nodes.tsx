@@ -510,7 +510,7 @@ function NodeCertRow({ n }: { n: Node }) {
         ) : null}
         <AcmeAttempts attempts={order?.attempts} className="mt-1" />
         {tls?.pinned && tls.kind !== "acme" ? <p className="mt-1 text-xs text-[var(--ink-500)]">{t("certs.pinnedNoteNode")}</p> : null}
-        {canOrder && needed && order?.error !== "node_outdated" ? (
+        {canOrder && needed && !(order?.error === "node_outdated" && n.behind) ? (
           <div className="mt-2">
             <Button size="sm" loading={renew.isPending} disabled={ordering} onClick={() => renew.mutate()}>
               <RefreshCw size={16} aria-hidden /> {order?.error ? t("certs.retry") : t("certs.getNow")}

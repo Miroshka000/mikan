@@ -1,8 +1,14 @@
 package nodehello
 
 import (
+	"context"
+	"crypto/x509"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
+
+	"mikan/internal/nodetls"
 )
 
 func TestStatusFile(t *testing.T) {
@@ -31,9 +37,28 @@ func TestFinal(t *testing.T) {
 		{Code: PanelRejected}:    true,
 		{Code: NoPanelURL}:       true,
 		{Code: PanelUnverified}:  true,
+		{Code: PanelUntrusted}:   true,
 	} {
 		if Final(*r) != want {
 			t.Errorf("%+v: %v", *r, !want)
 		}
+	}
+}
+
+// A panel still on its self-signed certificate is not asked: the hello checks the
+// certificate like any client and says why it did not go, which is no failure of the node.
+func TestHelloToAnUntrustedPanel(t *testing.T) {
+	panel := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("the hello went past an untrusted certificate")
+	}))
+	defer panel.Close()
+	now := time.Now()
+	pc, _ := nodetls.Generate("mikan-panel", x509.ExtKeyUsageClientAuth, now)
+	nc, _ := nodetls.Generate("node-2.mikan", x509.ExtKeyUsageServerAuth, now)
+	pin, _ := nodetls.Fingerprint(pc.CertPEM)
+	key := nodetls.Key{Port: 40123, PanelPin: pin, CertPEM: nc.CertPEM, KeyPEM: nc.KeyPEM, PanelURL: panel.URL}
+	r := Send(context.Background(), key, Client(), now)
+	if r.Code != PanelUntrusted || r.Params["url"] != panel.URL || !Final(r) {
+		t.Fatalf("%+v", r)
 	}
 }

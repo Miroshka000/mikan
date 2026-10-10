@@ -142,12 +142,28 @@ func TestOldNodeKeepsItsSelfSignedCertificate(t *testing.T) {
 	if ca.orders != 0 {
 		t.Fatalf("an old node cost %d orders at the CA", ca.orders)
 	}
-	// Asked again within minutes, not hours: it may be updated meanwhile.
-	if wait := nodes.next[3].Sub(time.Now()); wait > nodeRetry {
+	// Asked again within a minute: the admin updates it next, and the card must not keep
+	// saying "too old" once it is new.
+	if wait := nodes.next[3].Sub(time.Now()); wait > outdatedRetry {
 		t.Fatalf("next look in %s", wait)
 	}
 	if c, _ := nodes.Cert(3, "old.example.com"); c != nil {
 		t.Fatal("a certificate without an order")
+	}
+	// Updated: the next look orders, the old answer is gone.
+	node.mu.Lock()
+	node.old = false
+	node.mu.Unlock()
+	nodes.mu.Lock()
+	nodes.next[3] = time.Time{}
+	nodes.mu.Unlock()
+	nodes.due(context.Background())
+	if st, _ := nodes.Status(3); st.Error != "" || ca.orders != 1 {
+		t.Fatalf("after the update: %+v, %d orders", st, ca.orders)
+	}
+	// The attempt is in the node's log.
+	if st, _ := nodes.Status(3); len(st.Attempts) != 1 || st.Attempts[0].Error != "" {
+		t.Fatalf("attempts: %+v", st.Attempts)
 	}
 }
 
@@ -160,6 +176,10 @@ func TestNodePort80Busy(t *testing.T) {
 	nodes.due(context.Background())
 	if st, _ := nodes.Status(4); st.Error != CodePort80Busy || st.Holder != "nginx" {
 		t.Fatalf("status: %+v", st)
+	}
+	// The failed order is logged with who held the port.
+	if st, _ := nodes.Status(4); len(st.Attempts) != 1 || st.Attempts[0].Error != CodePort80Busy || st.Attempts[0].Holder != "nginx" {
+		t.Fatalf("attempts: %+v", st.Attempts)
 	}
 }
 

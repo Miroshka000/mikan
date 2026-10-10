@@ -127,6 +127,11 @@ func TestKeyPanelURL(t *testing.T) {
 			t.Errorf("%q: %q, %v", url, k.PanelURL, err)
 		}
 	}
+	// The node's own address rides along, for the installer's advice on port 80.
+	raw, _ := Key{Port: 40123, PanelPin: panelPin, CertPEM: node.CertPEM, KeyPEM: node.KeyPEM, Host: "se.example.com"}.Encode()
+	if k, err := DecodeKey(raw); err != nil || k.Host != "se.example.com" {
+		t.Fatalf("host: %q %v", k.Host, err)
+	}
 }
 
 func TestSignVerify(t *testing.T) {
