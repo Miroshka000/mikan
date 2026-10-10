@@ -185,7 +185,10 @@ func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 		st := h.d.Telegram.Status()
 		v.Running, v.Error = st.Running, st.Error
 		v.Config = h.d.Telegram.Config(ctx)
-		v.MiniAppURL = h.d.Telegram.MiniAppURL(ctx)
+		// The address carries the sub path, which is the panel's secret.
+		if !hidesSecrets(ctx) {
+			v.MiniAppURL = h.d.Telegram.MiniAppURL(ctx)
+		}
 		if p := h.d.Telegram.Progress(); p.Total > 0 {
 			v.Broadcast = &TelegramBroadcast{Total: p.Total, Sent: p.Sent, Failed: p.Failed, Started: p.Started.Unix(), Active: p.Active()}
 		}
