@@ -7,7 +7,9 @@ mod addon;
 mod backup;
 mod clock;
 mod docker;
+mod doctor;
 mod envfile;
+mod hello;
 mod host;
 mod lock;
 mod net;
@@ -54,6 +56,8 @@ enum Cmd {
     Install(setup::Options),
     /// Containers, version, health and whether an update is out
     Status,
+    /// Check this server: Docker, containers, ports, firewall, clock, DNS, access to GitHub and GHCR, disk and memory
+    Doctor,
     /// Follow the logs (Ctrl+C stops)
     Logs {
         #[arg(value_parser = ["panel", "node"])]
@@ -174,6 +178,7 @@ fn main() -> ExitCode {
         None => tui::start(),
         Some(Cmd::Install(o)) => setup::install(o),
         Some(Cmd::Status) => ops::status(),
+        Some(Cmd::Doctor) => doctor::run(),
         Some(Cmd::Logs { service }) => ops::logs(service.as_deref()),
         Some(Cmd::Url) => ops::admin(&["url"]),
         Some(Cmd::ResetPassword) => ops::admin(&["reset-password"]),

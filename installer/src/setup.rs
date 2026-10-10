@@ -8,14 +8,14 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, Result, anyhow, bail};
 
 use crate::envfile::{EnvFile, write_private};
 use crate::lock::{self, Wait};
 use crate::system::{self, Proto};
-use crate::{DIR, acme, docker, host, panelfs, release};
+use crate::{DIR, acme, docker, hello, host, panelfs, release};
 
 /// Present from the first file written until the last step is done: a server with it and
 /// a .env is an install that stopped half way, and `mikan install` continues it.
@@ -222,7 +222,7 @@ pub enum Event {
     Log(String),
     Done(Step),
     Failed(Step, String),
-    Finished(Outcome),
+    Finished(Box<Outcome>),
 }
 
 #[derive(Clone, Debug)]
@@ -235,6 +235,9 @@ pub struct Outcome {
     pub password: String,
     /// A domain whose port 80 something else holds: what became of Let's Encrypt.
     pub acme: Option<acme::Report>,
+    /// A node: how the panel's first contact with it went. None for a panel, and for a
+    /// node whose image does not report it.
+    pub hello: Option<Vec<(system::Level, String)>>,
 }
 
 /// Port 80 of a panel with a domain, when something else holds it.
@@ -483,21 +486,26 @@ fn run(plan: &Plan, tx: &Sender<Event>) -> StepResult<()> {
     })
     .map_err(kept)?;
 
-    step(tx, Step::Start, || {
+    let hello = step(tx, Step::Start, || {
+        let since = SystemTime::now();
         docker::compose_run(&["up", "-d"])?;
         wait_ready(api_port, Duration::from_secs(90))?;
         note(tx, Step::Start, "running");
-        Ok(())
+        // A node tells how its first contact with the panel went; a panel has no one to
+        // wait for. What it says never fails the install.
+        let Some(port) = api_port else { return Ok(None) };
+        note(tx, Step::Start, "waiting for the panel to connect");
+        Ok(hello::wait(since, hello::LIMIT).map(|h| hello::lines(&h, Some(port))))
     })
     .map_err(kept)?;
     // Everything is done: the install is not unfinished any more.
     let _ = fs::remove_file(Path::new(DIR).join(UNFINISHED));
 
     let outcome = match creds {
-        Some(c) => Outcome { version, node_port: None, url: c.url, login: c.login, password: c.password.unwrap_or_default(), acme },
-        None => Outcome { version, node_port: api_port, url: String::new(), login: String::new(), password: String::new(), acme },
+        Some(c) => Outcome { version, node_port: None, url: c.url, login: c.login, password: c.password.unwrap_or_default(), acme, hello },
+        None => Outcome { version, node_port: api_port, url: String::new(), login: String::new(), password: String::new(), acme, hello },
     };
-    let _ = tx.send(Event::Finished(outcome));
+    let _ = tx.send(Event::Finished(Box::new(outcome)));
     Ok(())
 }
 
@@ -699,10 +707,17 @@ pub fn wait_ready(node_port: Option<u16>, limit: Duration) -> Result<()> {
 /// with_password it stays out of the terminal's scrollback.
 pub fn summary(o: &Outcome, with_password: bool) -> String {
     let mut text = match o.node_port {
-        Some(p) => format!(
-            "mikan {} node is running and waits for its panel on port {p}.\nThe panel connects within 30 seconds: see its Nodes page.\nCommands on this server: mikan (menu), mikan status, mikan update",
-            o.version
-        ),
+        Some(p) => {
+            // An image that does not report says nothing: the panel is only expected.
+            let contact = match &o.hello {
+                Some(lines) => hello::render(lines).join("\n"),
+                None => "The panel connects within 30 seconds: see its Nodes page.".to_owned(),
+            };
+            format!(
+                "mikan {} node is running and waits for its panel on port {p}.\n{contact}\nCommands on this server: mikan (menu), mikan status, mikan doctor, mikan update",
+                o.version
+            )
+        }
         None => {
             let password = if o.password.is_empty() {
                 "not known: the admin was made by the attempt before this one; set a new password with: mikan reset-password".to_owned()
@@ -712,7 +727,7 @@ pub fn summary(o: &Outcome, with_password: bool) -> String {
                 "shown on the installer's last screen only; a new one: mikan reset-password".to_owned()
             };
             format!(
-                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: mikan (menu), mikan status, mikan update",
+                "mikan {} is running.\n\n  Panel     {}\n  Login     {}\n  Password  {password}\n\nCommands on this server: mikan (menu), mikan status, mikan doctor, mikan update",
                 o.version, o.url, o.login
             )
         }
@@ -821,7 +836,7 @@ fn plain(opts: Options, earlier: Option<EnvFile>) -> Result<()> {
     bail!("the install stopped")
 }
 
-fn mark(l: system::Level) -> &'static str {
+pub fn mark(l: system::Level) -> &'static str {
     match l {
         system::Level::Ok => "✓",
         system::Level::Warn => "!",
@@ -955,6 +970,7 @@ mod tests {
             login: "l".into(),
             password: "p4ssw0rd".into(),
             acme: None,
+            hello: None,
         };
         assert!(summary(&shown, true).contains("Password  p4ssw0rd"));
         // after the installer's screen the terminal gets the link and login, not the password
@@ -967,6 +983,27 @@ mod tests {
         let report = acme::Report::other("apache2");
         let with_acme = summary(&Outcome { acme: Some(report.clone()), ..shown }, false);
         assert!(with_acme.ends_with(&report.text().unwrap()), "the rule is not last");
+    }
+
+    // A node says how its panel's first contact went; an old image says nothing, and the
+    // summary then only expects the panel.
+    #[test]
+    fn the_summary_of_a_node_tells_how_the_panel_connected() {
+        let silent = Outcome {
+            version: "0.5.0.6".into(),
+            node_port: Some(31234),
+            url: String::new(),
+            login: String::new(),
+            password: String::new(),
+            acme: None,
+            hello: None,
+        };
+        assert!(summary(&silent, true).contains("The panel connects within 30 seconds"));
+        let ok = Outcome { hello: Some(vec![(system::Level::Ok, "The panel connected to this node.".into())]), ..silent.clone() };
+        let text = summary(&ok, true);
+        assert!(text.contains("\n✓ The panel connected to this node.\n") && !text.contains("within 30 seconds"), "{text}");
+        let blocked = Outcome { hello: Some(vec![(system::Level::Error, "The panel could not reach port 31234 here".into())]), ..silent };
+        assert!(summary(&blocked, true).contains("\n✗ The panel could not reach port 31234 here\n"));
     }
 
     #[test]

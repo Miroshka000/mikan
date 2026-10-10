@@ -7,13 +7,13 @@ use std::io::{BufRead, IsTerminal, Write};
 use std::net::IpAddr;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use anyhow::{Context, Result, anyhow, bail};
 
 use crate::envfile::EnvFile;
 use crate::setup;
-use crate::{DIR, addon, docker, host, lock, release, system};
+use crate::{DIR, addon, docker, hello, host, lock, release, system};
 
 pub struct Install {
     pub env: EnvFile,
@@ -155,8 +155,10 @@ pub fn status() -> Result<()> {
     let install = Install::load()?;
     let version = install.version();
     crate::out(&format!("mikan {version}, {}", if install.node { "node" } else { "panel" }));
+    let mut wrong = false;
     for s in docker::services()? {
         crate::out(&format!("  {:<6} {}", s.name, s.status));
+        wrong |= s.state != "running";
     }
     for s in docker::stats() {
         crate::out(&format!("  {:<16} CPU {:>6}  memory {}", s.name, s.cpu, s.mem));
@@ -164,12 +166,19 @@ pub fn status() -> Result<()> {
     if let Some(p) = install.node_port() {
         match system::port_owner(p, system::Proto::Tcp) {
             Some(_) => crate::out(&format!("The node waits for its panel on port {p}.")),
-            None => crate::out(&format!("The node does not listen on port {p}: mikan logs node")),
+            None => {
+                wrong = true;
+                crate::out(&format!("The node does not listen on port {p}: mikan logs node"));
+            }
         }
     } else if docker::panel_healthy() {
         crate::out("The panel answers.");
     } else {
+        wrong = true;
         crate::out("The panel does not answer: mikan logs panel");
+    }
+    if wrong {
+        crate::out("Run mikan doctor for a full check with fixes.");
     }
     match release::find(Some(&version), crate::update::channel(&install)) {
         Ok(found) => {
@@ -258,9 +267,17 @@ pub fn join(key: &str, panel_ip: Option<IpAddr>) -> Result<()> {
             None => host::allow(&format!("{port}/tcp"))?,
         }
     }
+    let since = SystemTime::now();
     docker::compose_run(&["up", "-d"])?;
     setup::wait_ready(Some(port), Duration::from_secs(90))?;
     crate::out(&format!("The node runs with the new key and waits for its panel on port {port}."));
+    // What the panel found is told, never made an error: the key is in place either way.
+    crate::out("Waiting for the panel to connect…");
+    if let Some(h) = hello::wait(since, hello::LIMIT) {
+        for line in hello::render(&hello::lines(&h, Some(port))) {
+            crate::out(&line);
+        }
+    }
     Ok(())
 }
 
