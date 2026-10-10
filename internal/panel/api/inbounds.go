@@ -43,6 +43,7 @@ type InboundView struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 	Apps        []string       `json:"apps" doc:"Приложения, которым подключение попадает в подписку: mihomo, xray, singbox, stash, other"`
 	Shared      bool           `json:"shared,omitempty" doc:"Один ключ на всех: учёт, лимиты и отключение по пользователям не работают"`
+	NodeCert    bool           `json:"node_cert,omitempty" doc:"Работает на сертификате ноды (Hysteria2, TUIC, AnyTLS, TrustTunnel, VLESS TLS): с самоподписанным в sing-box приложениях не появится"`
 	AutoPort    bool           `json:"auto_port" doc:"Панель сама переносит подключение на другой порт, если его блокируют (и включено в настройках)"`
 	AutoSNI     bool           `json:"auto_sni" doc:"Панель сама меняет сайт маскировки REALITY, если он перестал подходить (и включено в настройках)"`
 	Auto        AutoView       `json:"auto"`
@@ -197,6 +198,7 @@ func (h *handlers) viewInbound(in db.Inbound, last map[int64]db.InboundEvent) In
 	if t, err := proto.Parse(in.Config); err == nil {
 		v.Type, v.Network = t.Type(), t.Network()
 		v.Shared = proto.Shared(t.Type())
+		v.NodeCert = t.NodeCert()
 		for _, f := range subs.AppsFor(proto.NeedsOf(t)) {
 			v.Apps = append(v.Apps, string(f))
 		}

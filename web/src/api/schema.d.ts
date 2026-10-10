@@ -2511,6 +2511,8 @@ export interface components {
             listen: string;
             name: string;
             network: string;
+            /** @description Работает на сертификате ноды (Hysteria2, TUIC, AnyTLS, TrustTunnel, VLESS TLS): с самоподписанным в sing-box приложениях не появится */
+            node_cert?: boolean;
             /** Format: int64 */
             node_id: number;
             /** @description Hysteria2: salamander, gecko или пусто (без обфускации); у других типов поля нет */

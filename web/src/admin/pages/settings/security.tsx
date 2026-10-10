@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Copy, KeyRound, LogOut, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, Copy, KeyRound, LoaderCircle, LogOut, RefreshCw, ShieldCheck, Stethoscope } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { meQuery, qk } from "../../../api/hooks";
 import { FormActions } from "../../../components/layout";
 import { Confirm } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
 import { useToast } from "../../../components/toast";
-import { Button, Field, Pill, QR, Skeleton } from "../../../components/ui";
+import { Button, Field, Pill, QR, Segmented, Skeleton } from "../../../components/ui";
+import { AcmeProblem, caName, CertCheckDrawer } from "../../../components/acme";
 import { getLocale, t, tMaybe } from "../../../i18n";
 import { useCopy } from "../../../lib/copy";
 import { CertDrawer, certUntil, type CertInfo } from "../../../components/cert-drawer";
@@ -62,25 +63,35 @@ export function AccessCard({ s }: { s: Schemas["SettingsView"] }) {
   );
 }
 
+type CA = Schemas["SettingsView"]["acme_ca"];
+
 export function CertificateCard({ s }: { s: Schemas["SettingsView"] }) {
   const qc = useQueryClient();
   const toast = useToast();
   const c = s.certificate;
+  // The outcome of "Get now" shows here, under the button, not only as a toast.
+  const [outcome, setOutcome] = useState<"got" | "running" | null>(null);
   const renew = useMutation({
     mutationFn: () => unwrap(api.POST("/api/v1/settings/certificate/renew")),
-    onSuccess: () => {
-      toast.ok(t("settings.certRequested"));
-      window.setTimeout(() => void qc.invalidateQueries({ queryKey: qk.settings }), 15_000);
+    onMutate: () => setOutcome(null),
+    onSuccess: (st) => {
+      qc.setQueryData<Schemas["SettingsView"]>(qk.settings, (old) => (old ? { ...old, certificate: st } : old));
+      setOutcome(st.ordering ? "running" : st.error ? null : "got");
+      if (st.ordering) window.setTimeout(() => void qc.invalidateQueries({ queryKey: qk.settings }), 15_000);
     },
     onError: (e) => toast.error(errorText(e)),
   });
   const [own, setOwn] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [caFocus, setCaFocus] = useState(0);
   const custom = c.kind === "custom";
-  const ok = c.kind === "letsencrypt" || custom;
+  const ok = c.kind === "acme" || custom;
   const until = new Date(c.not_after).toLocaleString(getLocale(), { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
-  const sub = custom ? t("settings.certCustom", { names: (c.names ?? []).join(", "), until: certUntil(c.not_after) }) : ok ? t("settings.certLe", { id: c.identifier, until }) : t("settings.certSelf");
+  const sub = custom ? t("settings.certCustom", { names: (c.names ?? []).join(", "), until: certUntil(c.not_after) }) : ok ? t("certs.issued", { ca: caName(c.ca), id: c.identifier, until }) : t("settings.certSelf");
   // The own certificate as the drawer shows it; a broken one is shown by its error.
   const current: CertInfo | null = custom ? { names: c.names, issuer: c.issuer, not_after: c.not_after, trusted: c.trusted } : c.error?.startsWith("custom_") ? { error: c.error } : null;
+  const switching = c.kind === "acme" && !!c.ca && c.ca !== c.ca_wanted;
+  const failed = !!c.error && !c.error.startsWith("custom_") && c.error !== "no_public_host";
   return (
     <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
       <div className="card-head">
@@ -90,22 +101,47 @@ export function CertificateCard({ s }: { s: Schemas["SettingsView"] }) {
         </div>
         {custom ? <Pill tone="ok">{t("settings.certOwn")}</Pill> : ok ? <Pill tone="ok">{t("settings.certValid")}</Pill> : <Pill tone="warn">{t("settings.certTemp")}</Pill>}
       </div>
-      {c.error ? (
-        <p className="mb-3 text-[13px] text-[var(--berry-600)]" role="alert">
-          {tMaybe(`errors.acme.${c.error}`) ?? c.error}
+      {c.ordering || renew.isPending ? (
+        <p className="mb-3 flex items-center gap-2 text-[13px] text-[var(--ink-600)]" role="status">
+          <LoaderCircle size={16} className="spin" aria-hidden /> {t("certs.ordering")}
+        </p>
+      ) : c.error ? (
+        c.error.startsWith("custom_") ? (
+          <p className="mb-3 text-[13px] text-[var(--berry-600)]" role="alert">
+            {tMaybe(`errors.acme.${c.error}`) ?? c.error}
+          </p>
+        ) : (
+          <AcmeProblem code={c.error} detail={c.error_detail} holder={c.holder} retryAt={c.retry_at} className="mb-3" />
+        )
+      ) : outcome ? (
+        <p className="mb-3 text-[13px] text-[var(--leaf-700)]" role="status">
+          {outcome === "got" ? t("certs.got") : t("certs.stillRunning")}
+        </p>
+      ) : switching ? (
+        <p className="mb-3 text-[13px] text-[var(--ink-600)]" role="status">
+          {t("certs.switching", { ca: caName(c.ca_wanted) })}
         </p>
       ) : null}
       <p className="mb-3 text-xs text-[var(--ink-500)]">{custom ? t("settings.certOwnNote") : t("settings.certNote")}</p>
       <div className="flex flex-wrap gap-2">
         {!custom ? (
-          <Button size="sm" loading={renew.isPending} onClick={() => renew.mutate()}>
-            {t("settings.certRenew")}
+          <Button size="sm" loading={renew.isPending} disabled={renew.isPending || c.ordering} onClick={() => renew.mutate()}>
+            <RefreshCw size={16} aria-hidden /> {failed ? t("certs.retry") : t("certs.getNow")}
           </Button>
         ) : null}
+        <Button size="sm" onClick={() => setChecking(true)}>
+          <Stethoscope size={16} aria-hidden /> {t("certs.check")}
+        </Button>
         <Button size="sm" onClick={() => setOwn(true)}>
           <ShieldCheck size={16} aria-hidden /> {custom ? t("settings.certReplace") : t("settings.certOwnButton")}
         </Button>
       </div>
+      <AuthorityForm s={s} focus={caFocus} />
+      <CertCheckDrawer
+        open={checking}
+        onClose={() => setChecking(false)}
+        onUseZeroSSL={() => setCaFocus((n) => n + 1)}
+      />
       <CertDrawer
         open={own}
         onClose={() => setOwn(false)}
@@ -123,6 +159,93 @@ export function CertificateCard({ s }: { s: Schemas["SettingsView"] }) {
         clearText={t("cert.panelClearText")}
       />
     </section>
+  );
+}
+
+/**
+ * Who issues the panel's and the nodes' certificates. ZeroSSL takes an e-mail (its API gives
+ * the account's key for it), Google an EAB key made in Google Cloud. `focus` moves when the
+ * check's "Switch to ZeroSSL" is pressed: ZeroSSL is picked and the e-mail field focused.
+ */
+function AuthorityForm({ s, focus }: { s: Schemas["SettingsView"]; focus: number }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [ca, setCa] = useState<CA>(s.acme_ca);
+  const [email, setEmail] = useState(s.acme_email);
+  const [kid, setKid] = useState(s.acme_eab_kid);
+  const [hmac, setHmac] = useState("");
+  const emailRef = useRef<HTMLInputElement>(null);
+  const [seen, setSeen] = useState(focus);
+  if (focus !== seen) {
+    setSeen(focus);
+    setCa("zerossl");
+  }
+  useEffect(() => {
+    if (focus > 0) emailRef.current?.focus();
+  }, [focus]);
+  const save = useMutation({
+    mutationFn: () =>
+      unwrap(
+        api.PATCH("/api/v1/settings", {
+          body: { acme_ca: ca, acme_email: email.trim(), ...(ca === "google" ? { acme_eab_kid: kid.trim(), ...(hmac.trim() ? { acme_eab_hmac: hmac.trim() } : {}) } : {}) },
+        }),
+      ),
+    onSuccess: (v) => {
+      qc.setQueryData(qk.settings, v);
+      setHmac("");
+      toast.ok(t("certs.saved"));
+      // The panel's order runs in the background: the card follows it.
+      window.setTimeout(() => void qc.invalidateQueries({ queryKey: qk.settings }), 15_000);
+    },
+    onError: (e) => {
+      if (!(e instanceof ApiError && Object.keys(e.fields).length)) toast.error(errorText(e));
+    },
+  });
+  const errors = fieldErrors(save.error);
+  const dirty = ca !== s.acme_ca || email.trim() !== s.acme_email || (ca === "google" && (kid.trim() !== s.acme_eab_kid || hmac.trim() !== ""));
+  const host = s.domain || s.public_host;
+  const ipOnly = !s.domain && !!s.public_host;
+  return (
+    <form
+      className="mt-5 border-t border-[var(--hairline)] pt-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (dirty) save.mutate();
+      }}
+      noValidate
+    >
+      <Field label={t("certs.ca")} hint={t("certs.caHint")}>
+        <Segmented<CA>
+          value={ca}
+          onChange={setCa}
+          label={t("certs.ca")}
+          options={[
+            { value: "letsencrypt", label: t("certs.caLetsencrypt") },
+            { value: "zerossl", label: t("certs.caZerossl") },
+            { value: "google", label: t("certs.caGoogle") },
+          ]}
+        />
+      </Field>
+      {ipOnly ? (
+        <p className="mb-4 text-xs text-[var(--ink-500)]">{t("certs.ipOnlyLe")}</p>
+      ) : ca === "letsencrypt" && host ? (
+        <p className="mb-4 text-xs text-[var(--ink-500)]">{t("certs.oldAndroid")}</p>
+      ) : null}
+      <Field label={t("certs.email")} htmlFor="acme-email" hint={ca === "zerossl" ? t("certs.emailHint") : t("certs.emailOptional")} error={errors.acme_email}>
+        <input id="acme-email" ref={emailRef} type="email" className="input max-w-[360px]" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required={ca === "zerossl"} />
+      </Field>
+      {ca === "google" ? (
+        <>
+          <Field label={t("certs.eabKid")} htmlFor="acme-kid" error={errors.acme_eab_kid}>
+            <input id="acme-kid" className="input mono max-w-[360px]" autoComplete="off" spellCheck={false} value={kid} onChange={(e) => setKid(e.target.value)} />
+          </Field>
+          <Field label={t("certs.eabHmac")} htmlFor="acme-hmac" hint={s.acme_eab_hmac_set ? t("certs.eabSaved") : t("certs.eabHint")} error={errors.acme_eab_hmac}>
+            <input id="acme-hmac" type="password" className="input mono max-w-[360px]" autoComplete="off" spellCheck={false} value={hmac} onChange={(e) => setHmac(e.target.value)} />
+          </Field>
+        </>
+      ) : null}
+      <FormActions saving={save.isPending} disabled={!dirty} label={t("certs.save")} />
+    </form>
   );
 }
 

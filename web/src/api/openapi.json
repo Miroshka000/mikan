@@ -2069,6 +2069,10 @@
           "network": {
             "type": "string"
           },
+          "node_cert": {
+            "description": "Работает на сертификате ноды (Hysteria2, TUIC, AnyTLS, TrustTunnel, VLESS TLS): с самоподписанным в sing-box приложениях не появится",
+            "type": "boolean"
+          },
           "node_id": {
             "format": "int64",
             "type": "integer"

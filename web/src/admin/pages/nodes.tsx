@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Stethoscope, Trash2, Waypoints } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, RefreshCw, ShieldCheck, Stethoscope, Trash2, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
+import { AcmeProblem, caName } from "../../components/acme";
 import { CertDrawer, certUntil } from "../../components/cert-drawer";
 import { Confirm, Drawer } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
@@ -404,14 +405,7 @@ function NodeCard({
             </dd>
           </div>
         ) : null}
-        {n.certificate ? (
-          <div className="col-span-2">
-            <dt className="text-xs text-[var(--ink-500)]">{t("nodes.cert")}</dt>
-            <dd className={n.certificate.error ? "text-[var(--berry-600)]" : undefined}>
-              {n.certificate.error ? (tMaybe(`errors.acme.${n.certificate.error}`) ?? n.certificate.error) : t("nodes.certOwn", { until: certUntil(n.certificate.not_after) })}
-            </dd>
-          </div>
-        ) : null}
+        <NodeCertRow n={n} />
       </dl>
       <NodeUpdate n={n} />
       {/* The actions stay at the card's bottom, level with the card beside it. */}
@@ -467,6 +461,63 @@ function NodeCard({
         </Menu.Root>
       </div>
     </section>
+  );
+}
+
+/**
+ * The certificate of the node's protocols on TLS: its own, the public one the panel got for
+ * it, the panel's, or a pinned self-signed one, with why a public one is not there yet and
+ * a button to get it now.
+ */
+function NodeCertRow({ n }: { n: Node }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const renew = useMutation({
+    mutationFn: () => unwrap(api.POST("/api/v1/nodes/{id}/certificate/renew", { params: { path: { id: n.id } } })),
+    onSuccess: (v) => {
+      if (!v.acme?.error) toast.ok(v.acme?.ordering ? t("certs.stillRunning") : t("certs.got"));
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.nodes }),
+    onError: (e) => toast.error(errorText(e)),
+  });
+  const own = n.certificate;
+  const tls = n.tls;
+  if (!tls && !own) return null;
+  const order = tls?.acme;
+  const until = certUntil(tls?.not_after ?? undefined);
+  let text: string;
+  if (own?.error) text = tMaybe(`errors.acme.${own.error}`) ?? own.error;
+  else if (tls?.kind === "custom" || (!tls && own)) text = t("nodes.certOwn", { until: certUntil(own?.not_after ?? tls?.not_after ?? undefined) });
+  else if (tls?.kind === "acme") text = t("certs.kindAcme", { ca: caName(tls.ca), until });
+  else if (tls?.kind === "panel") text = t("certs.kindPanel", { until });
+  else text = t("certs.kindSelf");
+  const ordering = renew.isPending || !!order?.ordering;
+  // A button where the panel orders for the node: none on the panel's own node or with an own one.
+  const canOrder = !!order && tls?.kind !== "custom";
+  const needed = tls?.kind !== "acme" || !!order?.error;
+  return (
+    <div className="col-span-2">
+      <dt className="text-xs text-[var(--ink-500)]">{t("nodes.cert")}</dt>
+      <dd>
+        <span className={own?.error ? "text-[var(--berry-600)]" : undefined}>{text}</span>
+        {tls?.kind === "acme" && tls.pinned ? <span className="text-xs text-[var(--ink-500)]"> · {t("certs.applying")}</span> : null}
+        {ordering ? (
+          <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--ink-500)]" role="status">
+            <LoaderCircle size={14} className="spin" aria-hidden /> {t("certs.nodeOrdering")}
+          </span>
+        ) : order?.error ? (
+          <AcmeProblem code={order.error} detail={order.error_detail} holder={order.holder} retryAt={order.retry_at} className="mt-1" />
+        ) : null}
+        {tls?.pinned && tls.kind !== "acme" ? <p className="mt-1 text-xs text-[var(--ink-500)]">{t("certs.pinnedNoteNode")}</p> : null}
+        {canOrder && needed && order?.error !== "node_outdated" ? (
+          <div className="mt-2">
+            <Button size="sm" loading={renew.isPending} disabled={ordering} onClick={() => renew.mutate()}>
+              <RefreshCw size={16} aria-hidden /> {order?.error ? t("certs.retry") : t("certs.getNow")}
+            </Button>
+          </div>
+        ) : null}
+      </dd>
+    </div>
   );
 }
 
