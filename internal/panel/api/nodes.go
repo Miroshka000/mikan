@@ -65,6 +65,8 @@ type NodeInfo struct {
 	// Certificate is the node's own one for its protocols on the node's TLS; nil: the
 	// node uses its self-signed certificate.
 	Certificate *NodeCertView `json:"certificate,omitempty"`
+	// TLS is the certificate its protocols on TLS use now; nil when not known.
+	TLS *NodeTLSView `json:"tls,omitempty"`
 }
 
 type nodesOutput struct{ Body []NodeInfo }
@@ -166,6 +168,7 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 		v.Domain, _ = h.d.Settings.String(ctx, settings.KeyDomain)
 	}
 	v.Certificate = h.nodeCertView(n.ID, v.Host)
+	v.TLS = h.nodeTLSView(ctx, n)
 	if h.d.Nodes == nil {
 		return v
 	}

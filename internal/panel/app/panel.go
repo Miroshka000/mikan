@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"mikan/internal/nodeapi"
 	"mikan/internal/nodetls"
 	"mikan/internal/panel/acme"
 	"mikan/internal/panel/addons"
@@ -81,9 +80,11 @@ type Options struct {
 	Now        func() time.Time
 	// Connect reaches a node; nil when the panel runs without nodes (tests, UI development).
 	Connect nodesync.Connect
-	// QUIC is a node's long-lived self-signed Hysteria2/TUIC certificate and its pin,
-	// which subscription links carry.
-	QUIC func(n db.Node) (*nodeapi.TLSFiles, string, error)
+	// TLS picks the certificate of a node's protocols on TLS and the pin links carry for
+	// it; nil leaves links unpinned (tests).
+	TLS *NodeTLS
+	// NodesACME orders the remote nodes' public certificates; nil in development.
+	NodesACME *acme.Nodes
 	// PanelCert is the client certificate remote nodes pin; join keys carry its hash.
 	PanelCert func() (nodetls.Pair, error)
 	// NodeCerts keeps the nodes' own certificates; nil: nodes have none.
@@ -180,8 +181,21 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	p.st, p.devices = st, deps.Devices
 	deps.Packages = domain.NewPackages(st, o.Now)
 	if o.Certs != nil {
-		deps.Cert, deps.RenewCert = o.Certs.Status, o.Certs.Renew
+		deps.Cert, deps.RenewCert, deps.RenewCertNow = o.Certs.Status, o.Certs.Renew, o.Certs.RenewNow
 		deps.SetCert, deps.ClearCert = o.Certs.SetCustom, o.Certs.ClearCustom
+	}
+	if o.NodesACME != nil {
+		deps.RenewNodeCert, deps.WakeNodeCerts = o.NodesACME.Renew, o.NodesACME.Wake
+	}
+	if o.TLS != nil {
+		deps.NodeTLS = nodeTLSView(o.TLS, p.Nodes, o.NodesACME, o.Now)
+		if o.Certs != nil {
+			dns := o.DNS
+			if dns == nil {
+				dns = dnscheck.New()
+			}
+			deps.CheckCerts = checkCerts(st, set, o.Certs, o.TLS, p.Nodes, o.NodesACME, dns)
+		}
 	}
 	deps.NodeCerts = o.NodeCerts
 	deps.ForgetNode = forgetNodeFiles(o)
@@ -214,7 +228,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	p.Telegram = tgbot.New(tgbot.Deps{Store: st, Settings: set, Devices: deps.Devices, SubBase: subBase, API: o.TelegramAPI, Log: o.Log, Now: o.Now, Billing: p.Billing,
 		// Telegram apps refuse a Mini App on a self-signed certificate.
-		MiniApp: func() bool { return o.Certs != nil && o.Certs.Status().Kind == "letsencrypt" }, Tunnel: tunnel})
+		MiniApp: func() bool { return o.Certs != nil && o.Certs.Trusted() }, Tunnel: tunnel})
 	deps.Telegram = p.Telegram
 	p.Billing.SetTelegram(p.Telegram)
 	p.Updates = updates.New(o.DataDir, o.Version, o.Releases, o.Log, o.Now)
@@ -358,9 +372,16 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 				sn.Endpoint = subs.Endpoint{Host: domain.NodeHost(n), SNI: n.Domain}
 				cfg.Direct = append(cfg.Direct, n.PublicHost, n.Domain)
 			}
-			if o.QUIC != nil {
-				if _, pin, err := o.QUIC(n); err == nil {
-					sn.Endpoint.PinSHA256 = pin
+			if o.TLS != nil {
+				if c, err := o.TLS.Pick(n); err == nil {
+					sn.Endpoint.PinSHA256 = c.Pin
+				}
+				// What the node serves, as of the last state it took: a certificate picked now
+				// reaches it with the next state, and the links follow once it has.
+				if p.Nodes != nil {
+					if pin, ok := p.Nodes.ServedPin(n.ID); ok {
+						sn.Endpoint.PinSHA256 = pin
+					}
 				}
 			}
 			cfg.Nodes = append(cfg.Nodes, sn)
@@ -525,15 +546,20 @@ func (c *configCache) get(ctx context.Context, build func(context.Context) (subs
 }
 
 // forgetNodeFiles removes what the panel keeps on disk for a node id: its own certificate
-// (Options.NodeCerts) and the self-signed pair its QUIC protocols use, <data>/tls/nodes/<id>.
+// (Options.NodeCerts), the public one ordered for it (<data>/tls/acme-nodes/<id>) and the
+// self-signed pair, <data>/tls/nodes/<id>.
 func forgetNodeFiles(o Options) func(id int64) error {
 	return func(id int64) error {
 		var errs []error
 		if o.NodeCerts != nil {
 			errs = append(errs, o.NodeCerts.Clear(id))
 		}
+		if o.NodesACME != nil {
+			errs = append(errs, o.NodesACME.Forget(id))
+		}
 		if o.DataDir != "" {
 			errs = append(errs, os.RemoveAll(filepath.Join(o.DataDir, "tls", "nodes", strconv.FormatInt(id, 10))))
+			errs = append(errs, os.RemoveAll(filepath.Join(o.DataDir, "tls", "acme-nodes", strconv.FormatInt(id, 10))))
 		}
 		return errors.Join(errs...)
 	}

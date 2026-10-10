@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"log/slog"
@@ -168,6 +169,15 @@ func (m *Manager) Public() *tls.Certificate {
 		return nil
 	}
 	return c
+}
+
+// Served is the leaf the panel serves now, whatever it is; nil before any.
+func (m *Manager) Served() *x509.Certificate {
+	c, err := m.holder.Get(nil)
+	if err != nil {
+		return nil
+	}
+	return c.Leaf
 }
 
 // Renew asks the background loop to try again now (a new domain, another CA, kill -HUP).

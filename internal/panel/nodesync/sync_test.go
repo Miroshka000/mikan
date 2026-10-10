@@ -41,7 +41,9 @@ func (f *fakeNode) Ack(_ context.Context, _ string, seq int64) error {
 }
 func (f *fakeNode) Health(context.Context) (nodeapi.Health, error) { return f.health, nil }
 
-func fakeTLS() (*nodeapi.TLSFiles, error) { return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, nil }
+func fakeTLS() (*nodeapi.TLSFiles, string, error) {
+	return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, "pin", nil
+}
 
 func setup(t *testing.T) (*Syncer, *fakeNode, *store.Store, *domain.Users, *time.Time) {
 	t.Helper()

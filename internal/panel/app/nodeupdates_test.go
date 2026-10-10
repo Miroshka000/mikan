@@ -93,7 +93,9 @@ func newUpdRig(t *testing.T, version string) *updRig {
 			if !ok {
 				return nodesync.Target{}, nodesync.ErrNoNode
 			}
-			return nodesync.Target{Node: f, TLS: func() (*nodeapi.TLSFiles, error) { return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, nil }, Local: n.Address == ""}, nil
+			return nodesync.Target{Node: f, TLS: func() (*nodeapi.TLSFiles, string, error) {
+				return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, "", nil
+			}, Local: n.Address == ""}, nil
 		}
 	})
 	h := r.h

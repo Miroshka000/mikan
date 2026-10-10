@@ -5,9 +5,13 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/panel/acme"
+	"mikan/internal/panel/certcheck"
+	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/tlscert"
 )
 
@@ -33,8 +37,34 @@ type NodeCertView struct {
 	Error string `json:"error,omitempty" doc:"custom_expired, custom_invalid — сертификат не используется, нода на своём самоподписанном"`
 }
 
+// NodeTLSView is the certificate a node's protocols on TLS (Hysteria2, TUIC, AnyTLS,
+// TrustTunnel, VLESS TLS) use now, and the public one the panel orders for it.
+type NodeTLSView struct {
+	Kind     string     `json:"kind" enum:"custom,acme,panel,self-signed" doc:"custom — свой, acme — публичный, полученный панелью для ноды, panel — публичный сертификат панели (своя нода), self-signed — самоподписанный"`
+	Pinned   bool       `json:"pinned" doc:"Ссылки закрепляют самоподписанный сертификат: в sing-box приложениях (SFA, SFI) протоколы ноды на TLS не появятся, TUIC без проверки сертификата"`
+	CA       string     `json:"ca,omitempty" enum:"letsencrypt,zerossl,google"`
+	Issuer   string     `json:"issuer,omitempty"`
+	Names    []string   `json:"names,omitempty"`
+	NotAfter *time.Time `json:"not_after,omitempty"`
+	// ACME is the order of the node's public certificate; nil for the panel's own node and
+	// for a node with a certificate of its own.
+	ACME *acme.NodeStatus `json:"acme,omitempty"`
+}
+
+type nodeTLSOutput struct{ Body NodeTLSView }
+
+type certCheckOutput struct{ Body certcheck.CertReport }
+
+// renewWait is how long «Получить сейчас» waits for the CA: an order takes seconds, a port
+// 80 that hangs a minute and more; then the answer says the order still runs.
+const renewWait = 90 * time.Second
+
 func (h *handlers) registerCerts() {
 	tags := []string{"settings"}
+	huma.Register(h.api, huma.Operation{OperationID: "check-certificate", Method: http.MethodPost, Path: "/api/v1/settings/certificate/check",
+		Summary: "Проверить сертификаты панели и нод снаружи: что отдают порты, DNS, порт 80, заказы", Tags: tags}, h.checkCertificate)
+	huma.Register(h.api, huma.Operation{OperationID: "renew-node-certificate", Method: http.MethodPost, Path: "/api/v1/nodes/{id}/certificate/renew",
+		Summary: "Получить публичный сертификат ноды сейчас (ждёт до 90 с)", Tags: []string{"node"}}, h.renewNodeCertificate)
 	huma.Register(h.api, huma.Operation{OperationID: "set-certificate", Method: http.MethodPut, Path: "/api/v1/settings/certificate", Summary: "Поставить свой сертификат панели",
 		Tags: tags, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.setCertificate)
 	huma.Register(h.api, huma.Operation{OperationID: "clear-certificate", Method: http.MethodDelete, Path: "/api/v1/settings/certificate", Summary: "Вернуть сертификат Let's Encrypt",
@@ -42,7 +72,7 @@ func (h *handlers) registerCerts() {
 	nodeTags := []string{"node"}
 	huma.Register(h.api, huma.Operation{OperationID: "set-node-certificate", Method: http.MethodPut, Path: "/api/v1/nodes/{id}/certificate", Summary: "Поставить ноде свой сертификат",
 		Tags: nodeTags, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.setNodeCertificate)
-	huma.Register(h.api, huma.Operation{OperationID: "clear-node-certificate", Method: http.MethodDelete, Path: "/api/v1/nodes/{id}/certificate", Summary: "Вернуть ноде самоподписанный сертификат",
+	huma.Register(h.api, huma.Operation{OperationID: "clear-node-certificate", Method: http.MethodDelete, Path: "/api/v1/nodes/{id}/certificate", Summary: "Убрать свой сертификат ноды: вернётся публичный, полученный панелью, или самоподписанный",
 		Tags: nodeTags, Metadata: sessionOnly, Extensions: sessionOnlyExt, DefaultStatus: http.StatusNoContent}, h.clearNodeCertificate)
 }
 
@@ -123,8 +153,56 @@ func (h *handlers) clearNodeCertificate(ctx context.Context, in *nodeIDInput) (*
 	if h.d.Changes != nil {
 		h.d.Changes.SlotsChanged()
 	}
+	// Without its own one the node gets a public certificate from the panel.
+	if h.d.WakeNodeCerts != nil {
+		h.d.WakeNodeCerts()
+	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.certificate", "node", strconv.FormatInt(n.ID, 10), map[string]any{"kind": "self-signed"})
 	return nil, nil
+}
+
+func (h *handlers) checkCertificate(ctx context.Context, _ *struct{}) (*certCheckOutput, error) {
+	if h.d.CheckCerts == nil {
+		return nil, huma.Error409Conflict("acme_disabled")
+	}
+	r, err := h.d.CheckCerts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if r.Checks == nil {
+		r.Checks = []certcheck.CertCheck{}
+	}
+	return &certCheckOutput{Body: r}, nil
+}
+
+// renewNodeCertificate orders the node's public certificate now and answers with what it
+// has then: the new certificate, the classified error, or the order still running.
+func (h *handlers) renewNodeCertificate(ctx context.Context, in *nodeIDInput) (*nodeTLSOutput, error) {
+	if h.d.RenewNodeCert == nil {
+		return nil, huma.Error409Conflict("acme_disabled")
+	}
+	n, err := h.getNode(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	if _, _, err := h.d.RenewNodeCert(ctx, n.ID, renewWait); errors.Is(err, acme.ErrNoTarget) {
+		return nil, huma.Error409Conflict("node_cert_not_ordered")
+	} else if err != nil {
+		return nil, err
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, "node.renew_certificate", "node", strconv.FormatInt(n.ID, 10), nil)
+	v := h.nodeTLSView(ctx, n)
+	if v == nil {
+		return nil, huma.Error409Conflict("acme_disabled")
+	}
+	return &nodeTLSOutput{Body: *v}, nil
+}
+
+func (h *handlers) nodeTLSView(ctx context.Context, n db.Node) *NodeTLSView {
+	if h.d.NodeTLS == nil {
+		return nil
+	}
+	return h.d.NodeTLS(ctx, n)
 }
 
 // nodeCertView is what a node's own certificate is now, nil without one.

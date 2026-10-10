@@ -62,6 +62,7 @@ type Manager struct {
 	lastPrune time.Time
 
 	generation atomic.Uint64 // moves whenever a node is added, changed or removed
+	tlsGen     atomic.Uint64 // moves whenever a node took a certificate with another pin
 
 	// The snapshot the syncers share (snapshot.go): changes moves with every change it
 	// may not hold any more, batches counts the traffic batches stored per node.
@@ -141,9 +142,20 @@ func (m *Manager) NodesChanged() {
 	signal(m.nodesDirty)
 }
 
-// Generation moves with every NodesChanged: what is built from the nodes (the subscription's
-// server list) is built again when it has moved.
-func (m *Manager) Generation() uint64 { return m.generation.Load() }
+// Generation moves with every NodesChanged, and when a node took a certificate with another
+// pin: what is built from the nodes (the subscription's server list) is built again when it
+// has moved.
+func (m *Manager) Generation() uint64 { return m.generation.Load() + m.tlsGen.Load() }
+
+// ServedPin is the pin of the certificate node id serves ("" for a public one), as of the
+// last state it took; ok is false while that is not known (no syncer, or none taken yet).
+func (m *Manager) ServedPin(id int64) (pin string, ok bool) {
+	s, found := m.Syncer(id)
+	if !found {
+		return "", false
+	}
+	return s.ServedPin()
+}
 
 // Syncers returns the running syncers ordered by node id.
 func (m *Manager) Syncers() []*Syncer {

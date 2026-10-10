@@ -38,8 +38,10 @@ type Node interface {
 	Health(ctx context.Context) (nodeapi.Health, error)
 }
 
-// TLSSource returns the certificate the node uses for Hysteria2/TUIC.
-type TLSSource func() (*nodeapi.TLSFiles, error)
+// TLSSource returns the certificate the node uses for its protocols on TLS (Hysteria2,
+// TUIC, AnyTLS, TrustTunnel, VLESS TLS) and the pin links carry for it: the leaf's SHA-256
+// when clients cannot trust it, "" when they can.
+type TLSSource func() (*nodeapi.TLSFiles, string, error)
 
 // Syncer drives one node.
 type Syncer struct {
@@ -80,6 +82,10 @@ type Syncer struct {
 
 	health atomic.Pointer[HealthView]
 	online atomic.Pointer[map[string]nodeapi.Online]
+	// served is the pin of the certificate in the state the node last took ("" for a public
+	// one); nil until it took one from this panel process. Links follow it, not the
+	// certificate picked now: a node that has not got the new one yet keeps being pinned.
+	served atomic.Pointer[string]
 }
 
 type HealthView struct {
@@ -196,28 +202,33 @@ func every(ctx context.Context, d time.Duration, fn func(context.Context)) {
 
 // desired builds the node's full state from the database.
 func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
-	var st nodeapi.DesiredState
+	st, _, err := s.desiredPin(ctx)
+	return st, err
+}
+
+// desiredPin is desired with the pin of the certificate in it.
+func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin string, err error) {
 	q := s.m.st.Q
 	n, err := q.GetNode(ctx, s.id)
 	if err != nil {
-		return st, err
+		return st, "", err
 	}
 	snap, err := s.m.snapshot(ctx, s.id)
 	if err != nil {
-		return st, err
+		return st, "", err
 	}
 	inbounds := snap.inbounds
 	st.Inbounds = []nodeapi.Inbound{}
 	if st.Warp, err = s.warp(ctx, n, inbounds); err != nil {
-		return st, err
+		return st, "", err
 	}
 	if st.Relay, st.Exits, err = s.cascade(ctx, n, inbounds); err != nil {
-		return st, err
+		return st, "", err
 	}
 	if s.local {
 		// The panel runs next to its own node, so its HTTPS port is the self-steal REALITY target.
 		if st.SelfStealPort, _, err = settings.Get[int](ctx, s.m.set, settings.KeyPanelPort); err != nil {
-			return st, err
+			return st, "", err
 		}
 	}
 	var bad []string
@@ -248,17 +259,17 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 	for _, sl := range snap.slots {
 		st.Slots = append(st.Slots, nodeapi.Slot{Name: sl.Name, UUID: sl.Uuid, Secret: sl.Secret})
 	}
-	if st.TLS, err = s.tls(); err != nil {
-		return st, err
+	if st.TLS, pin, err = s.tls(); err != nil {
+		return st, "", err
 	}
 	st.Torrent = snap.torrent.Block()
 	st.Filters = snap.filters.State()
 	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
-	return st, nil
+	return st, pin, nil
 }
 
 func (s *Syncer) applyState(ctx context.Context) {
-	st, err := s.desired(ctx)
+	st, pin, err := s.desiredPin(ctx)
 	if err != nil {
 		s.log.Error("build node state", "err", err)
 		return
@@ -323,6 +334,20 @@ func (s *Syncer) applyState(ctx context.Context) {
 		s.log.Info("node answers again")
 	}
 	s.log.Info("node state applied", "revision", rev, "recreated", res.Recreated)
+	// The node serves this certificate now: links may follow it (drop the pin for a public
+	// one, or pin a self-signed one again).
+	if old := s.served.Swap(&pin); old == nil || *old != pin {
+		s.m.tlsGen.Add(1)
+	}
+}
+
+// ServedPin is the pin of the certificate the node serves, as of the last state it took;
+// ok is false before it took one from this panel process.
+func (s *Syncer) ServedPin() (pin string, ok bool) {
+	if p := s.served.Load(); p != nil {
+		return *p, true
+	}
+	return "", false
 }
 
 // noteBadInbounds logs the inbounds left out of the node's state when that set changes,

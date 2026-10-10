@@ -20,6 +20,7 @@ import (
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/certcheck"
 	"mikan/internal/panel/checkhost"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
@@ -60,6 +61,17 @@ type Deps struct {
 	Online    func() map[string]nodeapi.Online
 	Cert      func() acme.Status
 	RenewCert func()
+	// RenewCertNow tries the panel's certificate now and waits up to wait for the outcome;
+	// done is false when the order still runs then. nil in development.
+	RenewCertNow func(ctx context.Context, wait time.Duration) (st acme.Status, done bool)
+	// NodeTLS is the certificate a node's protocols on TLS use now; nil: not known.
+	NodeTLS func(ctx context.Context, n db.Node) *NodeTLSView
+	// RenewNodeCert orders a remote node's public certificate now (acme.Nodes.Renew).
+	RenewNodeCert func(ctx context.Context, id int64, wait time.Duration) (acme.NodeStatus, bool, error)
+	// WakeNodeCerts has every remote node's certificate looked at now: another CA.
+	WakeNodeCerts func()
+	// CheckCerts is «Проверить сертификат»; nil in development.
+	CheckCerts func(ctx context.Context) (certcheck.CertReport, error)
 	// RoutesPreview renders a Clash profile with routing in place of the saved one
 	// (subs.Handler.Preview); nil: no preview.
 	RoutesPreview func(ctx context.Context, req subs.PreviewRequest) ([]byte, error)

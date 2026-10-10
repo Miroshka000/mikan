@@ -653,14 +653,14 @@ export interface paths {
         /** Поставить ноде свой сертификат */
         put: operations["set-node-certificate"];
         post?: never;
-        /** Вернуть ноде самоподписанный сертификат */
+        /** Убрать свой сертификат ноды: вернётся публичный, полученный панелью, или самоподписанный */
         delete: operations["clear-node-certificate"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/nodes/{id}/check": {
+    "/api/v1/nodes/{id}/certificate/renew": {
         parameters: {
             query?: never;
             header?: never;
@@ -669,25 +669,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Проверить ноду: связь, версия, часы, протоколы, порты, интернет, каскад */
-        post: operations["check-node"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/nodes/{id}/check-russia": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Проверить порты ноды из России через check-host.net */
-        post: operations["check-node-russia"];
+        /** Получить публичный сертификат ноды сейчас (ждёт до 90 с) */
+        post: operations["renew-node-certificate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1102,6 +1085,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/certificate/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить сертификаты панели и нод снаружи: что отдают порты, DNS, порт 80, заказы */
+        post: operations["check-certificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/certificate/renew": {
         parameters: {
             query?: never;
@@ -1111,7 +1111,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Запросить сертификат Let's Encrypt сейчас */
+        /** Получить сертификат панели сейчас: ждёт до 90 с и отвечает тем, что вышло (ordering — заказ ещё идёт) */
         post: operations["renew-certificate"];
         delete?: never;
         options?: never;
@@ -1309,23 +1309,6 @@ export interface paths {
         post?: never;
         /** Убрать логотип или фон страницы подписки */
         delete: operations["delete-sub-page-image"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/system/check": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Проверить сервер панели */
-        post: operations["check-server"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2121,47 +2104,48 @@ export interface components {
             /** @description Служебный вход для других нод; есть, когда кто-то выходит через эту ноду */
             relay?: components["schemas"]["CascadeRelay"];
         };
+        CertCheck: {
+            /** @description Что именно, текст — certCheck.<code> в языке панели */
+            code: string;
+            /** @description Подробности как есть: ошибка соединения или ответ центра сертификации */
+            detail?: string;
+            fix?: components["schemas"]["CertFix"];
+            /** @description Что проверено: served, compat, dns, port80, acme, node_cert, node_port */
+            id: string;
+            /** @description Имя ноды, если проверка про ноду */
+            node?: string;
+            /** Format: int64 */
+            node_id?: number;
+            params?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "ok" | "info" | "warn" | "fail";
+        };
+        CertFix: {
+            /** @enum {string} */
+            action: "renew" | "renew_node" | "use_zerossl" | "update_node" | "copy";
+            /** @description Команда для сервера (action copy) */
+            command?: string;
+            /** Format: int64 */
+            node_id?: number;
+        };
         CertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
             cert: string;
             /** @description Закрытый ключ в PEM (privkey.pem): RSA от 2048 бит, ECDSA P-256/384/521 или Ed25519 */
             key: string;
         };
-        CheckItem: {
-            /** @description Почему не ok: timeout, refused, pin_mismatch, behind, skew, busy и другие */
-            code?: string;
-            /** @description Слова ошибки как есть, для «подробнее» */
-            detail?: string;
-            /**
-             * @description Что исправит: кнопка в панели или команда на сервере
-             * @enum {string}
-             */
-            fix?: "rekey" | "update_node" | "old_node" | "open_port" | "start_node" | "check_host" | "check_dns" | "free_port" | "sync_time" | "update_panel" | "free_disk" | "check_outbound" | "restart_panel" | "exit_node";
-            /** @description Что проверено: link, hello, version, update, clock, listeners, listener, port, relay, cascade, node_dns, node_internet, node_github, node_ghcr, node_disk, node_memory, diagnose, local_node, dns, internet, github, ghcr, disk, memory */
-            id: string;
-            params?: {
-                [key: string]: string;
-            };
-            /** @enum {string} */
-            status: "ok" | "warn" | "fail" | "skip";
+        CertReport: {
+            /** Format: date-time */
+            checked_at: string;
+            checks: components["schemas"]["CertCheck"][];
         };
         CheckTargetInputBody: {
             /** @description host:port */
             dest: string;
             /** @description Имя для клиентов; по умолчанию — хост из dest */
             sni?: string;
-        };
-        CheckView: {
-            /** Format: date-time */
-            at: string;
-            items: components["schemas"]["CheckItem"][];
-            /** @description Отчёт для чата: адреса, домены, порт API и ключи скрыты */
-            report: string;
-        };
-        CityResult: {
-            city: string;
-            id: string;
-            ports: components["schemas"]["PortResult"][];
         };
         ClientEndpoint: {
             /**
@@ -2719,22 +2703,6 @@ export interface components {
             /** @description Публично доверенный для адреса: приложения принимают его без пина */
             trusted: boolean;
         };
-        NodeHello: {
-            /** Format: date-time */
-            at: string;
-            code?: string;
-            /** @description Адрес ноды в панели */
-            host?: string;
-            /** @description Hello пришёл не с того IP, что указан в панели */
-            ip_differs: boolean;
-            /** @description Панель достучалась до ноды в ответ на её hello */
-            ok: boolean;
-            params?: {
-                [key: string]: string;
-            };
-            /** @description Адрес, с которого пришёл hello */
-            seen_ip?: string;
-        };
         NodeInfo: {
             /** @description host:port API ноды; пусто у своей ноды */
             address: string;
@@ -2745,11 +2713,6 @@ export interface components {
             certificate?: components["schemas"]["NodeCertView"];
             /** Format: date-time */
             checked_at?: string;
-            /**
-             * Format: int64
-             * @description Часы ноды минус часы панели, секунды; нет у старых нод
-             */
-            clock_skew?: number;
             /** Format: int64 */
             conns: number;
             /**
@@ -2759,35 +2722,13 @@ export interface components {
             cpu_percent: number;
             domain: string;
             enabled: boolean;
-            /** @description Слова ошибки связи как есть, для «подробнее» */
             error?: string;
-            /**
-             * @description Почему панель не достучалась до ноды
-             * @enum {string}
-             */
-            error_code?: "timeout" | "refused" | "unreachable" | "dns" | "pin_mismatch" | "tls" | "http_status" | "unknown";
-            /** @description host и port адреса API ноды, status ответа */
-            error_params?: {
-                [key: string]: string;
-            };
-            /**
-             * Format: date-time
-             * @description С какого момента нет связи
-             */
-            error_since?: string;
-            /** @description Последний hello ноды после запуска: достучалась ли панель в ответ */
-            hello?: components["schemas"]["NodeHello"];
             /** @description Адрес для клиентов */
             host: string;
             /** Format: int64 */
             id: number;
             /** Format: int64 */
             inbounds: number;
-            /**
-             * Format: date-time
-             * @description Когда нода последний раз отвечала (с запуска панели)
-             */
-            last_ok_at?: string;
             /** Format: int64 */
             listeners: number;
             /** Format: int64 */
@@ -2809,6 +2750,7 @@ export interface components {
             public_name: string;
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
+            tls?: components["schemas"]["NodeTLSView"];
             /**
              * Format: int64
              * @description Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0
@@ -2850,6 +2792,45 @@ export interface components {
              * @description Сколько унесли все ноды вместе
              */
             total: number;
+        };
+        NodeStatus: {
+            /**
+             * @description Кто выдал сертификат, который у ноды сейчас
+             * @enum {string}
+             */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            /** @enum {string} */
+            ca_wanted?: "letsencrypt" | "zerossl" | "google";
+            /** Format: date-time */
+            checked_at?: string;
+            /** @description Код errors.acme: node_outdated — нода старее панели и не умеет получать сертификат */
+            error?: string;
+            error_detail?: string;
+            holder?: string;
+            identifier: string;
+            issuer?: string;
+            names?: string[];
+            /** Format: date-time */
+            not_after?: string;
+            ordering?: boolean;
+            /** Format: date-time */
+            retry_at?: string;
+        };
+        NodeTLSView: {
+            acme?: components["schemas"]["NodeStatus"];
+            /** @enum {string} */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            issuer?: string;
+            /**
+             * @description custom — свой, acme — публичный, полученный панелью для ноды, panel — публичный сертификат панели (своя нода), self-signed — самоподписанный
+             * @enum {string}
+             */
+            kind: "custom" | "acme" | "panel" | "self-signed";
+            names?: string[];
+            /** Format: date-time */
+            not_after?: string;
+            /** @description Ссылки закрепляют самоподписанный сертификат: в sing-box приложениях (SFA, SFI) протоколы ноды на TLS не появятся, TUIC без проверки сертификата */
+            pinned: boolean;
         };
         NodeView: {
             /** Format: date-time */
@@ -3198,6 +3179,15 @@ export interface components {
             trial_tariff_id?: number;
         };
         PatchSettingsInputBody: {
+            /**
+             * @description Смена центра выпускает сертификаты панели и нод заново
+             * @enum {string}
+             */
+            acme_ca?: "letsencrypt" | "zerossl" | "google";
+            /** @description Ключ HMAC (base64url); пусто — убрать. Обратно не показывается */
+            acme_eab_hmac?: string;
+            acme_eab_kid?: string;
+            acme_email?: string;
             app_branding?: boolean;
             auto_port?: boolean;
             auto_sni?: boolean;
@@ -3415,15 +3405,6 @@ export interface components {
             /** @description Подключения, которые считаются в этот пул */
             inbounds: string[];
             name: string;
-        };
-        PortResult: {
-            error?: string;
-            /** Format: int64 */
-            ms?: number;
-            ok: boolean;
-            pending?: boolean;
-            /** Format: int64 */
-            port: number;
         };
         Preview: {
             /** @description Пользователи, которых mikan не примет, с причиной */
@@ -3717,19 +3698,6 @@ export interface components {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
         };
-        RussiaPort: {
-            /** @description api или имя подключения */
-            name: string;
-            /** Format: int64 */
-            port: number;
-        };
-        RussiaView: {
-            /** Format: date-time */
-            at: string;
-            cached: boolean;
-            cities: components["schemas"]["CityResult"][];
-            ports: components["schemas"]["RussiaPort"][];
-        };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
             ip: string;
@@ -3756,6 +3724,17 @@ export interface components {
             user_agent: string;
         };
         SettingsView: {
+            /**
+             * @description Центр сертификации панели и нод: letsencrypt, zerossl (нужен e-mail) или google (нужен ключ EAB). IP-адреса всегда получают сертификат Let's Encrypt
+             * @enum {string}
+             */
+            acme_ca: "letsencrypt" | "zerossl" | "google";
+            /** @description Google Trust Services: ключ HMAC сохранён (сам ключ не показывается) */
+            acme_eab_hmac_set: boolean;
+            /** @description Google Trust Services: keyId ключа EAB */
+            acme_eab_kid: string;
+            /** @description E-mail для центра сертификации; ZeroSSL привязывает к нему аккаунт */
+            acme_email: string;
             admin_url: string;
             /** @description Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки */
             app_branding: boolean;
@@ -3867,17 +3846,38 @@ export interface components {
             up_bps: number;
         };
         Status: {
+            /** @enum {string} */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            /**
+             * @description Куда уйдёт следующий заказ: выбранный центр, для IP всегда Let's Encrypt
+             * @enum {string}
+             */
+            ca_wanted: "letsencrypt" | "zerossl" | "google";
             /** Format: date-time */
             checked_at: string;
             error?: string;
+            /** @description Подробности ошибки как есть, для «подробнее» */
+            error_detail?: string;
+            /** @description Кто держит порт 80 (port80_busy), если это видно */
+            holder?: string;
             identifier: string;
             issuer?: string;
-            /** @enum {string} */
-            kind: "self-signed" | "letsencrypt" | "custom";
+            /**
+             * @description acme — выдан центром сертификации автоматически (ca), custom — свой, self-signed — временный самоподписанный
+             * @enum {string}
+             */
+            kind: "self-signed" | "acme" | "custom";
             names?: string[];
             /** Format: date-time */
             not_after: string;
-            /** @description Свой сертификат публично доверенный для адреса панели */
+            /** @description Заказ идёт прямо сейчас */
+            ordering?: boolean;
+            /**
+             * Format: date-time
+             * @description rate_limited: когда центр снова примет заказ
+             */
+            retry_at?: string;
+            /** @description Сертификат публично доверенный для адреса панели */
             trusted?: boolean;
         };
         SubDocBody: {
@@ -6044,7 +6044,7 @@ export interface operations {
             };
         };
     };
-    "check-node": {
+    "renew-node-certificate": {
         parameters: {
             query?: never;
             header?: never;
@@ -6061,38 +6061,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CheckView"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "check-node-russia": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RussiaView"];
+                    "application/json": components["schemas"]["NodeTLSView"];
                 };
             };
             /** @description Error */
@@ -7190,6 +7159,35 @@ export interface operations {
             };
         };
     };
+    "check-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CertReport"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "renew-certificate": {
         parameters: {
             query?: never;
@@ -7199,12 +7197,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Accepted */
-            202: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Status"];
+                };
             };
             /** @description Error */
             default: {
@@ -7708,35 +7708,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "check-server": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CheckView"];
-                };
             };
             /** @description Error */
             default: {
