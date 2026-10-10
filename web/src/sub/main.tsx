@@ -18,6 +18,21 @@ import { DocScreen, PageBackdrop, PageBlocks, PageShell } from "./view";
 /** Pauses between the reloads after a payment: the panel applies a paid one within seconds. */
 const AFTER_PAYMENT_MS = [2_000, 5_000, 10_000];
 
+type Insets = { top?: number; bottom?: number; left?: number; right?: number };
+
+/**
+ * Telegram's two safe areas: the device's (notch, home bar) and, in full screen, the room
+ * its own buttons take on top of it. Their sums go to --tg-top and --tg-bottom on <html>,
+ * which the page's padding takes when they exceed the browser's own safe area.
+ */
+const insets: { safe?: Insets; content?: Insets } = {};
+function applyInsets() {
+  const root = document.documentElement.style;
+  const sum = (side: "top" | "bottom") => (insets.safe?.[side] ?? 0) + (insets.content?.[side] ?? 0);
+  root.setProperty("--tg-top", `${sum("top")}px`);
+  root.setProperty("--tg-bottom", `${sum("bottom")}px`);
+}
+
 // What the admin made of the page, in its HTML: the look goes on before the first paint.
 const page = readPage();
 // The subscription path, as the server's <base> gives it: the images and instructions are
@@ -99,6 +114,10 @@ function SubPage() {
     if (!tgMode) return;
     tgEvent("web_app_ready");
     tgEvent("web_app_expand");
+    // In full screen Telegram draws its own buttons over the top of the page: it tells how
+    // much room they take when asked, and again whenever that changes.
+    tgEvent("web_app_request_safe_area");
+    tgEvent("web_app_request_content_safe_area");
     void session();
     loadShop(subRoot, initData)
       .then(setShop)
@@ -111,6 +130,16 @@ function SubPage() {
     if (!tgMode) return;
     let timers: number[] = [];
     const onEvent = (type: string, data: unknown) => {
+      if (type === "safe_area_changed" || type === "content_safe_area_changed") {
+        insets[type === "safe_area_changed" ? "safe" : "content"] = data as Insets;
+        applyInsets();
+        return;
+      }
+      if (type === "fullscreen_changed") {
+        tgEvent("web_app_request_safe_area");
+        tgEvent("web_app_request_content_safe_area");
+        return;
+      }
       if (type === "back_button_pressed") {
         history.back();
         return;

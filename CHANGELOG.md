@@ -31,6 +31,8 @@ the signed manifest, and the panel shows the one in its language.
 - **The panel's themes on the subscription page and in the Mini App**: Settings → Subscription page → Look offers every panel theme, each with a small live preview. Mikan, Ocean, Sakura and Forest still follow the light, dark or the visitor's mode; the others are light or dark by themselves and bring their own backdrop. The brand's colour still overrides the accent.
 - Telegram bot: the "Promo codes" button in the main menu can be hidden (Telegram → Options). It stays on by default, and codes can still be entered on the subscription page in the Mini App and at checkout.
 - A read-only API key no longer sees the Mini App's address in the Telegram settings: it carried the subscription path. Thanks to amnesiaof (#130).
+- Promo codes moved into Payments, as a tab next to the history, the methods and the rules: one menu item fewer. Old links lead there.
+- The Mini App in Telegram's full screen keeps its header clear of Telegram's own buttons (Close, the menu): the page now takes the room Telegram reports for them.
 
 ### ru
 - Платежи через Platega висели в «Ждёт оплаты», хотя покупатель заплатил: после выбора способа Platega добавляет свою комиссию сверху (5% для СБП), а панель не принимала сумму, отличную от счёта. Теперь оплата, покрывающая счёт, засчитывается; меньше или в другой валюте по-прежнему отклоняется. Обновите и дополнение Platega до 1.0.5: прежнее не читало сумму в том виде, в каком её присылает Platega, поэтому каждая проверка падала, а Platega показывала уведомления неуспешными. Платежи, которые уже истекли в ожидании, нужно выдать вручную.
@@ -59,6 +61,8 @@ the signed manifest, and the panel shows the one in its language.
 - **Темы панели на странице подписки и в Mini App**: «Настройки → Страница подписки → Оформление» предлагает все темы панели, у каждой живое превью. Mikan, Ocean, Sakura и Forest по-прежнему следуют режиму (светлый, тёмный или как у посетителя), остальные светлые или тёмные сами и приносят свой фон. Цвет бренда по-прежнему заменяет акцент.
 - Telegram-бот: кнопку «Промокоды» в главном меню можно скрыть (Telegram → Поведение и уведомления). По умолчанию она включена, а ввести код можно на странице подписки в Mini App и при оплате.
 - API-ключ только на чтение больше не видит адрес Mini App в настройках Telegram: в нём был путь подписок. Спасибо amnesiaof (#130).
+- Промокоды переехали в «Платежи», вкладкой рядом с историей, способами и правилами: в меню на пункт меньше. Старые ссылки ведут туда.
+- Mini App в полноэкранном режиме Telegram больше не прячет шапку под кнопками Telegram («Закрыть», меню): страница отступает на столько, сколько они занимают.
 
 ## 0.5.0.4
 ### en

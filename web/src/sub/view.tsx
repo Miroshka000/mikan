@@ -45,7 +45,7 @@ export function PageShell({ config, brand, logo, right, children }: { config: Pa
       </span>
     );
   return (
-    <main className="calm-glass mx-auto flex max-w-[440px] flex-col gap-3 px-4 pt-[calc(24px+env(safe-area-inset-top))] pb-[calc(40px+env(safe-area-inset-bottom))]">
+    <main className="calm-glass mx-auto flex max-w-[440px] flex-col gap-3 px-4 pt-[calc(24px+max(env(safe-area-inset-top),var(--tg-top,0px)))] pb-[calc(40px+max(env(safe-area-inset-bottom),var(--tg-bottom,0px)))]">
       <div className="flex items-center gap-2 px-1 pb-1">
         {mark}
         {b.subtitle ? (
