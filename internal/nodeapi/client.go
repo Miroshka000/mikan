@@ -88,7 +88,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any, timeo
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
@@ -230,7 +230,7 @@ var TunnelHosts = []string{"api.telegram.org:443"}
 func (c *Client) Tunnel(ctx context.Context, addr string) (net.Conn, error) {
 	conn, err := c.dial(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	if d, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(d)
@@ -240,13 +240,13 @@ func (c *Client) Tunnel(ctx context.Context, addr string) (net.Conn, error) {
 	req := &http.Request{Method: http.MethodConnect, URL: &url.URL{Host: addr}, Host: addr, Header: http.Header{}}
 	if err := req.Write(conn); err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	br := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(br, req)
 	if err != nil {
 		conn.Close()
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer conn.Close()
@@ -270,3 +270,11 @@ type bufConn struct {
 }
 
 func (c *bufConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+
+// Diagnose asks the node how its server is: DNS, the internet, GitHub and GHCR for
+// updates, its clock, disk and memory. Nodes that predate it answer 404 (a *StatusError).
+func (c *Client) Diagnose(ctx context.Context) (Diagnosis, error) {
+	var r Diagnosis
+	err := c.do(ctx, http.MethodPost, "/v1/diagnose", nil, &r, 25*time.Second)
+	return r, err
+}

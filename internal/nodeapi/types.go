@@ -161,6 +161,9 @@ type Health struct {
 	// Host is what listens on the node's server, whoever runs it; nil when the node does not
 	// say (before 0.5.0.2, or it cannot read the kernel's tables).
 	Host *HostPorts `json:"host,omitempty"`
+	// Time is the node's clock as it answered: the panel holds it against its own and warns
+	// of a skew. Older nodes send none.
+	Time time.Time `json:"time,omitzero"`
 }
 
 // HostPorts are the ports something listens on at the node's server: TCP sockets in the
@@ -483,3 +486,29 @@ type SpeedTest struct {
 	UpBps    int64     `json:"up_bps" doc:"Отдача, бит/с"`
 	Error    string    `json:"error,omitempty"`
 }
+
+// Diagnosis is a server's look at what it needs to work (POST /v1/diagnose on a node; the
+// panel runs the same on its own server): names, the internet, the places updates come
+// from, its clock, disk and memory. The targets are fixed: nothing in the request says
+// where to connect.
+type Diagnosis struct {
+	At    time.Time  `json:"at"`
+	Items []DiagItem `json:"items"`
+}
+
+// DiagItem is one check of a Diagnosis.
+type DiagItem struct {
+	ID     string            `json:"id" enum:"dns,internet,github,ghcr,clock,disk,memory"`
+	Status string            `json:"status" enum:"ok,warn,fail,skip"`
+	Code   string            `json:"code,omitempty" doc:"Почему не ok: timeout, refused, dns, tls, skew, low и другие"`
+	Params map[string]string `json:"params,omitempty"`
+	Detail string            `json:"detail,omitempty" doc:"Слова ошибки, без секретов"`
+}
+
+// The states of a check.
+const (
+	CheckOK   = "ok"
+	CheckWarn = "warn"
+	CheckFail = "fail"
+	CheckSkip = "skip"
+)
