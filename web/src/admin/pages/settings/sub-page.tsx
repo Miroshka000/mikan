@@ -8,7 +8,7 @@ import { useMemo, useRef, useState, type Dispatch, type ReactNode, type SetState
 import { api, ApiError, basePath, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk, useNodes, useSettings } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
-import { foldedList, Mock, themeNames, ThemesToggle } from "../../../components/theme";
+import { foldedList, Mock, themeNames, ThemesToggle, useTilesPerRow } from "../../../components/theme";
 import { QueryBoundary } from "../../../components/query";
 import { Switch, SwitchRow } from "../../../components/switch";
 import { SaveBar, WithPreview } from "../../../components/layout";
@@ -221,6 +221,7 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
   const setBg = (patch: Partial<Look["background"]>) => setLook({ background: { ...bg, ...patch } });
   const names = themeNames();
   const [themesOpen, setThemesOpen] = useState(false);
+  const [themeRows, perRow] = useTilesPerRow();
   // The four that follow the page's light/dark mode, then every other panel theme as it is.
   const moded = MODE_PALETTES.map((id) => ({ id, label: names[id], theme: id === "mikan" && look.mode === "dark" ? ("midnight" as const) : id }));
   const fixed = THEMES.filter((id) => !followsMode(id) && id !== "midnight").map((id) => ({ id, label: names[id], theme: id }));
@@ -233,7 +234,7 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
   return (
     <>
       <Card title={t("settings.page.theme")} sub={t("settings.page.themeSub")}>
-        <div role="radiogroup" aria-label={t("settings.page.theme")} className="mb-4 flex flex-col gap-4">
+        <div ref={themeRows} role="radiogroup" aria-label={t("settings.page.theme")} className="mb-4 flex flex-col gap-4">
           {[
             { label: t("settings.page.themesModed"), list: moded },
             { label: t("settings.page.themesFixed"), list: fixed },
@@ -241,7 +242,7 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
             <div key={g.label} role="group" aria-label={g.label}>
               <div className="theme-group-label">{g.label}</div>
               <div className="theme-tiles">
-                {foldedList(g.list, look.palette, themesOpen).map((p) => (
+                {foldedList(g.list, look.palette, themesOpen, perRow).map((p) => (
                   <button
                     key={p.id}
                     type="button"
@@ -261,7 +262,9 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
               </div>
             </div>
           ))}
-          <ThemesToggle open={themesOpen} total={moded.length + fixed.length} onToggle={() => setThemesOpen((v) => !v)} />
+          {themesOpen || fixed.length > perRow || moded.length > perRow ? (
+            <ThemesToggle open={themesOpen} total={moded.length + fixed.length} onToggle={() => setThemesOpen((v) => !v)} />
+          ) : null}
         </div>
         {followsMode(look.palette) ? (
         <Field label={t("settings.page.mode")} hint={look.mode === "system" ? t("settings.page.modeSystemHint") : undefined}>

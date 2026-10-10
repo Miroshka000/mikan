@@ -203,7 +203,7 @@
      a screen or so. A lone card, a notice and the save bar take the whole row. */
   @media (min-width: 1440px) {
     .section-body.narrow { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-    .section-body.narrow > :only-child, .section-body.narrow > .savebar, .section-body.narrow > .banner, .section-body.narrow > [role="status"], .section-body.narrow > .span-all { grid-column: 1 / -1; }
+    .section-body.narrow > :only-child, .section-body.narrow > .savebar, .section-body.narrow > .banner, .section-body.narrow > [role="status"] { grid-column: 1 / -1; }
     .section-body.narrow > .savebar { justify-self: center; }
     /* Packed by useMasonry: rows of 4px, each card spans its height plus the 16px gap. */
     .section-body.narrow.masonry { grid-auto-rows: 4px; row-gap: 0; grid-auto-flow: row dense; }

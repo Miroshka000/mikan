@@ -83,15 +83,38 @@ export function setTheme(choice: ThemeChoice, opts: { animate?: boolean; keep?: 
 
 type Option = { id: ThemeChoice; label: string };
 
-/** How many tiles a folded group shows (the chosen one is shown on top of them). */
-const FOLDED = 4;
+/** A tile's least width and the gap between tiles: .theme-tiles in app.css. */
+const TILE_MIN = 148;
+const TILE_GAP = 12;
 
-/** A group's tiles while the list is folded: the first few, and the chosen one wherever it is. */
-export function foldedList<T extends { id: string }>(list: readonly T[], chosen: string, open: boolean): T[] {
-  if (open) return [...list];
-  const head = list.slice(0, FOLDED);
+/**
+ * How many tiles fit in one row of el's width, followed as it changes: a folded group
+ * shows one full row, whether the card is a column of the settings or the whole width.
+ */
+export function useTilesPerRow(): [React.RefObject<HTMLDivElement | null>, number] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [n, setN] = useState(4);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = (w: number) => setN(Math.max(1, Math.floor((w + TILE_GAP) / (TILE_MIN + TILE_GAP))));
+    measure(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(([e]) => e && measure(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, n];
+}
+
+/**
+ * A group's tiles while the list is folded: one row of n, the chosen one taking the last
+ * place when it is further down, so a row never spills into a second.
+ */
+export function foldedList<T extends { id: string }>(list: readonly T[], chosen: string, open: boolean, n: number): T[] {
+  if (open || list.length <= n) return [...list];
+  const head = list.slice(0, n);
   const pick = list.find((o) => o.id === chosen);
-  return pick && !head.includes(pick) ? [...head, pick] : head;
+  return pick && !head.includes(pick) ? [...head.slice(0, n - 1), pick] : head;
 }
 
 /** The button under a folded list of themes: all of them, or back to a few. */
@@ -107,14 +130,17 @@ export function ThemesToggle({ open, total, onToggle }: { open: boolean; total: 
 export function ThemeCard() {
   const [choice, set] = useState<ThemeChoice>(getTheme);
   const [open, setOpen] = useState(false);
+  const [rows, perRow] = useTilesPerRow();
   const refs = useRef(new Map<ThemeChoice, HTMLButtonElement>());
 
   const names = themeNames();
   const groups: { label: string; options: Option[] }[] = [
     { label: t("settings.themeLight"), options: LIGHT.map((id) => ({ id, label: names[id] })) },
     { label: t("settings.themeDark"), options: DARK.map((id) => ({ id, label: names[id] })) },
-    { label: t("settings.themeAuto"), options: [{ id: "system", label: t("settings.themeSystem") }] },
+    // Folded, "as the system" waits behind "All themes" unless it is the choice.
+    ...(open || choice === "system" ? [{ label: t("settings.themeAuto"), options: [{ id: "system" as const, label: t("settings.themeSystem") }] }] : []),
   ];
+  const folds = THEMES.length + 1 > groups.reduce((sum, g) => sum + Math.min(g.options.length, perRow), 0);
   const order = groups.flatMap((g) => g.options.map((o) => o.id));
 
   const pick = (id: ThemeChoice) => {
@@ -153,19 +179,19 @@ export function ThemeCard() {
   }, []);
 
   return (
-    <section className="card glass reveal span-all" style={{ "--i": 4 } as React.CSSProperties}>
+    <section className="card glass reveal" style={{ "--i": 4 } as React.CSSProperties}>
       <div className="card-head">
         <div>
           <h2 className="card-title">{t("settings.theme")}</h2>
           <div className="card-sub">{t("settings.themeSub")}</div>
         </div>
       </div>
-      <div role="radiogroup" aria-label={t("settings.theme")} className="flex flex-col gap-4">
+      <div ref={rows} role="radiogroup" aria-label={t("settings.theme")} className="flex flex-col gap-4">
         {groups.map((g) => (
           <div key={g.label} role="group" aria-label={g.label}>
             <div className="theme-group-label">{g.label}</div>
             <div className="theme-tiles">
-              {foldedList(g.options, choice, open).map((o) => {
+              {foldedList(g.options, choice, open, perRow).map((o) => {
                 const checked = choice === o.id;
                 return (
                   <button
@@ -202,7 +228,7 @@ export function ThemeCard() {
           </div>
         ))}
       </div>
-      <ThemesToggle open={open} total={THEMES.length} onToggle={() => setOpen((v) => !v)} />
+      {folds || open ? <ThemesToggle open={open} total={THEMES.length} onToggle={() => setOpen((v) => !v)} /> : null}
     </section>
   );
 }
