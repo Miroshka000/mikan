@@ -212,12 +212,20 @@ func wordsFor(lang string) *words {
 	return &ru
 }
 
-// render fills {variables} into an admin's (or built-in) text. The text itself is plain:
-// it is escaped for Telegram's HTML, and so are the values.
-//
+// render turns an admin's (or built-in) text into the bot's HTML: its Markdown becomes
+// formatting (markdown.go), the rest is escaped, and the {variables} are filled in. A
+// value is text whatever it holds: a subscriber's name with stars or tags stays as typed.
+func render(text string, vars map[string]string) string {
+	return markdownHTML(text, func(s string) string { return fill(s, vars) })
+}
+
+// Render is render for the panel's preview: the HTML the bot would send for text.
+func Render(text string, vars map[string]string) string { return render(text, vars) }
+
+// fill escapes a run of text for Telegram's HTML and fills its {variables}, escaped too.
 // One pass over the text: a value that itself holds {something} is not filled again, and
 // the result does not depend on the order the variables are listed in.
-func render(text string, vars map[string]string) string {
+func fill(text string, vars map[string]string) string {
 	rest := html.EscapeString(text)
 	var out strings.Builder
 	for {

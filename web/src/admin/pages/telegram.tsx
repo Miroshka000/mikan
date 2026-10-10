@@ -16,6 +16,7 @@ import { useToast } from "../../components/toast";
 import { Bar, Button, Field, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui";
 import { Switch, SwitchRow } from "../../components/switch";
 import { t, tMaybe, useLocale } from "../../i18n";
+import { MarkdownHint, TgHtml, TgTextPreview, useTgPreview } from "./telegram-text";
 
 type View = Schemas["TelegramView"];
 type Config = Schemas["Config"];
@@ -646,6 +647,7 @@ function actionLabel(a: string): string {
 }
 
 function MenuCard({ draft, setDraft }: { draft: Config; setDraft: (c: Config) => void }) {
+  const sample = useSampleVars();
   const set = (i: number, patch: Partial<MenuButton>) => setDraft({ ...draft, buttons: draft.buttons.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
   const move = (i: number, d: -1 | 1) => {
     const list = [...draft.buttons];
@@ -705,7 +707,13 @@ function MenuCard({ draft, setDraft }: { draft: Config; setDraft: (c: Config) =>
               </div>
               {b.action === "url" ? <input className="input mono mt-2" value={b.url ?? ""} onChange={(e) => set(i, { url: e.target.value })} placeholder="https://… / tg://…" aria-label={t("telegram.buttonUrl")} /> : null}
               {b.action === "page" ? (
-                <textarea className="input mt-2" value={b.text ?? ""} maxLength={3000} onChange={(e) => set(i, { text: e.target.value })} placeholder={t("telegram.pagePlaceholder")} aria-label={t("telegram.pageText")} />
+                <>
+                  <textarea className="input mt-2" value={b.text ?? ""} maxLength={3000} onChange={(e) => set(i, { text: e.target.value })} placeholder={t("telegram.pagePlaceholder")} aria-label={t("telegram.pageText")} />
+                  <div className="mt-1">
+                    <MarkdownHint />
+                  </div>
+                  <TgTextPreview text={b.text ?? ""} vars={sample} label={t("telegram.md.preview")} />
+                </>
               ) : null}
             </motion.li>
           ))}
@@ -736,6 +744,9 @@ const TEXTS: { key: TextKey; label: string }[] = [
 ];
 
 function TextsCard({ draft, setDraft, defaults }: { draft: Config; setDraft: (c: Config) => void; defaults: Schemas["Texts"] }) {
+  // The text being edited shows under its field as the bot will send it.
+  const [active, setActive] = useState<TextKey | null>(null);
+  const sample = useSampleVars();
   return (
     <section {...rise(2)}>
       <div className="card-head">
@@ -757,10 +768,25 @@ function TextsCard({ draft, setDraft, defaults }: { draft: Config; setDraft: (c:
       </Field>
       {TEXTS.map(({ key, label }) => (
         <Field key={key} label={tMaybe(label) ?? key} htmlFor={`tg-${key}`}>
-          <textarea id={`tg-${key}`} className="input" rows={key === "main" || key === "welcome" ? 5 : 2} maxLength={3000} value={draft.texts[key]} placeholder={defaults[key]} onChange={(e) => setDraft({ ...draft, texts: { ...draft.texts, [key]: e.target.value } })} />
+          <>
+            <textarea
+              id={`tg-${key}`}
+              className="input"
+              rows={key === "main" || key === "welcome" ? 5 : 2}
+              maxLength={3000}
+              value={draft.texts[key]}
+              placeholder={defaults[key]}
+              onFocus={() => setActive(key)}
+              onChange={(e) => setDraft({ ...draft, texts: { ...draft.texts, [key]: e.target.value } })}
+            />
+            {active === key ? <TgTextPreview text={draft.texts[key]} vars={sample} label={t("telegram.md.preview")} /> : null}
+          </>
         </Field>
       ))}
       <p className="text-xs text-[var(--ink-500)]">{t("telegram.variables")}</p>
+      <div className="mt-2">
+        <MarkdownHint />
+      </div>
     </section>
   );
 }
@@ -808,6 +834,9 @@ function BroadcastCard({ v }: { v: View }) {
   });
   const busy = !!v.broadcast?.active;
   const ready = v.running && v.accounts > 0 && !busy;
+  // A broadcast fills only {brand}.
+  const sample = useSampleVars();
+  const brandOnly = useMemo(() => ({ brand: sample.brand ?? "VPN" }), [sample.brand]);
   return (
     <section {...rise(4)}>
       <div className="card-head">
@@ -817,6 +846,10 @@ function BroadcastCard({ v }: { v: View }) {
         </div>
       </div>
       <textarea className="input" rows={4} maxLength={3500} value={text} onChange={(e) => setText(e.target.value)} placeholder={t("telegram.broadcastPlaceholder")} aria-label={t("telegram.broadcast")} disabled={!v.running} />
+      <div className="mt-1">
+        <MarkdownHint />
+      </div>
+      <TgTextPreview text={text} vars={brandOnly} label={t("telegram.md.preview")} />
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button variant="primary" disabled={!ready || !text.trim()} onClick={() => setConfirm(true)}>
           <Send size={16} aria-hidden /> {t("telegram.broadcastButton")}
@@ -861,13 +894,12 @@ function BroadcastProgress({ b }: { b: Schemas["TelegramBroadcast"] }) {
   );
 }
 
-/** The main menu as a subscriber sees it in Telegram, with sample data. */
-function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean }) {
+/** Sample values of the texts' {variables}, for the previews. */
+function useSampleVars(): Record<string, string> {
   const settings = useSettings();
   const brand = settings.data?.brand || "VPN";
-  const support = !!settings.data?.support_url;
   const locale = useLocale();
-  const sample: Record<string, string> = useMemo(
+  return useMemo(
     () => ({
       brand,
       name: t("telegram.sample.name"),
@@ -885,7 +917,17 @@ function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean })
     // The sample texts are translated: they change with the language.
     [brand, locale],
   );
-  const text = (draft.texts.main || v.defaults.main).replace(/\{(\w+)\}/g, (m, k: string) => sample[k] ?? m);
+}
+
+/** The main menu as a subscriber sees it in Telegram, with sample data. */
+function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean }) {
+  const settings = useSettings();
+  const support = !!settings.data?.support_url;
+  const sample = useSampleVars();
+  const source = draft.texts.main || v.defaults.main;
+  const html = useTgPreview(source, sample);
+  // Until the panel answers, the text as typed with the samples in it.
+  const text = source.replace(/\{(\w+)\}/g, (m, k: string) => sample[k] ?? m);
   const reduce = useReducedMotion();
   const rows: MenuButton[][] = [];
   for (const b of draft.buttons) {
@@ -907,7 +949,7 @@ function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean })
         </div>
       )}
       <div className="tg-chat">
-        <div className="tg-bubble">{text}</div>
+        <div className="tg-bubble">{html.data && !html.isError ? <TgHtml html={html.data.html} /> : text}</div>
         <motion.div className="tg-keyboard" layout={!reduce} transition={slide}>
           <AnimatePresence initial={false} mode="popLayout">
             {rows.map((r) => (

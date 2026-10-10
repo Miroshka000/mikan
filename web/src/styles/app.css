@@ -368,6 +368,12 @@ html[data-theme="forest"] {
   /* Telegram preview: a chat bubble and inline buttons, in Telegram's own light palette. */
   .tg-chat { border-radius: 16px; padding: 16px 12px; background: linear-gradient(160deg, #d9e8c9, #c9dcb3); }
   .tg-bubble { max-width: 100%; border-radius: 14px 14px 14px 4px; background: #fff; padding: 8px 12px; font-size: 13px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; color: #0f1419; box-shadow: 0 1px 1px rgba(0, 0, 0, 0.12); }
+  /* The formatting the bot's HTML can carry, as Telegram draws it. */
+  .tg-bubble code, .tg-bubble pre { font-family: var(--font-mono-stack, ui-monospace, monospace); font-size: 12px; }
+  .tg-bubble pre { margin: 4px 0; padding: 4px 8px; border-radius: 8px; background: rgba(15, 20, 25, 0.06); white-space: pre-wrap; }
+  .tg-bubble blockquote { margin: 4px 0; padding: 0 0 0 8px; border-left: 3px solid #2481cc; }
+  .tg-spoiler { border-radius: 4px; background: rgba(15, 20, 25, 0.16); color: transparent; transition: color 0.15s; }
+  .tg-spoiler:hover { color: inherit; }
   .tg-keyboard { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
   .tg-row { display: flex; gap: 4px; }
   .tg-btn { flex: 1; min-width: 0; border-radius: 10px; background: rgba(40, 60, 30, 0.28); color: #fff; font-size: 12px; font-weight: 500; line-height: 16px; padding: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

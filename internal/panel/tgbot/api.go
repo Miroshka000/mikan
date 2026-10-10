@@ -247,7 +247,24 @@ func (c *Client) Send(ctx context.Context, chat int64, text string, kb *Keyboard
 		in["reply_markup"] = kb
 	}
 	err := c.call(ctx, "sendMessage", in, &m)
+	if unparsable(err) {
+		asPlain(in, text)
+		err = c.call(ctx, "sendMessage", in, &m)
+	}
 	return m, err
+}
+
+// unparsable: Telegram refused the message's HTML. The admin's texts are made to parse
+// (markdown.go); should one still not, it goes as plain text instead of not at all.
+func unparsable(err error) bool {
+	var ae *APIError
+	return errors.As(err, &ae) && ae.Code == 400 && strings.Contains(strings.ToLower(ae.Description), "can't parse entities")
+}
+
+// asPlain makes a request's HTML text plain.
+func asPlain(in map[string]any, text string) {
+	in["text"] = plainText(text)
+	delete(in, "parse_mode")
 }
 
 // SendTo is Send for a Telegram channel target: its numeric chat id or @username.
@@ -284,6 +301,10 @@ func (c *Client) Edit(ctx context.Context, chat, msg int64, text string, kb *Key
 		in["reply_markup"] = kb
 	}
 	err := c.call(ctx, "editMessageText", in, nil)
+	if unparsable(err) {
+		asPlain(in, text)
+		err = c.call(ctx, "editMessageText", in, nil)
+	}
 	var ae *APIError
 	if errors.As(err, &ae) && strings.Contains(ae.Description, "message is not modified") {
 		return nil
