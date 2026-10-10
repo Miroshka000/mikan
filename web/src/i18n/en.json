@@ -1191,6 +1191,8 @@
     "themeDark": "Dark",
     "themeAuto": "Auto",
     "themeSystem": "As the system",
+    "themesAll": "All themes · {n}",
+    "themesLess": "Show fewer",
     "saved": "Settings saved",
     "host": "Server address",
     "hostHint": "The IP address clients use to connect to the VPN.",

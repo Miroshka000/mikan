@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { DARK_THEMES, isDarkTheme, LIGHT_THEMES, THEMES, type Theme } from "../lib/themes";
@@ -83,8 +83,30 @@ export function setTheme(choice: ThemeChoice, opts: { animate?: boolean; keep?: 
 
 type Option = { id: ThemeChoice; label: string };
 
+/** How many tiles a folded group shows (the chosen one is shown on top of them). */
+const FOLDED = 4;
+
+/** A group's tiles while the list is folded: the first few, and the chosen one wherever it is. */
+export function foldedList<T extends { id: string }>(list: readonly T[], chosen: string, open: boolean): T[] {
+  if (open) return [...list];
+  const head = list.slice(0, FOLDED);
+  const pick = list.find((o) => o.id === chosen);
+  return pick && !head.includes(pick) ? [...head, pick] : head;
+}
+
+/** The button under a folded list of themes: all of them, or back to a few. */
+export function ThemesToggle({ open, total, onToggle }: { open: boolean; total: number; onToggle: () => void }) {
+  return (
+    <button type="button" className="theme-more" aria-expanded={open} onClick={onToggle}>
+      <span>{open ? t("settings.themesLess") : t("settings.themesAll", { n: total })}</span>
+      <ChevronDown size={16} aria-hidden />
+    </button>
+  );
+}
+
 export function ThemeCard() {
   const [choice, set] = useState<ThemeChoice>(getTheme);
+  const [open, setOpen] = useState(false);
   const refs = useRef(new Map<ThemeChoice, HTMLButtonElement>());
 
   const names = themeNames();
@@ -113,7 +135,9 @@ export function ThemeCard() {
     if (!to) return;
     e.preventDefault();
     pick(to);
-    refs.current.get(to)?.focus();
+    // The next theme may be folded away: unfold, then focus it once it is there.
+    setOpen(true);
+    requestAnimationFrame(() => refs.current.get(to)?.focus());
   };
 
   // Another tab may change the theme: follow it here too.
@@ -141,7 +165,7 @@ export function ThemeCard() {
           <div key={g.label} role="group" aria-label={g.label}>
             <div className="theme-group-label">{g.label}</div>
             <div className="theme-tiles">
-              {g.options.map((o) => {
+              {foldedList(g.options, choice, open).map((o) => {
                 const checked = choice === o.id;
                 return (
                   <button
@@ -178,6 +202,7 @@ export function ThemeCard() {
           </div>
         ))}
       </div>
+      <ThemesToggle open={open} total={THEMES.length} onToggle={() => setOpen((v) => !v)} />
     </section>
   );
 }

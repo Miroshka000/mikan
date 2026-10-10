@@ -8,7 +8,7 @@ import { useMemo, useRef, useState, type Dispatch, type ReactNode, type SetState
 import { api, ApiError, basePath, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk, useNodes, useSettings } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
-import { Mock, themeNames } from "../../../components/theme";
+import { foldedList, Mock, themeNames, ThemesToggle } from "../../../components/theme";
 import { QueryBoundary } from "../../../components/query";
 import { Switch, SwitchRow } from "../../../components/switch";
 import { SaveBar, WithPreview } from "../../../components/layout";
@@ -220,6 +220,7 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
   const bg = look.background;
   const setBg = (patch: Partial<Look["background"]>) => setLook({ background: { ...bg, ...patch } });
   const names = themeNames();
+  const [themesOpen, setThemesOpen] = useState(false);
   // The four that follow the page's light/dark mode, then every other panel theme as it is.
   const moded = MODE_PALETTES.map((id) => ({ id, label: names[id], theme: id === "mikan" && look.mode === "dark" ? ("midnight" as const) : id }));
   const fixed = THEMES.filter((id) => !followsMode(id) && id !== "midnight").map((id) => ({ id, label: names[id], theme: id }));
@@ -240,7 +241,7 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
             <div key={g.label} role="group" aria-label={g.label}>
               <div className="theme-group-label">{g.label}</div>
               <div className="theme-tiles">
-                {g.list.map((p) => (
+                {foldedList(g.list, look.palette, themesOpen).map((p) => (
                   <button
                     key={p.id}
                     type="button"
@@ -260,6 +261,7 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
               </div>
             </div>
           ))}
+          <ThemesToggle open={themesOpen} total={moded.length + fixed.length} onToggle={() => setThemesOpen((v) => !v)} />
         </div>
         {followsMode(look.palette) ? (
         <Field label={t("settings.page.mode")} hint={look.mode === "system" ? t("settings.page.modeSystemHint") : undefined}>

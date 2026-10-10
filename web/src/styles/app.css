@@ -86,6 +86,10 @@
   .tm-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; }
   .tm-btn { width: 44%; height: 10px; border-radius: 4px !important; background: var(--fill); }
   .tm-dot { width: 7px; height: 7px; background: var(--leaf-500); }
+  .theme-more { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; margin-top: 12px; height: 36px; padding: 0 12px; border-radius: var(--r-md); border: 1px solid var(--hairline); background: var(--surface-soft); color: var(--ink-700); font-size: 13px; font-weight: 500; transition: background-color 0.2s, color 0.2s; }
+  .theme-more:hover { background: var(--surface-hover); color: var(--ink-900); }
+  .theme-more svg { transition: transform 0.2s var(--ease-out); }
+  .theme-more[aria-expanded="true"] svg { transform: rotate(180deg); }
   .theme-mock-split { display: grid; grid-template-columns: 1fr 1fr; height: 84px; overflow: hidden; border-radius: 10px; }
   .theme-mock-split .theme-mock { border-radius: 0; padding: 8px 4px 8px 8px; }
   .theme-mock-split .theme-mock + .theme-mock { padding: 8px 8px 8px 4px; }
