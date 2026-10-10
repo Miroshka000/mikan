@@ -48,8 +48,9 @@ const (
 	GoalDone    = "done"    // shipped, in Version
 )
 
-// MaxGoals is how many goals an index carries; the panel shows the first few.
-const MaxGoals = 20
+// MaxGoals is how many goals an index carries; the panel shows the first few. Panels up to
+// 0.5.0.4 read only the first 20, so the open goals go first and the done ones last.
+const MaxGoals = 40
 
 var (
 	goalID       = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,39}$`)

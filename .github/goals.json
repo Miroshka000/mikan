@@ -65,15 +65,6 @@
       "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qY"
     },
     {
-      "id": "vless-tls",
-      "title": {"ru": "VLESS TLS на домене панели", "en": "VLESS TLS on the panel's domain"},
-      "about": {
-        "ru": "Протокол VLESS с обычным TLS и настоящим сертификатом домена вашей панели, как у обычного сайта. Ещё один вариант подключения рядом с REALITY.",
-        "en": "VLESS with plain TLS and the real certificate of your panel domain, like any website. One more way to connect next to REALITY."
-      },
-      "target": 10, "raised": 10, "currency": "USD", "status": "working", "url": "https://t.me/tribute/app?startapp=g6qZ"
-    },
-    {
       "id": "node-clients",
       "title": {"ru": "Клиенты на каждой ноде", "en": "Clients on each node"},
       "about": {
@@ -117,6 +108,96 @@
         "en": "A separate API access level that keeps an AI from deleting or breaking anything important, and an MCP server to connect ChatGPT and other agents."
       },
       "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r4"
+    },
+    {
+      "id": "support-tickets",
+      "title": {"ru": "Тикеты поддержки", "en": "Support tickets"},
+      "about": {
+        "ru": "Клиент пишет в поддержку прямо в Mini App или в боте, а вы отвечаете из админки: переписка по тикетам, статусы и уведомления.",
+        "en": "A client writes to support right in the Mini App or the bot, and you answer from the admin panel: conversations by ticket, statuses and notifications."
+      },
+      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rS"
+    },
+    {
+      "id": "referrals",
+      "title": {"ru": "Реферальная программа", "en": "Referral program"},
+      "about": {
+        "ru": "Личная ссылка у каждого клиента: за приглашённых друзей, которые купили подписку, он получает бонусные дни.",
+        "en": "A personal link for every client: they get bonus days for each invited friend who buys a subscription."
+      },
+      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rT"
+    },
+    {
+      "id": "gift-subs",
+      "title": {"ru": "Подарочные подписки", "en": "Gift subscriptions"},
+      "about": {
+        "ru": "Оплатить доступ другому человеку в боте или Mini App и отправить ему ссылку-подарок, которую он активирует у себя.",
+        "en": "Pay for someone else's access in the bot or the Mini App and send them a gift link they activate on their own account."
+      },
+      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rU"
+    },
+    {
+      "id": "status-page",
+      "title": {"ru": "Страница статуса нод", "en": "Node status page"},
+      "about": {
+        "ru": "Публичная страница: какие серверы работают сейчас и их аптайм за последние дни, чтобы клиенты сами видели, что происходит.",
+        "en": "A public page with the servers that work right now and their uptime over the last days, so clients see for themselves what is going on."
+      },
+      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rV"
+    },
+    {
+      "id": "email",
+      "title": {"ru": "Уведомления на почту", "en": "E-mail notifications"},
+      "about": {
+        "ru": "Письма клиентам о сроке и трафике, о продлении и рассылки, как в боте, для тех, кто не пользуется Telegram.",
+        "en": "E-mails to clients about the term and traffic, renewals and broadcasts, as in the bot, for those who do not use Telegram."
+      },
+      "target": 150, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rW"
+    },
+    {
+      "id": "awg",
+      "title": {"ru": "Протокол AmneziaWG", "en": "AmneziaWG protocol"},
+      "about": {
+        "ru": "AmneziaWG (AWG) как протокол на нодах: WireGuard с маскировкой от блокировок, ключи создаются сами, как у остальных протоколов.",
+        "en": "AmneziaWG (AWG) as a protocol on the nodes: WireGuard disguised against blocking, with keys made automatically like for the other protocols."
+      },
+      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rX"
+    },
+    {
+      "id": "vk-turn",
+      "title": {"ru": "VK TURN proxy", "en": "VK TURN proxy"},
+      "about": {
+        "ru": "Подключение через TURN-серверы звонков VK: трафик выглядит как обычный звонок и проходит там, где режут всё остальное.",
+        "en": "A connection through the TURN servers of VK calls: the traffic looks like an ordinary call and gets through where everything else is cut."
+      },
+      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rY"
+    },
+    {
+      "id": "cascade-routes",
+      "title": {"ru": "Маршруты каскадов в один клик", "en": "One-click cascade routes"},
+      "about": {
+        "ru": "Заранее заданные цепочки нод и быстрое переключение: заблокировали ноду, выбираете другой маршрут одной кнопкой, без перенастройки протоколов.",
+        "en": "Chains of nodes set up in advance and a quick switch: when a node is blocked, pick another route with one button instead of reconfiguring protocols."
+      },
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rZ"
+    },
+    {
+      "id": "xray-auto",
+      "title": {"ru": "Автовыбор в Happ и приложениях на Xray", "en": "Auto choice in Happ and Xray apps"},
+      "about": {
+        "ru": "Группа автовыбора со своим названием, как в Clash-приложениях, и для Happ, v2RayTun и других приложений на Xray: приложение само держит самый быстрый рабочий сервер.",
+        "en": "An auto choice group with your own name, as in Clash apps, for Happ, v2RayTun and other Xray apps too: the app keeps the fastest working server by itself."
+      },
+      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6s0"
+    },
+    {
+      "id": "vless-tls",
+      "title": {"ru": "VLESS TLS на домене панели", "en": "VLESS TLS on the panel's domain"},
+      "about": {
+        "ru": "Протокол VLESS с обычным TLS и настоящим сертификатом домена вашей панели, как у обычного сайта. Ещё один вариант подключения рядом с REALITY.",
+        "en": "VLESS with plain TLS and the real certificate of your panel domain, like any website. One more way to connect next to REALITY."
+      },
+      "target": 10, "raised": 10, "currency": "USD", "status": "done", "version": "0.5.0.3", "url": "https://t.me/tribute/app?startapp=g6qZ"
     }
   ]
 }
