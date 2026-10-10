@@ -1492,6 +1492,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/telegram/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Как бот отправит текст с Markdown */
+        post: operations["telegram-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/torrent": {
         parameters: {
             query?: never;
@@ -1665,6 +1682,58 @@ export interface paths {
         post?: never;
         /** Отвязать устройство: его ключи сгорают */
         delete: operations["unbind-device"];
+        options?: never;
+        head?: never;
+        /** Переименовать привязанное устройство */
+        patch: operations["rename-device"];
+        trace?: never;
+    };
+    "/api/v1/users/{id}/bound-devices/{device}/ban": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Заблокировать устройство: отвязать и не давать привязаться снова по его ID */
+        post: operations["ban-device"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/device-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Заблокированные устройства пользователя */
+        get: operations["device-bans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/device-bans/{ban}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Разблокировать устройство: оно снова сможет привязаться */
+        delete: operations["unban-device"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2071,12 +2140,14 @@ export interface components {
             /** Format: date-time */
             last_seen: string;
             model: string;
+            /** @description Своё имя устройства от админа или подписчика; пусто — имя от приложения (модель, система) */
+            name: string;
             online: boolean;
             os: string;
             os_version: string;
         };
         BroadcastInputBody: {
-            /** @description Обычный текст; {brand} — название сервиса */
+            /** @description Текст с Markdown, как тексты бота; {brand} — название сервиса */
             text: string;
         };
         BroadcastOutputBody: {
@@ -2343,6 +2414,18 @@ export interface components {
         DNSPolicy: {
             match: string;
             servers: string[];
+        };
+        DeviceBanView: {
+            /** @description Кто заблокировал; пусто — ключ API или удалённый админ */
+            admin: string;
+            /** Format: date-time */
+            banned_at: string;
+            /** @description ID устройства, которому закрыта привязка */
+            hwid: string;
+            /** Format: int64 */
+            id: number;
+            /** @description Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило */
+            label: string;
         };
         DeviceView: {
             /** Format: date-time */
@@ -3733,6 +3816,14 @@ export interface components {
             /** @description Показываются один раз */
             recovery_codes: string[];
         };
+        RenameDeviceInputBody: {
+            /** @description Своё имя устройства, до 40 символов одной строкой; пустое — вернуть имя от приложения */
+            name: string;
+        };
+        RenameDeviceOutputBody: {
+            /** @description Имя, как оно сохранено: без пробелов по краям */
+            name: string;
+        };
         Report: {
             /** Format: int64 */
             created: number;
@@ -4189,6 +4280,18 @@ export interface components {
             id: number;
             name: string;
             username: string;
+        };
+        TelegramPreviewInputBody: {
+            /** @description Текст бота с Markdown */
+            text: string;
+            /** @description Значения переменных {name}; без них переменные остаются как написаны */
+            vars?: {
+                [key: string]: string;
+            };
+        };
+        TelegramPreviewOutputBody: {
+            /** @description Сообщение, как его отправит бот: HTML Telegram */
+            html: string;
         };
         TelegramRoute: {
             /**
@@ -8327,6 +8430,39 @@ export interface operations {
             };
         };
     };
+    "telegram-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelegramPreviewInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramPreviewOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-torrent": {
         parameters: {
             query?: never;
@@ -8784,6 +8920,135 @@ export interface operations {
             path: {
                 id: number;
                 device: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "rename-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                device: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameDeviceInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenameDeviceOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "ban-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                device: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceBanView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "device-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceBanView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "unban-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                ban: number;
             };
             cookie?: never;
         };

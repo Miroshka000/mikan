@@ -239,6 +239,9 @@ func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id i
 	}
 	for i, d := range devs {
 		meta := []string{}
+		if d.Name != "" && d.Model != "" {
+			meta = append(meta, d.Model)
+		}
 		if d.Hwid != "" && d.Model != "" && d.Os != "" {
 			meta = append(meta, strings.TrimSpace(d.Os+" "+d.OsVersion))
 		}
@@ -255,8 +258,12 @@ func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id i
 	return strings.Join(lines, "\n"), &Keyboard{append(rows, back)}
 }
 
+// deviceName: the device's own name (the admin's or the subscriber's, escaped where it is
+// shown), else what its app reported.
 func deviceName(w *words, d db.BoundDevice) string {
 	switch {
+	case d.Name != "":
+		return d.Name
 	case d.Hwid == "":
 		return w.sharedPlace
 	case d.Model != "":

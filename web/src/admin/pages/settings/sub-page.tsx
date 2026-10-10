@@ -793,7 +793,7 @@ function Preview({ v, draft, platform: editing, bare }: { v: View; draft: Form; 
       protocols: [],
       binding: !!s?.device_binding,
       devices: s?.device_binding
-        ? [{ id: 1, os: "iOS", os_version: "18.4", model: "iPhone 15", app: "Happ", shared: false, created_at: new Date(now - 9 * 86_400_000).toISOString(), last_seen: new Date(now - 600_000).toISOString() }]
+        ? [{ id: 1, name: "", os: "iOS", os_version: "18.4", model: "iPhone 15", app: "Happ", shared: false, created_at: new Date(now - 9 * 86_400_000).toISOString(), last_seen: new Date(now - 600_000).toISOString() }]
         : [],
       telegram: "https://t.me/",
       locations: names.length ? names : [t("settings.page.sample.location1"), t("settings.page.sample.location2")],

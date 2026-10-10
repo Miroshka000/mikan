@@ -114,7 +114,14 @@ type CreateInput struct {
 	Source string
 }
 
+// Create makes a user the admin names (the panel, an API key): the name is checked as
+// CleanUserName does.
 func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
+	name, err := CleanUserName(in.Name)
+	if err != nil {
+		return db.User{}, err
+	}
+	in.Name = name
 	u, err := s.create(ctx, in)
 	if errors.Is(err, ErrNoSlots) {
 		if err := s.pool.Refill(ctx, RefillBatch); err != nil {
@@ -406,7 +413,10 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		par.BillingDay = sql.NullInt64{Int64: *p.BillingDay, Valid: true}
 	}
 	if p.Name != nil {
-		par.Name = strings.TrimSpace(*p.Name)
+		// A rename changes only the name: the link, the slots and the keys stay.
+		if par.Name, err = CleanUserName(*p.Name); err != nil {
+			return db.User{}, err
+		}
 	}
 	if p.Contact != nil {
 		par.Contact = strings.TrimSpace(*p.Contact)

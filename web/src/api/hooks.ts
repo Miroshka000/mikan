@@ -9,6 +9,7 @@ export const qk = {
   userTraffic: (id: number) => ["users", "traffic", id] as const,
   devices: (id: number) => ["users", "devices", id] as const,
   boundDevices: (id: number) => ["users", "bound", id] as const,
+  deviceBans: (id: number) => ["users", "bans", id] as const,
   tariffs: ["tariffs"] as const,
   inbounds: ["inbounds"] as const,
   presets: ["presets"] as const,
@@ -108,6 +109,14 @@ export function useBoundDevices(id: number) {
     queryKey: qk.boundDevices(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/bound-devices", { params: { path: { id } }, signal })),
     refetchInterval: 30_000,
+  });
+}
+
+/** Devices banned from a user's subscription; they change only from the card. */
+export function useDeviceBans(id: number) {
+  return useQuery({
+    queryKey: qk.deviceBans(id),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/device-bans", { params: { path: { id } }, signal })),
   });
 }
 
@@ -226,6 +235,10 @@ export const userActions = {
   bulk: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk", { body })),
   unbindDevice: ({ id, device }: { id: number; device: number }) =>
     unwrap(api.DELETE("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } } })),
+  renameDevice: ({ id, device, name }: { id: number; device: number; name: string }) =>
+    unwrap(api.PATCH("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } }, body: { name } })),
+  banDevice: ({ id, device }: { id: number; device: number }) => unwrap(api.POST("/api/v1/users/{id}/bound-devices/{device}/ban", { params: { path: { id, device } } })),
+  unbanDevice: ({ id, ban }: { id: number; ban: number }) => unwrap(api.DELETE("/api/v1/users/{id}/device-bans/{ban}", { params: { path: { id, ban } } })),
 };
 
 /** One paid period: a month up to the billing day, or 30 days without one. */

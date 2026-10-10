@@ -450,7 +450,12 @@
       "eab_kid_invalid": "The keyId without spaces, as the authority gave it",
       "eab_hmac_invalid": "The HMAC in base64url, 32 bytes or more",
       "zerossl_email_required": "ZeroSSL needs an e-mail",
-      "google_eab_required": "Google Trust Services needs an EAB key: keyId and HMAC"
+      "google_eab_required": "Google Trust Services needs an EAB key: keyId and HMAC",
+      "user_name_empty": "Enter a name",
+      "user_name_long": "At most 100 characters",
+      "name_chars": "One line, no control characters",
+      "device_name_long": "At most 40 characters",
+      "device_no_hwid": "Only a device with an ID can be banned. Apps without one share a single place"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. Free the port or pass /.well-known/acme-challenge/ to the panel (MIKAN_ACME_LISTEN)",
@@ -821,7 +826,33 @@
       "exemptHint": "The torrent blocker leaves this client alone.",
       "recent": "Latest catches",
       "none": "No torrents caught."
-    }
+    },
+    "rename": "Rename",
+    "renameLabel": "Rename {name}",
+    "renameTitle": "Rename the client",
+    "renameField": "Name",
+    "renameHint": "The subscription link, keys and devices stay the same",
+    "renamed": "The client is now called “{name}”",
+    "renameDevice": "Rename",
+    "renameDeviceLabel": "Rename {name}",
+    "renameDeviceTitle": "Device name",
+    "renameDeviceField": "Own name",
+    "renameDeviceHint": "Up to 40 characters, the subscriber sees it too. Leave it empty for the name the app reports",
+    "deviceRenamed": "The device is now called “{name}”",
+    "deviceNameCleared": "The name from the app is back",
+    "ban": "Ban",
+    "banLabel": "Ban {name}",
+    "banTitle": "Ban “{name}”?",
+    "banText": "The device disconnects at once and cannot bind to this client again, even with the same link. Instead of servers it sees “This device is blocked”. You can lift the ban in the Banned list.",
+    "banned": "“{name}” is banned",
+    "bansTitle": "Banned",
+    "bannedBy": "{when}, banned by {admin}",
+    "bannedAt": "Banned {when}",
+    "unban": "Unban",
+    "unbanLabel": "Unban {name}",
+    "unbanTitle": "Unban “{name}”?",
+    "unbanText": "The device can bind again: on its next subscription update it takes a free place.",
+    "unbanned": "“{name}” is unbanned"
   },
   "tariffs": {
     "subtitle": "Templates for granting access in one click. Changing a plan does not touch subscriptions already issued.",
@@ -1871,7 +1902,16 @@
     "promoCurrency": "Order currency does not match the promo",
     "promoNotDiscount": "This promo code cannot be applied to a payment",
     "promoSubscription": "An active subscription is required",
-    "promoNoExpiry": "The subscription has no end date"
+    "promoNoExpiry": "The subscription has no end date",
+    "rename": "Rename",
+    "renameLabel": "Rename {name}",
+    "renameField": "Device name",
+    "renameHint": "Up to 40 characters. Leave it empty for the name the app reports",
+    "renameFailed": "Couldn't save. Reload the page and try again.",
+    "nameErrors": {
+      "device_name_long": "At most 40 characters",
+      "name_chars": "One line, no control characters"
+    }
   },
   "nodes": {
     "subtitle": "Servers that run the VPN. The subscription includes the protocols of every enabled node, each in its own group.",
@@ -2049,7 +2089,7 @@
     "broadcastSub": "A message to everyone with a subscription in the bot: {n}",
     "broadcastPlaceholder": "E.g. maintenance tonight, short breaks possible",
     "broadcastButton": "Send to everyone",
-    "broadcastHint": "Plain text, {brand} is filled in. Up to 20 messages a second; replies in the bot skip the queue",
+    "broadcastHint": "Markdown as in the bot's texts, {brand} is filled in. Up to 20 messages a second; replies in the bot skip the queue",
     "broadcastOff": "Turn the bot on to send",
     "broadcasting": "A broadcast is still going",
     "broadcastTitle": "Send the message to {n} accounts?",
@@ -2158,7 +2198,20 @@
       "infra": "Alerts to me",
       "broadcast": "Broadcast"
     },
-    "sections": "Bot sections"
+    "sections": "Bot sections",
+    "md": {
+      "lead": "Markdown works:",
+      "bold": "bold",
+      "italic": "italic",
+      "underline": "underline",
+      "strike": "strikethrough",
+      "spoiler": "spoiler",
+      "code": "code",
+      "link": "link",
+      "quote": "quote",
+      "tail": "Lists are plain text; \\* keeps a star as is",
+      "preview": "How it arrives in Telegram"
+    }
   },
   "apiPage": {
     "title": "API",

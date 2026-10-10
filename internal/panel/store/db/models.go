@@ -54,6 +54,7 @@ type BoundDevice struct {
 	LastIp    string
 	CreatedAt int64
 	LastSeen  int64
+	Name      string
 }
 
 type Device struct {
@@ -61,6 +62,15 @@ type Device struct {
 	Ip        string
 	FirstSeen int64
 	LastSeen  int64
+}
+
+type DeviceBan struct {
+	ID       int64
+	UserID   int64
+	Hwid     string
+	Label    string
+	AdminID  sql.NullInt64
+	BannedAt int64
 }
 
 type Inbound struct {

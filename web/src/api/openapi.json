@@ -624,6 +624,10 @@
           "model": {
             "type": "string"
           },
+          "name": {
+            "description": "Своё имя устройства от админа или подписчика; пусто — имя от приложения (модель, система)",
+            "type": "string"
+          },
           "online": {
             "type": "boolean"
           },
@@ -636,6 +640,7 @@
         },
         "required": [
           "id",
+          "name",
           "hwid",
           "os",
           "os_version",
@@ -652,7 +657,7 @@
         "additionalProperties": false,
         "properties": {
           "text": {
-            "description": "Обычный текст; {brand} — название сервиса",
+            "description": "Текст с Markdown, как тексты бота; {brand} — название сервиса",
             "maxLength": 3500,
             "minLength": 1,
             "type": "string"
@@ -1486,6 +1491,39 @@
         "required": [
           "match",
           "servers"
+        ],
+        "type": "object"
+      },
+      "DeviceBanView": {
+        "additionalProperties": false,
+        "properties": {
+          "admin": {
+            "description": "Кто заблокировал; пусто — ключ API или удалённый админ",
+            "type": "string"
+          },
+          "banned_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "hwid": {
+            "description": "ID устройства, которому закрыта привязка",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "description": "Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hwid",
+          "label",
+          "admin",
+          "banned_at"
         ],
         "type": "object"
       },
@@ -5301,6 +5339,33 @@
         ],
         "type": "object"
       },
+      "RenameDeviceInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Своё имя устройства, до 40 символов одной строкой; пустое — вернуть имя от приложения",
+            "maxLength": 40,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "RenameDeviceOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "Имя, как оно сохранено: без пробелов по краям",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
       "Report": {
         "additionalProperties": false,
         "properties": {
@@ -6541,6 +6606,41 @@
           "id",
           "username",
           "name"
+        ],
+        "type": "object"
+      },
+      "TelegramPreviewInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "description": "Текст бота с Markdown",
+            "maxLength": 3500,
+            "type": "string"
+          },
+          "vars": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Значения переменных {name}; без них переменные остаются как написаны",
+            "maxProperties": 20,
+            "type": "object"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "TelegramPreviewOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "html": {
+            "description": "Сообщение, как его отправит бот: HTML Telegram",
+            "type": "string"
+          }
+        },
+        "required": [
+          "html"
         ],
         "type": "object"
       },
@@ -12536,6 +12636,47 @@
         "x-session-only": true
       }
     },
+    "/api/v1/telegram/preview": {
+      "post": {
+        "operationId": "telegram-preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramPreviewInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelegramPreviewOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Как бот отправит текст с Markdown",
+        "tags": [
+          "telegram"
+        ]
+      }
+    },
     "/api/v1/torrent": {
       "get": {
         "operationId": "get-torrent",
@@ -13237,6 +13378,212 @@
           }
         },
         "summary": "Отвязать устройство: его ключи сгорают",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "rename-device",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "device",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameDeviceInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenameDeviceOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Переименовать привязанное устройство",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/bound-devices/{device}/ban": {
+      "post": {
+        "operationId": "ban-device",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "device",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceBanView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Заблокировать устройство: отвязать и не давать привязаться снова по его ID",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/device-bans": {
+      "get": {
+        "operationId": "device-bans",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeviceBanView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Заблокированные устройства пользователя",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/device-bans/{ban}": {
+      "delete": {
+        "operationId": "unban-device",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ban",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Разблокировать устройство: оно снова сможет привязаться",
         "tags": [
           "users"
         ]

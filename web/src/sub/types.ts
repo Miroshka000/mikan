@@ -30,7 +30,8 @@ export type Info = {
   announce_url?: string;
 };
 
-export type Device = { id: number; os: string; os_version: string; model: string; app: string; shared: boolean; created_at: string; last_seen: string };
+/** `name` is the device's own name (the subscriber's or the admin's); "" shows what the app reported. */
+export type Device = { id: number; name: string; os: string; os_version: string; model: string; app: string; shared: boolean; created_at: string; last_seen: string };
 
 /** One of the subscriptions a Telegram account owns (the Mini App's /tg/session). */
 export type TgSub = { token: string; name: string };
