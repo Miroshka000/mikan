@@ -795,11 +795,23 @@ func (s *Service) refundTrial(ctx context.Context, p db.Payment) error {
 		s.d.Log.Error("billing: refund of a trial that cannot be given", "payment", cur.ID, "provider", cur.Provider, "err", refundErr)
 		return errors.Join(refundErr, s.d.Store.Q.SetPaymentError(ctx, db.SetPaymentErrorParams{Error: "trial_refund_failed", ID: cur.ID}))
 	}
-	if _, err := s.d.Store.Q.MarkRefundedUnapplied(ctx, db.MarkRefundedUnappliedParams{
-		RefundedAt: sql.NullInt64{Int64: s.d.Now().Unix(), Valid: true}, ID: cur.ID}); err != nil {
+	n, err := s.d.Store.Q.MarkRefundedUnapplied(ctx, db.MarkRefundedUnappliedParams{
+		RefundedAt: sql.NullInt64{Int64: s.d.Now().Unix(), Valid: true}, ID: cur.ID})
+	if err != nil {
 		return err
 	}
+	if n != 1 {
+		// The provider gave the money back, but the payment moved on while it did (another
+		// pass applied it). Said loudly: this one is the admin's to settle.
+		s.d.Log.Error("billing: the trial payment changed while its money was going back", "payment", cur.ID)
+		return errors.New("the trial payment changed while its money was going back")
+	}
 	s.d.Log.Warn("billing: a paid trial the account may not take was refunded", "payment", cur.ID, "provider", cur.Provider, "tg", cur.TgID)
+	if tg := s.telegram(); tg != nil {
+		// Nothing was made for the payment, so the buyer hears only that it came back.
+		cur.Status, cur.RefundedAt = "refunded", sql.NullInt64{Int64: s.d.Now().Unix(), Valid: true}
+		tg.Refunded(ctx, cur, db.User{}, false)
+	}
 	return nil
 }
 

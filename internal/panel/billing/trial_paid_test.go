@@ -3,9 +3,11 @@ package billing
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
+	"mikan/internal/panel/addons"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -189,6 +191,10 @@ func TestPaidTrialPaidTwice(t *testing.T) {
 	if refunds := append([]string(nil), e.tg.refunds...); len(refunds) != 1 || refunds[0] != "ch-trial-2" {
 		t.Fatalf("refunds %v", refunds)
 	}
+	// Told once, about the money and not about a subscription: there is none.
+	if notes := e.tg.refundNotes(); len(notes) != 1 || notes[0].p.ID != second.ID || notes[0].u.ID != 0 || notes[0].disabled {
+		t.Fatalf("the buyer was told %+v", notes)
+	}
 	if links, err := e.st.Q.ListTgLinksOf(ctx, 916); err != nil || len(links) != 1 {
 		t.Fatalf("links %+v %v", links, err)
 	}
@@ -231,5 +237,41 @@ func TestPaidTrialPreCheckoutAfterTheOfferChanged(t *testing.T) {
 		if err := e.s.PreCheckout(ctx, 918, p.Payload, "XTR", 1); !errors.Is(err, ErrTrialOff) {
 			t.Fatalf("the pre-checkout of an invoice for a trial %s: %v", c.what, err)
 		}
+	}
+}
+
+// A priced trial bought through an adapter, with the trial taken in between: the money
+// goes back through the adapter under a key of the payment's own, and nothing is given.
+// The card is charged on the provider's page, so this is the apply-time check, not the
+// pre-checkout, that has to catch it.
+func TestPaidTrialThroughAdapterIsRefunded(t *testing.T) {
+	e, fa := addonEnv(t)
+	ctx := context.Background()
+	if _, err := e.s.SetAddonConfig(ctx, "fake", true, addons.Settings{"shop_id": "12", "secret_key": adapterSecret}); err != nil {
+		t.Fatal(err)
+	}
+	e.priceTrial()
+	p, err := e.s.TrialInvoice(ctx, 919, "addon:fake")
+	must(t, err)
+	if p.Currency != "RUB" || p.Amount != 100 {
+		t.Fatalf("trial invoice through the adapter: %+v", p)
+	}
+	// The same account takes the trial while the invoice is open, in another chat.
+	if _, err := e.st.Q.TakeTrial(ctx, db.TakeTrialParams{TgID: 919, CreatedAt: e.now.Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	fa.set(p.ExternalID.String, func(s *addons.Status) { s.Status, s.Amount = "paid", p.Amount })
+	must(t, e.s.checkAddon(ctx, p.Provider, p.ExternalID.String))
+	if got := e.payment(p.ID); got.Status != "refunded" || !got.RefundedAt.Valid || got.Error != "" {
+		t.Fatalf("the trial paid through the adapter: %+v", got)
+	}
+	if len(fa.refunds) != 1 || fa.refunds[0] != p.ExternalID.String {
+		t.Fatalf("refunds %v", fa.refunds)
+	}
+	if len(fa.refundCalls) != 1 || fa.refundCalls[0] != "mikan-trial-"+strconv.FormatInt(p.ID, 10) {
+		t.Fatalf("refund keys %v", fa.refundCalls)
+	}
+	if e.users() != 0 {
+		t.Fatal("a trial that may not be given made a subscription")
 	}
 }
