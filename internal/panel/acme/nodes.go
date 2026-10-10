@@ -76,6 +76,7 @@ type Nodes struct {
 	mu       sync.Mutex
 	status   map[int64]NodeStatus
 	attempts map[int64]*attempt
+	next     map[int64]time.Time // when each node is looked at again
 	cache    map[int64]cachedPair
 	onChange func(id int64)
 }
@@ -90,7 +91,7 @@ type cachedPair struct {
 // kept under <data>/tls/acme-nodes.
 func (m *Manager) Nodes(source NodeSource) *Nodes {
 	return &Nodes{root: filepath.Join(filepath.Dir(m.dir), "acme-nodes"), iss: m.iss, set: m.set, log: m.log, now: m.now, source: source,
-		wake: make(chan struct{}, 1), status: map[int64]NodeStatus{}, attempts: map[int64]*attempt{}, cache: map[int64]cachedPair{}}
+		wake: make(chan struct{}, 1), status: map[int64]NodeStatus{}, attempts: map[int64]*attempt{}, next: map[int64]time.Time{}, cache: map[int64]cachedPair{}}
 }
 
 // OnChange sets what hears of a node's new certificate: the node gets it with its state.
@@ -156,60 +157,56 @@ func (n *Nodes) Wake() {
 	}
 }
 
+// nodeRetry is how soon a node that did not answer, or predates the challenge endpoint, is
+// asked again: the panel asks the node itself first, which costs the CA nothing.
+var nodeRetry = 5 * time.Minute
+
 func (n *Nodes) Run(ctx context.Context) {
-	next := time.NewTimer(time.Hour)
-	defer next.Stop()
-	later := func(failed bool) {
-		d := checkEvery
-		if failed {
-			d = retryAfter
-		}
-		if !next.Stop() {
-			select {
-			case <-next.C:
-			default:
-			}
-		}
-		next.Reset(d)
-	}
-	later(n.all(ctx))
+	tick := time.NewTicker(time.Minute)
+	defer tick.Stop()
+	n.due(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-next.C:
+		case <-tick.C:
 		case <-n.wake:
+			n.mu.Lock()
+			clear(n.next)
+			n.mu.Unlock()
 		}
-		later(n.all(ctx))
+		n.due(ctx)
 	}
 }
 
-// all looks after every node, one at a time; true when an order failed and is worth
-// trying again soon.
-func (n *Nodes) all(ctx context.Context) (failed bool) {
+// due looks after every node whose time has come, one at a time.
+func (n *Nodes) due(ctx context.Context) {
 	targets, err := n.source(ctx)
 	if err != nil {
 		n.log.Warn("acme: nodes not listed", "err", err)
-		return true
+		return
 	}
 	keep := map[int64]bool{}
 	for _, t := range targets {
 		keep[t.ID] = true
 		if ctx.Err() != nil {
-			return false
+			return
 		}
-		if n.attemptOnce(ctx, t) {
-			failed = true
+		n.mu.Lock()
+		wait := n.now().Before(n.next[t.ID])
+		n.mu.Unlock()
+		if !wait {
+			n.attemptOnce(ctx, t)
 		}
 	}
 	n.mu.Lock()
 	for id := range n.status {
 		if !keep[id] {
 			delete(n.status, id)
+			delete(n.next, id)
 		}
 	}
 	n.mu.Unlock()
-	return failed
 }
 
 // Renew orders the node's certificate now if it needs one and waits up to wait for the
@@ -245,29 +242,33 @@ func (n *Nodes) Renew(ctx context.Context, id int64, wait time.Duration) (st Nod
 	return st, done, nil
 }
 
-func (n *Nodes) attemptOnce(ctx context.Context, t NodeTarget) (failed bool) {
+// attemptOnce runs ensure for the node, or waits for the one under way, and sets when the
+// node is looked at next.
+func (n *Nodes) attemptOnce(ctx context.Context, t NodeTarget) {
 	n.mu.Lock()
 	if a := n.attempts[t.ID]; a != nil {
 		n.mu.Unlock()
 		<-a.done
-		return a.failed
+		return
 	}
 	a := &attempt{done: make(chan struct{})}
 	n.attempts[t.ID] = a
 	n.mu.Unlock()
-	defer func() {
-		n.mu.Lock()
-		delete(n.attempts, t.ID)
-		n.mu.Unlock()
-		close(a.done)
-	}()
-	a.failed = n.ensure(ctx, t)
-	return a.failed
+	again := n.ensure(ctx, t)
+	n.mu.Lock()
+	delete(n.attempts, t.ID)
+	n.next[t.ID] = n.now().Add(again)
+	n.mu.Unlock()
+	close(a.done)
 }
 
+// probeToken is a token no CA hands out: the panel takes it off the node to learn whether
+// the node answers and knows the challenge endpoint, before the CA gets an order.
+const probeToken = "mikan-probe-0000000000000000"
+
 // ensure orders the node's certificate when it has none valid for its host, from the CA
-// chosen, or when it is due for renewal.
-func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (failed bool) {
+// chosen, or when it is due for renewal. It returns when to look again.
+func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (again time.Duration) {
 	now := n.now()
 	st := NodeStatus{Identifier: t.Host, CheckedAt: &now}
 	defer func() {
@@ -276,28 +277,34 @@ func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (failed bool) {
 		n.mu.Unlock()
 	}()
 	if t.HasOwn {
-		return false
+		return checkEvery
 	}
 	if t.Host == "" || isPrivate(t.Host) {
 		st.Error = "no_public_host"
-		return false
+		return checkEvery
 	}
 	chosen, err := ChosenCA(ctx, n.set)
 	if err != nil {
 		st.Error, st.ErrorDetail = CodeUnknown, err.Error()
-		return true
+		return retryAfter
 	}
 	ca := EffectiveCA(chosen, t.Host)
 	st.WantCA = ca
 	if cert, have := n.Cert(t.ID, t.Host); cert != nil {
 		n.describe(&st, cert, have)
 		if !needsRenewal(cert.Leaf, now) && have == ca {
-			return false
+			return checkEvery
 		}
 	}
 	if t.Client == nil {
 		st.Error = CodeNodeUnreachable
-		return true
+		return nodeRetry
+	}
+	// The node first: one that is down or too old would only cost an order at the CA.
+	if err := t.Client.CleanUpChallenge(ctx, probeToken); err != nil {
+		p := Classify(err, t.Own, now)
+		st.Error, st.ErrorDetail = p.Code, p.Detail
+		return nodeRetry
 	}
 	certPEM, keyPEM, err := n.iss.obtain(ctx, t.Host, ca, &nodeProvider{ctx: ctx, c: t.Client})
 	if err == nil {
@@ -306,18 +313,16 @@ func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (failed bool) {
 	if err != nil {
 		p := Classify(err, t.Own, n.now())
 		st.Error, st.ErrorDetail, st.Holder, st.RetryAt = p.Code, p.Detail, p.Holder, p.RetryAt
-		if p.Code == CodeNodeOutdated {
-			// Nothing to try until the node is updated: the next round is soon enough.
-			n.log.Info("acme: the node predates public certificates", "node", t.ID)
-			return false
-		}
 		n.log.Warn("acme: node certificate not obtained", "node", t.ID, "identifier", t.Host, "ca", ca, "code", p.Code, "err", err)
-		return true
+		if p.RetryAt != nil && p.RetryAt.After(now) {
+			return max(p.RetryAt.Sub(now), retryAfter)
+		}
+		return retryAfter
 	}
 	cert, have := n.Cert(t.ID, t.Host)
 	if cert == nil {
 		st.Error = CodeUnknown
-		return true
+		return retryAfter
 	}
 	n.describe(&st, cert, have)
 	n.log.Info("acme: node certificate installed", "node", t.ID, "identifier", t.Host, "ca", ca)
@@ -327,7 +332,7 @@ func (n *Nodes) ensure(ctx context.Context, t NodeTarget) (failed bool) {
 	if f != nil {
 		f(t.ID)
 	}
-	return false
+	return checkEvery
 }
 
 func (n *Nodes) describe(st *NodeStatus, cert *tls.Certificate, ca string) {

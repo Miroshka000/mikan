@@ -21,13 +21,19 @@ import (
 type fakeNode struct {
 	mu      sync.Mutex
 	tokens  map[string]string
-	err     error
+	err     error // what PUT answers
+	old     bool  // a node before the endpoint: 404 to everything
 	cleaned int
 }
+
+var notFound = &nodeapi.StatusError{Method: http.MethodPut, Path: "/v1/acme/challenge/x", Status: http.StatusNotFound}
 
 func (n *fakeNode) PresentChallenge(_ context.Context, token, keyAuth string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.old {
+		return notFound
+	}
 	if n.err != nil {
 		return n.err
 	}
@@ -41,6 +47,9 @@ func (n *fakeNode) PresentChallenge(_ context.Context, token, keyAuth string) er
 func (n *fakeNode) CleanUpChallenge(_ context.Context, token string) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.old {
+		return notFound
+	}
 	delete(n.tokens, token)
 	n.cleaned++
 	return nil
@@ -89,8 +98,8 @@ func TestNodeCertificateIsOrderedThroughTheNode(t *testing.T) {
 	var changed []int64
 	nodes.OnChange(func(id int64) { changed = append(changed, id) })
 
-	if failed := nodes.all(context.Background()); failed {
-		st, _ := nodes.Status(7)
+	nodes.due(context.Background())
+	if st, _ := nodes.Status(7); st.Error != "" {
 		t.Fatalf("order failed: %+v", st)
 	}
 	cert, issuedBy := nodes.Cert(7, "nl.example.com")
@@ -103,11 +112,14 @@ func TestNodeCertificateIsOrderedThroughTheNode(t *testing.T) {
 	if len(changed) != 1 || changed[0] != 7 {
 		t.Fatalf("the node was not told: %v", changed)
 	}
-	if node.cleaned != 1 || len(node.tokens) != 0 {
+	// The probe before the order, and the CA's token after it.
+	if node.cleaned != 2 || len(node.tokens) != 0 {
 		t.Fatalf("the token stayed on the node: %d cleaned, %v", node.cleaned, node.tokens)
 	}
-	// A valid certificate is not ordered again.
-	nodes.all(context.Background())
+	// A valid certificate is not ordered again, not even when woken.
+	nodes.Wake()
+	clear(nodes.next)
+	nodes.due(context.Background())
 	if ca.orders != 1 {
 		t.Fatalf("%d orders", ca.orders)
 	}
@@ -119,15 +131,20 @@ func TestNodeCertificateIsOrderedThroughTheNode(t *testing.T) {
 // A node older than the challenge endpoint answers 404: it keeps its pinned self-signed
 // certificate, and the admin is told to update it.
 func TestOldNodeKeepsItsSelfSignedCertificate(t *testing.T) {
-	node := &fakeNode{err: &nodeapi.StatusError{Method: http.MethodPut, Path: "/v1/acme/challenge/x", Status: http.StatusNotFound}}
-	newFakeCA(t, func(_, token, _ string) bool { return node.answers(token) })
+	node := &fakeNode{old: true}
+	ca := newFakeCA(t, func(_, token, _ string) bool { return node.answers(token) })
 	m, _ := testManager(t, "panel.example.com")
 	nodes := nodesFor(m, NodeTarget{ID: 3, Host: "old.example.com", Client: node})
-	if failed := nodes.all(context.Background()); failed {
-		t.Fatal("an old node is no failure to retry soon")
-	}
+	nodes.due(context.Background())
 	if st, _ := nodes.Status(3); st.Error != CodeNodeOutdated {
 		t.Fatalf("status: %+v", st)
+	}
+	if ca.orders != 0 {
+		t.Fatalf("an old node cost %d orders at the CA", ca.orders)
+	}
+	// Asked again within minutes, not hours: it may be updated meanwhile.
+	if wait := nodes.next[3].Sub(time.Now()); wait > nodeRetry {
+		t.Fatalf("next look in %s", wait)
 	}
 	if c, _ := nodes.Cert(3, "old.example.com"); c != nil {
 		t.Fatal("a certificate without an order")
@@ -140,9 +157,7 @@ func TestNodePort80Busy(t *testing.T) {
 	newFakeCA(t, func(_, token, _ string) bool { return node.answers(token) })
 	m, _ := testManager(t, "panel.example.com")
 	nodes := nodesFor(m, NodeTarget{ID: 4, Host: "busy.example.com", Client: node})
-	if failed := nodes.all(context.Background()); !failed {
-		t.Fatal("a busy port 80 is tried again soon")
-	}
+	nodes.due(context.Background())
 	if st, _ := nodes.Status(4); st.Error != CodePort80Busy || st.Holder != "nginx" {
 		t.Fatalf("status: %+v", st)
 	}
@@ -155,7 +170,7 @@ func TestNodesWithoutOrders(t *testing.T) {
 	ca := newFakeCA(t, func(_, token, _ string) bool { return node.answers(token) })
 	m, _ := testManager(t, "panel.example.com")
 	nodes := nodesFor(m, NodeTarget{ID: 5, Host: "own.example.com", HasOwn: true, Client: node}, NodeTarget{ID: 6, Host: "10.0.0.5", Client: node})
-	nodes.all(context.Background())
+	nodes.due(context.Background())
 	if ca.orders != 0 {
 		t.Fatalf("%d orders", ca.orders)
 	}

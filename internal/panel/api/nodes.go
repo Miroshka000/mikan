@@ -537,6 +537,10 @@ func (h *handlers) nodesChanged() {
 	if h.d.Nodes != nil {
 		h.d.Nodes.NodesChanged()
 	}
+	// A new node, address or domain gets its public certificate now, not at the next round.
+	if h.d.WakeNodeCerts != nil {
+		h.d.WakeNodeCerts()
+	}
 }
 
 // forgetNode drops the certificates and keys the panel keeps for a node id: the admin's
