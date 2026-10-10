@@ -3287,10 +3287,10 @@ export interface components {
              */
             mode: "light" | "dark" | "system";
             /**
-             * @description Палитра темы, как темы панели
+             * @description Тема, как темы панели. mikan, ocean, sakura и forest следуют mode; остальные светлые или тёмные сами
              * @enum {string}
              */
-            palette: "mikan" | "ocean" | "sakura" | "forest";
+            palette: "mikan" | "ocean" | "sakura" | "forest" | "latte" | "snow" | "dawn" | "dune" | "graphite" | "abyss" | "ember" | "plum" | "moss" | "terminal" | "nord" | "mocha" | "tokyo" | "dracula" | "aurora" | "cosmos";
             /** @enum {string} */
             radius: "small" | "medium" | "large";
         };

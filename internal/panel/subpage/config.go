@@ -23,9 +23,14 @@ type Page struct {
 	CSS    string      `json:"css" maxLength:"20480" doc:"Свой CSS страницы подписки (не админки), до 20 КБ; @import и < убираются"`
 }
 
+// Palettes are the page's themes, the panel's: the first four follow Mode, the others are
+// light or dark by themselves (web/src/lib/themes.ts, styles/themes.css). Midnight is Mikan
+// in the dark mode.
+var Palettes = []string{"mikan", "ocean", "sakura", "forest", "latte", "snow", "dawn", "dune", "graphite", "abyss", "ember", "plum", "moss", "terminal", "nord", "mocha", "tokyo", "dracula", "aurora", "cosmos"}
+
 // PageLook is how the page looks.
 type PageLook struct {
-	Palette    string         `json:"palette" enum:"mikan,ocean,sakura,forest" doc:"Палитра темы, как темы панели"`
+	Palette    string         `json:"palette" enum:"mikan,ocean,sakura,forest,latte,snow,dawn,dune,graphite,abyss,ember,plum,moss,terminal,nord,mocha,tokyo,dracula,aurora,cosmos" doc:"Тема, как темы панели. mikan, ocean, sakura и forest следуют mode; остальные светлые или тёмные сами"`
 	Mode       string         `json:"mode" enum:"light,dark,system" doc:"light, dark (как Midnight) или system — как у посетителя"`
 	Accent     string         `json:"accent" enum:"theme,brand" doc:"theme — цвет палитры, brand — цвет бренда (brand_accent)"`
 	Background PageBackground `json:"background"`
@@ -181,7 +186,7 @@ func Normalize(c *Page) []Problem {
 			*v = def
 		}
 	}
-	enum("look.palette", &l.Palette, d.Look.Palette, "mikan", "ocean", "sakura", "forest")
+	enum("look.palette", &l.Palette, d.Look.Palette, Palettes...)
 	enum("look.mode", &l.Mode, d.Look.Mode, "light", "dark", "system")
 	enum("look.accent", &l.Accent, d.Look.Accent, "theme", "brand")
 	enum("look.font", &l.Font, d.Look.Font, "default", "onest", "system", "rounded")

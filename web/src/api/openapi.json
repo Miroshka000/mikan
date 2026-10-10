@@ -3876,12 +3876,28 @@
             "type": "string"
           },
           "palette": {
-            "description": "Палитра темы, как темы панели",
+            "description": "Тема, как темы панели. mikan, ocean, sakura и forest следуют mode; остальные светлые или тёмные сами",
             "enum": [
               "mikan",
               "ocean",
               "sakura",
-              "forest"
+              "forest",
+              "latte",
+              "snow",
+              "dawn",
+              "dune",
+              "graphite",
+              "abyss",
+              "ember",
+              "plum",
+              "moss",
+              "terminal",
+              "nord",
+              "mocha",
+              "tokyo",
+              "dracula",
+              "aurora",
+              "cosmos"
             ],
             "type": "string"
           },

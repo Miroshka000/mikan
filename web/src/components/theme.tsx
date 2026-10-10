@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { DARK_THEMES, isDarkTheme, LIGHT_THEMES, THEMES, type Theme } from "../lib/themes";
 
 /*
  * The panel's theme, kept in this browser. The palettes themselves are in styles/themes.css;
@@ -8,10 +9,9 @@ import { t } from "../i18n";
  * is in public/theme-boot.js, which applies the theme before the first paint.
  */
 
-const LIGHT = ["mikan", "ocean", "sakura", "forest", "latte", "snow", "dawn", "dune"] as const;
-const DARK = ["midnight", "graphite", "abyss", "ember", "plum", "moss", "terminal", "nord", "mocha", "tokyo", "dracula", "aurora", "cosmos"] as const;
-export const THEMES = [...LIGHT, ...DARK] as const;
-export type Theme = (typeof THEMES)[number];
+const LIGHT = LIGHT_THEMES;
+const DARK = DARK_THEMES;
+export { THEMES, type Theme };
 /** What the admin picks: a theme, or the device's light or dark (Mikan or Midnight). */
 export type ThemeChoice = Theme | "system";
 
@@ -21,7 +21,7 @@ function valid(value: string | null): value is ThemeChoice {
   return value === "system" || (value !== null && (THEMES as readonly string[]).includes(value));
 }
 
-export const isDark = (theme: Theme) => (DARK as readonly string[]).includes(theme);
+export const isDark = (theme: Theme) => isDarkTheme(theme);
 
 export function getTheme(): ThemeChoice {
   if (typeof window === "undefined") return "mikan";
@@ -87,29 +87,7 @@ export function ThemeCard() {
   const [choice, set] = useState<ThemeChoice>(getTheme);
   const refs = useRef(new Map<ThemeChoice, HTMLButtonElement>());
 
-  const names: Record<Theme, string> = {
-    mikan: t("settings.themeMikan"),
-    ocean: t("settings.themeOcean"),
-    sakura: t("settings.themeSakura"),
-    forest: t("settings.themeForest"),
-    midnight: t("settings.themeMidnight"),
-    graphite: t("settings.themeGraphite"),
-    abyss: t("settings.themeAbyss"),
-    ember: t("settings.themeEmber"),
-    plum: t("settings.themePlum"),
-    moss: t("settings.themeMoss"),
-    terminal: t("settings.themeTerminal"),
-    latte: t("settings.themeLatte"),
-    snow: t("settings.themeSnow"),
-    dawn: t("settings.themeDawn"),
-    dune: t("settings.themeDune"),
-    nord: t("settings.themeNord"),
-    mocha: t("settings.themeMocha"),
-    tokyo: t("settings.themeTokyo"),
-    dracula: t("settings.themeDracula"),
-    aurora: t("settings.themeAurora"),
-    cosmos: t("settings.themeCosmos"),
-  };
+  const names = themeNames();
   const groups: { label: string; options: Option[] }[] = [
     { label: t("settings.themeLight"), options: LIGHT.map((id) => ({ id, label: names[id] })) },
     { label: t("settings.themeDark"), options: DARK.map((id) => ({ id, label: names[id] })) },
@@ -204,8 +182,35 @@ export function ThemeCard() {
   );
 }
 
+/** Every theme's name, in the admin's language. */
+export function themeNames(): Record<Theme, string> {
+  return {
+    mikan: t("settings.themeMikan"),
+    ocean: t("settings.themeOcean"),
+    sakura: t("settings.themeSakura"),
+    forest: t("settings.themeForest"),
+    latte: t("settings.themeLatte"),
+    snow: t("settings.themeSnow"),
+    dawn: t("settings.themeDawn"),
+    dune: t("settings.themeDune"),
+    midnight: t("settings.themeMidnight"),
+    graphite: t("settings.themeGraphite"),
+    abyss: t("settings.themeAbyss"),
+    ember: t("settings.themeEmber"),
+    plum: t("settings.themePlum"),
+    moss: t("settings.themeMoss"),
+    terminal: t("settings.themeTerminal"),
+    nord: t("settings.themeNord"),
+    mocha: t("settings.themeMocha"),
+    tokyo: t("settings.themeTokyo"),
+    dracula: t("settings.themeDracula"),
+    aurora: t("settings.themeAurora"),
+    cosmos: t("settings.themeCosmos"),
+  };
+}
+
 /** A small panel drawn from a theme's own tokens: its backdrop, sidebar, a card, the accent. */
-function Mock({ theme }: { theme: Theme }) {
+export function Mock({ theme }: { theme: Theme }) {
   return (
     <span className="theme-mock" data-theme={theme} data-tone={isDark(theme) ? "dark" : "light"} aria-hidden>
       <span className="tm-side">
