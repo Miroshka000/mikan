@@ -43,9 +43,9 @@ type TLSSource func() (*nodeapi.TLSFiles, error)
 
 // Syncer drives one node.
 type Syncer struct {
-	id    int64
-	m     *Manager
-	node  Node
+	id      int64
+	m       *Manager
+	node    Node
 	tls     TLSSource
 	local   bool
 	address string
@@ -95,8 +95,8 @@ type HealthView struct {
 	Since  time.Time
 	// Skew is the node's clock minus the panel's, the round trip taken into account; nil
 	// when the node does not say its time (older nodes) or did not answer.
-	Skew   *time.Duration
-	Health nodeapi.Health
+	Skew      *time.Duration
+	Health    nodeapi.Health
 	Listeners []nodeapi.ListenerStatus
 	// Ports are the listeners' ports in the state the node runs, by name (the relay's too,
 	// as nodeapi.RelayListener), when that is the state this panel last applied; nil

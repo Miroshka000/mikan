@@ -23,14 +23,14 @@ func TestStatusFile(t *testing.T) {
 
 func TestFinal(t *testing.T) {
 	for r, want := range map[*Result]bool{
-		{OK: true}:                 true,
-		{Code: "timeout"}:          false,
-		{Code: "refused"}:          false,
-		{Code: PanelUnreachable}:   false,
-		{Code: "pin_mismatch"}:     true,
-		{Code: PanelRejected}:      true,
-		{Code: NoPanelURL}:         true,
-		{Code: PanelUnverified}:    true,
+		{OK: true}:               true,
+		{Code: "timeout"}:        false,
+		{Code: "refused"}:        false,
+		{Code: PanelUnreachable}: false,
+		{Code: "pin_mismatch"}:   true,
+		{Code: PanelRejected}:    true,
+		{Code: NoPanelURL}:       true,
+		{Code: PanelUnverified}:  true,
 	} {
 		if Final(*r) != want {
 			t.Errorf("%+v: %v", *r, !want)

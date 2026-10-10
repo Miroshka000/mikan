@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Stethoscope, Trash2, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
@@ -15,12 +15,13 @@ import { useCopy } from "../../lib/copy";
 import { bytes, num } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
 import { CascadeDrawer } from "./node-cascade";
+import { HelloLine, JoinProgress, NodeCheckDrawer, NodeProblem, SkewLine, type FixActions } from "./node-check";
 import { SpeedDrawer } from "./node-speed";
 import { NodeTrafficDrawer } from "./node-traffic";
 import { WarpDrawer } from "./node-warp";
 
 type Node = Schemas["NodeInfo"];
-type Joined = { name: string; key: string; command: string };
+type Joined = { id: number; name: string; key: string; command: string };
 
 /** What a server before 0.5.0.2 runs once by hand: from then on the panel updates it. */
 const OLD_NODE_COMMAND = "mikan update";
@@ -44,6 +45,7 @@ export function NodesPage() {
   const [trafficOf, setTrafficOf] = useState<Node | null>(null);
   const [cascadeOf, setCascadeOf] = useState<Node | null>(null);
   const [certOf, setCertOf] = useState<Node | null>(null);
+  const [checkOf, setCheckOf] = useState<Node | null>(null);
   // The arrows that order the nodes show only while ordering: most of the time they are noise.
   const [ordering, setOrdering] = useState(false);
   const many = (nodes.data?.length ?? 0) > 1;
@@ -56,7 +58,7 @@ export function NodesPage() {
     mutationFn: (id: number) => unwrap(api.POST("/api/v1/nodes/{id}/key", { params: { path: { id } } })),
     onSuccess: (r) => {
       setRekeying(null);
-      setJoined({ name: nodeLabel(r.node), key: r.key, command: r.command });
+      setJoined({ id: r.node.id, name: nodeLabel(r.node), key: r.key, command: r.command });
     },
     onSettled: refresh,
     onError: (e) => toast.error(errorText(e)),
@@ -118,6 +120,30 @@ export function NodesPage() {
       toast.error(e instanceof ApiError && e.status === 409 && e.detail === "node_in_use" ? `${t("errors.api.node_in_use")} ${e.messages.join("; ")}` : errorText(e)),
   });
 
+  // The fixes the check and the joining steps offer as buttons.
+  const fixesFor = (n: Node | undefined, close: () => void): FixActions =>
+    n
+      ? {
+          rekey: n.local
+            ? undefined
+            : () => {
+                close();
+                setRekeying(n);
+              },
+          update: updatable(n)
+            ? () => {
+                close();
+                setUpdateOf(n);
+              }
+            : undefined,
+          edit: () => {
+            close();
+            setEditing(n);
+          },
+        }
+      : {};
+  const joinedNode = joined ? nodes.data?.find((x) => x.id === joined.id) : undefined;
+
   return (
     <>
       <PageHeader
@@ -174,7 +200,7 @@ export function NodesPage() {
                 </p>
               ) : null}
               {list.map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onCheck={() => setCheckOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -189,7 +215,8 @@ export function NodesPage() {
         }}
       />
       <EditNodeDrawer node={editing} onClose={() => setEditing(null)} />
-      <KeyDrawer joined={joined} onClose={() => setJoined(null)} />
+      <KeyDrawer joined={joined} onClose={() => setJoined(null)} actions={fixesFor(joinedNode, () => setJoined(null))} />
+      <NodeCheckDrawer node={checkOf} onClose={() => setCheckOf(null)} actions={fixesFor(checkOf ?? undefined, () => setCheckOf(null))} />
       <WarpDrawer node={warpOf ? { id: warpOf.id, name: nodeLabel(warpOf) } : null} onClose={() => setWarpOf(null)} />
       <SpeedDrawer node={speedOf ? { id: speedOf.id, name: nodeLabel(speedOf) } : null} onClose={() => setSpeedOf(null)} />
       <NodeTrafficDrawer node={trafficOf ? { id: trafficOf.id, name: nodeLabel(trafficOf) } : null} onClose={() => setTrafficOf(null)} />
@@ -255,6 +282,7 @@ function NodeCard({
   onTraffic,
   onCascade,
   onCert,
+  onCheck,
   onRekey,
   onRemove,
 }: {
@@ -280,6 +308,7 @@ function NodeCard({
   onTraffic: () => void;
   onCascade: () => void;
   onCert: () => void;
+  onCheck: () => void;
   onRekey: () => void;
   onRemove: () => void;
 }) {
@@ -312,11 +341,9 @@ function NodeCard({
           ) : null}
         </div>
       </div>
-      {n.status === "error" && n.enabled ? (
-        <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
-          {n.local ? t("nodes.localOffline") : t("nodes.remoteOffline")}
-        </p>
-      ) : null}
+      {n.status === "error" && n.enabled ? <NodeProblem n={n} onCheck={onCheck} actions={{ rekey: onRekey, update: updatable(n) ? onUpdate : undefined, edit: onEdit }} /> : null}
+      {n.status === "ok" ? <SkewLine n={n} /> : null}
+      <HelloLine n={n} actions={{ edit: onEdit }} />
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-[13px]">
         <div>
           <dt className="text-xs text-[var(--ink-500)]">{t("nodes.protocols")}</dt>
@@ -409,6 +436,9 @@ function NodeCard({
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
+              <Menu.Item className="menu-item" onSelect={onCheck}>
+                <Stethoscope size={16} aria-hidden /> {t("nodeCheck.button")}
+              </Menu.Item>
               <Menu.Item className="menu-item" onSelect={onWarp}>
                 <Cloud size={16} aria-hidden /> WARP
               </Menu.Item>
@@ -501,7 +531,7 @@ function AddNodeDrawer({ open, onOpenChange, onJoined }: { open: boolean; onOpen
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: qk.nodes });
       void qc.invalidateQueries({ queryKey: qk.inbounds });
-      onJoined({ name: nodeLabel(r.node), key: r.key, command: r.command });
+      onJoined({ id: r.node.id, name: nodeLabel(r.node), key: r.key, command: r.command });
     },
     onError: (e) => {
       if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields);
@@ -557,7 +587,7 @@ function AddNodeDrawer({ open, onOpenChange, onJoined }: { open: boolean; onOpen
 }
 
 /** The join key is shown once: the panel keeps only its fingerprint. */
-function KeyDrawer({ joined, onClose }: { joined: Joined | null; onClose: () => void }) {
+function KeyDrawer({ joined, onClose, actions }: { joined: Joined | null; onClose: () => void; actions: FixActions }) {
   const copyText = useCopy();
   const copy = () => joined && copyText(joined.command, t("nodes.commandCopied"));
   return (
@@ -587,6 +617,7 @@ function KeyDrawer({ joined, onClose }: { joined: Joined | null; onClose: () => 
             <Copy size={18} />
           </button>
         </div>
+        {joined ? <JoinProgress id={joined.id} actions={actions} /> : null}
       </div>
     </Drawer>
   );

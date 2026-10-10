@@ -29,7 +29,7 @@ import (
 // CheckItem is one line of "Check node" or "Check server": what was looked at, how it is,
 // and what fixes it. The page words it by id, status and code; params are the facts.
 type CheckItem struct {
-	ID     string            `json:"id" doc:"Что проверено: link, hello, version, update, clock, listeners, listener, port, relay, cascade, node_dns, node_internet, node_github, node_ghcr, node_disk, node_memory, diagnose, local_node, dns, internet, github, ghcr, disk, memory"`
+	ID     string            `json:"id" doc:"Что проверено: link, hello, version, update, skew, listeners, listener, port, relay, cascade, node_dns, node_internet, node_github, node_ghcr, node_disk, node_memory, diagnose, local_node, dns, internet, github, ghcr, disk, memory, clock, updates"`
 	Status string            `json:"status" enum:"ok,warn,fail,skip"`
 	Code   string            `json:"code,omitempty" doc:"Почему не ok: timeout, refused, pin_mismatch, behind, skew, busy и другие"`
 	Params map[string]string `json:"params,omitempty"`
@@ -250,9 +250,9 @@ func updateItem(u *nodeapi.UpdateStatus, version string) (CheckItem, bool) {
 
 func clockItem(skew *time.Duration) CheckItem {
 	if skew == nil {
-		return CheckItem{ID: "clock", Status: nodeapi.CheckSkip, Code: "old_node"}
+		return CheckItem{ID: "skew", Status: nodeapi.CheckSkip, Code: "old_node"}
 	}
-	it := CheckItem{ID: "clock", Status: nodeapi.CheckOK, Params: map[string]string{"skew": strconv.FormatInt(int64(math.Round(skew.Seconds())), 10)}}
+	it := CheckItem{ID: "skew", Status: nodeapi.CheckOK, Params: map[string]string{"skew": strconv.FormatInt(int64(math.Round(skew.Seconds())), 10)}}
 	if *skew >= diag.SkewWarn || *skew <= -diag.SkewWarn {
 		it.Status, it.Code, it.Fix = nodeapi.CheckWarn, "skew", "sync_time"
 	}

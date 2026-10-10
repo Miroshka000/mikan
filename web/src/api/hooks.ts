@@ -150,12 +150,13 @@ export function useNode() {
   return useQuery({ queryKey: qk.node, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/node", { signal })), refetchInterval: 10_000 });
 }
 
-export function useNodes() {
+/** The nodes; `watch` polls closely while something waits for a node (a new one joining). */
+export function useNodes(watch?: boolean) {
   return useQuery({
     queryKey: qk.nodes,
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes", { signal })),
     // Closer while a node updates: it goes down and comes back on the new version.
-    refetchInterval: (q) => (q.state.data?.some((n) => n.update?.state === "running") ? 4_000 : 30_000),
+    refetchInterval: (q) => (watch ? 2_500 : q.state.data?.some((n) => n.update?.state === "running") ? 4_000 : 30_000),
   });
 }
 

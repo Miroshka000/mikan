@@ -25,17 +25,17 @@ import (
 )
 
 type NodeInfo struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name" doc:"Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений"`
-	Local       bool       `json:"local" doc:"Своя нода панели"`
-	Address     string     `json:"address" doc:"host:port API ноды; пусто у своей ноды"`
-	Host        string     `json:"host" doc:"Адрес для клиентов"`
-	Domain      string     `json:"domain"`
-	PublicName  string     `json:"public_name" doc:"Публичное имя для канала состояния; пустое — нода скрыта из списка"`
-	Enabled     bool       `json:"enabled"`
-	Inbounds    int        `json:"inbounds"`
-	Status      string     `json:"status" enum:"ok,error,unknown"`
-	Error       string     `json:"error,omitempty" doc:"Слова ошибки связи как есть, для «подробнее»"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name" doc:"Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений"`
+	Local      bool   `json:"local" doc:"Своя нода панели"`
+	Address    string `json:"address" doc:"host:port API ноды; пусто у своей ноды"`
+	Host       string `json:"host" doc:"Адрес для клиентов"`
+	Domain     string `json:"domain"`
+	PublicName string `json:"public_name" doc:"Публичное имя для канала состояния; пустое — нода скрыта из списка"`
+	Enabled    bool   `json:"enabled"`
+	Inbounds   int    `json:"inbounds"`
+	Status     string `json:"status" enum:"ok,error,unknown"`
+	Error      string `json:"error,omitempty" doc:"Слова ошибки связи как есть, для «подробнее»"`
 	// Why the panel cannot reach the node, since when, and when it last could; the node's
 	// clock against the panel's; its last hello.
 	ErrorCode   string            `json:"error_code,omitempty" enum:"timeout,refused,unreachable,dns,pin_mismatch,tls,http_status,unknown" doc:"Почему панель не достучалась до ноды"`
@@ -44,15 +44,15 @@ type NodeInfo struct {
 	LastOKAt    *time.Time        `json:"last_ok_at,omitempty" doc:"Когда нода последний раз отвечала (с запуска панели)"`
 	ClockSkew   *int64            `json:"clock_skew,omitempty" doc:"Часы ноды минус часы панели, секунды; нет у старых нод"`
 	Hello       *NodeHello        `json:"hello,omitempty" doc:"Последний hello ноды после запуска: достучалась ли панель в ответ"`
-	Version     string     `json:"version,omitempty"`
-	Listeners   int        `json:"listeners"`
-	ListenersOK int        `json:"listeners_ok"`
-	Conns       int        `json:"conns"`
-	CPUPercent  float64    `json:"cpu_percent" doc:"Загрузка процессора всего сервера, не только ноды"`
-	ProcCPU     *float64   `json:"proc_cpu_percent,omitempty" doc:"Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4"`
-	MemUsed     uint64     `json:"mem_used"`
-	MemTotal    uint64     `json:"mem_total"`
-	CheckedAt   *time.Time `json:"checked_at,omitempty"`
+	Version     string            `json:"version,omitempty"`
+	Listeners   int               `json:"listeners"`
+	ListenersOK int               `json:"listeners_ok"`
+	Conns       int               `json:"conns"`
+	CPUPercent  float64           `json:"cpu_percent" doc:"Загрузка процессора всего сервера, не только ноды"`
+	ProcCPU     *float64          `json:"proc_cpu_percent,omitempty" doc:"Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4"`
+	MemUsed     uint64            `json:"mem_used"`
+	MemTotal    uint64            `json:"mem_total"`
+	CheckedAt   *time.Time        `json:"checked_at,omitempty"`
 	// Traffic24h is what the node carried in the last day, both ways.
 	Traffic24h int64 `json:"traffic_24h" doc:"Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0"`
 	// Behind: the node runs an older version than the panel.

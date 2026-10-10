@@ -72,9 +72,9 @@ type Checker struct {
 
 // PortResult is one port as one checker saw it.
 type PortResult struct {
-	Port int     `json:"port"`
-	OK   bool    `json:"ok"`
-	Ms   int     `json:"ms,omitempty"`
+	Port int  `json:"port"`
+	OK   bool `json:"ok"`
+	Ms   int  `json:"ms,omitempty"`
 	// Error is the checker's words ("Connection timed out"); Pending: no answer in time.
 	Error   string `json:"error,omitempty"`
 	Pending bool   `json:"pending,omitempty"`

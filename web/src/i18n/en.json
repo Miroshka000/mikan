@@ -441,7 +441,10 @@
       "logo_missing": "Upload a logo first",
       "background_missing": "Upload a background image first",
       "duplicate_id": "An instruction is listed twice",
-      "too_many_docs": "No more than {value} instructions"
+      "too_many_docs": "No more than {value} instructions",
+      "checkhost_busy": "A check from Russia is running, wait a moment",
+      "checkhost_unavailable": "check-host.net did not answer, try later",
+      "checkhost_nothing": "The node has no address or TCP ports to check"
     },
     "acme": {
       "port80_busy": "Port 80 is used by another program. Let's Encrypt checks the server through it",
@@ -1874,7 +1877,6 @@
     "offline": "No connection",
     "checking": "Checking…",
     "localOffline": "The VPN on the panel's server does not answer. The mikan status command on the server shows why.",
-    "remoteOffline": "The server does not answer. If you have just added it, run the install command on it. If not, check that it is on.",
     "protocols": "Protocols",
     "listeners": "{ok} of {total} working",
     "conns": "Connections",
@@ -1923,7 +1925,7 @@
     "keyTitle": "Join key",
     "keyOnce": "The key is shown once. If you lose it, change the key on the node's card.",
     "keyStep1": "Run the command below on the node's server as root: the installer sets up Docker and the node and opens its ports.",
-    "keyStep2": "In half a minute the node shows up here as «Working».",
+    "keyStep2": "Below you see how the connection goes.",
     "keyDone": "Done",
     "copyCommand": "Copy command",
     "commandCopied": "Command copied",
@@ -2671,5 +2673,266 @@
     "up": "Upload",
     "ms": "{n} ms",
     "broke": "The test broke off: {error}"
+  },
+  "nodeCheck": {
+    "button": "Check node",
+    "title": "Node check",
+    "lead": "The panel looks at its link to the node, the version, the clock, the protocols, the ports, the internet on the node's server and the cascade.",
+    "running": "Checking, up to 30 seconds…",
+    "again": "Check again",
+    "copyReport": "Copy a report for the chat",
+    "reportCopied": "Report copied. IPs, domains, the API port and keys are hidden in it",
+    "failed": "The check failed",
+    "allOk": "All good",
+    "problems": "{n, plural, one {# problem} other {# problems}}",
+    "warnings": "{n, plural, one {# warning} other {# warnings}}",
+    "details": "Details",
+    "copyCommand": "Copy the command",
+    "commandCopied": "Command copied",
+    "onNode": "On the node's server, as root:",
+    "onPanel": "On the panel's server, as root:",
+    "rekey": "Reissue key",
+    "updateNode": "Update node",
+    "editHost": "Change address",
+    "lastSeen": "Last seen {ago}",
+    "neverSeen": "Not seen since the panel started",
+    "lostAgo": "Lost {ago}",
+    "helloOk": "The node said hello {ago} and the panel reached it back",
+    "helloIp": "The node said hello from IP {seen}, but the panel has {host}. If clients cannot connect, fix the address",
+    "helloFail": "The node said hello {ago}, but the panel could not reach it back",
+    "skewAhead": "The node's clock is {n} s ahead: REALITY and TLS connections break because of it",
+    "skewBehind": "The node's clock is {n} s behind: REALITY and TLS connections break because of it",
+    "status": {
+      "ok": "ok",
+      "warn": "warning",
+      "fail": "error",
+      "skip": "skipped"
+    },
+    "id": {
+      "link": "Link to the node's API",
+      "hello": "Hello from the node",
+      "version": "Version",
+      "update": "Last update",
+      "skew": "Clock",
+      "listeners": "Protocols",
+      "listener": "Protocol {name}",
+      "port": "Port {port}, {name}",
+      "relay": "Cascade relay",
+      "cascade": "Cascade through {exit}",
+      "node_dns": "DNS on the node",
+      "node_internet": "Internet on the node",
+      "node_github": "GitHub from the node",
+      "node_ghcr": "GHCR from the node",
+      "node_disk": "Node's disk",
+      "node_memory": "Node's memory",
+      "diagnose": "Node's server",
+      "local_node": "The panel's own node",
+      "dns": "DNS",
+      "internet": "Internet",
+      "github": "GitHub for updates",
+      "ghcr": "GHCR for updates",
+      "clock": "Clock",
+      "disk": "Disk",
+      "memory": "Memory",
+      "updates": "Updates"
+    },
+    "code": {
+      "timeout": "Port {port} does not answer: packets get lost on the way. Usually the hoster's firewall or ufw closes it, or the server is off",
+      "refused": "The server answers, but nothing listens on port {port}: the node is not installed, stopped or crashed",
+      "unreachable": "No route to {host}: a wrong IP, or the server is off",
+      "dns": "The name {host} is not found in DNS",
+      "pin_mismatch": "The node answered, but the key does not match: it is outdated or belongs to another node or panel",
+      "tls": "Something else than the node answers on port {port}",
+      "http_status": "The node answered with error {status}",
+      "unknown": "No link, the details say why",
+      "old_node": "The node is older than this check",
+      "none": "No data yet",
+      "busy": "Port {port} is taken by another program",
+      "failed": "Did not start, the details say why",
+      "low": "Low on space",
+      "panel_unreachable": "The node's server cannot reach the panel. This breaks nothing: the panel is the one that connects",
+      "panel_rejected": "The panel does not know the node's key: it was reissued or the node removed",
+      "panel_unverified": "The answer did not come from this panel",
+      "no_panel_url": "The key has no panel address: an older version issued it"
+    },
+    "text": {
+      "link": {
+        "ok": "The panel reaches the node, answer in {ms} ms"
+      },
+      "hello": {
+        "ok": "Came {ago}, the panel reached the node back",
+        "none": "None since the panel started. Nodes of new versions send it when they start",
+        "ip_differs": "Came from IP {seen_ip}, but the panel has {host}"
+      },
+      "version": {
+        "ok": "The node runs {version}",
+        "behind": "The node runs {version}, the panel {panel}",
+        "newer": "The node runs {version}, newer than the panel ({panel})",
+        "local_differs": "The own node runs {version}, the panel {panel}"
+      },
+      "update": {
+        "ok": "Updated to {version}",
+        "update_failed": "The node did not update to {version} and stayed on {from}",
+        "update_running": "Updating to {version}"
+      },
+      "skew": {
+        "ok": "{abs} s off the panel's",
+        "skew": "{abs} s off the panel's: REALITY and TLS connections break",
+        "old_node": "The node does not report its time: it is older than this check"
+      },
+      "listeners": {
+        "ok": "{ok} of {total} running",
+        "some_down": "{ok} of {total} running",
+        "none": "No protocols are on for the node"
+      },
+      "listener": {
+        "busy": "Port {port} on the node's server is taken by another program",
+        "failed": "Did not start"
+      },
+      "port": {
+        "ok": "Open to the panel",
+        "timeout": "No answer: the hoster's firewall or ufw closes the port",
+        "refused": "Closed: nothing listens on it"
+      },
+      "relay": {
+        "ok": "Port {port} listens",
+        "busy": "Port {port} is taken by another program",
+        "failed": "Did not start",
+        "unknown": "The node has not applied the relay yet"
+      },
+      "cascade": {
+        "ok": "Works, sites see IP {ip}",
+        "exit_down": "Node {exit} is not connected to the panel",
+        "exit_relay": "The relay of node {exit} did not start, port {port}",
+        "exit_no_relay": "Node {exit} has no relay",
+        "exit_blocked": "This node cannot reach port {port} of node {exit}, or {exit} has no internet",
+        "old_node": "The node cannot check the cascade, update it"
+      },
+      "node_dns": {
+        "ok": "Names resolve",
+        "fail": "The node cannot find {name} in DNS"
+      },
+      "node_internet": {
+        "ok": "Yes",
+        "fail": "No way to the internet"
+      },
+      "node_github": {
+        "ok": "Reachable",
+        "fail": "Unreachable: the node cannot download updates"
+      },
+      "node_ghcr": {
+        "ok": "Reachable",
+        "fail": "Unreachable: the node cannot download updates"
+      },
+      "node_disk": {
+        "ok": "{free} free",
+        "low": "Only {free} free",
+        "unknown": "No data"
+      },
+      "node_memory": {
+        "ok": "{available} free",
+        "low": "Only {available} free",
+        "unknown": "No data"
+      },
+      "diagnose": {
+        "old_node": "The node is older than this check: update it to see DNS, the internet, disk and memory"
+      },
+      "local_node": {
+        "ok": "Running, version {version}",
+        "fail": "Does not answer"
+      },
+      "dns": {
+        "ok": "Names resolve",
+        "fail": "The server cannot find {name} in DNS"
+      },
+      "internet": {
+        "ok": "Yes",
+        "fail": "No way to the internet"
+      },
+      "github": {
+        "ok": "Reachable",
+        "fail": "Unreachable: the panel cannot download updates"
+      },
+      "ghcr": {
+        "ok": "Reachable",
+        "fail": "Unreachable: the panel cannot download updates"
+      },
+      "clock": {
+        "ok": "{abs} s off GitHub's",
+        "skew": "{abs} s off GitHub's: REALITY and TLS connections break",
+        "unknown": "Could not compare: GitHub did not answer"
+      },
+      "disk": {
+        "ok": "{free} free",
+        "low": "Only {free} free",
+        "unknown": "No data"
+      },
+      "memory": {
+        "ok": "{available} free",
+        "low": "Only {available} free",
+        "unknown": "No data"
+      },
+      "updates": {
+        "ok": "{version}, the latest",
+        "available": "{version} is out",
+        "check_failed": "Could not check for updates"
+      }
+    },
+    "fix": {
+      "rekey": "Reissue the key and run mikan join with the new key on the node's server.",
+      "update_node": "Update the node from the panel.",
+      "old_node": "The node is too old for the panel to update it. Run this once on its server:",
+      "open_port": "Open port {port}/tcp in the firewall of the hoster's control panel. If ufw is on on the server:",
+      "start_node": "See what is wrong with the node on its server. If the node is not installed yet, run the install command with the key.",
+      "check_host": "Check the node's IP in its settings and that the server is on.",
+      "check_dns": "Check the domain's DNS record, or use the IP instead of the name.",
+      "free_port": "Free the port or change it. What holds it:",
+      "sync_time": "Turn on time sync on the server:",
+      "update_panel": "Update the panel: Settings → System.",
+      "free_disk": "Free some disk space:",
+      "check_outbound": "The server cannot reach the internet, or its DNS does not work. The full check on the server:",
+      "restart_panel": "See what is wrong with mikan on the panel's server and restart it:",
+      "exit_node": "Open the exit node's card and check it."
+    },
+    "russia": {
+      "button": "Check from Russia",
+      "title": "Reachability from Russia",
+      "lead": "The panel asks check-host.net to connect to the node's ports from cities in Russia.",
+      "caveat": "This check sees only blocks of an IP or a port. It does not show DPI blocking or the whitelists of mobile operators.",
+      "running": "Asking check-host.net, up to 30 seconds…",
+      "checkedAt": "Checked {ago}",
+      "api": "API {port}",
+      "ok": "open, {ms} ms",
+      "pending": "no answer",
+      "allOk": "The ports open from every city",
+      "someFail": "The ports do not open from some cities: the IP or a port may be blocked",
+      "city": "City"
+    },
+    "join": {
+      "title": "Connection",
+      "install": "Waiting for the install on the server",
+      "installHint": "An install usually takes 1-3 minutes",
+      "installDone": "The node is installed and said hello",
+      "reach": "The panel reached port {port}",
+      "reachWait": "The panel knocks on port {port}",
+      "key": "The key fits",
+      "keyWait": "Checking the key",
+      "protocols": "Protocols running {ok}/{total}",
+      "protocolsWait": "Starting the protocols",
+      "internet": "The node reaches the internet",
+      "internetWait": "Checking the internet",
+      "internetFail": "The node has no way to the internet",
+      "internetSkip": "The node cannot check its internet, update it",
+      "done": "The node works. Its protocols are in the subscriptions already, clients need to do nothing.",
+      "closeHint": "You can close this: the status stays on the node's card.",
+      "stepDone": "done",
+      "stepWait": "waiting",
+      "stepFail": "error"
+    },
+    "server": {
+      "title": "Server check",
+      "lead": "The own node, the clock, disk, memory, DNS and access to GitHub and GHCR for updates.",
+      "button": "Check server"
+    }
   }
 }
