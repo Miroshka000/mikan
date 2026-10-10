@@ -90,7 +90,7 @@ func Classify(err error) string {
 	}
 	// Errors that lost their type on the way (a wrapped string) still read the same.
 	switch {
-	case strings.Contains(msg, "connection refused"):
+	case strings.Contains(msg, "connection refused"), strings.Contains(msg, "actively refused"):
 		return LinkRefused
 	case strings.Contains(msg, "no route to host"), strings.Contains(msg, "network is unreachable"):
 		return LinkUnreachable

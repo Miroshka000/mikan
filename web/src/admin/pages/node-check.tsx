@@ -22,8 +22,8 @@ type Params = Record<string, string>;
 /** What the buttons of a fix do; a fix without its action shows only its words. */
 export type FixActions = { rekey?: () => void; update?: () => void; edit?: () => void };
 
-/** The link failures before any TLS: the panel never got a word from the node. */
-const DIAL_CODES = ["timeout", "refused", "unreachable", "dns"];
+/** The link failures after the port opened: something answered on it, the node or not. */
+const ANSWER_CODES = ["pin_mismatch", "tls", "http_status"];
 
 /** The node's API port, from its host:port. */
 export const apiPort = (n: Node) => n.address.slice(n.address.lastIndexOf(":") + 1);
@@ -366,7 +366,7 @@ export function NodeProblem({ n, onCheck, actions }: { n: Node; onCheck: () => v
       <p className="text-[var(--berry-600)]">{codeText(code, n.error_params)}</p>
       <p className="mt-1 text-xs text-[var(--ink-500)]">
         {n.last_ok_at ? t("nodeCheck.lastSeen", { ago: ago(n.last_ok_at) }) : t("nodeCheck.neverSeen")}
-        {n.error_since ? ` · ${t("nodeCheck.lostAgo", { ago: ago(n.error_since) })}` : null}
+        {n.last_ok_at && n.error_since ? ` · ${t("nodeCheck.lostAgo", { ago: ago(n.error_since) })}` : null}
       </p>
       <Fix fix={fix} params={n.error_params} actions={actions} />
       <Details text={n.error} />
@@ -434,8 +434,9 @@ export function JoinProgress({ id, actions }: { id: number; actions: FixActions 
   const hello = n.hello;
   const ok = n.status === "ok";
   const port = apiPort(n);
-  const installed = ok || !!hello || (!!code && !DIAL_CODES.includes(code));
-  const reached = ok || (!!code && !DIAL_CODES.includes(code));
+  const answered = ANSWER_CODES.includes(code);
+  const installed = ok || !!hello || answered;
+  const reached = ok || answered;
   // Installed for sure (it said hello), and the panel still cannot get to its port.
   const blocked = !reached && !!hello && !hello.ok;
   const keyBad = code === "pin_mismatch" || code === "tls" || code === "http_status";
