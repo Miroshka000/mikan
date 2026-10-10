@@ -103,6 +103,16 @@ func TestCountersAppliedOnce(t *testing.T) {
 	if len(node.acked) != 2 || node.acked[1] != 1 {
 		t.Fatalf("acks = %v, want the duplicate acked too", node.acked)
 	}
+	// The slot's own total (what a bound device used) is counted once too, and a slot of
+	// nobody is not.
+	var up, down int64
+	if err := st.DB.QueryRowContext(ctx, "SELECT up, down FROM slot_traffic WHERE slot_id = $1", slot.ID).Scan(&up, &down); err != nil || up != 100 || down != 900 {
+		t.Fatalf("slot traffic: up %d down %d, %v", up, down, err)
+	}
+	var strangers int
+	if err := st.DB.QueryRowContext(ctx, "SELECT count(*) FROM slot_traffic t JOIN slots s ON s.id = t.slot_id WHERE s.name = 's999999'").Scan(&strangers); err != nil || strangers != 0 {
+		t.Fatalf("a slot of nobody got traffic: %d, %v", strangers, err)
+	}
 	node.batch = nodeapi.Counters{Epoch: "e2", Seq: 1, Slots: map[string]nodeapi.Traffic{slot.Name: {Down: 50}}}
 	s.pullCounters(ctx)
 	got, _ = st.Q.GetUser(ctx, u.ID)

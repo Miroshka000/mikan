@@ -54,6 +54,10 @@ const PresetGecko = "hysteria2_gecko"
 const (
 	PresetTLSXHTTP  = "vless_tls_xhttp"
 	PresetTLSVision = "vless_tls_vision"
+	// PresetTLSWS is VLESS over WebSocket on TLS: the transport some mobile operators let
+	// through when nothing else passes, and the one a CDN (Cloudflare, Yandex) carries to
+	// the node. Behind a CDN its client address is the CDN's (inbound "behind a proxy").
+	PresetTLSWS = "vless_tls_ws"
 )
 
 // Order is display and fallback order. Since 2026 the RU DPI freezes a server's 443/tcp
@@ -69,9 +73,10 @@ var All = []Info{
 	{ID: "trojan_reality", Title: "Trojan · REALITY", Summary: "Другой протокол под той же маскировкой — запасной вариант", Type: "trojan", Network: "tcp", Port: "2087", Name: "trojan", SubName: "Trojan"},
 	{ID: PresetTLSXHTTP, Title: "VLESS · TLS · XHTTP", Summary: "Обычный TLS на настоящем сертификате домена панели, как у сайта: на чужие запросы отвечает как веб-сервер, держит мало соединений", Type: "vless", Network: "tcp", Port: "2443", Name: "vless-tls-xhttp", SubName: "VLESS TLS XHTTP", DomainCert: true},
 	{ID: PresetTLSVision, Title: "VLESS · TLS · Vision", Summary: "Классический VLESS Vision на настоящем сертификате домена панели: работает почти во всех приложениях. На 443 в РФ быстро замораживается", Type: "vless", Network: "tcp", Port: "3443", Name: "vless-tls-vision", SubName: "VLESS TLS Vision", DomainCert: true},
+	{ID: PresetTLSWS, Title: "VLESS · TLS · WebSocket", Summary: "WebSocket на настоящем сертификате: проходит у операторов, где работает только WS, и через CDN (Cloudflare, Яндекс). Для CDN укажите его адрес в блоке «За прокси»", Type: "vless", Network: "tcp", Port: "2053", Name: "vless-tls-ws", SubName: "VLESS WS", DomainCert: true},
 	{ID: "anytls", Title: "AnyTLS", Summary: "TLS с паддингом против анализа размеров пакетов; нужен клиент на mihomo или sing-box", Type: "anytls", Network: "tcp", Port: "2083", Name: "anytls", SubName: "AnyTLS"},
 	{ID: PresetPQ, Title: "VLESS · REALITY · XHTTP · PQ", Summary: "XHTTP с постквантовым шифрованием VLESS: записанный сейчас трафик не расшифровать и в будущем. Нужен свежий клиент на mihomo или Xray; приложения на sing-box не подключатся", Type: "vless", Network: "tcp", Port: "2096", Name: "vless-pq", SubName: "VLESS PQ"},
-	{ID: "trusttunnel", Title: "TrustTunnel", Summary: "Протокол AdGuard: HTTP/2 на настоящем сертификате ноды, снаружи обычный сайт", Type: "trusttunnel", Network: "tcp", Port: "4443", Name: "trusttunnel", SubName: "TrustTunnel", Apps: "mihomo"},
+	{ID: "trusttunnel", Title: "TrustTunnel", Summary: "Протокол AdGuard: HTTP/2 на настоящем сертификате ноды. На запрос без ключа отвечает 407, как прокси, и активный сканер его узнаёт: не ставьте его на ноду, IP которой важно сберечь", Type: "trusttunnel", Network: "tcp", Port: "4443", Name: "trusttunnel", SubName: "TrustTunnel", Apps: "mihomo"},
 	{ID: "shadowquic", Title: "ShadowQUIC", Summary: "QUIC, который на чужие запросы отвечает как настоящий сайт (JLS). Запасной протокол по UDP", Type: "shadowquic", Network: "udp", Port: "4443", Name: "shadowquic", SubName: "ShadowQUIC", Apps: "mihomo"},
 	{ID: "mieru", Title: "Mieru", Summary: "Своё шифрование и случайный рисунок трафика. Только TCP", Type: "mieru", Network: "tcp", Port: "5443", Name: "mieru", SubName: "Mieru", Apps: "mihomo"},
 	{ID: "shadowsocks_2022", Title: "Shadowsocks-2022", Summary: "Классика, быстрый. Один ключ на всех пользователей", Type: "shadowsocks", Network: "tcp", Port: "6443", Name: "shadowsocks", SubName: "Shadowsocks", Shared: true},
@@ -125,6 +130,8 @@ func NewConfig(id, dest string) (string, error) {
 			"mikan": map[string]any{"tls": "node"}}), nil
 	case PresetTLSVision:
 		return proto.Marshal(proto.Template{"type": "vless", "mikan": map[string]any{"flow": "xtls-rprx-vision", "tls": "node"}}), nil
+	case PresetTLSWS:
+		return proto.Marshal(proto.Template{"type": "vless", "ws-path": randomPath(), "mikan": map[string]any{"tls": "node"}}), nil
 	case "hysteria2":
 		return proto.Marshal(proto.Template{"type": "hysteria2", "alpn": []any{"h3"}, "obfs": proto.ObfsSalamander, "obfs-password": secure.Token(24)}), nil
 	case PresetGecko:

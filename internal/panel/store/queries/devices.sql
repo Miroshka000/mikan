@@ -58,3 +58,17 @@ WHERE b.user_id = $1 ORDER BY b.banned_at DESC, b.id DESC;
 
 -- name: DeleteDeviceBan :one
 DELETE FROM device_bans WHERE id = $1 AND user_id = $2 RETURNING *;
+
+-- name: AddSlotsTraffic :exec
+-- Adds a batch's traffic to its slots, in slot order so two nodes' batches take turns.
+INSERT INTO slot_traffic (slot_id, up, down)
+SELECT s.id, v.up, v.down
+FROM (SELECT unnest(sqlc.arg(names)::text[]) AS name, unnest(sqlc.arg(up)::bigint[]) AS up, unnest(sqlc.arg(down)::bigint[]) AS down) AS v
+JOIN slots s ON s.name = v.name
+ORDER BY s.id
+ON CONFLICT (slot_id) DO UPDATE SET up = slot_traffic.up + excluded.up, down = slot_traffic.down + excluded.down;
+
+-- name: ListBoundDeviceTraffic :many
+-- What each of a user's bound devices used since it was bound.
+SELECT d.id AS device_id, COALESCE(t.up, 0)::bigint AS up, COALESCE(t.down, 0)::bigint AS down
+FROM bound_devices d LEFT JOIN slot_traffic t ON t.slot_id = d.slot_id WHERE d.user_id = $1;

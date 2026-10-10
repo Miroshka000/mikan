@@ -7,7 +7,7 @@ import { useToast } from "../../../components/toast";
 import { Button, ErrorState, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { DEVICE_NAME_MAX, desktopOS, deviceDetails, deviceLabel, reportedName } from "../../../lib/devices";
-import { ago, dateShort, maskIP } from "../../../lib/format";
+import { ago, bytes, dateShort, maskIP } from "../../../lib/format";
 import { LimitPicker } from "./limit-picker";
 import { Section } from "./section";
 
@@ -125,6 +125,11 @@ function BoundDevices({ u }: { u: User }) {
                     {meta ? `${meta} · ` : ""}
                     {d.online ? <span className="text-[var(--leaf-700)]">{t("users.onlineNow")}</span> : ago(d.last_seen)}
                   </div>
+                  {d.traffic_up + d.traffic_down > 0 ? (
+                    <div className="num text-xs text-[var(--ink-500)]" title={t("userDrawer.deviceTrafficHint")}>
+                      {t("userDrawer.deviceTraffic", { down: bytes(d.traffic_down), up: bytes(d.traffic_up) })}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" className="icon-btn" aria-label={t("userDrawer.renameDeviceLabel", { name })} title={t("userDrawer.renameDevice")} onClick={() => setPick({ d, act: "rename" })}>

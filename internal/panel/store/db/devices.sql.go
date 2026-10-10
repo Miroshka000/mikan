@@ -8,7 +8,30 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/lib/pq"
 )
+
+const addSlotsTraffic = `-- name: AddSlotsTraffic :exec
+INSERT INTO slot_traffic (slot_id, up, down)
+SELECT s.id, v.up, v.down
+FROM (SELECT unnest($1::text[]) AS name, unnest($2::bigint[]) AS up, unnest($3::bigint[]) AS down) AS v
+JOIN slots s ON s.name = v.name
+ORDER BY s.id
+ON CONFLICT (slot_id) DO UPDATE SET up = slot_traffic.up + excluded.up, down = slot_traffic.down + excluded.down
+`
+
+type AddSlotsTrafficParams struct {
+	Names []string
+	Up    []int64
+	Down  []int64
+}
+
+// Adds a batch's traffic to its slots, in slot order so two nodes' batches take turns.
+func (q *Queries) AddSlotsTraffic(ctx context.Context, arg AddSlotsTrafficParams) error {
+	_, err := q.db.ExecContext(ctx, addSlotsTraffic, pq.Array(arg.Names), pq.Array(arg.Up), pq.Array(arg.Down))
+	return err
+}
 
 const countBoundDevices = `-- name: CountBoundDevices :one
 SELECT count(*) FROM bound_devices WHERE user_id = $1
@@ -219,6 +242,41 @@ func (q *Queries) GetBoundDeviceByID(ctx context.Context, arg GetBoundDeviceByID
 		&i.Name,
 	)
 	return i, err
+}
+
+const listBoundDeviceTraffic = `-- name: ListBoundDeviceTraffic :many
+SELECT d.id AS device_id, COALESCE(t.up, 0)::bigint AS up, COALESCE(t.down, 0)::bigint AS down
+FROM bound_devices d LEFT JOIN slot_traffic t ON t.slot_id = d.slot_id WHERE d.user_id = $1
+`
+
+type ListBoundDeviceTrafficRow struct {
+	DeviceID int64
+	Up       int64
+	Down     int64
+}
+
+// What each of a user's bound devices used since it was bound.
+func (q *Queries) ListBoundDeviceTraffic(ctx context.Context, userID int64) ([]ListBoundDeviceTrafficRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBoundDeviceTraffic, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListBoundDeviceTrafficRow{}
+	for rows.Next() {
+		var i ListBoundDeviceTrafficRow
+		if err := rows.Scan(&i.DeviceID, &i.Up, &i.Down); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listBoundDevices = `-- name: ListBoundDevices :many

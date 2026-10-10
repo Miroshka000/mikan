@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button, Pill } from "../components/ui";
 import { t, tMaybe } from "../i18n";
 import { DEVICE_NAME_MAX, desktopOS, deviceDetails, deviceLabel, reportedName } from "../lib/devices";
-import { ago, dateShort, time } from "../lib/format";
+import { ago, bytes, dateShort, time } from "../lib/format";
 import { request } from "./net";
 import type { Device, Info } from "./types";
 
@@ -160,6 +160,7 @@ export function Devices({ info, subURL, reload, title }: { info: Info; subURL: s
                     <div className="truncate text-sm font-semibold">{name}</div>
                     <div className="text-xs break-words text-[var(--ink-500)]">
                       {meta ? `${meta} · ` : ""}
+                      {d.used ? `${bytes(d.used)} · ` : ""}
                       {ago(d.last_seen)}
                     </div>
                   </div>

@@ -2145,6 +2145,16 @@ export interface components {
             online: boolean;
             os: string;
             os_version: string;
+            /**
+             * Format: int64
+             * @description Байты к устройству с тех пор, как оно привязано
+             */
+            traffic_down: number;
+            /**
+             * Format: int64
+             * @description Байты от устройства с тех пор, как оно привязано (до 0.5.0.5 не считались)
+             */
+            traffic_up: number;
         };
         BroadcastInputBody: {
             /** @description Текст с Markdown, как тексты бота; {brand} — название сервиса */
@@ -2383,7 +2393,7 @@ export interface components {
             node_id?: number;
             port?: string;
             /** @enum {string} */
-            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
+            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "vless_tls_ws" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
         };
         CreateNodeInputBody: {
             /**

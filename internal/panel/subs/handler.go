@@ -907,6 +907,7 @@ type DeviceItem struct {
 	Shared    bool      `json:"shared" doc:"Apps that send no device id, seated together"`
 	CreatedAt time.Time `json:"created_at"`
 	LastSeen  time.Time `json:"last_seen"`
+	Used      int64     `json:"used,omitempty" doc:"Bytes both ways since the device was bound"`
 }
 
 func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, prof Profile, cfg Config) {
@@ -940,9 +941,15 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
+		used := map[int64]int64{}
+		if rows, err := h.st.Q.ListBoundDeviceTraffic(ctx, u.ID); err == nil {
+			for _, r := range rows {
+				used[r.DeviceID] = r.Up + r.Down
+			}
+		}
 		for _, d := range devs {
 			out.Bound = append(out.Bound, DeviceItem{ID: d.ID, Name: d.Name, OS: d.Os, OSVersion: d.OsVersion, Model: d.Model, App: d.App, Shared: d.Hwid == "",
-				CreatedAt: time.Unix(d.CreatedAt, 0).UTC(), LastSeen: time.Unix(d.LastSeen, 0).UTC()})
+				CreatedAt: time.Unix(d.CreatedAt, 0).UTC(), LastSeen: time.Unix(d.LastSeen, 0).UTC(), Used: used[d.ID]})
 		}
 		if t := domain.NextUnbind(u, now); !t.IsZero() {
 			out.UnbindAfter = &t

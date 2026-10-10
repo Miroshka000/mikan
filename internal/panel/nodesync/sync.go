@@ -626,6 +626,10 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 		if err := domain.CountTraffic(ctx, q, b, now); err != nil {
 			return err
 		}
+		// Each slot's own total, main and pools: what every bound device used.
+		if err := countSlots(ctx, q, c, owner); err != nil {
+			return err
+		}
 		if c.Epoch != epoch {
 			if err := q.SetNodeState(ctx, db.SetNodeStateParams{Key: stateKeyOf("counters_epoch", s.id), Value: c.Epoch}); err != nil {
 				return err
@@ -1043,4 +1047,32 @@ func poolKey(ps []nodeapi.PoolQuota) []string {
 		out = append(out, p.Pool)
 	}
 	return out
+}
+
+// countSlots adds a batch to the slots' own totals (slot_traffic): a bound device's slot
+// is the device, so the card can say what each one used. Slots of nobody are left out,
+// as the users' counters leave them out.
+func countSlots(ctx context.Context, q *db.Queries, c nodeapi.Counters, owner map[string]int64) error {
+	sum := map[string]nodeapi.Traffic{}
+	for slot, t := range c.Slots {
+		sum[slot] = nodeapi.Traffic{Up: t.Up, Down: t.Down}
+	}
+	for slot, pools := range c.Pools {
+		cur := sum[slot]
+		for _, t := range pools {
+			cur.Up, cur.Down = cur.Up+t.Up, cur.Down+t.Down
+		}
+		sum[slot] = cur
+	}
+	var p db.AddSlotsTrafficParams
+	for slot, t := range sum {
+		if _, ok := owner[slot]; !ok || t.Up == 0 && t.Down == 0 {
+			continue
+		}
+		p.Names, p.Up, p.Down = append(p.Names, slot), append(p.Up, t.Up), append(p.Down, t.Down)
+	}
+	if len(p.Names) == 0 {
+		return nil
+	}
+	return q.AddSlotsTraffic(ctx, p)
 }

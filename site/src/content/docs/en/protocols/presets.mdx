@@ -14,11 +14,14 @@ The **Protocols** section holds the protocols clients use to reach your nodes. A
 | VLESS · REALITY · gRPC | 2053/tcp | |
 | VLESS · REALITY · XHTTP · PQ | 2096/tcp | post-quantum VLESS encryption, needs a recent mihomo or Xray |
 | Trojan · REALITY | 2087/tcp | |
+| VLESS · TLS · XHTTP | 2443/tcp | plain TLS on a real certificate, answers strangers as a web server |
+| VLESS · TLS · Vision | 3443/tcp | works in almost every app |
+| VLESS · TLS · WebSocket | 2053/tcp | gets through on operators where only WS works, and through a CDN, see [behind a proxy](/mikan/en/protocols/behind-proxy/#through-a-cdn) |
 | Hysteria2 | 443/udp | QUIC, a port range can be set |
 | Hysteria2 · Gecko | 2443/udp | Hysteria2 with Gecko obfuscation, Clash apps only |
 | TUIC v5 | 8443/udp | |
 | AnyTLS | 2083/tcp | |
-| TrustTunnel | 4443/tcp | Clash apps only |
+| TrustTunnel | 4443/tcp | Clash apps only; answers a request without a key with 407, so a scanner can tell it is a proxy |
 | ShadowQUIC | 4443/udp | Clash apps only |
 | Mieru | 5443/tcp | Clash apps only |
 | Shadowsocks-2022 | 6443/tcp | one key for everyone |
@@ -41,6 +44,7 @@ The subscription detects the app and sends it only what it can run. The connecti
 | VLESS · REALITY · gRPC | yes | yes | yes |
 | VLESS PQ | yes | yes | |
 | Trojan · REALITY | yes | yes | yes |
+| VLESS · TLS · WebSocket | yes | yes | yes |
 | Hysteria2 | yes | yes | yes |
 | TUIC v5 | yes | | yes |
 | AnyTLS | yes | | Karing |

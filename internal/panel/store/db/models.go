@@ -312,6 +312,12 @@ type SlotCounter struct {
 	Last int64
 }
 
+type SlotTraffic struct {
+	SlotID int64
+	Up     int64
+	Down   int64
+}
+
 type SubAsset struct {
 	Name        string
 	ContentType string

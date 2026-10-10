@@ -220,6 +220,12 @@ func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id i
 	if err != nil {
 		devs = nil
 	}
+	used := map[int64]int64{}
+	if rows, err := b.d.Store.Q.ListBoundDeviceTraffic(ctx, u.ID); err == nil {
+		for _, r := range rows {
+			used[r.DeviceID] = r.Up + r.Down
+		}
+	}
 	name := func(d db.BoundDevice) string { return deviceName(w, d) }
 	if cmd == "dc" {
 		for _, d := range devs {
@@ -247,6 +253,9 @@ func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id i
 		}
 		if app, _, _ := strings.Cut(strings.TrimSpace(d.App), " "); app != "" {
 			meta = append(meta, strings.Replace(app, "/", " ", 1))
+		}
+		if n := used[d.ID]; n > 0 {
+			meta = append(meta, w.bytes(n))
 		}
 		meta = append(meta, w.ago(time.Unix(d.LastSeen, 0), now))
 		lines = append(lines, fmt.Sprintf("%d. %s — %s", i+1, html.EscapeString(name(d)), html.EscapeString(strings.Join(meta, " · "))))
