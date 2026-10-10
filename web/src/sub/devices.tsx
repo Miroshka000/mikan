@@ -1,4 +1,4 @@
-import { Laptop, Layers, Pencil, Smartphone } from "lucide-react";
+import { Hourglass, Laptop, Layers, Pencil, Smartphone } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Button, Pill } from "../components/ui";
 import { t, tMaybe } from "../i18n";
@@ -79,7 +79,20 @@ function RenameForm({ d, subURL, onDone }: { d: Device; subURL: string; onDone: 
   );
 }
 
-/** The subscriber's own devices: each holds a place; one may be unbound a day. */
+/** The unbind window in words: "сутки", "неделю", "10 дней". */
+function period(days: number): string {
+  if (days === 1) return t("sub.periodDay");
+  if (days === 7) return t("sub.periodWeek");
+  if (days === 30) return t("sub.periodMonth");
+  return t("sub.periodDays", { n: days });
+}
+
+/** A pause in hours, whole days as days. */
+function pause(hours: number): string {
+  return hours % 24 === 0 ? t("sub.periodDays", { n: hours / 24 }) : t("sub.pauseHours", { n: hours });
+}
+
+/** The subscriber's own devices: each holds a place; they unbind them within the admin's rules. */
 export function Devices({ info, subURL, reload, title }: { info: Info; subURL: string; reload: () => Promise<void>; title?: string }) {
   const [confirm, setConfirm] = useState<number | null>(null);
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -90,6 +103,15 @@ export function Devices({ info, subURL, reload, title }: { info: Info; subURL: s
   const list = info.devices ?? [];
   const full = info.device_limit > 0 && list.length >= info.device_limit;
   const wait = info.unbind_after && new Date(info.unbind_after).getTime() > Date.now() ? info.unbind_after : "";
+  const returnHours = info.return_hours ?? 0;
+  const left = info.unbinds_left ?? -1;
+  const note = [
+    t("sub.devicesNote"),
+    left >= 0 && !wait ? t("sub.unbindLeft", { left, limit: info.unbind_limit ?? 0, period: period(info.unbind_days ?? 1) }) : "",
+    returnHours > 0 ? t("sub.returnNote", { pause: pause(returnHours) }) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   useEffect(() => {
     if (confirm !== null || opener.current === null) return;
@@ -143,6 +165,15 @@ export function Devices({ info, subURL, reload, title }: { info: Info; subURL: s
         {info.device_limit > 0 ? <Pill tone={full ? "warn" : "ok"}>{t("sub.devicesCount", { n: list.length, limit: info.device_limit })}</Pill> : null}
       </div>
       {full ? <p className="mb-3 rounded-2xl bg-[var(--hover)] p-3 text-[13px] text-[var(--ink-700)]">{t("sub.devicesFull")}</p> : null}
+      {wait && list.length > 0 ? (
+        <div className="mb-3 flex items-start gap-2 rounded-2xl bg-[var(--hover)] p-3" role="status">
+          <Hourglass size={18} className="mt-0.5 shrink-0 text-[var(--mikan-600)]" aria-hidden />
+          <div className="text-[13px]">
+            <p className="font-medium text-[var(--ink-800)]">{t("sub.unbindLimitTitle")}</p>
+            <p className="text-[var(--ink-600)]">{t("sub.unbindAfter", { date: dateShort(wait), time: time(wait) })}</p>
+          </div>
+        </div>
+      ) : null}
       {list.length === 0 ? (
         <p className="text-[13px] text-[var(--ink-500)]">{t("sub.devicesEmpty")}</p>
       ) : (
@@ -180,9 +211,11 @@ export function Devices({ info, subURL, reload, title }: { info: Info; subURL: s
                       >
                         <Pencil size={16} aria-hidden />
                       </button>
-                      <Button id={`unbind-${d.id}`} size="sm" disabled={busy || !!wait} onClick={() => ask(d.id)} aria-label={t("sub.unbindLabel", { name })}>
-                        {t("sub.unbind")}
-                      </Button>
+                      {wait ? null : (
+                        <Button id={`unbind-${d.id}`} size="sm" disabled={busy} onClick={() => ask(d.id)} aria-label={t("sub.unbindLabel", { name })}>
+                          {t("sub.unbind")}
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -190,6 +223,7 @@ export function Devices({ info, subURL, reload, title }: { info: Info; subURL: s
                 {confirm === d.id ? (
                   <div className="mt-2 rounded-2xl bg-[var(--hover)] p-3" role="group" aria-label={t("sub.unbindLabel", { name })}>
                     <p className="text-[13px] text-[var(--ink-700)]">{t("sub.unbindWarn")}</p>
+                    {returnHours > 0 && !d.shared ? <p className="mt-1 text-[13px] font-medium text-[var(--ink-800)]">{t("sub.unbindWarnReturn", { pause: pause(returnHours) })}</p> : null}
                     <div className="mt-2 flex justify-end gap-2">
                       <Button variant="ghost" size="sm" disabled={busy} autoFocus onClick={() => setConfirm(null)}>
                         {t("common.cancel")}
@@ -209,10 +243,8 @@ export function Devices({ info, subURL, reload, title }: { info: Info; subURL: s
         <p className="mt-2 text-[13px] text-[var(--berry-600)]" role="alert">
           {error}
         </p>
-      ) : wait ? (
-        <p className="mt-2 text-xs text-[var(--ink-500)]">{t("sub.unbindAfter", { date: dateShort(wait), time: time(wait) })}</p>
       ) : null}
-      <p className="mt-2 text-xs text-[var(--ink-500)]">{t("sub.devicesNote")}</p>
+      <p className="mt-2 text-xs text-[var(--ink-500)]">{note}</p>
     </section>
   );
 }

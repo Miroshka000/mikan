@@ -107,8 +107,24 @@ func TestDeviceBindingOverHTTP(t *testing.T) {
 		t.Fatalf("the freed place: %q", links)
 	}
 	second := sub + "/devices/" + strconv.FormatInt(info.Devices[1].ID, 10) + "/unbind"
-	if resp, _ := h.do(http.MethodPost, second, nil, map[string]string{"Sec-Fetch-Site": "same-origin"}); resp.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("a second unbind the same day: %d", resp.StatusCode)
+	resp, body = h.do(http.MethodPost, second, nil, map[string]string{"Sec-Fetch-Site": "same-origin"})
+	if resp.StatusCode != http.StatusTooManyRequests || !strings.Contains(string(body), `"unbind_after":"`+h.now.Add(24*time.Hour).UTC().Format(time.RFC3339)) {
+		t.Fatalf("a second unbind the same day: %d %s", resp.StatusCode, body)
+	}
+	// The page tells the rules: none left, when the next comes, the pause of an unbound device.
+	var rules struct {
+		Limit  int        `json:"unbind_limit"`
+		Days   int        `json:"unbind_days"`
+		Left   int        `json:"unbinds_left"`
+		Return int        `json:"return_hours"`
+		After  *time.Time `json:"unbind_after"`
+	}
+	if _, body := h.do(http.MethodGet, sub+"/info", nil, nil); json.Unmarshal(body, &rules) != nil || rules.Limit != 1 || rules.Days != 1 || rules.Left != 0 || rules.Return != 24 || rules.After == nil {
+		t.Fatalf("the rules on the page: %+v %s", rules, body)
+	}
+	// The unbound phone, its app still open, asks again: it waits out the pause, told so.
+	if resp, links := fetch("phone-0123456789"); resp.StatusCode != http.StatusOK || !strings.Contains(links, "127.0.0.1:1") || notice(links) != "⏸ This device was unbound — it can connect again in 24 h" {
+		t.Fatalf("the unbound phone comes back at once: %q", notice(links))
 	}
 
 	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
@@ -149,6 +165,28 @@ func TestDeviceBindingOverHTTP(t *testing.T) {
 		if it.ID == u.ID && it.BoundDevices != 2 {
 			t.Fatalf("the list's bound devices: %d", it.BoundDevices)
 		}
+	}
+
+	// The admin sees the phone's pause among the bans, with its end.
+	resp, body = h.do(http.MethodGet, "/"+adminPath+"/api/v1/users/"+strconv.FormatInt(u.ID, 10)+"/device-bans", nil, nil)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"until":"`+h.now.Add(24*time.Hour).UTC().Format(time.RFC3339)) {
+		t.Fatalf("the pause among the bans: %d %s", resp.StatusCode, body)
+	}
+	// The admin's rules: broken ones are refused, good ones apply to the next unbind at once.
+	settingsAPI := "/" + adminPath + "/api/v1/settings"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	for _, bad := range []map[string]any{{"limit": -1, "days": 1, "return_hours": 0}, {"limit": 1, "days": 0, "return_hours": 0}, {"limit": 1, "days": 1, "return_hours": 9999}} {
+		if resp, body := h.do(http.MethodPatch, settingsAPI, map[string]any{"device_unbind": bad}, csrf); resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Fatalf("rules %v: %d %s", bad, resp.StatusCode, body)
+		}
+	}
+	resp, body = h.do(http.MethodPatch, settingsAPI, map[string]any{"device_unbind": map[string]any{"limit": 3, "days": 7, "return_hours": 0}}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"device_unbind":{"limit":3,"days":7,"return_hours":0}`) {
+		t.Fatalf("rules saved: %d %s", resp.StatusCode, body)
+	}
+	third := sub + "/devices/" + strconv.FormatInt(info.Devices[2].ID, 10) + "/unbind"
+	if resp, _ := h.do(http.MethodPost, third, nil, map[string]string{"Sec-Fetch-Site": "same-origin"}); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("one of three a week: %d", resp.StatusCode)
 	}
 
 	// Strict mode: an app without an id gets no keys.

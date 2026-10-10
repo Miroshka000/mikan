@@ -5,8 +5,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"path"
@@ -69,6 +71,7 @@ type Config struct {
 type Binder interface {
 	Bind(ctx context.Context, u db.User, in domain.DeviceInfo, requireHWID bool) (db.Slot, error)
 	Unbind(ctx context.Context, userID, deviceID int64, bySubscriber bool) error
+	UnbindState(ctx context.Context, userID int64) (domain.UnbindState, error)
 	Rename(ctx context.Context, userID, deviceID int64, name string) (string, error)
 	Banned(ctx context.Context, userID int64, hwid string) (bool, error)
 }
@@ -268,7 +271,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	slot, err := h.slotFor(r, u, cfg)
 	switch {
-	case errors.Is(err, domain.ErrDeviceLimit), errors.Is(err, domain.ErrNoHWID), errors.Is(err, domain.ErrDeviceBanned):
+	case errors.Is(err, domain.ErrDeviceLimit), errors.Is(err, domain.ErrNoHWID), errors.Is(err, domain.ErrDeviceBanned), errors.Is(err, domain.ErrDeviceUnbound):
 		h.stub(w, u, cfg, format, err)
 		return
 	case err != nil:
@@ -885,6 +888,11 @@ type Info struct {
 	Binding     bool         `json:"binding"`
 	Bound       []DeviceItem `json:"devices"`
 	UnbindAfter *time.Time   `json:"unbind_after,omitempty" doc:"The subscriber may unbind again from then"`
+	// The admin's rules for unbinding (domain.UnbindRules), for the page to tell them.
+	UnbindLimit int `json:"unbind_limit" doc:"Unbinds allowed per unbind_days; 0: no limit"`
+	UnbindDays  int `json:"unbind_days"`
+	UnbindsLeft int `json:"unbinds_left" doc:"Unbinds left in the window now; -1: no limit"`
+	ReturnHours int `json:"return_hours" doc:"An unbound device may not bind again for this long; 0: at once"`
 	// Pools: the user's traffic pools with a limit or with traffic used.
 	Pools []PoolInfo `json:"pools,omitempty"`
 	// The announcement the apps show, with the user's values in it; the page shows it when
@@ -951,9 +959,14 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, u db.User, pr
 			out.Bound = append(out.Bound, DeviceItem{ID: d.ID, Name: d.Name, OS: d.Os, OSVersion: d.OsVersion, Model: d.Model, App: d.App, Shared: d.Hwid == "",
 				CreatedAt: time.Unix(d.CreatedAt, 0).UTC(), LastSeen: time.Unix(d.LastSeen, 0).UTC(), Used: used[d.ID]})
 		}
-		if t := domain.NextUnbind(u, now); !t.IsZero() {
-			out.UnbindAfter = &t
+		st, err := h.devices.UnbindState(ctx, u.ID)
+		if err != nil {
+			h.log.Warn("subs: unbind rules not read", "user", u.ID, "err", err)
 		}
+		if !st.Next.IsZero() {
+			out.UnbindAfter = &st.Next
+		}
+		out.UnbindLimit, out.UnbindDays, out.UnbindsLeft, out.ReturnHours = st.Rules.Limit, st.Rules.Days, st.Left(), st.Rules.ReturnHours
 	}
 	if u.TrafficLimit.Valid {
 		out.Limit = &u.TrafficLimit.Int64
@@ -1005,14 +1018,17 @@ func (h *Handler) unbind(w http.ResponseWriter, r *http.Request, u db.User, id i
 	err := h.devices.Unbind(r.Context(), u.ID, id, true)
 	switch {
 	case err == nil:
+		h.log.Info("subs: the subscriber unbound a device", "user", u.ID, "device", id)
 		w.WriteHeader(http.StatusNoContent)
 	case errors.Is(err, domain.ErrUnbindCooldown):
+		st, _ := h.devices.UnbindState(r.Context(), u.ID)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
-		_ = json.NewEncoder(w).Encode(map[string]any{"code": "unbind_cooldown", "unbind_after": domain.NextUnbind(u, h.now())})
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": "unbind_cooldown", "unbind_after": st.Next})
 	case errors.Is(err, domain.ErrNotFound):
 		server.NotFound(w)
 	default:
+		h.log.Warn("subs: device not unbound", "user", u.ID, "device", id, "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
@@ -1072,6 +1088,17 @@ func (h *Handler) stub(w http.ResponseWriter, u db.User, cfg Config, format stri
 		name = "⛔ Устройство заблокировано"
 		if en {
 			name = "⛔ This device is blocked"
+		}
+	case errors.Is(reason, domain.ErrDeviceUnbound):
+		// The subscriber unbound it a moment ago: its app, still open, asks again.
+		var ue *domain.UnboundError
+		hours := 1
+		if errors.As(reason, &ue) {
+			hours = max(1, int(math.Ceil(ue.Until.Sub(h.now()).Hours())))
+		}
+		name = fmt.Sprintf("⏸ Устройство отвязано — подключится снова через %d ч", hours)
+		if en {
+			name = fmt.Sprintf("⏸ This device was unbound — it can connect again in %d h", hours)
 		}
 	case errors.Is(reason, domain.ErrNoHWID):
 		name = "⛔ Приложение не сообщает ID устройства — поставьте Happ, Koala Clash или INCY"

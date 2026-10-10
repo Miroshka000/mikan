@@ -1,4 +1,4 @@
-import { Ban, Laptop, Layers, Pencil, Smartphone, Unlink } from "lucide-react";
+import { Ban, Hourglass, Laptop, Layers, Pencil, Smartphone, Unlink } from "lucide-react";
 import { useState } from "react";
 import { ApiError, errorText, type Schemas, type User } from "../../../api/client";
 import { useBoundDevices, useDeviceBans, useDevices, userActions, useSettings, useUserMutation } from "../../../api/hooks";
@@ -7,7 +7,7 @@ import { useToast } from "../../../components/toast";
 import { Button, ErrorState, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { DEVICE_NAME_MAX, desktopOS, deviceDetails, deviceLabel, reportedName } from "../../../lib/devices";
-import { ago, bytes, dateShort, maskIP } from "../../../lib/format";
+import { ago, bytes, dateShort, maskIP, time } from "../../../lib/format";
 import { LimitPicker } from "./limit-picker";
 import { Section } from "./section";
 
@@ -228,7 +228,11 @@ function BoundDevices({ u }: { u: User }) {
   );
 }
 
-/** Devices banned from the subscription: they get no keys until the admin lets them back. */
+/**
+ * Devices banned from the subscription: they get no keys until the admin lets them back.
+ * A device the subscriber unbound is here too while it may not come back (until): the
+ * admin may let it in earlier.
+ */
 function DeviceBans({ u }: { u: User }) {
   const bans = useDeviceBans(u.id);
   const unban = useUserMutation(userActions.unbanDevice);
@@ -252,15 +256,19 @@ function DeviceBans({ u }: { u: User }) {
         <ul className="flex flex-col gap-2" aria-label={t("userDrawer.bansTitle")}>
           {list.map((b) => (
             <li key={b.id} className="panel-soft grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 p-2">
-              <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-[var(--hover)] text-[var(--berry-600)]" aria-hidden>
-                <Ban size={18} />
+              <span className={`grid h-9 w-9 place-items-center rounded-[10px] bg-[var(--hover)] ${b.until ? "text-[var(--mikan-600)]" : "text-[var(--berry-600)]"}`} aria-hidden>
+                {b.until ? <Hourglass size={18} /> : <Ban size={18} />}
               </span>
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-medium" title={label(b)}>
                   {label(b)}
                 </div>
                 <div className="truncate text-xs text-[var(--ink-500)]">
-                  {b.admin ? t("userDrawer.bannedBy", { when: dateShort(b.banned_at), admin: b.admin }) : t("userDrawer.bannedAt", { when: dateShort(b.banned_at) })}
+                  {b.until
+                    ? t("userDrawer.pausedUntil", { when: dateShort(b.until), time: time(b.until) })
+                    : b.admin
+                      ? t("userDrawer.bannedBy", { when: dateShort(b.banned_at), admin: b.admin })
+                      : t("userDrawer.bannedAt", { when: dateShort(b.banned_at) })}
                 </div>
               </div>
               <Button size="sm" variant="ghost" onClick={() => setPick(b)} aria-label={t("userDrawer.unbanLabel", { name: label(b) })}>
@@ -273,7 +281,7 @@ function DeviceBans({ u }: { u: User }) {
       <Confirm
         open={pick !== null}
         onOpenChange={(v) => !v && setPick(null)}
-        title={t("userDrawer.unbanTitle", { name: pick ? label(pick) : "" })}
+        title={t(pick?.until ? "userDrawer.unpauseTitle" : "userDrawer.unbanTitle", { name: pick ? label(pick) : "" })}
         text={t("userDrawer.unbanText")}
         confirm={t("userDrawer.unban")}
         loading={unban.isPending}

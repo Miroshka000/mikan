@@ -728,6 +728,8 @@ type DeviceBanView struct {
 	Label    string    `json:"label" doc:"Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило"`
 	Admin    string    `json:"admin" doc:"Кто заблокировал; пусто — ключ API или удалённый админ"`
 	BannedAt time.Time `json:"banned_at"`
+	// Until is set for a device the subscriber unbound: it may bind again from then.
+	Until *time.Time `json:"until,omitempty" doc:"Подписчик сам отвязал устройство: оно сможет привязаться снова с этого момента; пусто — заблокировано админом навсегда"`
 }
 
 type deviceBanOutput struct{ Body DeviceBanView }
@@ -759,13 +761,18 @@ func (h *handlers) deviceBans(ctx context.Context, in *userIDInput) (*deviceBans
 	if _, err := h.d.Users.Get(ctx, in.ID); err != nil {
 		return nil, mapDomainErr(err)
 	}
-	rows, err := h.d.Store.Q.ListDeviceBans(ctx, in.ID)
+	rows, err := h.d.Store.Q.ListDeviceBans(ctx, db.ListDeviceBansParams{UserID: in.ID, Until: sql.NullInt64{Int64: h.d.Now().Unix(), Valid: true}})
 	if err != nil {
 		return nil, err
 	}
 	out := &deviceBansOutput{Body: make([]DeviceBanView, 0, len(rows))}
 	for _, r := range rows {
-		out.Body = append(out.Body, DeviceBanView{ID: r.ID, HWID: r.Hwid, Label: r.Label, Admin: r.AdminName, BannedAt: time.Unix(r.BannedAt, 0).UTC()})
+		v := DeviceBanView{ID: r.ID, HWID: r.Hwid, Label: r.Label, Admin: r.AdminName, BannedAt: time.Unix(r.BannedAt, 0).UTC()}
+		if r.Until.Valid {
+			t := time.Unix(r.Until.Int64, 0).UTC()
+			v.Until = &t
+		}
+		out.Body = append(out.Body, v)
 	}
 	return out, nil
 }

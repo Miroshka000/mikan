@@ -12,6 +12,24 @@ import (
 	"github.com/lib/pq"
 )
 
+const activeDeviceBan = `-- name: ActiveDeviceBan :one
+SELECT until FROM device_bans WHERE user_id = $1 AND hwid = $2 AND (until IS NULL OR until > $3)
+`
+
+type ActiveDeviceBanParams struct {
+	UserID int64
+	Hwid   string
+	Until  sql.NullInt64
+}
+
+// The ban on a device now: until is NULL for the admin's ban, a moment for an unbound one.
+func (q *Queries) ActiveDeviceBan(ctx context.Context, arg ActiveDeviceBanParams) (sql.NullInt64, error) {
+	row := q.db.QueryRowContext(ctx, activeDeviceBan, arg.UserID, arg.Hwid, arg.Until)
+	var until sql.NullInt64
+	err := row.Scan(&until)
+	return until, err
+}
+
 const addSlotsTraffic = `-- name: AddSlotsTraffic :exec
 INSERT INTO slot_traffic (slot_id, up, down)
 SELECT s.id, v.up, v.down
@@ -30,6 +48,21 @@ type AddSlotsTrafficParams struct {
 // Adds a batch's traffic to its slots, in slot order so two nodes' batches take turns.
 func (q *Queries) AddSlotsTraffic(ctx context.Context, arg AddSlotsTrafficParams) error {
 	_, err := q.db.ExecContext(ctx, addSlotsTraffic, pq.Array(arg.Names), pq.Array(arg.Up), pq.Array(arg.Down))
+	return err
+}
+
+const addUnbind = `-- name: AddUnbind :exec
+INSERT INTO device_unbinds (user_id, at) VALUES ($1, $2)
+`
+
+type AddUnbindParams struct {
+	UserID int64
+	At     int64
+}
+
+// The subscriber unbound a device: it counts against the admin's limit.
+func (q *Queries) AddUnbind(ctx context.Context, arg AddUnbindParams) error {
+	_, err := q.db.ExecContext(ctx, addUnbind, arg.UserID, arg.At)
 	return err
 }
 
@@ -97,8 +130,8 @@ func (q *Queries) CreateBoundDevice(ctx context.Context, arg CreateBoundDevicePa
 const createDeviceBan = `-- name: CreateDeviceBan :one
 INSERT INTO device_bans (user_id, hwid, label, admin_id, banned_at)
 VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (user_id, hwid) DO UPDATE SET label = EXCLUDED.label, admin_id = EXCLUDED.admin_id, banned_at = EXCLUDED.banned_at
-RETURNING id, user_id, hwid, label, admin_id, banned_at
+ON CONFLICT (user_id, hwid) DO UPDATE SET label = EXCLUDED.label, admin_id = EXCLUDED.admin_id, banned_at = EXCLUDED.banned_at, until = NULL
+RETURNING id, user_id, hwid, label, admin_id, banned_at, until
 `
 
 type CreateDeviceBanParams struct {
@@ -125,6 +158,7 @@ func (q *Queries) CreateDeviceBan(ctx context.Context, arg CreateDeviceBanParams
 		&i.Label,
 		&i.AdminID,
 		&i.BannedAt,
+		&i.Until,
 	)
 	return i, err
 }
@@ -148,7 +182,7 @@ func (q *Queries) DeleteBoundDevicesOf(ctx context.Context, userID int64) error 
 }
 
 const deleteDeviceBan = `-- name: DeleteDeviceBan :one
-DELETE FROM device_bans WHERE id = $1 AND user_id = $2 RETURNING id, user_id, hwid, label, admin_id, banned_at
+DELETE FROM device_bans WHERE id = $1 AND user_id = $2 RETURNING id, user_id, hwid, label, admin_id, banned_at, until
 `
 
 type DeleteDeviceBanParams struct {
@@ -166,24 +200,27 @@ func (q *Queries) DeleteDeviceBan(ctx context.Context, arg DeleteDeviceBanParams
 		&i.Label,
 		&i.AdminID,
 		&i.BannedAt,
+		&i.Until,
 	)
 	return i, err
 }
 
-const deviceBanned = `-- name: DeviceBanned :one
-SELECT EXISTS (SELECT 1 FROM device_bans WHERE user_id = $1 AND hwid = $2)
+const deleteExpiredBans = `-- name: DeleteExpiredBans :exec
+DELETE FROM device_bans WHERE until IS NOT NULL AND until <= $1
 `
 
-type DeviceBannedParams struct {
-	UserID int64
-	Hwid   string
+func (q *Queries) DeleteExpiredBans(ctx context.Context, until sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, deleteExpiredBans, until)
+	return err
 }
 
-func (q *Queries) DeviceBanned(ctx context.Context, arg DeviceBannedParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, deviceBanned, arg.UserID, arg.Hwid)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+const deleteUnbindsBefore = `-- name: DeleteUnbindsBefore :exec
+DELETE FROM device_unbinds WHERE at < $1
+`
+
+func (q *Queries) DeleteUnbindsBefore(ctx context.Context, at int64) error {
+	_, err := q.db.ExecContext(ctx, deleteUnbindsBefore, at)
+	return err
 }
 
 const getBoundDevice = `-- name: GetBoundDevice :one
@@ -242,6 +279,34 @@ func (q *Queries) GetBoundDeviceByID(ctx context.Context, arg GetBoundDeviceByID
 		&i.Name,
 	)
 	return i, err
+}
+
+const holdUnbound = `-- name: HoldUnbound :exec
+INSERT INTO device_bans (user_id, hwid, label, banned_at, until)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, hwid) DO UPDATE SET label = EXCLUDED.label, banned_at = EXCLUDED.banned_at, until = EXCLUDED.until
+WHERE device_bans.until IS NOT NULL
+`
+
+type HoldUnboundParams struct {
+	UserID   int64
+	Hwid     string
+	Label    string
+	BannedAt int64
+	Until    sql.NullInt64
+}
+
+// A device its subscriber unbound may not bind again until a moment. The admin's ban of
+// the same device stays for good.
+func (q *Queries) HoldUnbound(ctx context.Context, arg HoldUnboundParams) error {
+	_, err := q.db.ExecContext(ctx, holdUnbound,
+		arg.UserID,
+		arg.Hwid,
+		arg.Label,
+		arg.BannedAt,
+		arg.Until,
+	)
+	return err
 }
 
 const listBoundDeviceTraffic = `-- name: ListBoundDeviceTraffic :many
@@ -320,10 +385,15 @@ func (q *Queries) ListBoundDevices(ctx context.Context, userID int64) ([]BoundDe
 }
 
 const listDeviceBans = `-- name: ListDeviceBans :many
-SELECT b.id, b.user_id, b.hwid, b.label, b.admin_id, b.banned_at, COALESCE(a.username, '')::text AS admin_name
+SELECT b.id, b.user_id, b.hwid, b.label, b.admin_id, b.banned_at, b.until, COALESCE(a.username, '')::text AS admin_name
 FROM device_bans b LEFT JOIN admins a ON a.id = b.admin_id
-WHERE b.user_id = $1 ORDER BY b.banned_at DESC, b.id DESC
+WHERE b.user_id = $1 AND (b.until IS NULL OR b.until > $2) ORDER BY b.banned_at DESC, b.id DESC
 `
+
+type ListDeviceBansParams struct {
+	UserID int64
+	Until  sql.NullInt64
+}
 
 type ListDeviceBansRow struct {
 	ID        int64
@@ -332,11 +402,12 @@ type ListDeviceBansRow struct {
 	Label     string
 	AdminID   sql.NullInt64
 	BannedAt  int64
+	Until     sql.NullInt64
 	AdminName string
 }
 
-func (q *Queries) ListDeviceBans(ctx context.Context, userID int64) ([]ListDeviceBansRow, error) {
-	rows, err := q.db.QueryContext(ctx, listDeviceBans, userID)
+func (q *Queries) ListDeviceBans(ctx context.Context, arg ListDeviceBansParams) ([]ListDeviceBansRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDeviceBans, arg.UserID, arg.Until)
 	if err != nil {
 		return nil, err
 	}
@@ -351,6 +422,7 @@ func (q *Queries) ListDeviceBans(ctx context.Context, userID int64) ([]ListDevic
 			&i.Label,
 			&i.AdminID,
 			&i.BannedAt,
+			&i.Until,
 			&i.AdminName,
 		); err != nil {
 			return nil, err
@@ -440,6 +512,49 @@ func (q *Queries) ListIdleBoundDevices(ctx context.Context, lastSeen int64) ([]B
 	return items, nil
 }
 
+const listUnbindsSince = `-- name: ListUnbindsSince :many
+SELECT at FROM device_unbinds WHERE user_id = $1 AND at > $2 ORDER BY at
+`
+
+type ListUnbindsSinceParams struct {
+	UserID int64
+	At     int64
+}
+
+// The subscriber's unbinds after a moment, the oldest first.
+func (q *Queries) ListUnbindsSince(ctx context.Context, arg ListUnbindsSinceParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listUnbindsSince, arg.UserID, arg.At)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var at int64
+		if err := rows.Scan(&at); err != nil {
+			return nil, err
+		}
+		items = append(items, at)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockUser = `-- name: LockUser :exec
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+// Two unbinds of one subscriber at once must not both fit under the limit.
+func (q *Queries) LockUser(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, lockUser, id)
+	return err
+}
+
 const setBoundDeviceName = `-- name: SetBoundDeviceName :execrows
 UPDATE bound_devices SET name = $1 WHERE id = $2 AND user_id = $3
 `
@@ -472,20 +587,6 @@ type SetUserSlotParams struct {
 // A new own slot for the user, same subscription link (the shared device was unbound).
 func (q *Queries) SetUserSlot(ctx context.Context, arg SetUserSlotParams) error {
 	_, err := q.db.ExecContext(ctx, setUserSlot, arg.SlotID, arg.UpdatedAt, arg.ID)
-	return err
-}
-
-const setUserUnboundAt = `-- name: SetUserUnboundAt :exec
-UPDATE users SET unbound_at = $1 WHERE id = $2
-`
-
-type SetUserUnboundAtParams struct {
-	UnboundAt int64
-	ID        int64
-}
-
-func (q *Queries) SetUserUnboundAt(ctx context.Context, arg SetUserUnboundAtParams) error {
-	_, err := q.db.ExecContext(ctx, setUserUnboundAt, arg.UnboundAt, arg.ID)
 	return err
 }
 

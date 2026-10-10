@@ -1568,6 +1568,11 @@
           "label": {
             "description": "Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило",
             "type": "string"
+          },
+          "until": {
+            "description": "Подписчик сам отвязал устройство: оно сможет привязаться снова с этого момента; пусто — заблокировано админом навсегда",
+            "format": "date-time",
+            "type": "string"
           }
         },
         "required": [
@@ -4333,6 +4338,9 @@
           "device_require_hwid": {
             "type": "boolean"
           },
+          "device_unbind": {
+            "$ref": "#/components/schemas/UnbindRules"
+          },
           "domain": {
             "maxLength": 253,
             "type": "string"
@@ -5998,6 +6006,10 @@
             "description": "Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место)",
             "type": "boolean"
           },
+          "device_unbind": {
+            "$ref": "#/components/schemas/UnbindRules",
+            "description": "Сколько устройств подписчик может отвязать сам и через сколько отвязанное может вернуться"
+          },
           "domain": {
             "type": "string"
           },
@@ -6126,6 +6138,7 @@
           "auto_sni",
           "device_binding",
           "device_require_hwid",
+          "device_unbind",
           "default_lang",
           "certificate",
           "acme_ca",
@@ -7264,6 +7277,38 @@
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "UnbindRules": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "description": "За сколько дней считается лимит (скользящее окно)",
+            "format": "int64",
+            "maximum": 365,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "limit": {
+            "description": "Сколько устройств подписчик может отвязать за days; 0 — без ограничения",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "return_hours": {
+            "description": "Сколько часов отвязанное подписчиком устройство не может привязаться снова; 0 — сразу",
+            "format": "int64",
+            "maximum": 720,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit",
+          "days",
+          "return_hours"
+        ],
         "type": "object"
       },
       "UpdateStatus": {

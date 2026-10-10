@@ -71,6 +71,13 @@ type DeviceBan struct {
 	Label    string
 	AdminID  sql.NullInt64
 	BannedAt int64
+	Until    sql.NullInt64
+}
+
+type DeviceUnbind struct {
+	ID     int64
+	UserID int64
+	At     int64
 }
 
 type Inbound struct {
@@ -499,7 +506,6 @@ type User struct {
 	CreatedAt     int64
 	UpdatedAt     int64
 	BillingDay    sql.NullInt64
-	UnboundAt     int64
 	Source        string
 	Hidden        int64
 	FolderID      sql.NullInt64

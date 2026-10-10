@@ -9,6 +9,7 @@ import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
 import { useSaveSettings } from "./shared";
+import { LimitPicker } from "../user/limit-picker";
 
 // Ports the installer opens in the firewall (443 and the HTTPS pool): a subscription
 // port among them needs nothing else on the server.
@@ -269,7 +270,75 @@ export function DevicesCard({ s }: { s: Schemas["SettingsView"] }) {
           <SwitchRow label={t("settings.requireHwid")} sub={t("settings.requireHwidSub")} checked={s.device_require_hwid} disabled={save.isPending || !s.device_binding} onChange={(v) => save.mutate({ device_require_hwid: v })} />
         </li>
       </ul>
+      {s.device_binding ? <UnbindRules s={s} /> : null}
       <p className="mt-3 text-xs text-[var(--ink-500)]">{t("settings.devicesNote")}</p>
     </section>
+  );
+}
+
+/** A period of days in words: "a day", "a week", "30 days". */
+function periodLabel(days: number): string {
+  if (days === 1) return t("settings.unbindDay");
+  if (days === 7) return t("settings.unbindWeek");
+  if (days === 30) return t("settings.unbindMonth");
+  return t("settings.unbindDays", { n: days });
+}
+
+/** A pause in hours: "at once", "6 h", whole days as days. */
+function pauseLabel(hours: number): string {
+  if (hours === 0) return t("settings.unbindAtOnce");
+  if (hours % 24 === 0) return t("settings.unbindDays", { n: hours / 24 });
+  return t("settings.unbindHours", { n: hours });
+}
+
+/**
+ * How subscribers unbind devices themselves: how many a period, and how long an unbound
+ * device stays out, so that its app, still open, does not take the place back at once.
+ */
+function UnbindRules({ s }: { s: Schemas["SettingsView"] }) {
+  const save = useSaveSettings();
+  const r = s.device_unbind;
+  const set = (patch: Partial<Schemas["UnbindRules"]>, done: () => void) => save.mutate({ device_unbind: { ...r, ...patch } }, { onSuccess: done });
+  const summary =
+    r.limit === 0
+      ? t("settings.unbindSummaryFree")
+      : t("settings.unbindSummary", { n: r.limit, period: periodLabel(r.days).toLowerCase() });
+  return (
+    <div className="mt-4 border-t border-[var(--line)] pt-4">
+      <h3 className="text-[14px] font-medium">{t("settings.unbindTitle")}</h3>
+      <p className="mt-1 mb-3 text-xs text-[var(--ink-500)]">{t("settings.unbindSub")}</p>
+      <div className="flex flex-col gap-3">
+        <LimitPicker label={t("settings.unbindLimit")} value={r.limit === 0 ? null : r.limit} presets={[1, 2, 3, 5]} min={1} max={100} busy={save.isPending} onChange={(n, done) => set({ limit: n ?? 0 }, done)} />
+        {r.limit > 0 ? (
+          <LimitPicker
+            label={t("settings.unbindPeriod")}
+            value={r.days}
+            presets={[1, 7, 30]}
+            min={1}
+            max={365}
+            unlimited={false}
+            format={periodLabel}
+            fieldUnit={t("settings.unbindDaysUnit")}
+            busy={save.isPending}
+            onChange={(n, done) => set({ days: n ?? 1 }, done)}
+          />
+        ) : null}
+        <LimitPicker
+          label={t("settings.unbindReturn")}
+          value={r.return_hours}
+          presets={[0, 6, 24, 72]}
+          min={0}
+          max={720}
+          unlimited={false}
+          format={pauseLabel}
+          fieldUnit={t("settings.unbindHoursUnit")}
+          busy={save.isPending}
+          onChange={(n, done) => set({ return_hours: n ?? 0 }, done)}
+        />
+      </div>
+      <p className="mt-3 text-xs text-[var(--ink-600)]" role="status">
+        {summary} {r.return_hours > 0 ? t("settings.unbindSummaryPause", { pause: pauseLabel(r.return_hours) }) : t("settings.unbindSummaryNoPause")}
+      </p>
+    </div>
   );
 }

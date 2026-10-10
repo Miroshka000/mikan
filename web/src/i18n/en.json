@@ -308,6 +308,7 @@
       "tg_proxy_private": "The proxy name leads to this server itself or to a metadata address: give the address of the proxy as an IP",
       "tg_proxy_invalid": "A proxy address is socks5://login:password@host:port or http://host:port",
       "tg_route_node": "Pick a remote node of the panel: its own node shares the server",
+      "tg_route_node_missing": "This node is no longer in the panel: reload the page and pick a node again",
       "tg_route_unreachable": "Telegram does not answer this way: check the node or the proxy",
       "sub_port_reserved": "Port {value} is the system's (SSH or the certificate check)",
       "sub_port_panel": "That is the panel's own port, subscriptions already work on it",
@@ -859,7 +860,9 @@
     "unbanLabel": "Unban {name}",
     "unbanTitle": "Unban “{name}”?",
     "unbanText": "The device can bind again: on its next subscription update it takes a free place.",
-    "unbanned": "“{name}” is unbanned"
+    "unbanned": "“{name}” is unbanned",
+    "pausedUntil": "Unbound by the client · returns {when} at {time}",
+    "unpauseTitle": "Let “{name}” back earlier?"
   },
   "tariffs": {
     "subtitle": "Templates for granting access in one click. Changing a plan does not touch subscriptions already issued.",
@@ -1359,7 +1362,7 @@
     "bindingSub": "Each device takes a place in the limit. When places run out, a new device sees a message instead of servers.",
     "requireHwid": "Only allow apps that identify the device",
     "requireHwidSub": "Happ, Koala Clash, v2RayTun and a few more. Other apps will not open the subscription.",
-    "devicesNote": "A client may unbind one device a day on the subscription page; you can do it any time. A device gets its keys on the next subscription refresh.",
+    "devicesNote": "The client unbinds devices themselves under the rules above, you on the client's card without limits. A device gets its keys at its next subscription update.",
     "support": "Support",
     "supportHint": "A Telegram or website link for the «Contact support» button on the subscription page.",
     "apps": "In the apps",
@@ -1801,7 +1804,24 @@
         "location1": "Germany",
         "location2": "Netherlands"
       }
-    }
+    },
+    "unbindTitle": "Unbinding by the client",
+    "unbindSub": "How many devices a client may unbind themselves in the bot, on the subscription page and in the Mini App. You unbind without limits on the client's card.",
+    "unbindLimit": "Devices",
+    "unbindPeriod": "Per",
+    "unbindReturn": "An unbound one returns in",
+    "unbindDay": "Day",
+    "unbindWeek": "Week",
+    "unbindMonth": "Month",
+    "unbindDays": "{n, plural, one {# day} other {# days}}",
+    "unbindDaysUnit": "days",
+    "unbindHoursUnit": "h",
+    "unbindAtOnce": "At once",
+    "unbindHours": "{n} h",
+    "unbindSummary": "A client unbinds {n, plural, one {# device} other {# devices}} per {period}.",
+    "unbindSummaryFree": "A client unbinds as many devices as they like.",
+    "unbindSummaryPause": "An unbound device can connect again in {pause}: an app left open on it does not take the place back.",
+    "unbindSummaryNoPause": "An unbound device can bind again at once if its app is still open."
   },
   "goals": {
     "title": "What we are working on",
@@ -1837,7 +1857,7 @@
     "devicesCount": "{n} of {limit}",
     "devicesFull": "All places are taken. To connect a new device, unbind one you no longer use.",
     "devicesEmpty": "Devices appear here once an app loads the subscription.",
-    "devicesNote": "Each device takes one place. An unbound device is disconnected at once. You can unbind one device a day.",
+    "devicesNote": "Each device takes one place. An unbound device is disconnected at once.",
     "sharedPlace": "Apps without a device ID",
     "pageTitle": "Subscription",
     "device": "Device",
@@ -1950,7 +1970,16 @@
     "nameErrors": {
       "device_name_long": "At most 40 characters",
       "name_chars": "One line, no control characters"
-    }
+    },
+    "unbindLeft": "You can unbind {left} more of {limit} per {period}.",
+    "returnNote": "An unbound device can connect again in {pause}.",
+    "unbindWarnReturn": "Close the app on it first: it can connect again only in {pause}.",
+    "unbindLimitTitle": "No unbinds left for now",
+    "periodDay": "day",
+    "periodWeek": "week",
+    "periodMonth": "month",
+    "periodDays": "{n, plural, one {# day} other {# days}}",
+    "pauseHours": "{n} h"
   },
   "nodes": {
     "subtitle": "Servers that run the VPN. The subscription includes the protocols of every enabled node, each in its own group.",
@@ -2094,7 +2123,7 @@
     "newPage": "📄 Page",
     "action": {
       "sub": "Subscription screen: term, traffic, devices",
-      "devices": "Devices with unbinding (once a day)",
+      "devices": "Devices with unbinding by the client",
       "connect": "How to connect: link and subscription page",
       "renew": "Renewal: your text and support",
       "support": "Support link from the settings",

@@ -2450,6 +2450,11 @@ export interface components {
             id: number;
             /** @description Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило */
             label: string;
+            /**
+             * Format: date-time
+             * @description Подписчик сам отвязал устройство: оно сможет привязаться снова с этого момента; пусто — заблокировано админом навсегда
+             */
+            until?: string;
         };
         DeviceView: {
             /** Format: date-time */
@@ -3451,6 +3456,7 @@ export interface components {
             default_lang?: "auto" | "ru" | "en";
             device_binding?: boolean;
             device_require_hwid?: boolean;
+            device_unbind?: components["schemas"]["UnbindRules"];
             domain?: string;
             /** @enum {string} */
             happ_crypt?: "off" | "api" | "local";
@@ -4045,6 +4051,8 @@ export interface components {
             device_binding: boolean;
             /** @description Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место) */
             device_require_hwid: boolean;
+            /** @description Сколько устройств подписчик может отвязать сам и через сколько отвязанное может вернуться */
+            device_unbind: components["schemas"]["UnbindRules"];
             domain: string;
             /**
              * @description Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама
@@ -4543,6 +4551,23 @@ export interface components {
             block_quic?: boolean;
             real_ip?: boolean;
             sniffer?: boolean;
+        };
+        UnbindRules: {
+            /**
+             * Format: int64
+             * @description За сколько дней считается лимит (скользящее окно)
+             */
+            days: number;
+            /**
+             * Format: int64
+             * @description Сколько устройств подписчик может отвязать за days; 0 — без ограничения
+             */
+            limit: number;
+            /**
+             * Format: int64
+             * @description Сколько часов отвязанное подписчиком устройство не может привязаться снова; 0 — сразу
+             */
+            return_hours: number;
         };
         UpdateStatus: {
             /** @description RFC 3339 */

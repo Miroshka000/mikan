@@ -3,9 +3,10 @@ import { Button } from "../../../components/ui";
 import { t } from "../../../i18n";
 
 /**
- * A limit of the client's card: a few common values, none (∞), and at the end "Other",
- * which opens a field for any number in [min, max]. A value that is not one of the presets
- * shows on the "Other" button itself.
+ * A limit: a few common values, none (∞) unless unlimited is false, and at the end
+ * "Other", which opens a field for any number in [min, max]. A value that is not one of
+ * the presets shows on the "Other" button itself. format names a value in words ("a week");
+ * fieldUnit is what the typed number counts, when the buttons say it in words.
  */
 export function LimitPicker({
   label,
@@ -14,6 +15,9 @@ export function LimitPicker({
   min,
   max,
   unit,
+  fieldUnit,
+  format = String,
+  unlimited = true,
   busy,
   onChange,
 }: {
@@ -23,6 +27,9 @@ export function LimitPicker({
   min: number;
   max: number;
   unit?: string;
+  fieldUnit?: string;
+  format?: (n: number) => string;
+  unlimited?: boolean;
   busy?: boolean;
   onChange: (n: number | null, done: () => void) => void;
 }) {
@@ -38,14 +45,16 @@ export function LimitPicker({
         <div className="seg" role="group" aria-label={label}>
           {presets.map((p) => (
             <button key={p} type="button" aria-pressed={value === p && typing === null} disabled={busy} onClick={() => pick(p)}>
-              {p}
+              {format(p)}
             </button>
           ))}
-          <button type="button" aria-pressed={value == null && typing === null} disabled={busy} onClick={() => pick(null)} aria-label={t("users.unlimited")}>
-            ∞
-          </button>
+          {unlimited ? (
+            <button type="button" aria-pressed={value == null && typing === null} disabled={busy} onClick={() => pick(null)} aria-label={t("users.unlimited")}>
+              ∞
+            </button>
+          ) : null}
           <button type="button" aria-pressed={own || typing !== null} aria-expanded={typing !== null} disabled={busy} onClick={() => setTyping(typing === null ? String(own ? value : "") : null)}>
-            {own && typing === null ? value : t("userDrawer.limitOther")}
+            {own && typing === null ? format(value) : t("userDrawer.limitOther")}
           </button>
         </div>
         {unit ? <span className="text-xs text-[var(--ink-500)]">{unit}</span> : null}
@@ -74,7 +83,7 @@ export function LimitPicker({
               aria-invalid={typing !== "" && !ok}
               placeholder={`${min}–${max}`}
             />
-            {unit ? <span>{unit}</span> : null}
+            {(fieldUnit ?? unit) ? <span>{fieldUnit ?? unit}</span> : null}
           </span>
           <Button size="sm" type="submit" disabled={!ok} loading={busy}>
             {t("userDrawer.limitSet")}

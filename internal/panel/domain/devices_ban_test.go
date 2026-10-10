@@ -145,7 +145,7 @@ func TestBanDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _ = users.Get(ctx, a.ID)
-	rows, _ := st.Q.ListDeviceBans(ctx, a.ID)
+	rows, _ := st.Q.ListDeviceBans(ctx, db.ListDeviceBansParams{UserID: a.ID})
 	if len(rows) != 1 || rows[0].AdminName != "root" || rows[0].Label != "Телефон" {
 		t.Fatalf("bans: %+v", rows)
 	}
@@ -153,7 +153,7 @@ func TestBanDevice(t *testing.T) {
 	if _, err := users.Reissue(ctx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	if rows, _ := st.Q.ListDeviceBans(ctx, a.ID); len(rows) != 1 {
+	if rows, _ := st.Q.ListDeviceBans(ctx, db.ListDeviceBansParams{UserID: a.ID}); len(rows) != 1 {
 		t.Fatal("a reissue lifted the ban")
 	}
 

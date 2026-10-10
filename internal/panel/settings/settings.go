@@ -48,6 +48,9 @@ const (
 	// refuse apps that send no device id instead of seating them together, off by default.
 	KeyDeviceBinding = "device_binding"
 	KeyRequireHWID   = "device_require_hwid"
+	// KeyUnbindRules is how the subscriber may unbind devices (domain.UnbindRules); unset:
+	// domain.DefaultUnbindRules.
+	KeyUnbindRules = "device_unbind"
 	// KeyDefaultLang is the language chosen at install: the admin panel and the subscription
 	// page open in it until a visitor picks one, and new names (tariffs, the auto group, the
 	// bot's menu) are written in it. "auto" or unset: the visitor's browser decides.

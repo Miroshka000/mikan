@@ -31,8 +31,20 @@ DELETE FROM bound_devices WHERE user_id = $1;
 -- A new own slot for the user, same subscription link (the shared device was unbound).
 UPDATE users SET slot_id = $1, updated_at = $2 WHERE id = $3;
 
--- name: SetUserUnboundAt :exec
-UPDATE users SET unbound_at = $1 WHERE id = $2;
+-- name: AddUnbind :exec
+-- The subscriber unbound a device: it counts against the admin's limit.
+INSERT INTO device_unbinds (user_id, at) VALUES ($1, $2);
+
+-- name: ListUnbindsSince :many
+-- The subscriber's unbinds after a moment, the oldest first.
+SELECT at FROM device_unbinds WHERE user_id = $1 AND at > $2 ORDER BY at;
+
+-- name: DeleteUnbindsBefore :exec
+DELETE FROM device_unbinds WHERE at < $1;
+
+-- name: LockUser :exec
+-- Two unbinds of one subscriber at once must not both fit under the limit.
+SELECT id FROM users WHERE id = $1 FOR UPDATE;
 
 -- name: ListDeviceSlots :many
 -- Slots of bound devices with an id: keys of their own, profile fetches of their own.
@@ -45,16 +57,28 @@ UPDATE bound_devices SET name = $1 WHERE id = $2 AND user_id = $3;
 -- name: CreateDeviceBan :one
 INSERT INTO device_bans (user_id, hwid, label, admin_id, banned_at)
 VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (user_id, hwid) DO UPDATE SET label = EXCLUDED.label, admin_id = EXCLUDED.admin_id, banned_at = EXCLUDED.banned_at
+ON CONFLICT (user_id, hwid) DO UPDATE SET label = EXCLUDED.label, admin_id = EXCLUDED.admin_id, banned_at = EXCLUDED.banned_at, until = NULL
 RETURNING *;
 
--- name: DeviceBanned :one
-SELECT EXISTS (SELECT 1 FROM device_bans WHERE user_id = $1 AND hwid = $2);
+-- name: HoldUnbound :exec
+-- A device its subscriber unbound may not bind again until a moment. The admin's ban of
+-- the same device stays for good.
+INSERT INTO device_bans (user_id, hwid, label, banned_at, until)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, hwid) DO UPDATE SET label = EXCLUDED.label, banned_at = EXCLUDED.banned_at, until = EXCLUDED.until
+WHERE device_bans.until IS NOT NULL;
+
+-- name: ActiveDeviceBan :one
+-- The ban on a device now: until is NULL for the admin's ban, a moment for an unbound one.
+SELECT until FROM device_bans WHERE user_id = $1 AND hwid = $2 AND (until IS NULL OR until > $3);
+
+-- name: DeleteExpiredBans :exec
+DELETE FROM device_bans WHERE until IS NOT NULL AND until <= $1;
 
 -- name: ListDeviceBans :many
-SELECT b.id, b.user_id, b.hwid, b.label, b.admin_id, b.banned_at, COALESCE(a.username, '')::text AS admin_name
+SELECT b.id, b.user_id, b.hwid, b.label, b.admin_id, b.banned_at, b.until, COALESCE(a.username, '')::text AS admin_name
 FROM device_bans b LEFT JOIN admins a ON a.id = b.admin_id
-WHERE b.user_id = $1 ORDER BY b.banned_at DESC, b.id DESC;
+WHERE b.user_id = $1 AND (b.until IS NULL OR b.until > $2) ORDER BY b.banned_at DESC, b.id DESC;
 
 -- name: DeleteDeviceBan :one
 DELETE FROM device_bans WHERE id = $1 AND user_id = $2 RETURNING *;

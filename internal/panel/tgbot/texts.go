@@ -17,8 +17,11 @@ type words struct {
 	stateActive, stateExpiring, stateLimited, stateExpired, stateOff   string
 	forever, termUntil, noLimit, trafficOf, trafficNoLimit, resets     string
 	devicesNone, devicesOff, devicesNote, confirmUnbind, unbound, wait string
-	connectText, linked, alreadyLinked, linkExpired, linkInvalid       string
-	linkLimit, noSub, sharedPlace, device, justNow                     string
+	// The admin's unbind rules: what is left in the window, the pause of an unbound device.
+	unbindLeft, returnNote, confirmReturn, unbindFailed          string
+	perDay, perWeek, perMonth, perDays, hours                    string
+	connectText, linked, alreadyLinked, linkExpired, linkInvalid string
+	linkLimit, noSub, sharedPlace, device, justNow               string
 	// Taking a subscription off the Telegram account: it keeps working in the apps.
 	removeSub, confirmRemove, yesRemove, removed string
 	// A subscription already linked to another account is moved only if its owner agrees.
@@ -58,10 +61,15 @@ var ru = words{
 	subTitle: "Подписка «%s»", devicesTitle: "Устройства", connectTitle: "Подключить устройство", switchTitle: "Какую подписку показать?",
 	stateActive: "✅ Работает", stateExpiring: "⏳ Скоро закончится", stateLimited: "📦 Трафик на этот период закончился", stateExpired: "⛔️ Подписка закончилась", stateOff: "⏸ Доступ приостановлен",
 	forever: "бессрочно", termUntil: "до %s — осталось %s", noLimit: "без лимита", trafficOf: "%s из %s", trafficNoLimit: "%s, без лимита", resets: "🔄 Обновится: %s",
-	devicesNone:       "Устройства появятся здесь, когда приложение загрузит подписку.",
-	devicesOff:        "Привязка устройств выключена: одновременно можно подключаться не больше чем с %s адресов.",
-	devicesNote:       "Отвязанное устройство сразу отключается, а место освобождается. Отвязывать можно одно устройство в сутки.",
-	confirmUnbind:     "Отвязать «%s»? Оно сразу отключится.",
+	devicesNone:   "Устройства появятся здесь, когда приложение загрузит подписку.",
+	devicesOff:    "Привязка устройств выключена: одновременно можно подключаться не больше чем с %s адресов.",
+	devicesNote:   "Отвязанное устройство сразу отключается, а место освобождается.",
+	confirmUnbind: "Отвязать «%s»? Оно сразу отключится.",
+	unbindLeft:    "Можно отвязать ещё %d из %d за %s.",
+	returnNote:    "Отвязанное устройство не сможет подключиться снова %s, поэтому сначала закройте на нём приложение.",
+	confirmReturn: "Подключиться снова оно сможет только через %s: сначала закройте на нём приложение, иначе оно сразу попробует вернуться.",
+	unbindFailed:  "⚠️ Не получилось отвязать устройство. Попробуйте ещё раз чуть позже.",
+	perDay:        "сутки", perWeek: "неделю", perMonth: "месяц", perDays: "%s", hours: "%d ч",
 	unbound:           "✅ «%s» отвязано.",
 	removeSub:         "🗑 Убрать из бота",
 	confirmRemove:     "Убрать подписку «%s» из этого Telegram?\n\nОна продолжит работать в приложениях, но уведомления о ней сюда приходить перестанут. Чтобы вернуть её, пришлите сюда ссылку на подписку.",
@@ -138,10 +146,15 @@ var en = words{
 	subTitle: "Subscription “%s”", devicesTitle: "Devices", connectTitle: "Connect a device", switchTitle: "Which subscription to show?",
 	stateActive: "✅ Working", stateExpiring: "⏳ Ends soon", stateLimited: "📦 Traffic for this period is used up", stateExpired: "⛔️ The subscription has ended", stateOff: "⏸ Access is paused",
 	forever: "no end date", termUntil: "until %s — %s left", noLimit: "unlimited", trafficOf: "%s of %s", trafficNoLimit: "%s, unlimited", resets: "🔄 Renews: %s",
-	devicesNone:       "Devices appear here once an app loads the subscription.",
-	devicesOff:        "Device binding is off: at most %s addresses can be connected at once.",
-	devicesNote:       "An unbound device is disconnected at once and its place frees up. You can unbind one device a day.",
-	confirmUnbind:     "Unbind “%s”? It disconnects at once.",
+	devicesNone:   "Devices appear here once an app loads the subscription.",
+	devicesOff:    "Device binding is off: at most %s addresses can be connected at once.",
+	devicesNote:   "An unbound device is disconnected at once and its place frees up.",
+	confirmUnbind: "Unbind “%s”? It disconnects at once.",
+	unbindLeft:    "You can unbind %d more of %d per %s.",
+	returnNote:    "An unbound device cannot connect again for %s, so close the app on it first.",
+	confirmReturn: "It can connect again only in %s: close the app on it first, or it tries to come back at once.",
+	unbindFailed:  "⚠️ The device was not unbound. Please try again a little later.",
+	perDay:        "day", perWeek: "week", perMonth: "month", perDays: "%s", hours: "%d h",
 	unbound:           "✅ “%s” is unbound.",
 	removeSub:         "🗑 Remove from the bot",
 	confirmRemove:     "Remove the subscription “%s” from this Telegram account?\n\nIt keeps working in the apps, but its notices stop coming here. To bring it back, send its subscription link here.",
@@ -303,6 +316,27 @@ func (w *words) bytes(n int64) string {
 		s = strings.Replace(strings.TrimSuffix(fmt.Sprintf("%.1f", v), ".0"), ".", sep, 1)
 	}
 	return s + " " + units[i]
+}
+
+// period is the unbind window in words: "сутки", "неделю", "10 дней".
+func (w *words) period(days int) string {
+	switch days {
+	case 1:
+		return w.perDay
+	case 7:
+		return w.perWeek
+	case 30:
+		return w.perMonth
+	}
+	return fmt.Sprintf(w.perDays, w.days(days))
+}
+
+// span is a pause in hours, whole days as days.
+func (w *words) span(hours int) string {
+	if hours >= 24 && hours%24 == 0 {
+		return w.days(hours / 24)
+	}
+	return fmt.Sprintf(w.hours, hours)
 }
 
 func (w *words) ago(t, now time.Time) string {
