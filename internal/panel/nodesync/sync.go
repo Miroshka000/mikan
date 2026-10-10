@@ -38,17 +38,20 @@ type Node interface {
 	Health(ctx context.Context) (nodeapi.Health, error)
 }
 
-// TLSSource returns the certificate the node uses for Hysteria2/TUIC.
-type TLSSource func() (*nodeapi.TLSFiles, error)
+// TLSSource returns the certificate the node uses for its protocols on TLS (Hysteria2,
+// TUIC, AnyTLS, TrustTunnel, VLESS TLS) and the pin links carry for it: the leaf's SHA-256
+// when clients cannot trust it, "" when they can.
+type TLSSource func() (*nodeapi.TLSFiles, string, error)
 
 // Syncer drives one node.
 type Syncer struct {
-	id    int64
-	m     *Manager
-	node  Node
-	tls   TLSSource
-	local bool
-	log   *slog.Logger
+	id      int64
+	m       *Manager
+	node    Node
+	tls     TLSSource
+	local   bool
+	address string
+	log     *slog.Logger
 
 	policiesDirty chan struct{}
 	stateDirty    chan struct{}
@@ -79,11 +82,26 @@ type Syncer struct {
 
 	health atomic.Pointer[HealthView]
 	online atomic.Pointer[map[string]nodeapi.Online]
+	// served is the pin of the certificate in the state the node last took ("" for a public
+	// one); nil until it took one from this panel process. Links follow it, not the
+	// certificate picked now: a node that has not got the new one yet keeps being pinned.
+	served atomic.Pointer[string]
 }
 
 type HealthView struct {
-	OK        bool
-	Error     string
+	OK    bool
+	Error string
+	// Code says why the node did not answer (nodeapi.Link*), Params the facts its text
+	// names; empty while it answers.
+	Code   string
+	Params map[string]string
+	// LastOK is when the node last answered; zero when it has not since the panel started.
+	// Since is when the current failure began.
+	LastOK time.Time
+	Since  time.Time
+	// Skew is the node's clock minus the panel's, the round trip taken into account; nil
+	// when the node does not say its time (older nodes) or did not answer.
+	Skew      *time.Duration
 	Health    nodeapi.Health
 	Listeners []nodeapi.ListenerStatus
 	// Ports are the listeners' ports in the state the node runs, by name (the relay's too,
@@ -104,7 +122,7 @@ func (v HealthView) HostPorts() *nodeapi.HostPorts {
 }
 
 func newSyncer(m *Manager, id int64, t Target) *Syncer {
-	s := &Syncer{id: id, m: m, node: t.Node, tls: t.TLS, local: t.Local, log: m.log.With("node", id),
+	s := &Syncer{id: id, m: m, node: t.Node, tls: t.TLS, local: t.Local, address: t.Address, log: m.log.With("node", id),
 		policiesDirty: make(chan struct{}, 1), stateDirty: make(chan struct{}, 1)}
 	empty := map[string]nodeapi.Online{}
 	s.online.Store(&empty)
@@ -184,28 +202,33 @@ func every(ctx context.Context, d time.Duration, fn func(context.Context)) {
 
 // desired builds the node's full state from the database.
 func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
-	var st nodeapi.DesiredState
+	st, _, err := s.desiredPin(ctx)
+	return st, err
+}
+
+// desiredPin is desired with the pin of the certificate in it.
+func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin string, err error) {
 	q := s.m.st.Q
 	n, err := q.GetNode(ctx, s.id)
 	if err != nil {
-		return st, err
+		return st, "", err
 	}
 	snap, err := s.m.snapshot(ctx, s.id)
 	if err != nil {
-		return st, err
+		return st, "", err
 	}
 	inbounds := snap.inbounds
 	st.Inbounds = []nodeapi.Inbound{}
 	if st.Warp, err = s.warp(ctx, n, inbounds); err != nil {
-		return st, err
+		return st, "", err
 	}
 	if st.Relay, st.Exits, err = s.cascade(ctx, n, inbounds); err != nil {
-		return st, err
+		return st, "", err
 	}
 	if s.local {
 		// The panel runs next to its own node, so its HTTPS port is the self-steal REALITY target.
 		if st.SelfStealPort, _, err = settings.Get[int](ctx, s.m.set, settings.KeyPanelPort); err != nil {
-			return st, err
+			return st, "", err
 		}
 	}
 	var bad []string
@@ -236,17 +259,20 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 	for _, sl := range snap.slots {
 		st.Slots = append(st.Slots, nodeapi.Slot{Name: sl.Name, UUID: sl.Uuid, Secret: sl.Secret})
 	}
-	if st.TLS, err = s.tls(); err != nil {
-		return st, err
+	if st.TLS, pin, err = s.tls(); err != nil {
+		return st, "", err
 	}
 	st.Torrent = snap.torrent.Block()
 	st.Filters = snap.filters.State()
+	if n.FairShare != 0 && n.ChannelMbps.Valid {
+		st.Shaping = &nodeapi.Shaping{ChannelMbps: int(n.ChannelMbps.Int64)}
+	}
 	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
-	return st, nil
+	return st, pin, nil
 }
 
 func (s *Syncer) applyState(ctx context.Context) {
-	st, err := s.desired(ctx)
+	st, pin, err := s.desiredPin(ctx)
 	if err != nil {
 		s.log.Error("build node state", "err", err)
 		return
@@ -311,6 +337,20 @@ func (s *Syncer) applyState(ctx context.Context) {
 		s.log.Info("node answers again")
 	}
 	s.log.Info("node state applied", "revision", rev, "recreated", res.Recreated)
+	// The node serves this certificate now: links may follow it (drop the pin for a public
+	// one, or pin a self-signed one again).
+	if old := s.served.Swap(&pin); old == nil || *old != pin {
+		s.m.tlsGen.Add(1)
+	}
+}
+
+// ServedPin is the pin of the certificate the node serves, as of the last state it took;
+// ok is false before it took one from this panel process.
+func (s *Syncer) ServedPin() (pin string, ok bool) {
+	if p := s.served.Load(); p != nil {
+		return *p, true
+	}
+	return "", false
 }
 
 // noteBadInbounds logs the inbounds left out of the node's state when that set changes,
@@ -458,6 +498,12 @@ func userPolicy(u db.User, grants int64, name string, seq int64, now time.Time, 
 	if u.DeviceLimit.Valid {
 		p.DeviceLimit = int(u.DeviceLimit.Int64)
 	}
+	if u.SpeedLimit.Valid {
+		p.SpeedMbps = int(u.SpeedLimit.Int64)
+	}
+	// The user's devices are slots of their own: they share the user's speed and the
+	// node's fair share as one.
+	p.Group = strconv.FormatInt(u.ID, 10)
 	allowed := domain.DecodeInbounds(u.Inbounds)
 	if len(allowed) == 0 && len(shut) > 0 {
 		// "All" but the excluded: the list is spelled out.
@@ -578,6 +624,10 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 			}
 		}
 		if err := domain.CountTraffic(ctx, q, b, now); err != nil {
+			return err
+		}
+		// Each slot's own total, main and pools: what every bound device used.
+		if err := countSlots(ctx, q, c, owner); err != nil {
 			return err
 		}
 		if c.Epoch != epoch {
@@ -709,14 +759,28 @@ func (s *Syncer) saveRevision(ctx context.Context, rev int64) error {
 }
 
 func (s *Syncer) refreshHealth(ctx context.Context) {
+	sent := s.m.now()
 	h, err := s.node.Health(ctx)
 	view := &HealthView{CheckedAt: s.m.now()}
+	prev := s.health.Load()
+	view.LastOK = prev.LastOK
 	if err != nil {
-		view.Error = err.Error()
+		view.Error, view.Code = err.Error(), nodeapi.Classify(err)
+		view.Params = nodeapi.LinkParams(view.Code, s.address, err)
+		// A failure that goes on keeps its start; a new one, or another kind, starts now.
+		view.Since = view.CheckedAt
+		if !prev.OK && prev.Code == view.Code && !prev.Since.IsZero() {
+			view.Since = prev.Since
+		}
 		s.health.Store(view)
 		return
 	}
-	view.OK, view.Health, view.Listeners = true, h, h.Listeners
+	view.OK, view.Health, view.Listeners, view.LastOK = true, h, h.Listeners, view.CheckedAt
+	if !h.Time.IsZero() {
+		// The node read its clock about halfway through the round trip.
+		d := h.Time.Sub(sent.Add(view.CheckedAt.Sub(sent) / 2))
+		view.Skew = &d
+	}
 	s.mu.Lock()
 	applied := s.lastApplied.Revision
 	if applied != 0 && h.Revision == applied {
@@ -753,7 +817,8 @@ func stateKey(st nodeapi.DesiredState) string {
 		E []nodeapi.Exit
 		B *nodeapi.TorrentBlock
 		F *nodeapi.Filters
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters})
+		H *nodeapi.Shaping
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters, st.Shaping})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
@@ -764,7 +829,7 @@ func policyKey(ps []nodeapi.Policy) string {
 	h := sha256.New()
 	for _, p := range ps {
 		raw, _ := json.Marshal([]any{p.Slot, p.Allowed, p.Inbounds, p.DeviceLimit, p.QuotaRemaining < 0, p.OtherIPs, poolKey(p.Pools),
-			p.TorrentExempt, p.BannedUntil})
+			p.TorrentExempt, p.BannedUntil, p.SpeedMbps, p.Group})
 		h.Write(raw)
 	}
 	return hex.EncodeToString(h.Sum(nil))
@@ -982,4 +1047,32 @@ func poolKey(ps []nodeapi.PoolQuota) []string {
 		out = append(out, p.Pool)
 	}
 	return out
+}
+
+// countSlots adds a batch to the slots' own totals (slot_traffic): a bound device's slot
+// is the device, so the card can say what each one used. Slots of nobody are left out,
+// as the users' counters leave them out.
+func countSlots(ctx context.Context, q *db.Queries, c nodeapi.Counters, owner map[string]int64) error {
+	sum := map[string]nodeapi.Traffic{}
+	for slot, t := range c.Slots {
+		sum[slot] = nodeapi.Traffic{Up: t.Up, Down: t.Down}
+	}
+	for slot, pools := range c.Pools {
+		cur := sum[slot]
+		for _, t := range pools {
+			cur.Up, cur.Down = cur.Up+t.Up, cur.Down+t.Down
+		}
+		sum[slot] = cur
+	}
+	var p db.AddSlotsTrafficParams
+	for slot, t := range sum {
+		if _, ok := owner[slot]; !ok || t.Up == 0 && t.Down == 0 {
+			continue
+		}
+		p.Names, p.Up, p.Down = append(p.Names, slot), append(p.Up, t.Up), append(p.Down, t.Down)
+	}
+	if len(p.Names) == 0 {
+		return nil
+	}
+	return q.AddSlotsTraffic(ctx, p)
 }

@@ -33,11 +33,10 @@ export const TARIFF_TABS = ["tariffs", "pools", "packages"] as const;
 export type TariffsSearch = { tab: (typeof TARIFF_TABS)[number] };
 
 /** Payments open on their history; without a way to take payments yet, on setting one up. */
-export const PAYMENT_TABS = ["history", "methods", "rules"] as const;
-export type PaymentsSearch = { tab?: (typeof PAYMENT_TABS)[number] };
+export const PAYMENT_TABS = ["history", "methods", "rules", "promocodes"] as const;
+export type PaymentsSearch = { tab?: (typeof PAYMENT_TABS)[number]; promo?: (typeof PROMO_TABS)[number] };
 
 export const PROMO_TABS = ["codes", "history"] as const;
-export type PromoSearch = { tab: (typeof PROMO_TABS)[number] };
 
 export const TELEGRAM_TABS = ["connect", "menu", "notify", "infra", "broadcast"] as const;
 export type TelegramSearch = { tab: (typeof TELEGRAM_TABS)[number] };

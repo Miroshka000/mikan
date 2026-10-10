@@ -187,7 +187,8 @@ func (b *Bot) menu(ctx context.Context, cfg Config, w *words, subs int) *Keyboar
 			rows = append(rows, []Button{btn})
 		}
 	}
-	if url := b.miniAppURL(ctx, cfg); url != "" {
+	// The promo codes entry is the admin's to hide; the Mini App page keeps its field.
+	if url := b.miniAppURL(ctx, cfg); url != "" && cfg.PromoButton {
 		rows = append(rows, []Button{{Text: w.promo, WebApp: &WebApp{URL: url + "#promocodes"}}})
 	}
 	if subs > 1 {
@@ -220,18 +221,37 @@ func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id i
 	if err != nil {
 		devs = nil
 	}
+	used := map[int64]int64{}
+	if rows, err := b.d.Store.Q.ListBoundDeviceTraffic(ctx, u.ID); err == nil {
+		for _, r := range rows {
+			used[r.DeviceID] = r.Up + r.Down
+		}
+	}
 	name := func(d db.BoundDevice) string { return deviceName(w, d) }
-	if cmd == "dc" {
+	rules, err := b.d.Devices.UnbindState(ctx, u.ID)
+	if err != nil {
+		b.d.Log.Warn("telegram: unbind rules", "err", err)
+	}
+	waiting := !rules.Next.IsZero()
+	if cmd == "dc" && !waiting {
 		for _, d := range devs {
 			if d.ID == id {
-				return html.EscapeString(fmt.Sprintf(w.confirmUnbind, name(d))), &Keyboard{[][]Button{
+				text := html.EscapeString(fmt.Sprintf(w.confirmUnbind, name(d)))
+				if r := rules.Rules.ReturnHours; r > 0 && d.Hwid != "" {
+					text += "\n\n" + html.EscapeString(fmt.Sprintf(w.confirmReturn, w.span(r)))
+				}
+				return text, &Keyboard{[][]Button{
 					{{Text: w.yesUnbind, CallbackData: "du:" + strconv.FormatInt(id, 10)}, {Text: w.cancel, CallbackData: "d"}}}}
 			}
 		}
 	}
 	lines := []string{head, ""}
-	if notice != "" {
+	switch {
+	case notice != "":
 		lines = append([]string{html.EscapeString(notice), ""}, lines...)
+	case waiting && len(devs) > 0:
+		// No buttons to tap while the limit is reached: the line says when they come back.
+		lines = append([]string{"<b>" + html.EscapeString(fmt.Sprintf(w.wait, b.when(w, rules.Next))) + "</b>", ""}, lines...)
 	}
 	rows := [][]Button{}
 	if len(devs) == 0 {
@@ -239,24 +259,43 @@ func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id i
 	}
 	for i, d := range devs {
 		meta := []string{}
+		if d.Name != "" && d.Model != "" {
+			meta = append(meta, d.Model)
+		}
 		if d.Hwid != "" && d.Model != "" && d.Os != "" {
 			meta = append(meta, strings.TrimSpace(d.Os+" "+d.OsVersion))
 		}
 		if app, _, _ := strings.Cut(strings.TrimSpace(d.App), " "); app != "" {
 			meta = append(meta, strings.Replace(app, "/", " ", 1))
 		}
+		if n := used[d.ID]; n > 0 {
+			meta = append(meta, w.bytes(n))
+		}
 		meta = append(meta, w.ago(time.Unix(d.LastSeen, 0), now))
 		lines = append(lines, fmt.Sprintf("%d. %s — %s", i+1, html.EscapeString(name(d)), html.EscapeString(strings.Join(meta, " · "))))
-		rows = append(rows, []Button{{Text: "❌ " + name(d), CallbackData: "dc:" + strconv.FormatInt(d.ID, 10)}})
+		if !waiting {
+			rows = append(rows, []Button{{Text: "❌ " + name(d), CallbackData: "dc:" + strconv.FormatInt(d.ID, 10)}})
+		}
 	}
 	if len(devs) > 0 {
-		lines = append(lines, "", html.EscapeString(w.devicesNote))
+		note := []string{w.devicesNote}
+		if left := rules.Left(); left >= 0 && !waiting {
+			note = append(note, fmt.Sprintf(w.unbindLeft, left, rules.Rules.Limit, w.period(rules.Rules.Days)))
+		}
+		if r := rules.Rules.ReturnHours; r > 0 {
+			note = append(note, fmt.Sprintf(w.returnNote, w.span(r)))
+		}
+		lines = append(lines, "", html.EscapeString(strings.Join(note, " ")))
 	}
 	return strings.Join(lines, "\n"), &Keyboard{append(rows, back)}
 }
 
+// deviceName: the device's own name (the admin's or the subscriber's, escaped where it is
+// shown), else what its app reported.
 func deviceName(w *words, d db.BoundDevice) string {
 	switch {
+	case d.Name != "":
+		return d.Name
 	case d.Hwid == "":
 		return w.sharedPlace
 	case d.Model != "":
@@ -288,10 +327,16 @@ func (b *Bot) act(ctx context.Context, chat int64, data string) (screen, notice 
 			err := b.d.Devices.Unbind(ctx, u.ID, id, true)
 			switch {
 			case err == nil:
+				b.d.Log.Info("telegram: the subscriber unbound a device", "user", u.ID, "device", id)
 				return "d", fmt.Sprintf(w.unbound, deviceName(w, d))
 			case errors.Is(err, domain.ErrUnbindCooldown):
-				fresh, _ := b.d.Store.Q.GetUser(ctx, u.ID)
-				return "d", fmt.Sprintf(w.wait, b.when(w, domain.NextUnbind(fresh, b.d.Now())))
+				st, _ := b.d.Devices.UnbindState(ctx, u.ID)
+				return "d", fmt.Sprintf(w.wait, b.when(w, st.Next))
+			case errors.Is(err, domain.ErrNotFound):
+				return "d", ""
+			default:
+				b.d.Log.Warn("telegram: device not unbound", "user", u.ID, "device", id, "err", err)
+				return "d", w.unbindFailed
 			}
 		}
 		return "d", ""

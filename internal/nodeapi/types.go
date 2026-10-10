@@ -43,6 +43,15 @@ type DesiredState struct {
 	// Filters keep users' traffic from places and strangers from the node; nil: none.
 	// Nodes older than the filters ignore it.
 	Filters *Filters `json:"filters,omitempty"`
+	// Shaping splits the node's channel evenly between the users moving traffic; nil: off.
+	// Nodes older than it ignore it.
+	Shaping *Shaping `json:"shaping,omitempty"`
+}
+
+// Shaping is the fair share of a node: ChannelMbps (each way) is split evenly between the
+// groups (users) moving traffic at the moment, a user's own cap staying the ceiling.
+type Shaping struct {
+	ChannelMbps int `json:"channel_mbps"`
 }
 
 // Filters are the ingress and egress filters of the node.
@@ -106,6 +115,10 @@ type Policy struct {
 	// BannedUntil (unix seconds) keeps the slot out until then: the torrent blocker
 	// caught it on some node of the panel. 0: no ban.
 	BannedUntil int64 `json:"banned_until,omitempty"`
+	// SpeedMbps caps the slot's traffic each way, in Mbit/s; 0: no cap. Slots of one Group
+	// (a user's devices) share one cap. Nodes older than the caps ignore both.
+	SpeedMbps int    `json:"speed_mbps,omitempty"`
+	Group     string `json:"group,omitempty"`
 }
 
 type PoliciesRequest struct {
@@ -122,6 +135,21 @@ type TLSFiles struct {
 	CertPEM string `json:"cert_pem"`
 	KeyPEM  string `json:"key_pem"`
 }
+
+// ChallengeRequest asks the node to answer an ACME HTTP-01 challenge for its own address
+// (PUT /v1/acme/challenge/{token}): the panel orders the node's certificate, the CA comes
+// to the node's port 80. Nodes that predate it answer 404 and stay on a pinned
+// self-signed certificate.
+type ChallengeRequest struct {
+	KeyAuth string `json:"key_auth"`
+}
+
+// The node's answers to a challenge it cannot take: port 80 held by another program (the
+// message names it when the node can tell), or too many pending at once.
+const (
+	CodePort80Busy        = "port80_busy"
+	CodeTooManyChallenges = "too_many_challenges"
+)
 
 // Counters is a batch of traffic deltas. The node returns the same batch until it is
 // acknowledged, so the panel can apply it idempotently by (Epoch, Seq).
@@ -161,6 +189,9 @@ type Health struct {
 	// Host is what listens on the node's server, whoever runs it; nil when the node does not
 	// say (before 0.5.0.2, or it cannot read the kernel's tables).
 	Host *HostPorts `json:"host,omitempty"`
+	// Time is the node's clock as it answered: the panel holds it against its own and warns
+	// of a skew. Older nodes send none.
+	Time time.Time `json:"time,omitzero"`
 }
 
 // HostPorts are the ports something listens on at the node's server: TCP sockets in the
@@ -483,3 +514,29 @@ type SpeedTest struct {
 	UpBps    int64     `json:"up_bps" doc:"Отдача, бит/с"`
 	Error    string    `json:"error,omitempty"`
 }
+
+// Diagnosis is a server's look at what it needs to work (POST /v1/diagnose on a node; the
+// panel runs the same on its own server): names, the internet, the places updates come
+// from, its clock, disk and memory. The targets are fixed: nothing in the request says
+// where to connect.
+type Diagnosis struct {
+	At    time.Time  `json:"at"`
+	Items []DiagItem `json:"items"`
+}
+
+// DiagItem is one check of a Diagnosis.
+type DiagItem struct {
+	ID     string            `json:"id" enum:"dns,internet,github,ghcr,clock,disk,memory"`
+	Status string            `json:"status" enum:"ok,warn,fail,skip"`
+	Code   string            `json:"code,omitempty" doc:"Почему не ok: timeout, refused, dns, tls, skew, low и другие"`
+	Params map[string]string `json:"params,omitempty"`
+	Detail string            `json:"detail,omitempty" doc:"Слова ошибки, без секретов"`
+}
+
+// The states of a check.
+const (
+	CheckOK   = "ok"
+	CheckWarn = "warn"
+	CheckFail = "fail"
+	CheckSkip = "skip"
+)

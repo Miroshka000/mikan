@@ -14,11 +14,14 @@ description: Все протоколы mikan, их порты по умолча�
 | VLESS · REALITY · gRPC | 2053/tcp | |
 | VLESS · REALITY · XHTTP · PQ | 2096/tcp | постквантовое шифрование VLESS, нужен свежий mihomo или Xray |
 | Trojan · REALITY | 2087/tcp | |
+| VLESS · TLS · XHTTP | 2443/tcp | обычный TLS на настоящем сертификате, на чужие запросы отвечает как веб-сервер |
+| VLESS · TLS · Vision | 3443/tcp | работает почти во всех приложениях |
+| VLESS · TLS · WebSocket | 2053/tcp | проходит у операторов, где работает только WS, и через CDN, см. [за прокси](/mikan/protocols/behind-proxy/#через-cdn) |
 | Hysteria2 | 443/udp | QUIC, можно задать диапазон портов |
 | Hysteria2 · Gecko | 2443/udp | Hysteria2 с обфускацией Gecko, только Clash-приложения |
 | TUIC v5 | 8443/udp | |
 | AnyTLS | 2083/tcp | |
-| TrustTunnel | 4443/tcp | только Clash-приложения |
+| TrustTunnel | 4443/tcp | только Clash-приложения; на запрос без ключа отвечает 407, сканер узнаёт в нём прокси |
 | ShadowQUIC | 4443/udp | только Clash-приложения |
 | Mieru | 5443/tcp | только Clash-приложения |
 | Shadowsocks-2022 | 6443/tcp | один ключ на всех |
@@ -41,6 +44,7 @@ Shadowsocks-2022, Sudoku и Snell в mihomo работают с одним кл�
 | VLESS · REALITY · gRPC | да | да | да |
 | VLESS PQ | да | да | |
 | Trojan · REALITY | да | да | да |
+| VLESS · TLS · WebSocket | да | да | да |
 | Hysteria2 | да | да | да |
 | TUIC v5 | да | | да |
 | AnyTLS | да | | Karing |

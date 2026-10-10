@@ -57,7 +57,7 @@ func (q *Queries) DeleteLegacySubTokensOf(ctx context.Context, userID int64) err
 }
 
 const legacySubTokenUser = `-- name: LegacySubTokenUser :one
-SELECT u.id, u.name, u.contact, u.note, u.tags, u.status, u.tariff_id, u.traffic_limit, u.device_limit, u.reset_strategy, u.period_days, u.period_start, u.used_up, u.used_down, u.total_up, u.total_down, u.expires_at, u.inbounds, u.sub_token, u.slot_id, u.online_at, u.created_at, u.updated_at, u.billing_day, u.unbound_at, u.source, u.hidden, u.folder_id, t.not_before FROM legacy_sub_tokens t JOIN users u ON u.id = t.user_id WHERE t.token = $1
+SELECT u.id, u.name, u.contact, u.note, u.tags, u.status, u.tariff_id, u.traffic_limit, u.device_limit, u.reset_strategy, u.period_days, u.period_start, u.used_up, u.used_down, u.total_up, u.total_down, u.expires_at, u.inbounds, u.sub_token, u.slot_id, u.online_at, u.created_at, u.updated_at, u.billing_day, u.source, u.hidden, u.folder_id, u.speed_limit, t.not_before FROM legacy_sub_tokens t JOIN users u ON u.id = t.user_id WHERE t.token = $1
 `
 
 type LegacySubTokenUserRow struct {
@@ -93,10 +93,10 @@ func (q *Queries) LegacySubTokenUser(ctx context.Context, token string) (LegacyS
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
 		&i.User.BillingDay,
-		&i.User.UnboundAt,
 		&i.User.Source,
 		&i.User.Hidden,
 		&i.User.FolderID,
+		&i.User.SpeedLimit,
 		&i.NotBefore,
 	)
 	return i, err

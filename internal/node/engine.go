@@ -1,6 +1,7 @@
 package node
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -27,6 +28,7 @@ import (
 	mlog "github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/tunnel"
 
+	"mikan/internal/acmechallenge"
 	"mikan/internal/fsutil"
 	"mikan/internal/nodeapi"
 	"mikan/internal/proto"
@@ -46,6 +48,9 @@ type Options struct {
 	DeviceRelease time.Duration
 	// AllowPrivate lets VPN users reach private and loopback networks of the server.
 	AllowPrivate bool
+	// ACMEListen is where the panel's HTTP-01 challenges for this node are answered
+	// (acmechallenge.ParseListen); "" is port 80.
+	ACMEListen string
 }
 
 type Engine struct {
@@ -58,6 +63,9 @@ type Engine struct {
 
 	Reg *Registry
 	tun *Tunnel
+	// Challenge answers the ACME challenges the panel orders for the node's address, on
+	// port 80 while one is pending.
+	Challenge *acmechallenge.Server
 
 	mu         sync.Mutex // serializes Apply
 	savedShape string     // policyShape of the policies in the state file
@@ -166,6 +174,7 @@ func Start(o Options) (*Engine, error) {
 		dataDir: dataDir, home: home, log: log, version: version, started: time.Now(), allowPrivate: o.AllowPrivate,
 		listeners: map[string]nodeapi.ListenerStatus{},
 		errs:      map[string]string{}, marker: make(chan string, 8), sys: newSysSampler(),
+		Challenge: acmechallenge.New(cmp.Or(o.ACMEListen, acmechallenge.DefaultListen)),
 	}
 	go e.pumpLogs()
 
@@ -200,6 +209,7 @@ func Start(o Options) (*Engine, error) {
 	}
 	e.restoreCounters(cs)
 	go e.sys.run()
+	go e.Reg.RunShaper(context.Background())
 	return e, nil
 }
 
@@ -261,6 +271,7 @@ func (e *Engine) Apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	}
 
 	e.Reg.SetSlots(st.Slots)
+	e.Reg.SetShaping(st.Shaping)
 	e.Reg.SetPolicies(st.Epoch, st.Policies)
 	e.Reg.SetShared(sharedListeners(st))
 	e.Reg.SetTorrent(st.Torrent)
@@ -388,7 +399,7 @@ func policyShape(ps []nodeapi.Policy) string {
 			pools = append(pools, q.Pool+strconv.FormatBool(q.Remaining < 0))
 		}
 		_ = enc.Encode([]any{p.Slot, p.Allowed, p.Inbounds, p.DeviceLimit, p.QuotaRemaining < 0, p.OtherIPs, pools,
-			p.TorrentExempt, p.BannedUntil})
+			p.TorrentExempt, p.BannedUntil, p.SpeedMbps, p.Group})
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -404,7 +415,7 @@ func (e *Engine) Health() nodeapi.Health {
 	sort.Slice(ls, func(i, j int) bool { return ls[i].Name < ls[j].Name })
 	return nodeapi.Health{
 		Version: e.version, Core: "mihomo " + mihomoVersion(), Revision: rev, StartedAt: e.started,
-		Listeners: ls, Conns: e.Reg.ConnCount(), System: e.sys.last(), Update: e.UpdateStatus(), Host: e.host.get(),
+		Listeners: ls, Conns: e.Reg.ConnCount(), System: e.sys.last(), Update: e.UpdateStatus(), Host: e.host.get(), Time: time.Now(),
 	}
 }
 

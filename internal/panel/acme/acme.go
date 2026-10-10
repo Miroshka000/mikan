@@ -1,79 +1,81 @@
-// Package acme obtains and renews the panel's HTTPS certificate from Let's Encrypt:
-// a normal certificate for a domain, or a short-lived one (profile "shortlived") for a
-// bare IP address. Subscription URLs are fetched by client apps that reject
+// Package acme obtains and renews public certificates over ACME: the panel's, and one for
+// each remote node. A domain gets a normal certificate from the CA the admin chose (Let's
+// Encrypt, ZeroSSL or Google Trust Services); a bare IP address a short-lived one
+// (profile "shortlived") from Let's Encrypt, the only CA that certifies addresses.
+// Subscription URLs and the protocols on a node's TLS are used by apps that reject
 // self-signed certificates, so an IP-only install still needs a public certificate.
 package acme
 
 import (
 	"context"
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/pem"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/go-acme/lego/v4/certcrypto"
-	"github.com/go-acme/lego/v4/certificate"
-	"github.com/go-acme/lego/v4/challenge/http01"
-	"github.com/go-acme/lego/v4/lego"
-	"github.com/go-acme/lego/v4/registration"
-
-	"mikan/internal/fsutil"
+	"mikan/internal/acmechallenge"
 	"mikan/internal/hostname"
+	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/tlscert"
 )
 
-const letsEncrypt = "https://acme-v02.api.letsencrypt.org/directory"
-
-// defaultChallenge is where the HTTP-01 challenge is answered unless MIKAN_ACME_LISTEN
-// says otherwise: port 80 on every address, where Let's Encrypt comes.
-const defaultChallenge = ":80"
-
+// Status is the panel's certificate as the admin panel shows it.
 type Status struct {
-	Kind       string    `json:"kind" enum:"self-signed,letsencrypt,custom"`
+	Kind       string    `json:"kind" enum:"self-signed,acme,custom" doc:"acme — выдан центром сертификации автоматически (ca), custom — свой, self-signed — временный самоподписанный"`
 	Identifier string    `json:"identifier"`
 	NotAfter   time.Time `json:"not_after"`
-	Error      string    `json:"error,omitempty"`
-	CheckedAt  time.Time `json:"checked_at"`
-	// The admin's own certificate (kind custom).
+	// CA issued the certificate served (kind acme); WantCA is the one the next order goes to:
+	// they differ while a change of the CA is under way.
+	CA     string `json:"ca,omitempty" enum:"letsencrypt,zerossl,google"`
+	WantCA string `json:"ca_wanted" enum:"letsencrypt,zerossl,google" doc:"Куда уйдёт следующий заказ: выбранный центр, для IP всегда Let's Encrypt"`
+	// Error is a code of errors.acme; ErrorDetail the CA's or the system's own words.
+	Error       string     `json:"error,omitempty"`
+	ErrorDetail string     `json:"error_detail,omitempty" doc:"Подробности ошибки как есть, для «подробнее»"`
+	Holder      string     `json:"holder,omitempty" doc:"Кто держит порт 80 (port80_busy), если это видно"`
+	RetryAt     *time.Time `json:"retry_at,omitempty" doc:"rate_limited: когда центр снова примет заказ"`
+	Ordering    bool       `json:"ordering,omitempty" doc:"Заказ идёт прямо сейчас"`
+	CheckedAt   time.Time  `json:"checked_at"`
+	// The certificate served (kinds acme and custom).
 	Issuer  string   `json:"issuer,omitempty"`
 	Names   []string `json:"names,omitempty"`
-	Trusted bool     `json:"trusted,omitempty" doc:"Свой сертификат публично доверенный для адреса панели"`
+	Trusted bool     `json:"trusted,omitempty" doc:"Сертификат публично доверенный для адреса панели"`
+	// Attempts are the latest orders at the CA, the latest first.
+	Attempts []Attempt `json:"attempts,omitempty" doc:"Последние попытки получить сертификат, свежие первыми"`
 }
 
 type Manager struct {
-	dir       string
-	directory string
-	holder    *tlscert.Holder
-	fallback  *tls.Certificate
-	set       *settings.Settings
-	log       *slog.Logger
-	now       func() time.Time
-	mu        sync.Mutex // the state below and the serving certificate; never held across an order
-	orderMu   sync.Mutex // one order at a time: it takes minutes when port 80 hangs
-	status    atomic.Pointer[Status]
-	wake      chan struct{}
-	challenge string // listen address for http-01: MIKAN_ACME_LISTEN, ":80" by default
+	dir      string
+	iss      *issuer
+	holder   *tlscert.Holder
+	fallback *tls.Certificate
+	set      *settings.Settings
+	log      *slog.Logger
+	now      func() time.Time
+	mu       sync.Mutex // the state below and the serving certificate; never held across an order
+	orderMu  sync.Mutex // one order at a time: it takes minutes when port 80 hangs
+	status   atomic.Pointer[Status]
+	wake     chan struct{}
+	// challenge answers HTTP-01 on MIKAN_ACME_LISTEN (":80" by default), for orders and for
+	// the port 80 check.
+	challenge *acmechallenge.Server
+	// The attempt under way, which a second caller joins instead of ordering again.
+	attMu sync.Mutex
+	cur   *attempt
 	// customDir holds the admin's own certificate (tlscert.SaveCustom); it wins over
-	// Let's Encrypt while valid. customMod is when its files last changed, as ensure saw.
+	// the CA while valid. customMod is when its files last changed, as ensure saw.
 	customDir string
 	customMod time.Time
+	// journal keeps the latest orders, for the admin panel to list.
+	journal *journal
 	// onChange hears of every change of Public: the local node gets that certificate with
 	// its state, which is sent again only on a change. announced is the last one told.
 	annMu     sync.Mutex
@@ -81,46 +83,38 @@ type Manager struct {
 	announced string
 }
 
+type attempt struct {
+	done   chan struct{}
+	failed bool
+}
+
 func New(dataDir string, holder *tlscert.Holder, fallback *tls.Certificate, set *settings.Settings, log *slog.Logger, now func() time.Time) *Manager {
-	dir := os.Getenv("MIKAN_ACME_DIRECTORY")
-	if dir == "" {
-		dir = letsEncrypt
-	}
-	challenge, err := ChallengeListen(os.Getenv("MIKAN_ACME_LISTEN"))
+	listen, err := acmechallenge.ParseListen(os.Getenv("MIKAN_ACME_LISTEN"))
 	if err != nil {
-		log.Warn("MIKAN_ACME_LISTEN is not host:port: the HTTP-01 challenge is answered on "+defaultChallenge, "err", err)
-		challenge = defaultChallenge
+		log.Warn("MIKAN_ACME_LISTEN is not host:port: the HTTP-01 challenge is answered on "+acmechallenge.DefaultListen, "err", err)
+		listen = acmechallenge.DefaultListen
 	}
-	m := &Manager{dir: filepath.Join(dataDir, "tls", "acme"), directory: dir, holder: holder, fallback: fallback,
-		set: set, log: log, now: now, wake: make(chan struct{}, 1), challenge: challenge, customDir: filepath.Join(dataDir, "tls", "custom")}
-	m.status.Store(&Status{Kind: "self-signed", CheckedAt: now()})
+	root := filepath.Join(dataDir, "tls", "acme")
+	m := &Manager{dir: root, iss: newIssuer(root, set), holder: holder, fallback: fallback,
+		set: set, log: log, now: now, wake: make(chan struct{}, 1), challenge: acmechallenge.New(listen), customDir: filepath.Join(dataDir, "tls", "custom"),
+		journal: newJournal(root)}
+	m.status.Store(&Status{Kind: "self-signed", WantCA: CALetsEncrypt, CheckedAt: now()})
 	return m
 }
 
-// ChallengeListen reads MIKAN_ACME_LISTEN, the address the HTTP-01 challenge is answered
-// on: ":80" when empty. When nginx or caddy holds port 80 the installer sets a loopback
-// port, e.g. 127.0.0.1:18080, and the proxy forwards /.well-known/acme-challenge/ there.
-// The host is an IP address, localhost or empty (every address); the port is 1..65535.
-func ChallengeListen(v string) (string, error) {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return defaultChallenge, nil
-	}
-	host, port, err := net.SplitHostPort(v)
-	if err != nil {
-		return "", err
-	}
-	if host != "" && host != "localhost" && net.ParseIP(host) == nil {
-		return "", fmt.Errorf("host %q is not an IP address", host)
-	}
-	p, err := strconv.Atoi(port)
-	if err != nil || p < 1 || p > 65535 {
-		return "", fmt.Errorf("port %q is not 1..65535", port)
-	}
-	return net.JoinHostPort(host, strconv.Itoa(p)), nil
-}
+// Challenge is the panel's HTTP-01 responder: the certificate check puts a token of its own
+// on it to see that port 80 reaches the panel from outside.
+func (m *Manager) Challenge() *acmechallenge.Server { return m.challenge }
 
-func (m *Manager) Status() Status { return *m.status.Load() }
+// Status is the certificate now, with Ordering set while an order runs.
+func (m *Manager) Status() Status {
+	st := *m.status.Load()
+	m.attMu.Lock()
+	st.Ordering = m.cur != nil
+	m.attMu.Unlock()
+	st.Attempts = m.journal.List()
+	return st
+}
 
 // OnChange sets what is called after Public changes: a certificate issued, renewed,
 // uploaded or dropped. It is called outside the manager's locks and must not block.
@@ -155,11 +149,14 @@ func (m *Manager) announce() {
 }
 
 // Trusted says whether the panel serves a certificate browsers trust for its address: one
-// from Let's Encrypt, or the admin's own when it is publicly trusted and covers the address.
+// from the CA, or the admin's own when it is publicly trusted and covers the address.
 func (m *Manager) Trusted() bool {
 	st := m.status.Load()
+	if !st.NotAfter.IsZero() && !m.now().Before(st.NotAfter) {
+		return false
+	}
 	switch st.Kind {
-	case "letsencrypt":
+	case "acme":
 		return true
 	case "custom":
 		return st.Trusted && st.Error == ""
@@ -168,24 +165,73 @@ func (m *Manager) Trusted() bool {
 }
 
 // Public is the certificate the panel serves when clients trust it without a pin: the one
-// from Let's Encrypt, or the admin's own that is publicly trusted. nil otherwise.
+// from the CA, or the admin's own that is publicly trusted. nil otherwise, and once expired.
 func (m *Manager) Public() *tls.Certificate {
 	if !m.Trusted() {
 		return nil
 	}
 	c, err := m.holder.Get(nil)
-	if err != nil || c.Leaf == nil {
+	if err != nil || c.Leaf == nil || !m.now().Before(c.Leaf.NotAfter) {
 		return nil
 	}
 	return c
 }
 
-// Renew asks the background loop to try again now (e.g. after the admin freed port 80).
+// Served is the leaf the panel serves now, whatever it is; nil before any.
+func (m *Manager) Served() *x509.Certificate {
+	c, err := m.holder.Get(nil)
+	if err != nil {
+		return nil
+	}
+	return c.Leaf
+}
+
+// Renew asks the background loop to try again now (a new domain, another CA, kill -HUP).
 func (m *Manager) Renew() {
 	select {
 	case m.wake <- struct{}{}:
 	default:
 	}
+}
+
+// RenewNow tries now and waits up to wait for the outcome: the admin's "Request now". done
+// is false when the order still runs then; it goes on in the background.
+func (m *Manager) RenewNow(ctx context.Context, wait time.Duration) (st Status, done bool) {
+	finished := make(chan struct{})
+	go func() {
+		m.attemptOnce(context.WithoutCancel(ctx))
+		close(finished)
+	}()
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-finished:
+		return m.Status(), true
+	case <-t.C:
+	case <-ctx.Done():
+	}
+	return m.Status(), false
+}
+
+// attemptOnce runs ensure, or waits for the one under way and shares its outcome.
+func (m *Manager) attemptOnce(ctx context.Context) (failed bool) {
+	m.attMu.Lock()
+	if a := m.cur; a != nil {
+		m.attMu.Unlock()
+		<-a.done
+		return a.failed
+	}
+	a := &attempt{done: make(chan struct{})}
+	m.cur = a
+	m.attMu.Unlock()
+	defer func() {
+		m.attMu.Lock()
+		m.cur = nil
+		m.attMu.Unlock()
+		close(a.done)
+	}()
+	a.failed = m.ensure(ctx)
+	return a.failed
 }
 
 // How often the certificate is looked after, and how soon after an order that failed. A
@@ -203,6 +249,7 @@ func (m *Manager) Run(ctx context.Context) {
 	// served within half a minute, no restart.
 	watch := time.NewTicker(30 * time.Second)
 	defer watch.Stop()
+	defer m.challenge.Close()
 	later := func(failed bool) {
 		d := checkEvery
 		if failed {
@@ -216,7 +263,7 @@ func (m *Manager) Run(ctx context.Context) {
 		}
 		next.Reset(d)
 	}
-	later(m.ensure(ctx))
+	later(m.attemptOnce(ctx))
 	for {
 		select {
 		case <-ctx.Done():
@@ -228,7 +275,7 @@ func (m *Manager) Run(ctx context.Context) {
 				continue
 			}
 		}
-		later(m.ensure(ctx))
+		later(m.attemptOnce(ctx))
 	}
 }
 
@@ -260,8 +307,8 @@ func (m *Manager) SetCustom(ctx context.Context, certPEM, keyPEM []byte) error {
 	return nil
 }
 
-// ClearCustom goes back to Let's Encrypt or the self-signed certificate. The custom one
-// is served until the loop has the other: there is no gap.
+// ClearCustom goes back to the CA or the self-signed certificate. The custom one is served
+// until the loop has the other: there is no gap.
 func (m *Manager) ClearCustom() error {
 	if err := tlscert.RemoveCustom(m.customDir); err != nil {
 		return err
@@ -279,22 +326,28 @@ func (m *Manager) identifier(ctx context.Context) (string, error) {
 }
 
 // ensure makes the panel serve the right certificate and, when it needs a new one from
-// Let's Encrypt, orders it. It reports whether that order failed. The order runs outside
-// m.mu: uploading a certificate of one's own must not wait for it.
+// the CA, orders it. It reports whether that order failed. The order runs outside m.mu:
+// uploading a certificate of one's own must not wait for it.
 func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
-	id, need := m.settle(ctx)
+	id, ca, need := m.settle(ctx)
 	if !need {
 		return false
 	}
 	m.orderMu.Lock()
 	defer m.orderMu.Unlock()
 	// Checked again: a certificate may have come meanwhile, an order that waited for ours.
-	if id, need = m.settle(ctx); !need {
+	if id, ca, need = m.settle(ctx); !need {
 		return false
 	}
-	cert, err := m.obtain(ctx, id)
+	certPEM, keyPEM, err := m.iss.obtain(ctx, id, ca, serverProvider{m.challenge})
+	if err == nil {
+		err = savePair(m.dir, certPEM, keyPEM, ca)
+	}
 	if err != nil {
-		m.log.Warn("acme: certificate not obtained", "identifier", id, "err", err)
+		host, _ := m.set.String(ctx, settings.KeyPublicHost)
+		p := Classify(err, dnscheck.Own(host), m.now())
+		m.log.Warn("acme: certificate not obtained", "identifier", id, "ca", ca, "code", p.Code, "holder", p.Holder, "err", err)
+		m.journal.Add(Attempt{At: m.now(), CA: ca, Error: p.Code, Detail: p.Detail, Holder: p.Holder})
 		m.mu.Lock()
 		st := *m.status.Load()
 		if st.Kind == "custom" {
@@ -304,7 +357,7 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 			return false
 		}
 		if st.Error == "" { // a custom certificate that is broken is the thing to tell the admin of
-			st.Error = humanError(err)
+			st.Error, st.ErrorDetail, st.Holder, st.RetryAt = p.Code, p.Detail, p.Holder, p.RetryAt
 		}
 		st.CheckedAt = m.now()
 		if st.Kind == "self-signed" {
@@ -315,37 +368,46 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 		m.announce()
 		return true
 	}
-	m.log.Info("acme: certificate installed", "identifier", id, "not_after", cert.Leaf.NotAfter)
+	m.log.Info("acme: certificate installed", "identifier", id, "ca", ca)
+	m.journal.Add(Attempt{At: m.now(), CA: ca})
 	m.settle(ctx) // now on disk: served, unless the admin's own certificate has come in the meantime
 	return false
 }
 
 // settle serves the best certificate there already is and says whether a new one has to
-// be ordered for id. It does no network.
-func (m *Manager) settle(ctx context.Context) (id string, order bool) {
+// be ordered for id, from ca. It does no network.
+func (m *Manager) settle(ctx context.Context) (id, ca string, order bool) {
 	defer m.announce() // after the lock and the status: Public reads both
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	now := m.now()
 	id, err := m.identifier(ctx)
-	st := &Status{Kind: "self-signed", Identifier: id, CheckedAt: m.now()}
+	st := &Status{Kind: "self-signed", Identifier: id, CheckedAt: now}
 	defer func() { m.status.Store(st) }()
 	if err != nil {
-		st.Error = err.Error()
-		return id, false
+		st.Error, st.ErrorDetail = CodeUnknown, err.Error()
+		return id, "", false
 	}
+	chosen, err := ChosenCA(ctx, m.set)
+	if err != nil {
+		st.Error, st.ErrorDetail = CodeUnknown, err.Error()
+		return id, "", false
+	}
+	ca = EffectiveCA(chosen, id)
+	st.WantCA = ca
 	// The admin's own certificate wins while it is valid; an expired or broken one falls
 	// back to the rest, and the status says why.
 	m.customMod = tlscert.CustomModTime(m.customDir)
 	if tlscert.HasCustom(m.customDir) {
-		cert, err := tlscert.LoadCustom(m.customDir, m.now())
+		cert, err := tlscert.LoadCustom(m.customDir, now)
 		if err == nil {
-			info := tlscert.Describe(cert, id, m.now())
+			info := tlscert.Describe(cert, id, now)
 			m.holder.Set(cert)
 			st.Kind, st.NotAfter, st.Issuer, st.Names, st.Trusted = "custom", cert.Leaf.NotAfter, info.Issuer, info.Names, info.Trusted
 			if id != "" && !tlscert.Covers(cert.Leaf, id) {
 				st.Error = "custom_wrong_host"
 			}
-			return id, false
+			return id, ca, false
 		}
 		why := "custom_invalid"
 		if errors.Is(err, tlscert.ErrExpired) {
@@ -358,19 +420,20 @@ func (m *Manager) settle(ctx context.Context) (id string, order bool) {
 	if isPrivate(id) {
 		m.useFallback()
 		st.Error = "no_public_host"
-		return id, false
+		return id, ca, false
 	}
-	if cert, err := m.load(); err == nil && tlscert.Covers(cert.Leaf, id) {
-		m.holder.Set(cert) // kept serving while it is renewed
-		st.Kind, st.NotAfter = "letsencrypt", cert.Leaf.NotAfter
-		if !m.needsRenewal(cert.Leaf) {
-			return id, false
+	if cert, have, err := loadPair(m.dir); err == nil && tlscert.Covers(cert.Leaf, id) && now.Before(cert.Leaf.NotAfter) {
+		m.holder.Set(cert) // kept serving while it is renewed, or ordered from another CA
+		info := tlscert.Describe(cert, id, now)
+		st.Kind, st.NotAfter, st.CA, st.Issuer, st.Names, st.Trusted = "acme", cert.Leaf.NotAfter, have, info.Issuer, info.Names, true
+		if !needsRenewal(cert.Leaf, now) && have == ca {
+			return id, ca, false
 		}
 	}
 	if st.Kind == "self-signed" {
 		m.useFallback()
 	}
-	return id, true
+	return id, ca, true
 }
 
 func (m *Manager) useFallback() {
@@ -379,129 +442,12 @@ func (m *Manager) useFallback() {
 	}
 }
 
-// needsRenewal renews once a third of the lifetime is left: ~2 days for 6-day IP
-// certificates, ~30 days for 90-day ones, leaving room for several retries.
-func (m *Manager) needsRenewal(leaf *x509.Certificate) bool {
-	life := leaf.NotAfter.Sub(leaf.NotBefore)
-	return leaf.NotAfter.Sub(m.now()) < life/3
-}
-
-type user struct {
-	email string
-	reg   *registration.Resource
-	key   crypto.PrivateKey
-}
-
-func (u *user) GetEmail() string                        { return u.email }
-func (u *user) GetRegistration() *registration.Resource { return u.reg }
-func (u *user) GetPrivateKey() crypto.PrivateKey        { return u.key }
-
-func (m *Manager) obtain(ctx context.Context, id string) (*tls.Certificate, error) {
-	if err := os.MkdirAll(m.dir, 0o700); err != nil {
-		return nil, err
-	}
-	key, err := m.accountKey()
-	if err != nil {
-		return nil, err
-	}
-	email, _ := m.set.String(ctx, settings.KeyACMEEmail)
-	u := &user{email: email, key: key}
-	req, noCN := order(id)
-	cfg := lego.NewConfig(u)
-	cfg.CADirURL = m.directory
-	cfg.Certificate.KeyType = certcrypto.EC256
-	cfg.Certificate.DisableCommonName = noCN
-	client, err := lego.NewClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-	// The challenge's port (80, or MIKAN_ACME_LISTEN's) is taken only for the few seconds
-	// of the challenge.
-	host, port, _ := net.SplitHostPort(m.challenge)
-	if err := client.Challenge.SetHTTP01Provider(http01.NewProviderServer(host, port)); err != nil {
-		return nil, err
-	}
-	if u.reg, err = client.Registration.ResolveAccountByKey(); err != nil {
-		if u.reg, err = client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true}); err != nil {
-			return nil, fmt.Errorf("register: %w", err)
-		}
-	}
-	res, err := client.Certificate.Obtain(req)
-	if err != nil {
-		return nil, err
-	}
-	if err := fsutil.WriteFileAtomic(filepath.Join(m.dir, "cert.pem"), res.Certificate, 0o600); err != nil {
-		return nil, err
-	}
-	if err := fsutil.WriteFileAtomic(filepath.Join(m.dir, "key.pem"), res.PrivateKey, 0o600); err != nil {
-		return nil, err
-	}
-	return m.load()
-}
-
-// order is what Let's Encrypt is asked for. It issues an IP certificate only with the
-// shortlived profile and only with the IP in the SAN: an IP in the Common Name is refused
-// as badCSR, so the CSR goes without one. A domain keeps its Common Name.
-func order(id string) (req certificate.ObtainRequest, noCommonName bool) {
-	req = certificate.ObtainRequest{Domains: []string{id}, Bundle: true}
-	if net.ParseIP(id) != nil {
-		req.Profile = "shortlived"
-		return req, true
-	}
-	return req, false
-}
-
-func (m *Manager) load() (*tls.Certificate, error) {
-	c, err := tls.LoadX509KeyPair(filepath.Join(m.dir, "cert.pem"), filepath.Join(m.dir, "key.pem"))
-	if err != nil {
-		return nil, err
-	}
-	if c.Leaf == nil {
-		return nil, errors.New("no leaf certificate")
-	}
-	return &c, nil
-}
-
-func (m *Manager) accountKey() (crypto.PrivateKey, error) {
-	path := filepath.Join(m.dir, "account.key")
-	if raw, err := os.ReadFile(path); err == nil {
-		block, _ := pem.Decode(raw)
-		if block == nil {
-			return nil, errors.New("account.key: no PEM block")
-		}
-		return x509.ParseECPrivateKey(block.Bytes)
-	}
-	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-	der, err := x509.MarshalECPrivateKey(k)
-	if err != nil {
-		return nil, err
-	}
-	return k, fsutil.WriteFileAtomic(path, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}), 0o600)
-}
-
-// isPrivate reports identifiers Let's Encrypt can never validate: private and loopback
-// IPs, and what is not a DNS name, such as docker service names in test setups.
+// isPrivate reports identifiers a CA can never validate: private and loopback IPs, and
+// what is not a DNS name, such as docker service names in test setups.
 func isPrivate(id string) bool {
 	ip := net.ParseIP(id)
 	if ip == nil {
 		return !hostname.Name(id) || hostname.Reserved(id)
 	}
 	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified()
-}
-
-// humanError maps known failures to codes the UI translates; anything else goes out raw.
-func humanError(err error) string {
-	s := err.Error()
-	switch {
-	case strings.Contains(s, "address already in use"):
-		return "port80_busy"
-	case strings.Contains(s, "rateLimited") || strings.Contains(s, "too many"):
-		return "rate_limited"
-	case strings.Contains(s, "connection") || strings.Contains(s, "timeout"):
-		return "unreachable"
-	}
-	return s
 }

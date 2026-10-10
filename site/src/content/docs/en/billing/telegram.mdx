@@ -34,7 +34,7 @@ The route is checked before it is saved.
 ## What the subscriber sees
 
 - The subscription screen: term, traffic, devices, pools. If there are several subscriptions, you can switch between them, up to five per account.
-- Devices with unbinding, once a day.
+- Devices with unbinding under the rules of the subscription settings.
 - "Connect a device": the link and apps, plus a button for the subscription page in the Mini App.
 - Buying and renewing, "Buy more traffic", "Promo codes", "Try it for free".
 - "Remove from the bot": removes only the link to Telegram. The subscription keeps working in apps and comes back to the bot if you send it the link again.
@@ -45,13 +45,31 @@ A subscription is bound when a person sends the bot the link or taps "Open in Te
 
 The **Menu and texts** tab: main menu buttons (subscription, devices, connection, renewal, support, Mini App and your own: a link or a page with text), up to 20 buttons, ordered with arrows. Texts for the welcome, renewal and notifications, and the bot language. On the right is a preview with sample data.
 
+### Formatting
+
+The bot's texts, button pages and broadcasts take Markdown:
+
+| You write | In Telegram |
+| --- | --- |
+| `**bold**` | **bold** |
+| `*italic*` or `_italic_` | *italic* |
+| `__underline__` | underlined |
+| `~~strikethrough~~` | ~~strikethrough~~ |
+| `\|\|hidden\|\|` | a spoiler, revealed on tap |
+| `` `code` `` and a block between ` ``` ` | monospace |
+| `> quote` at the start of a line | a quote |
+| `# Heading` | a bold line |
+| `[text](https://…)` | a link: https, http or tg |
+
+Lists are written as plain text. A backslash keeps a mark as is: `\*`. Variables like `{name}` are filled in after the formatting, so a name with stars or tags stays text. Unpaired marks and links to other addresses stay as written, and if Telegram still refuses a message, the bot sends it without formatting. Older texts without markup look as before. Under the field you edit you see how the message arrives in Telegram.
+
 ## Notifications
 
 The **Notifications** tab: reminders 3 days and 1 day before the term ends, when it ends, at 90% of traffic and when traffic runs out. It also has the Mini App button next to the input field, "Keep one menu in the chat" and "Silent at night" (from 22:00 to 9:00 Moscow time).
 
 ## Broadcast
 
-The **Broadcast** tab sends a text to everyone whose subscription is bound to the bot. Messages go within Telegram's limits, and progress is shown in the panel.
+The **Broadcast** tab sends a text to everyone whose subscription is bound to the bot. It is formatted like the bot's texts, and `{brand}` is filled in. Messages go within Telegram's limits, and progress is shown in the panel.
 
 ## Free trial
 

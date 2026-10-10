@@ -3,6 +3,7 @@ package nodesync
 import (
 	"context"
 	"crypto/x509"
+	"database/sql"
 	"io"
 	"log/slog"
 	"slices"
@@ -41,7 +42,9 @@ func (f *fakeNode) Ack(_ context.Context, _ string, seq int64) error {
 }
 func (f *fakeNode) Health(context.Context) (nodeapi.Health, error) { return f.health, nil }
 
-func fakeTLS() (*nodeapi.TLSFiles, error) { return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, nil }
+func fakeTLS() (*nodeapi.TLSFiles, string, error) {
+	return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, "pin", nil
+}
 
 func setup(t *testing.T) (*Syncer, *fakeNode, *store.Store, *domain.Users, *time.Time) {
 	t.Helper()
@@ -99,6 +102,16 @@ func TestCountersAppliedOnce(t *testing.T) {
 	}
 	if len(node.acked) != 2 || node.acked[1] != 1 {
 		t.Fatalf("acks = %v, want the duplicate acked too", node.acked)
+	}
+	// The slot's own total (what a bound device used) is counted once too, and a slot of
+	// nobody is not.
+	var up, down int64
+	if err := st.DB.QueryRowContext(ctx, "SELECT up, down FROM slot_traffic WHERE slot_id = $1", slot.ID).Scan(&up, &down); err != nil || up != 100 || down != 900 {
+		t.Fatalf("slot traffic: up %d down %d, %v", up, down, err)
+	}
+	var strangers int
+	if err := st.DB.QueryRowContext(ctx, "SELECT count(*) FROM slot_traffic t JOIN slots s ON s.id = t.slot_id WHERE s.name = 's999999'").Scan(&strangers); err != nil || strangers != 0 {
+		t.Fatalf("a slot of nobody got traffic: %d, %v", strangers, err)
 	}
 	node.batch = nodeapi.Counters{Epoch: "e2", Seq: 1, Slots: map[string]nodeapi.Traffic{slot.Name: {Down: 50}}}
 	s.pullCounters(ctx)
@@ -465,5 +478,23 @@ func TestHealthCarriesAppliedPorts(t *testing.T) {
 	s.refreshHealth(ctx)
 	if p := s.Health().Ports; p != nil {
 		t.Fatalf("a state this panel did not apply: ports %v", p)
+	}
+}
+
+// A user's cap and group reach every slot of the user: the node holds the devices as one.
+func TestPolicyCarriesSpeedCap(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	u := db.User{ID: 42, Status: "active", SpeedLimit: sql.NullInt64{Int64: 30, Valid: true}}
+	p := userPolicy(u, 0, "s1", 1, now, nil, nil, nil)
+	if p.SpeedMbps != 30 || p.Group != "42" {
+		t.Fatalf("cap and group: %+v", p)
+	}
+	u.SpeedLimit = sql.NullInt64{}
+	if p := userPolicy(u, 0, "s2", 1, now, nil, nil, nil); p.SpeedMbps != 0 || p.Group != "42" {
+		t.Fatalf("no cap: %+v", p)
+	}
+	a := policyKey([]nodeapi.Policy{{Slot: "s1", SpeedMbps: 30}})
+	if a == policyKey([]nodeapi.Policy{{Slot: "s1", SpeedMbps: 40}}) {
+		t.Fatal("a changed cap must be pushed to the node")
 	}
 }

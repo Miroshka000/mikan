@@ -3,11 +3,12 @@
 // saved together; images and instructions are saved as they are made.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useBlocker } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, ChevronDown, ImageUp, Link2, Monitor, Moon, Plus, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronDown, ImageUp, Link2, Monitor, Moon, Plus, RotateCcw, Smartphone, Sun, Trash2, Type } from "lucide-react";
 import { useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { api, ApiError, basePath, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk, useNodes, useSettings } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
+import { foldedList, Mock, themeNames, ThemesToggle, useTilesPerRow } from "../../../components/theme";
 import { QueryBoundary } from "../../../components/query";
 import { Switch, SwitchRow } from "../../../components/switch";
 import { SaveBar, WithPreview } from "../../../components/layout";
@@ -16,6 +17,7 @@ import { Button, Field, Segmented, Skeleton } from "../../../components/ui";
 import { t, useLocale, type Key } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
+import { followsMode, MODE_PALETTES, THEMES } from "../../../lib/themes";
 import { safeHref } from "../../../lib/url";
 import { APPS, type Platform } from "../../../sub/apps";
 import { CUSTOM_TYPES, MINI_APP_ONLY, orderApps, PLATFORMS, type BlockType } from "../../../sub/page";
@@ -217,12 +219,12 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
   const setLook = (patch: Partial<Look>) => set((c) => ({ ...c, look: { ...c.look, ...patch } }));
   const bg = look.background;
   const setBg = (patch: Partial<Look["background"]>) => setLook({ background: { ...bg, ...patch } });
-  const palettes: { id: Look["palette"]; label: Key }[] = [
-    { id: "mikan", label: "settings.themeMikan" },
-    { id: "ocean", label: "settings.themeOcean" },
-    { id: "sakura", label: "settings.themeSakura" },
-    { id: "forest", label: "settings.themeForest" },
-  ];
+  const names = themeNames();
+  const [themesOpen, setThemesOpen] = useState(false);
+  const [themeRows, perRow] = useTilesPerRow();
+  // The four that follow the page's light/dark mode, then every other panel theme as it is.
+  const moded = MODE_PALETTES.map((id) => ({ id, label: names[id], theme: id === "mikan" && look.mode === "dark" ? ("midnight" as const) : id }));
+  const fixed = THEMES.filter((id) => !followsMode(id) && id !== "midnight").map((id) => ({ id, label: names[id], theme: id }));
   const fonts: { id: Look["font"]; family: string }[] = [
     { id: "default", family: '"Unbounded Variable", "Onest Variable", system-ui, sans-serif' },
     { id: "onest", family: '"Onest Variable", system-ui, sans-serif' },
@@ -232,22 +234,39 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
   return (
     <>
       <Card title={t("settings.page.theme")} sub={t("settings.page.themeSub")}>
-        <div className="theme-grid mb-4" role="radiogroup" aria-label={t("settings.page.theme")}>
-          {palettes.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              role="radio"
-              aria-checked={look.palette === p.id}
-              className="theme-option"
-              data-theme-preview={p.id === "mikan" && look.mode === "dark" ? "midnight" : p.id}
-              onClick={() => setLook({ palette: p.id })}
-            >
-              <span className="theme-swatch" aria-hidden />
-              <span>{p.id === "mikan" && look.mode === "dark" ? t("settings.themeMidnight") : t(p.label)}</span>
-            </button>
+        <div ref={themeRows} role="radiogroup" aria-label={t("settings.page.theme")} className="mb-4 flex flex-col gap-4">
+          {[
+            { label: t("settings.page.themesModed"), list: moded },
+            { label: t("settings.page.themesFixed"), list: fixed },
+          ].map((g) => (
+            <div key={g.label} role="group" aria-label={g.label}>
+              <div className="theme-group-label">{g.label}</div>
+              <div className="theme-tiles">
+                {foldedList(g.list, look.palette, themesOpen, perRow).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={look.palette === p.id}
+                    aria-label={p.theme === "midnight" ? names.midnight : p.label}
+                    className="theme-tile"
+                    onClick={() => setLook({ palette: p.id as Look["palette"] })}
+                  >
+                    <Mock theme={p.theme} />
+                    <span className="theme-tile-name">
+                      <span>{p.theme === "midnight" ? names.midnight : p.label}</span>
+                      {look.palette === p.id ? <Check size={14} aria-hidden /> : null}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
+          {themesOpen || fixed.length > perRow || moded.length > perRow ? (
+            <ThemesToggle open={themesOpen} total={moded.length + fixed.length} onToggle={() => setThemesOpen((v) => !v)} />
+          ) : null}
         </div>
+        {followsMode(look.palette) ? (
         <Field label={t("settings.page.mode")} hint={look.mode === "system" ? t("settings.page.modeSystemHint") : undefined}>
           <Segmented
             label={t("settings.page.mode")}
@@ -260,6 +279,7 @@ function LookSection({ draft, setDraft, set, errors, accentMissing, background }
             ]}
           />
         </Field>
+        ) : null}
         <Field label={t("settings.page.accent")} hint={t("settings.page.accentHint")}>
           <Segmented
             label={t("settings.page.accent")}
@@ -793,7 +813,7 @@ function Preview({ v, draft, platform: editing, bare }: { v: View; draft: Form; 
       protocols: [],
       binding: !!s?.device_binding,
       devices: s?.device_binding
-        ? [{ id: 1, os: "iOS", os_version: "18.4", model: "iPhone 15", app: "Happ", shared: false, created_at: new Date(now - 9 * 86_400_000).toISOString(), last_seen: new Date(now - 600_000).toISOString() }]
+        ? [{ id: 1, name: "", os: "iOS", os_version: "18.4", model: "iPhone 15", app: "Happ", shared: false, created_at: new Date(now - 9 * 86_400_000).toISOString(), last_seen: new Date(now - 600_000).toISOString() }]
         : [],
       telegram: "https://t.me/",
       locations: names.length ? names : [t("settings.page.sample.location1"), t("settings.page.sample.location2")],

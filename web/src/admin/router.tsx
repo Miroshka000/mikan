@@ -4,7 +4,7 @@ import { ApiError, basePath, setCsrf } from "../api/client";
 import { meQuery } from "../api/hooks";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { PAYMENT_TABS, PROMO_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type PaymentsSearch, type PromoSearch, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { PAYMENT_TABS, PROMO_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type PaymentsSearch, type SettingsSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -128,11 +128,14 @@ export function createAppRouter(queryClient: QueryClient) {
       throw redirect({ to: "/addons/telegram", search: search as TelegramSearch });
     },
   });
+  // Promo codes were a page of their own until 0.5.0.5: old links land on their tab in Payments.
   const promocodes = createRoute({
     getParentRoute: () => app,
     path: "/promocodes",
-    component: page(() => import("./pages/promocodes"), "PromocodesPage"),
-    validateSearch: (s: Record<string, unknown>): PromoSearch => ({ tab: PROMO_TABS.includes(s.tab as PromoSearch["tab"]) ? (s.tab as PromoSearch["tab"]) : "codes" }),
+    beforeLoad: ({ search }) => {
+      const tab = (search as { tab?: string }).tab;
+      throw redirect({ to: "/payments", search: { tab: "promocodes", promo: PROMO_TABS.includes(tab as (typeof PROMO_TABS)[number]) ? (tab as (typeof PROMO_TABS)[number]) : undefined } });
+    },
   });
   const payments = createRoute({
     getParentRoute: () => app,
@@ -140,6 +143,7 @@ export function createAppRouter(queryClient: QueryClient) {
     component: page(() => import("./pages/payments"), "PaymentsPage"),
     validateSearch: (s: Record<string, unknown>): PaymentsSearch => ({
       tab: PAYMENT_TABS.includes(s.tab as (typeof PAYMENT_TABS)[number]) ? (s.tab as PaymentsSearch["tab"]) : undefined,
+      promo: PROMO_TABS.includes(s.promo as (typeof PROMO_TABS)[number]) ? (s.promo as PaymentsSearch["promo"]) : undefined,
     }),
   });
   const apiDocs = createRoute({ getParentRoute: () => app, path: "/settings/api", component: page(() => import("./pages/api"), "ApiPage") });

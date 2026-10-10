@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
@@ -19,6 +20,7 @@ import (
 // the number of places.
 type Devices struct {
 	st      *store.Store
+	set     *settings.Settings
 	pool    *Pool
 	changes Changes
 	now     func() time.Time
@@ -34,10 +36,6 @@ var hwidRe = regexp.MustCompile(`^[a-zA-Z0-9=-]{10,64}$`)
 // ValidHWID follows Remnawave's rule, which the apps are built for.
 func ValidHWID(s string) bool { return hwidRe.MatchString(s) }
 
-// UnbindCooldown: the subscriber unbinds at most one device a day; otherwise a reseller
-// would let buyers in one after another.
-const UnbindCooldown = 24 * time.Hour
-
 // MaxDevices is how many devices a user without a limit may bind. The id is whatever the
 // client sends, and every new one takes a slot of the pool for good: holders of a link
 // could otherwise use the pool up and make the nodes rebuild their listeners.
@@ -49,11 +47,13 @@ const DeviceIdle = 90 * 24 * time.Hour
 var (
 	ErrDeviceLimit    = errors.New("device_limit")    // the user's places are taken
 	ErrNoHWID         = errors.New("no_hwid")         // the app sends no device id and one is required
-	ErrUnbindCooldown = errors.New("unbind_cooldown") // the subscriber unbound a device less than a day ago
+	ErrUnbindCooldown = errors.New("unbind_cooldown") // the subscriber used up the unbinds the admin's rules allow for now
+	ErrDeviceBanned   = errors.New("device_banned")   // the admin banned this device from the subscription
+	ErrBanShared      = errors.New("device_no_hwid")  // the shared place of apps without an id cannot be banned
 )
 
 func NewDevices(st *store.Store, pool *Pool, changes Changes, now func() time.Time) *Devices {
-	return &Devices{st: st, pool: pool, changes: changes, now: now}
+	return &Devices{st: st, set: settings.New(st.Q), pool: pool, changes: changes, now: now}
 }
 
 // same: what the app sent tells nothing new (it did not send it, or it is what is known).
@@ -136,6 +136,21 @@ func (d *Devices) bind(ctx context.Context, u db.User, hwid string, in DeviceInf
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
+		// A banned device gets nothing, whatever the user's state: banning unbound it, and
+		// it must not take a place again. So does one its subscriber just unbound, until its
+		// pause ends. Only a new device is asked: both remove the device's row in the same
+		// transaction.
+		if hwid != "" {
+			until, err := q.ActiveDeviceBan(ctx, db.ActiveDeviceBanParams{UserID: u.ID, Hwid: hwid, Until: sql.NullInt64{Int64: now, Valid: true}})
+			switch {
+			case err == nil && until.Valid:
+				return &UnboundError{Until: time.Unix(until.Int64, 0).UTC()}
+			case err == nil:
+				return ErrDeviceBanned
+			case !errors.Is(err, sql.ErrNoRows):
+				return err
+			}
+		}
 		// A user who cannot connect (turned off, term over) registers no new device and takes
 		// no slot: the link itself is enough to ask, and it may be in anyone's hands. The
 		// answer is the user's own keys, which the node refuses anyway.
@@ -183,15 +198,21 @@ func (d *Devices) bind(ctx context.Context, u db.User, hwid string, in DeviceInf
 
 // Unbind frees a device's place and cuts it off: its own slot burns (the node drops it
 // at once). The shared place of apps without an id is the user's own slot: it is replaced
-// with a fresh one, the subscription link stays. The subscriber may do this once a day.
+// with a fresh one, the subscription link stays. The subscriber does it within the admin's
+// UnbindRules (ErrUnbindCooldown past them), and the device they unbound stays out for the
+// rules' pause; the admin unbinds outside them.
 func (d *Devices) Unbind(ctx context.Context, userID, deviceID int64, bySubscriber bool) error {
-	err := d.unbind(ctx, userID, deviceID, bySubscriber)
+	rules, err := LoadUnbindRules(ctx, d.set)
+	if err != nil {
+		return err
+	}
+	err = d.unbind(ctx, rules, userID, deviceID, bySubscriber)
 	if errors.Is(err, ErrNoSlots) {
 		if err := d.pool.Refill(ctx, RefillBatch); err != nil {
 			return err
 		}
 		d.changes.SlotsChanged()
-		err = d.unbind(ctx, userID, deviceID, bySubscriber)
+		err = d.unbind(ctx, rules, userID, deviceID, bySubscriber)
 	}
 	if err == nil {
 		d.changes.PoliciesChanged()
@@ -199,14 +220,12 @@ func (d *Devices) Unbind(ctx context.Context, userID, deviceID int64, bySubscrib
 	return err
 }
 
-func (d *Devices) unbind(ctx context.Context, userID, deviceID int64, bySubscriber bool) error {
+func (d *Devices) unbind(ctx context.Context, rules UnbindRules, userID, deviceID int64, bySubscriber bool) error {
 	now := d.now()
 	return d.st.Tx(ctx, func(q *db.Queries) error {
-		u, err := q.GetUser(ctx, userID)
-		if errors.Is(err, sql.ErrNoRows) {
+		if _, err := q.GetUser(ctx, userID); errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
-		}
-		if err != nil {
+		} else if err != nil {
 			return err
 		}
 		dev, err := q.GetBoundDeviceByID(ctx, db.GetBoundDeviceByIDParams{ID: deviceID, UserID: userID})
@@ -216,8 +235,18 @@ func (d *Devices) unbind(ctx context.Context, userID, deviceID int64, bySubscrib
 		if err != nil {
 			return err
 		}
-		if bySubscriber && now.Sub(time.Unix(u.UnboundAt, 0)) < UnbindCooldown {
-			return ErrUnbindCooldown
+		if bySubscriber {
+			// One unbind of the subscriber's at a time: two at once would both fit the limit.
+			if err := q.LockUser(ctx, userID); err != nil {
+				return err
+			}
+			st, err := unbindState(ctx, q, rules, userID, now)
+			if err != nil {
+				return err
+			}
+			if !st.Next.IsZero() {
+				return ErrUnbindCooldown
+			}
 		}
 		if dev.Hwid == "" {
 			fresh, err := q.TakeFreeSlot(ctx)
@@ -237,11 +266,110 @@ func (d *Devices) unbind(ctx context.Context, userID, deviceID int64, bySubscrib
 		if err := q.DeleteBoundDevice(ctx, dev.ID); err != nil {
 			return err
 		}
-		if bySubscriber {
-			return q.SetUserUnboundAt(ctx, db.SetUserUnboundAtParams{UnboundAt: now.Unix(), ID: userID})
+		if !bySubscriber {
+			return nil
 		}
-		return nil
+		if err := q.AddUnbind(ctx, db.AddUnbindParams{UserID: userID, At: now.Unix()}); err != nil {
+			return err
+		}
+		return holdUnbound(ctx, q, rules, userID, dev, now)
 	})
+}
+
+// Rename gives a bound device of userID its own name; "" goes back to the name its app
+// reports. A device of another user is ErrNotFound. The name is checked by
+// CleanDeviceName: the subscriber may set it too.
+func (d *Devices) Rename(ctx context.Context, userID, deviceID int64, name string) (string, error) {
+	name, err := CleanDeviceName(name)
+	if err != nil {
+		return "", err
+	}
+	n, err := d.st.Q.SetBoundDeviceName(ctx, db.SetBoundDeviceNameParams{Name: name, ID: deviceID, UserID: userID})
+	if err != nil {
+		return "", err
+	}
+	if n == 0 {
+		return "", ErrNotFound
+	}
+	return name, nil
+}
+
+// DeviceLabel is what to call a bound device in a list: its own name, else what its app
+// reported (model, system, the app). "" for a device that reported nothing.
+func DeviceLabel(dev db.BoundDevice) string {
+	switch {
+	case dev.Name != "":
+		return dev.Name
+	case dev.Model != "":
+		return dev.Model
+	case dev.Os != "":
+		return strings.TrimSpace(dev.Os + " " + dev.OsVersion)
+	}
+	app, _, _ := strings.Cut(strings.TrimSpace(dev.App), " ")
+	return strings.Replace(app, "/", " ", 1)
+}
+
+// Ban unbinds a device of userID and keeps it from binding to that user again by its id:
+// its keys burn at once, and its next fetch gets the notice instead of keys. Only a device
+// with an id can be banned (ErrBanShared): the shared place is anyone's app without one.
+// adminID 0 is not an admin of the panel (a script's key).
+func (d *Devices) Ban(ctx context.Context, userID, deviceID, adminID int64) (db.DeviceBan, error) {
+	var ban db.DeviceBan
+	now := d.now().Unix()
+	err := d.st.Tx(ctx, func(q *db.Queries) error {
+		if _, err := q.GetUser(ctx, userID); errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		dev, err := q.GetBoundDeviceByID(ctx, db.GetBoundDeviceByIDParams{ID: deviceID, UserID: userID})
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if dev.Hwid == "" {
+			return ErrBanShared
+		}
+		ban, err = q.CreateDeviceBan(ctx, db.CreateDeviceBanParams{UserID: userID, Hwid: dev.Hwid, Label: DeviceLabel(dev),
+			AdminID: sql.NullInt64{Int64: adminID, Valid: adminID > 0}, BannedAt: now})
+		if err != nil {
+			return err
+		}
+		if err := q.BurnSlot(ctx, db.BurnSlotParams{BurnedAt: sql.NullInt64{Int64: now, Valid: true}, ID: dev.SlotID}); err != nil {
+			return err
+		}
+		return q.DeleteBoundDevice(ctx, dev.ID)
+	})
+	if err == nil {
+		d.changes.PoliciesChanged() // the burnt slot leaves the nodes
+	}
+	return ban, err
+}
+
+// Unban lets a banned device of userID bind again: on its next fetch it takes a free
+// place like a new device. A ban of another user is ErrNotFound.
+func (d *Devices) Unban(ctx context.Context, userID, banID int64) (db.DeviceBan, error) {
+	ban, err := d.st.Q.DeleteDeviceBan(ctx, db.DeleteDeviceBanParams{ID: banID, UserID: userID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return ban, ErrNotFound
+	}
+	return ban, err
+}
+
+// Banned tells whether the admin banned the device with this id from userID; an id the
+// apps would not send is never banned. For fetches without binding, which bind nothing:
+// the pause after the subscriber's own unbind is about places, and there are none then.
+func (d *Devices) Banned(ctx context.Context, userID int64, hwid string) (bool, error) {
+	if !ValidHWID(hwid) {
+		return false, nil
+	}
+	until, err := d.st.Q.ActiveDeviceBan(ctx, db.ActiveDeviceBanParams{UserID: userID, Hwid: hwid, Until: sql.NullInt64{Int64: d.now().Unix(), Valid: true}})
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil && !until.Valid, err
 }
 
 // ForgetIdle forgets the devices not seen for DeviceIdle and burns their keys: nobody
@@ -274,15 +402,6 @@ func (d *Devices) ForgetIdle(ctx context.Context) (int, error) {
 		d.changes.PoliciesChanged()
 	}
 	return n, err
-}
-
-// NextUnbind is when the subscriber may unbind a device again (zero: now).
-func NextUnbind(u db.User, now time.Time) time.Time {
-	next := time.Unix(u.UnboundAt, 0).Add(UnbindCooldown)
-	if u.UnboundAt == 0 || !next.After(now) {
-		return time.Time{}
-	}
-	return next.UTC()
 }
 
 // burnDevices burns the slots of a user's devices with ids and forgets all devices:

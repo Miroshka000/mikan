@@ -363,7 +363,7 @@ impl Wizard {
                     });
                     self.failed = Some((s, e));
                 }
-                Event::Finished(o) => self.outcome = Some(o),
+                Event::Finished(o) => self.outcome = Some(*o),
             }
         }
         // The worker is gone without a last word (it panicked past its own handler): the
@@ -1011,12 +1011,24 @@ impl Wizard {
             ];
             lines.extend(field("Waits on", format!("port {}", o.node_port.unwrap_or_default()), w));
             lines.push(Line::from(""));
-            for text in [
-                "Its panel connects within 30 seconds: see the panel's Nodes page.",
-                "On this server: mikan (menu), mikan status, mikan update.",
-            ] {
-                lines.extend(wrap(text, w).into_iter().map(|l| Line::from(dim(l))));
+            match &o.hello {
+                // What the panel found when it connected, with what to do about it.
+                Some(report) => {
+                    for (level, text) in report {
+                        for (i, part) in wrap(text, w.saturating_sub(2)).into_iter().enumerate() {
+                            let lead = if i == 0 { level_span(*level) } else { Span::raw(" ") };
+                            lines.push(Line::from(vec![lead, Span::raw(format!(" {part}"))]));
+                        }
+                    }
+                }
+                None => lines.extend(
+                    wrap("Its panel connects within 30 seconds: see the panel's Nodes page.", w).into_iter().map(|l| Line::from(dim(l))),
+                ),
             }
+            lines.push(Line::from(""));
+            lines.extend(
+                wrap("On this server: mikan (menu), mikan status, mikan doctor, mikan update.", w).into_iter().map(|l| Line::from(dim(l))),
+            );
             Self::page(f, Card::new("The node is running", "", &keys), lines);
             return;
         }

@@ -20,6 +20,8 @@ import (
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/certcheck"
+	"mikan/internal/panel/checkhost"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/nodesync"
@@ -59,6 +61,17 @@ type Deps struct {
 	Online    func() map[string]nodeapi.Online
 	Cert      func() acme.Status
 	RenewCert func()
+	// RenewCertNow tries the panel's certificate now and waits up to wait for the outcome;
+	// done is false when the order still runs then. nil in development.
+	RenewCertNow func(ctx context.Context, wait time.Duration) (st acme.Status, done bool)
+	// NodeTLS is the certificate a node's protocols on TLS use now; nil: not known.
+	NodeTLS func(ctx context.Context, n db.Node) *NodeTLSView
+	// RenewNodeCert orders a remote node's public certificate now (acme.Nodes.Renew).
+	RenewNodeCert func(ctx context.Context, id int64, wait time.Duration) (acme.NodeStatus, bool, error)
+	// WakeNodeCerts has every remote node's certificate looked at now: another CA.
+	WakeNodeCerts func()
+	// CheckCerts is «Проверить сертификат»; nil in development.
+	CheckCerts func(ctx context.Context) (certcheck.CertReport, error)
 	// RoutesPreview renders a Clash profile with routing in place of the saved one
 	// (subs.Handler.Preview); nil: no preview.
 	RoutesPreview func(ctx context.Context, req subs.PreviewRequest) ([]byte, error)
@@ -109,6 +122,10 @@ type Deps struct {
 	// DNS checks that a domain leads to the panel's or the node's server; nil: unchecked
 	// (tests, development).
 	DNS *dnscheck.Checker
+	// CheckHost checks a node's ports from Russia (check-host.net); nil: not offered.
+	CheckHost *checkhost.Client
+	// DataDir is the panel's data directory, whose disk "Check server" looks at; "": none.
+	DataDir string
 }
 
 // NodeRuntime is what the API needs from the running nodes.
@@ -127,6 +144,12 @@ type NodeRuntime interface {
 	Probe(ctx context.Context, id int64, proxy string) (nodeapi.ProbeResult, error)
 	// SpeedTest measures a node's own way to the internet.
 	SpeedTest(ctx context.Context, id int64) (nodeapi.SpeedTest, error)
+	// CheckNow asks a node for its health at once (Check node, a node's hello).
+	CheckNow(ctx context.Context, id int64) (nodesync.HealthView, bool)
+	// Hello is a node's last hello since the panel started.
+	Hello(id int64) (nodesync.HelloView, bool)
+	// Diagnose asks a node how its server is: DNS, the internet, GitHub, disk, memory.
+	Diagnose(ctx context.Context, id int64) (nodeapi.Diagnosis, error)
 }
 
 type ctxKey int
@@ -233,6 +256,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerTelegram()
 	h.registerUpdates()
 	h.registerNodes()
+	h.registerNodeChecks()
 	h.registerTorrent()
 	h.registerFilters()
 	h.registerSpeedTests()

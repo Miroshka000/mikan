@@ -29,6 +29,27 @@ pub fn get(url: &str, limit: u64) -> Result<Vec<u8>> {
     get_opt(url, limit)?.with_context(|| format!("GET {url}: not found"))
 }
 
+/// What an address answers over HTTPS, whatever the status is.
+pub struct Probe {
+    pub status: u16,
+    /// The Date header: the other side's clock.
+    pub date: Option<String>,
+}
+
+/// Asks an address and says what it answered; an error when the connection fails. Any
+/// status counts as an answer (ghcr.io/v2/ says 401 to everyone).
+pub fn probe(url: &str, timeout: Duration) -> Result<Probe> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(timeout))
+        .http_status_as_error(false)
+        .user_agent(format!("mikan-installer/{}", crate::version()))
+        .build()
+        .into();
+    let resp = agent.get(url).call()?;
+    let date = resp.headers().get("date").and_then(|v| v.to_str().ok()).map(str::to_owned);
+    Ok(Probe { status: resp.status().as_u16(), date })
+}
+
 /// The address the world sees this server at; the route's source address when the
 /// lookup services are out of reach.
 pub fn public_ipv4() -> Option<Ipv4Addr> {

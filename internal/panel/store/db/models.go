@@ -54,6 +54,7 @@ type BoundDevice struct {
 	LastIp    string
 	CreatedAt int64
 	LastSeen  int64
+	Name      string
 }
 
 type Device struct {
@@ -61,6 +62,22 @@ type Device struct {
 	Ip        string
 	FirstSeen int64
 	LastSeen  int64
+}
+
+type DeviceBan struct {
+	ID       int64
+	UserID   int64
+	Hwid     string
+	Label    string
+	AdminID  sql.NullInt64
+	BannedAt int64
+	Until    sql.NullInt64
+}
+
+type DeviceUnbind struct {
+	ID     int64
+	UserID int64
+	At     int64
 }
 
 type Inbound struct {
@@ -120,19 +137,21 @@ type MikanSqliteImport struct {
 }
 
 type Node struct {
-	ID         int64
-	Name       string
-	Address    string
-	PublicHost string
-	Domain     string
-	CertSha256 string
-	Enabled    int64
-	CreatedAt  int64
-	UpdatedAt  int64
-	PublicName string
-	Sort       int64
-	TotalUp    int64
-	TotalDown  int64
+	ID          int64
+	Name        string
+	Address     string
+	PublicHost  string
+	Domain      string
+	CertSha256  string
+	Enabled     int64
+	CreatedAt   int64
+	UpdatedAt   int64
+	PublicName  string
+	Sort        int64
+	TotalUp     int64
+	TotalDown   int64
+	FairShare   int64
+	ChannelMbps sql.NullInt64
 }
 
 type NodeRelay struct {
@@ -300,6 +319,12 @@ type SlotCounter struct {
 	Last int64
 }
 
+type SlotTraffic struct {
+	SlotID int64
+	Up     int64
+	Down   int64
+}
+
 type SubAsset struct {
 	Name        string
 	ContentType string
@@ -341,6 +366,7 @@ type Tariff struct {
 	PriceStars    sql.NullInt64
 	PriceRub      sql.NullInt64
 	OnSale        int64
+	SpeedLimit    sql.NullInt64
 }
 
 type TariffPool struct {
@@ -480,10 +506,10 @@ type User struct {
 	CreatedAt     int64
 	UpdatedAt     int64
 	BillingDay    sql.NullInt64
-	UnboundAt     int64
 	Source        string
 	Hidden        int64
 	FolderID      sql.NullInt64
+	SpeedLimit    sql.NullInt64
 }
 
 type UserFolder struct {

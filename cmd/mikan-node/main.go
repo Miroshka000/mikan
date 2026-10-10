@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"mikan/internal/acmechallenge"
 	"mikan/internal/node"
 	"mikan/internal/nodetls"
 )
@@ -34,6 +35,21 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println(key.Port)
+		return
+	}
+	// The node's address as the panel has it, for the installer's advice; empty for keys of
+	// older panels.
+	if len(os.Args) > 1 && os.Args[1] == "key-host" {
+		key, err := nodetls.DecodeKey(os.Getenv("MIKAN_NODE_JOIN"))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "mikan-node:", err)
+			os.Exit(1)
+		}
+		fmt.Println(key.Host)
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "hello" {
+		helloOnce()
 		return
 	}
 	if err := run(); err != nil {
@@ -57,7 +73,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("MIKAN_ALLOW_PRIVATE: %w", err)
 	}
-	eng, err := node.Start(node.Options{DataDir: dataDir, Version: version, Log: log, DeviceRelease: release, AllowPrivate: allowPrivate})
+	// The panel's HTTP-01 challenges for this node's certificate: port 80, unless a web
+	// server of the admin's holds it and passes /.well-known/acme-challenge/ on.
+	acmeListen, err := acmechallenge.ParseListen(os.Getenv("MIKAN_ACME_LISTEN"))
+	if err != nil {
+		return fmt.Errorf("MIKAN_ACME_LISTEN: %w", err)
+	}
+	eng, err := node.Start(node.Options{DataDir: dataDir, Version: version, Log: log, DeviceRelease: release, AllowPrivate: allowPrivate, ACMEListen: acmeListen})
 	if err != nil {
 		return err
 	}
@@ -99,6 +121,7 @@ func run() error {
 		}
 		go serve(tls.NewListener(tcp, cfg))
 		log.Info("node api for the panel", "port", key.Port)
+		go helloLoop(ctx, key, dataDir, log)
 	}
 
 	t := time.NewTicker(10 * time.Second)

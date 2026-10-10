@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -32,6 +33,8 @@ type Registry struct {
 	torrent    torrents
 
 	ingress atomic.Pointer[ingress] // nil: anyone may connect
+
+	shaper *shaper // speed caps and the fair share (shaper.go)
 }
 
 type slot struct {
@@ -60,6 +63,8 @@ type slot struct {
 	cleaned     time.Time             // when ips was last swept of devices that left
 	seenPruned  time.Time             // likewise for seen
 	pools       map[string]*bucket    // traffic pools of the slot, made on first use
+
+	group atomic.Pointer[group] // the user's speed group; nil before the first policy
 }
 
 type ipUse struct {
@@ -79,7 +84,7 @@ const seqAfterCrash = 100_000
 
 func NewRegistry(epoch string, seq int64, release time.Duration, now func() time.Time) *Registry {
 	return &Registry{byKey: map[string]*slot{}, byName: map[string]*slot{}, epoch: epoch, seq: seq, release: release, now: now,
-		torrent: newTorrents()}
+		torrent: newTorrents(), shaper: newShaper(now)}
 }
 
 func newSlot(name, uuid string) *slot {
@@ -141,8 +146,21 @@ func (r *Registry) SetPolicies(epoch string, list []nodeapi.Policy) {
 	r.mu.RUnlock()
 
 	var toClose []*countingConn
+	groups := map[string]bool{}
 	for _, s := range slots {
 		p, ok := given[s.name]
+		key := s.name
+		if ok && p.Group != "" {
+			key = p.Group
+		}
+		g := r.shaper.group(key)
+		groups[key] = true
+		var own int64
+		if ok && p.SpeedMbps > 0 {
+			own = int64(p.SpeedMbps) * mbit
+		}
+		g.own.Store(own)
+		s.group.Store(g)
 		s.mu.Lock()
 		s.allowed = ok && p.Allowed
 		s.inbounds = nil
@@ -219,6 +237,50 @@ func (r *Registry) SetPolicies(epoch string, list []nodeapi.Policy) {
 					c.bucket != nil && c.bucket.exhausted.Load():
 					toClose = append(toClose, c)
 				}
+			}
+		}
+		s.mu.Unlock()
+	}
+	r.shaper.keep(groups)
+	r.shaper.share()
+	closeAll(toClose)
+	r.reshape()
+}
+
+// SetShaping turns the node's fair share on or off.
+func (r *Registry) SetShaping(s *nodeapi.Shaping) {
+	r.shaper.setChannel(s)
+	r.reshape()
+}
+
+// RunShaper works the fair share out every second until ctx ends.
+func (r *Registry) RunShaper(ctx context.Context) { r.shaper.run(ctx) }
+
+// shapedGroup is the group whose ceilings hold the slot's new connections, nil when
+// nothing holds them back (no cap, no fair share): they may then be spliced.
+func (r *Registry) shapedGroup(s *slot) *group {
+	g := s.group.Load()
+	if g == nil || s.shared || (g.own.Load() == 0 && !r.shaper.on()) {
+		return nil
+	}
+	return g
+}
+
+// reshape closes the connections opened before a cap or the fair share came in: they go
+// around the limiter, and the apps open them again at once, held this time.
+func (r *Registry) reshape() {
+	r.mu.RLock()
+	slots := values(r.byName)
+	r.mu.RUnlock()
+	var toClose []*countingConn
+	for _, s := range slots {
+		if r.shapedGroup(s) == nil {
+			continue
+		}
+		s.mu.Lock()
+		for c := range s.conns {
+			if !c.shaped {
+				toClose = append(toClose, c)
 			}
 		}
 		s.mu.Unlock()
@@ -675,6 +737,9 @@ func (r *Registry) poolOfListener(inName string) string {
 func (s *slot) countIn(b *bucket, up, down int64) {
 	if s.shared {
 		return
+	}
+	if g := s.group.Load(); g != nil {
+		g.moved(up, down)
 	}
 	if b == nil {
 		s.count(up, down)

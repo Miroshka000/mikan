@@ -42,3 +42,13 @@ Automatic fixes are off for a connection behind a proxy and can't be turned on:
 
 - the port isn't moved, otherwise the proxy wouldn't know the new one;
 - the camouflage site isn't changed, because the proxy may route by its name.
+
+## Through a CDN
+
+**VLESS · TLS · WebSocket** goes through a CDN (Cloudflare, Yandex Cloud CDN): clients connect to the CDN's address, and the CDN passes the connection to the node. Where the server's IP is blocked and the CDN's network is not, this can save the day.
+
+1. Add a **VLESS · TLS · WebSocket** connection. Keep port 2053: Cloudflare passes only ports 443, 2053, 2083, 2087, 2096 and 8443 to a server.
+2. In the CDN, add a domain such as `cdn.example.com` with the node's server address and turn proxying on (Cloudflare's orange cloud). Cloudflare SSL mode: Full.
+3. In the connection's **Behind a proxy** block: client address `cdn.example.com`, port 443, SNI `cdn.example.com`.
+
+The node's other protocols are not touched: they go to its address as before.

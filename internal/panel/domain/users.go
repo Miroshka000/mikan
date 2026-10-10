@@ -114,7 +114,14 @@ type CreateInput struct {
 	Source string
 }
 
+// Create makes a user the admin names (the panel, an API key): the name is checked as
+// CleanUserName does.
 func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
+	name, err := CleanUserName(in.Name)
+	if err != nil {
+		return db.User{}, err
+	}
+	in.Name = name
 	u, err := s.create(ctx, in)
 	if errors.Is(err, ErrNoSlots) {
 		if err := s.pool.Refill(ctx, RefillBatch); err != nil {
@@ -168,7 +175,7 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 	}
 	u, err := q.CreateUser(ctx, db.CreateUserParams{
 		Name: strings.TrimSpace(in.Name), Contact: strings.TrimSpace(in.Contact), Note: in.Note, Tags: tags,
-		TariffID: sql.NullInt64{Int64: t.ID, Valid: true}, TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit,
+		TariffID: sql.NullInt64{Int64: t.ID, Valid: true}, TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit, SpeedLimit: t.SpeedLimit,
 		ResetStrategy: t.ResetStrategy, PeriodDays: 30, PeriodStart: now,
 		ExpiresAt:  tariffExpiry(time.Unix(now, 0), durationTariff{termDays(t, in.TermDays), t.BillingDay}),
 		BillingDay: t.BillingDay, SubToken: secure.Token(24), SlotID: sql.NullInt64{Int64: slot.ID, Valid: true}, CreatedAt: now, UpdatedAt: now,
@@ -213,7 +220,7 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, userID, tariffID in
 	}
 	u, err = q.UpdateUser(ctx, db.UpdateUserParams{
 		Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: "active", TariffID: sql.NullInt64{Int64: t.ID, Valid: true},
-		TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit, ResetStrategy: t.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
+		TrafficLimit: t.TrafficLimit, DeviceLimit: t.DeviceLimit, SpeedLimit: t.SpeedLimit, ResetStrategy: t.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
 		ExpiresAt: tariffExpiry(base, durationTariff{termDays(t, term), billingDay}), Inbounds: u.Inbounds, BillingDay: billingDay,
 		UpdatedAt: now.Unix(), ID: u.ID,
 	})
@@ -299,6 +306,8 @@ type Patch struct {
 	ClearTrafficLimit   bool
 	DeviceLimit         *int64
 	ClearDeviceLimit    bool
+	SpeedLimit          *int64 // Mbit/s each way
+	ClearSpeedLimit     bool
 	ExpiresAt           *time.Time
 	ClearExpiry         bool
 	BillingDay          *int64 // 1–31: terms end on that day of the month
@@ -346,6 +355,15 @@ func (e Extension) until(now time.Time, exp sql.NullInt64, billingDay sql.NullIn
 // ErrBadBillingDay: a billing day is 1–31.
 var ErrBadBillingDay = errors.New("bad_billing_day")
 
+// MaxSpeedLimit bounds a speed cap: 100 Gbit/s, past any server's port.
+const MaxSpeedLimit = 100_000
+
+// ErrBadSpeedLimit: a speed cap is 1–MaxSpeedLimit Mbit/s.
+var ErrBadSpeedLimit = errors.New("bad_speed_limit")
+
+// ValidSpeedLimit says whether mbps is a speed cap the panel takes.
+func ValidSpeedLimit(mbps int64) bool { return mbps >= 1 && mbps <= MaxSpeedLimit }
+
 func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) {
 	var out db.User
 	err := s.st.Tx(ctx, func(q *db.Queries) (err error) {
@@ -377,7 +395,7 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 	now := s.now().Unix()
 	par := db.UpdateUserParams{
 		Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID,
-		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, ResetStrategy: u.ResetStrategy,
+		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, SpeedLimit: u.SpeedLimit, ResetStrategy: u.ResetStrategy,
 		PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart, ExpiresAt: u.ExpiresAt, Inbounds: u.Inbounds,
 		BillingDay: u.BillingDay, UpdatedAt: now, ID: u.ID,
 	}
@@ -391,6 +409,7 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		}
 		par.TariffID = sql.NullInt64{Int64: t.ID, Valid: true}
 		par.TrafficLimit, par.DeviceLimit, par.ResetStrategy, par.BillingDay = t.TrafficLimit, t.DeviceLimit, t.ResetStrategy, t.BillingDay
+		par.SpeedLimit = t.SpeedLimit
 		par.ExpiresAt = tariffExpiry(time.Unix(now, 0), durationTariff{t.DurationDays, t.BillingDay})
 		if err := ApplyTariffPools(ctx, q, u.ID, t.ID); err != nil {
 			return db.User{}, err
@@ -406,7 +425,10 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		par.BillingDay = sql.NullInt64{Int64: *p.BillingDay, Valid: true}
 	}
 	if p.Name != nil {
-		par.Name = strings.TrimSpace(*p.Name)
+		// A rename changes only the name: the link, the slots and the keys stay.
+		if par.Name, err = CleanUserName(*p.Name); err != nil {
+			return db.User{}, err
+		}
 	}
 	if p.Contact != nil {
 		par.Contact = strings.TrimSpace(*p.Contact)
@@ -436,6 +458,15 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		par.DeviceLimit = sql.NullInt64{}
 	case p.DeviceLimit != nil:
 		par.DeviceLimit = sql.NullInt64{Int64: *p.DeviceLimit, Valid: true}
+	}
+	switch {
+	case p.ClearSpeedLimit:
+		par.SpeedLimit = sql.NullInt64{}
+	case p.SpeedLimit != nil:
+		if !ValidSpeedLimit(*p.SpeedLimit) {
+			return db.User{}, ErrBadSpeedLimit
+		}
+		par.SpeedLimit = sql.NullInt64{Int64: *p.SpeedLimit, Valid: true}
 	}
 	switch {
 	case p.ClearExpiry:

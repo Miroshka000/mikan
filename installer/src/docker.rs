@@ -154,6 +154,7 @@ services:
       MIKAN_DATA_DIR: /data/node
       MIKAN_NODE_SOCKET: /run/mikan/node.sock
       MIKAN_NODE_JOIN: ${MIKAN_NODE_JOIN}
+      MIKAN_ACME_LISTEN: "${MIKAN_ACME_LISTEN:-:80}"
     volumes: ["./data/node:/data/node", "run:/run/mikan"]
     pids_limit: 1024
 
@@ -644,6 +645,8 @@ mod tests {
         // for it would drop every client, so it has none.
         assert!(panel.contains("mem_limit") && !node.contains("mem_limit") && !NODE_COMPOSE.contains("mem_limit"));
         assert!(NODE_COMPOSE.contains("./data/node:/data/node") && !NODE_COMPOSE.contains("data/panel"));
+        // The node answers the CA for its own certificate, past a web server when told to.
+        assert!(NODE_COMPOSE.contains("MIKAN_ACME_LISTEN: \"${MIKAN_ACME_LISTEN:-:80}\""));
     }
 
     fn tmpdir(name: &str) -> std::path::PathBuf {

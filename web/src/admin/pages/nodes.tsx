@@ -1,9 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2, Waypoints } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, RefreshCw, ShieldCheck, Stethoscope, Trash2, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
+import { AcmeAttempts, AcmeProblem, caName } from "../../components/acme";
 import { CertDrawer, certUntil } from "../../components/cert-drawer";
 import { Confirm, Drawer } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
@@ -15,12 +16,13 @@ import { useCopy } from "../../lib/copy";
 import { bytes, num } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
 import { CascadeDrawer } from "./node-cascade";
+import { HelloLine, JoinProgress, NodeCheckDrawer, NodeProblem, SkewLine, type FixActions } from "./node-check";
 import { SpeedDrawer } from "./node-speed";
 import { NodeTrafficDrawer } from "./node-traffic";
 import { WarpDrawer } from "./node-warp";
 
 type Node = Schemas["NodeInfo"];
-type Joined = { name: string; key: string; command: string };
+type Joined = { id: number; name: string; key: string; command: string };
 
 /** What a server before 0.5.0.2 runs once by hand: from then on the panel updates it. */
 const OLD_NODE_COMMAND = "mikan update";
@@ -44,6 +46,7 @@ export function NodesPage() {
   const [trafficOf, setTrafficOf] = useState<Node | null>(null);
   const [cascadeOf, setCascadeOf] = useState<Node | null>(null);
   const [certOf, setCertOf] = useState<Node | null>(null);
+  const [checkOf, setCheckOf] = useState<Node | null>(null);
   // The arrows that order the nodes show only while ordering: most of the time they are noise.
   const [ordering, setOrdering] = useState(false);
   const many = (nodes.data?.length ?? 0) > 1;
@@ -56,7 +59,7 @@ export function NodesPage() {
     mutationFn: (id: number) => unwrap(api.POST("/api/v1/nodes/{id}/key", { params: { path: { id } } })),
     onSuccess: (r) => {
       setRekeying(null);
-      setJoined({ name: nodeLabel(r.node), key: r.key, command: r.command });
+      setJoined({ id: r.node.id, name: nodeLabel(r.node), key: r.key, command: r.command });
     },
     onSettled: refresh,
     onError: (e) => toast.error(errorText(e)),
@@ -118,6 +121,30 @@ export function NodesPage() {
       toast.error(e instanceof ApiError && e.status === 409 && e.detail === "node_in_use" ? `${t("errors.api.node_in_use")} ${e.messages.join("; ")}` : errorText(e)),
   });
 
+  // The fixes the check and the joining steps offer as buttons.
+  const fixesFor = (n: Node | undefined, close: () => void): FixActions =>
+    n
+      ? {
+          rekey: n.local
+            ? undefined
+            : () => {
+                close();
+                setRekeying(n);
+              },
+          update: updatable(n)
+            ? () => {
+                close();
+                setUpdateOf(n);
+              }
+            : undefined,
+          edit: () => {
+            close();
+            setEditing(n);
+          },
+        }
+      : {};
+  const joinedNode = joined ? nodes.data?.find((x) => x.id === joined.id) : undefined;
+
   return (
     <>
       <PageHeader
@@ -174,7 +201,7 @@ export function NodesPage() {
                 </p>
               ) : null}
               {list.map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onCheck={() => setCheckOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -189,7 +216,8 @@ export function NodesPage() {
         }}
       />
       <EditNodeDrawer node={editing} onClose={() => setEditing(null)} />
-      <KeyDrawer joined={joined} onClose={() => setJoined(null)} />
+      <KeyDrawer joined={joined} onClose={() => setJoined(null)} actions={fixesFor(joinedNode, () => setJoined(null))} />
+      <NodeCheckDrawer node={checkOf} onClose={() => setCheckOf(null)} actions={fixesFor(checkOf ?? undefined, () => setCheckOf(null))} />
       <WarpDrawer node={warpOf ? { id: warpOf.id, name: nodeLabel(warpOf) } : null} onClose={() => setWarpOf(null)} />
       <SpeedDrawer node={speedOf ? { id: speedOf.id, name: nodeLabel(speedOf) } : null} onClose={() => setSpeedOf(null)} />
       <NodeTrafficDrawer node={trafficOf ? { id: trafficOf.id, name: nodeLabel(trafficOf) } : null} onClose={() => setTrafficOf(null)} />
@@ -255,6 +283,7 @@ function NodeCard({
   onTraffic,
   onCascade,
   onCert,
+  onCheck,
   onRekey,
   onRemove,
 }: {
@@ -280,6 +309,7 @@ function NodeCard({
   onTraffic: () => void;
   onCascade: () => void;
   onCert: () => void;
+  onCheck: () => void;
   onRekey: () => void;
   onRemove: () => void;
 }) {
@@ -312,11 +342,9 @@ function NodeCard({
           ) : null}
         </div>
       </div>
-      {n.status === "error" && n.enabled ? (
-        <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
-          {n.local ? t("nodes.localOffline") : t("nodes.remoteOffline")}
-        </p>
-      ) : null}
+      {n.status === "error" && n.enabled ? <NodeProblem n={n} onCheck={onCheck} actions={{ rekey: onRekey, update: updatable(n) ? onUpdate : undefined, edit: onEdit }} /> : null}
+      {n.status === "ok" ? <SkewLine n={n} /> : null}
+      <HelloLine n={n} actions={{ edit: onEdit }} />
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-[13px]">
         <div>
           <dt className="text-xs text-[var(--ink-500)]">{t("nodes.protocols")}</dt>
@@ -377,14 +405,7 @@ function NodeCard({
             </dd>
           </div>
         ) : null}
-        {n.certificate ? (
-          <div className="col-span-2">
-            <dt className="text-xs text-[var(--ink-500)]">{t("nodes.cert")}</dt>
-            <dd className={n.certificate.error ? "text-[var(--berry-600)]" : undefined}>
-              {n.certificate.error ? (tMaybe(`errors.acme.${n.certificate.error}`) ?? n.certificate.error) : t("nodes.certOwn", { until: certUntil(n.certificate.not_after) })}
-            </dd>
-          </div>
-        ) : null}
+        <NodeCertRow n={n} />
       </dl>
       <NodeUpdate n={n} />
       {/* The actions stay at the card's bottom, level with the card beside it. */}
@@ -409,6 +430,9 @@ function NodeCard({
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
+              <Menu.Item className="menu-item" onSelect={onCheck}>
+                <Stethoscope size={16} aria-hidden /> {t("nodeCheck.button")}
+              </Menu.Item>
               <Menu.Item className="menu-item" onSelect={onWarp}>
                 <Cloud size={16} aria-hidden /> WARP
               </Menu.Item>
@@ -437,6 +461,64 @@ function NodeCard({
         </Menu.Root>
       </div>
     </section>
+  );
+}
+
+/**
+ * The certificate of the node's protocols on TLS: its own, the public one the panel got for
+ * it, the panel's, or a pinned self-signed one, with why a public one is not there yet and
+ * a button to get it now.
+ */
+function NodeCertRow({ n }: { n: Node }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const renew = useMutation({
+    mutationFn: () => unwrap(api.POST("/api/v1/nodes/{id}/certificate/renew", { params: { path: { id: n.id } } })),
+    onSuccess: (v) => {
+      if (!v.acme?.error) toast.ok(v.acme?.ordering ? t("certs.stillRunning") : t("certs.got"));
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: qk.nodes }),
+    onError: (e) => toast.error(errorText(e)),
+  });
+  const own = n.certificate;
+  const tls = n.tls;
+  if (!tls && !own) return null;
+  const order = tls?.acme;
+  const until = certUntil(tls?.not_after ?? undefined);
+  let text: string;
+  if (own?.error) text = tMaybe(`errors.acme.${own.error}`) ?? own.error;
+  else if (tls?.kind === "custom" || (!tls && own)) text = t("nodes.certOwn", { until: certUntil(own?.not_after ?? tls?.not_after ?? undefined) });
+  else if (tls?.kind === "acme") text = t("certs.kindAcme", { ca: caName(tls.ca), until });
+  else if (tls?.kind === "panel") text = t("certs.kindPanel", { until });
+  else text = t("certs.kindSelf");
+  const ordering = renew.isPending || !!order?.ordering;
+  // A button where the panel orders for the node: none on the panel's own node or with an own one.
+  const canOrder = !!order && tls?.kind !== "custom";
+  const needed = tls?.kind !== "acme" || !!order?.error;
+  return (
+    <div className="col-span-2">
+      <dt className="text-xs text-[var(--ink-500)]">{t("nodes.cert")}</dt>
+      <dd>
+        <span className={own?.error ? "text-[var(--berry-600)]" : undefined}>{text}</span>
+        {tls?.kind === "acme" && tls.pinned ? <span className="text-xs text-[var(--ink-500)]"> · {t("certs.applying")}</span> : null}
+        {ordering ? (
+          <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--ink-500)]" role="status">
+            <LoaderCircle size={14} className="spin" aria-hidden /> {t("certs.nodeOrdering")}
+          </span>
+        ) : order?.error ? (
+          <AcmeProblem code={order.error} detail={order.error_detail} holder={order.holder} retryAt={order.retry_at} host={order.identifier} node className="mt-1" />
+        ) : null}
+        <AcmeAttempts attempts={order?.attempts} className="mt-1" />
+        {tls?.pinned && tls.kind !== "acme" ? <p className="mt-1 text-xs text-[var(--ink-500)]">{t("certs.pinnedNoteNode")}</p> : null}
+        {canOrder && needed && !(order?.error === "node_outdated" && n.behind) ? (
+          <div className="mt-2">
+            <Button size="sm" loading={renew.isPending} disabled={ordering} onClick={() => renew.mutate()}>
+              <RefreshCw size={16} aria-hidden /> {order?.error ? t("certs.retry") : t("certs.getNow")}
+            </Button>
+          </div>
+        ) : null}
+      </dd>
+    </div>
   );
 }
 
@@ -501,7 +583,7 @@ function AddNodeDrawer({ open, onOpenChange, onJoined }: { open: boolean; onOpen
     onSuccess: (r) => {
       void qc.invalidateQueries({ queryKey: qk.nodes });
       void qc.invalidateQueries({ queryKey: qk.inbounds });
-      onJoined({ name: nodeLabel(r.node), key: r.key, command: r.command });
+      onJoined({ id: r.node.id, name: nodeLabel(r.node), key: r.key, command: r.command });
     },
     onError: (e) => {
       if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields);
@@ -557,7 +639,7 @@ function AddNodeDrawer({ open, onOpenChange, onJoined }: { open: boolean; onOpen
 }
 
 /** The join key is shown once: the panel keeps only its fingerprint. */
-function KeyDrawer({ joined, onClose }: { joined: Joined | null; onClose: () => void }) {
+function KeyDrawer({ joined, onClose, actions }: { joined: Joined | null; onClose: () => void; actions: FixActions }) {
   const copyText = useCopy();
   const copy = () => joined && copyText(joined.command, t("nodes.commandCopied"));
   return (
@@ -587,6 +669,7 @@ function KeyDrawer({ joined, onClose }: { joined: Joined | null; onClose: () => 
             <Copy size={18} />
           </button>
         </div>
+        {joined ? <JoinProgress id={joined.id} actions={actions} /> : null}
       </div>
     </Drawer>
   );
@@ -595,14 +678,21 @@ function KeyDrawer({ joined, onClose }: { joined: Joined | null; onClose: () => 
 function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true });
+  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "" });
   const [errors, setErrors] = useState<Record<string, string>>({});
   useEffect(() => {
     if (node) {
-      setForm({ name: node.name, public_name: node.public_name, host: node.host, domain: node.domain, enabled: node.enabled });
+      setForm({ name: node.name, public_name: node.public_name, host: node.host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "" });
       setErrors({});
     }
   }, [node]);
+  // The last speed test of the node, to fill the channel in with one click.
+  const tests = useQuery({
+    queryKey: qk.speedTests(node?.id ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/speedtests", { params: { path: { id: node!.id }, query: { limit: 30 } }, signal })),
+    enabled: !!node,
+  });
+  const measured = tests.data?.[0]?.down_bps ? Math.floor(tests.data[0].down_bps / 1_000_000) : 0;
   const save = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Schemas["PatchNodeInputBody"] }) => unwrap(api.PATCH("/api/v1/nodes/{id}", { params: { path: { id } }, body })),
     onSuccess: () => {
@@ -621,7 +711,15 @@ function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => v
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!node) return;
-    const body: Schemas["PatchNodeInputBody"] = { name: form.name.trim(), public_name: form.public_name.trim(), enabled: form.enabled };
+    const body: Schemas["PatchNodeInputBody"] = { name: form.name.trim(), public_name: form.public_name.trim(), enabled: form.enabled, fair_share: form.fair_share };
+    const channel = Number(form.channel);
+    if (form.channel.trim() || form.fair_share) {
+      if (!Number.isInteger(channel) || channel < 1 || channel > 100000) {
+        setErrors({ channel_mbps: t("nodes.channelErr") });
+        return;
+      }
+      body.channel_mbps = channel;
+    }
     if (!node.local) {
       body.host = form.host.trim();
       body.domain = form.domain.trim();
@@ -671,6 +769,39 @@ function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => v
         <Field label={t("nodes.serving")} hint={t("nodes.servingHint")}>
           <Switch checked={form.enabled} onChange={(v) => setForm((f) => ({ ...f, enabled: v }))} label={t("nodes.serving")} />
         </Field>
+        <div className="dr-sec">
+          <div className="switch-row pt-0">
+            <div>
+              <div className="switch-row-title">{t("nodes.fairShare")}</div>
+              <div className="switch-row-sub">{t("nodes.fairShareHint")}</div>
+            </div>
+            <Switch checked={form.fair_share} onChange={(v) => setForm((f) => ({ ...f, fair_share: v }))} label={t("nodes.fairShare")} />
+          </div>
+          <Field label={t("nodes.channel")} htmlFor="e-channel" hint={form.fair_share ? t("nodes.channelHint") : t("nodes.channelHintOff")} error={errors.channel_mbps}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="input-unit max-w-[180px] flex-1">
+                <input
+                  id="e-channel"
+                  className="input"
+                  inputMode="numeric"
+                  value={form.channel}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, channel: e.target.value }));
+                    setErrors(({ channel_mbps: _, ...rest }) => rest);
+                  }}
+                  aria-invalid={!!errors.channel_mbps}
+                />
+                <span>{t("tariffs.mbps")}</span>
+              </span>
+              {measured > 0 && String(measured) !== form.channel ? (
+                <Button size="sm" variant="ghost" type="button" onClick={() => setForm((f) => ({ ...f, channel: String(measured) }))}>
+                  {t("nodes.channelFromTest", { n: measured })}
+                </Button>
+              ) : null}
+            </div>
+          </Field>
+          {form.fair_share && !node?.fair_share ? <p className="text-xs text-[var(--honey-600)]">{t("nodes.fairShareReconnect")}</p> : null}
+        </div>
       </form>
     </Drawer>
   );

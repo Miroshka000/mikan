@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,12 +26,18 @@ const (
 	KeySubPort   = "sub_port"
 	KeyDomain    = "domain"
 	KeyACMEEmail = "acme_email"
-	KeyGroupMain = "sub_group_main" // subscription group names, see subs.Groups
-	KeyGroupAuto = "sub_group_auto"
-	KeyRouting   = "sub_routing"  // subs.Routing
-	KeyRules     = "sub_rules"    // the admin's own Clash rules, as typed (subs.ParseRules)
-	KeyRoutes    = "sub_routes"   // services, direct apps and DNS of the profiles (subs.Routes)
-	KeyTemplate  = "sub_template" // the admin's own Clash profile (subs.Template); empty: none
+	// KeyACMECA is the certificate authority of the panel and its nodes (acme.ValidCA);
+	// unset: Let's Encrypt. KeyACMEEABKID and KeyACMEEABHMAC are Google Trust Services'
+	// external account key; the HMAC is a secret and never shown back.
+	KeyACMECA      = "acme_ca"
+	KeyACMEEABKID  = "acme_eab_kid"
+	KeyACMEEABHMAC = "acme_eab_hmac"
+	KeyGroupMain   = "sub_group_main" // subscription group names, see subs.Groups
+	KeyGroupAuto   = "sub_group_auto"
+	KeyRouting     = "sub_routing"  // subs.Routing
+	KeyRules       = "sub_rules"    // the admin's own Clash rules, as typed (subs.ParseRules)
+	KeyRoutes      = "sub_routes"   // services, direct apps and DNS of the profiles (subs.Routes)
+	KeyTemplate    = "sub_template" // the admin's own Clash profile (subs.Template); empty: none
 	// KeyFingerprint is the uTLS profile clients get where an inbound sets none
 	// (proto.Fingerprints); unset means proto.DefaultFingerprint.
 	KeyFingerprint = "client_fingerprint"
@@ -40,6 +48,9 @@ const (
 	// refuse apps that send no device id instead of seating them together, off by default.
 	KeyDeviceBinding = "device_binding"
 	KeyRequireHWID   = "device_require_hwid"
+	// KeyUnbindRules is how the subscriber may unbind devices (domain.UnbindRules); unset:
+	// domain.DefaultUnbindRules.
+	KeyUnbindRules = "device_unbind"
 	// KeyDefaultLang is the language chosen at install: the admin panel and the subscription
 	// page open in it until a visitor picks one, and new names (tariffs, the auto group, the
 	// bot's menu) are written in it. "auto" or unset: the visitor's browser decides.
@@ -300,6 +311,14 @@ func (s *Settings) Paths(ctx context.Context) (Paths, error) {
 type Endpoint struct {
 	Host string
 	Port int
+}
+
+// URL is https://host:port, the panel's base address; "" while it has no host or port.
+func (e Endpoint) URL() string {
+	if e.Host == "" || e.Port <= 0 {
+		return ""
+	}
+	return "https://" + net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
 }
 
 // SubEndpoint is where subscription links point: the subscription port when one is set.

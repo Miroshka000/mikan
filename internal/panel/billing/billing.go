@@ -624,6 +624,9 @@ func DescribeLimits(t db.Tariff, lang string) string {
 	if t.DeviceLimit.Valid {
 		parts = append(parts, fmt.Sprintf(pick("устройств: %d", "devices: %d"), t.DeviceLimit.Int64))
 	}
+	if t.SpeedLimit.Valid {
+		parts = append(parts, fmt.Sprintf(pick("до %d Мбит/с", "up to %d Mbit/s"), t.SpeedLimit.Int64))
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -1087,7 +1090,11 @@ func (s *Service) Reconcile(ctx context.Context) {
 		if AddonID(p.Provider) == "" || !p.ExternalID.Valid || !dueCheck(p, now) {
 			continue
 		}
-		_ = s.checkAddon(ctx, p.Provider, p.ExternalID.String)
+		// A refused amount is logged where it is found; the rest (the adapter or the provider
+		// is down, the credentials stopped working) would leave the invoice pending unseen.
+		if err := s.checkAddon(ctx, p.Provider, p.ExternalID.String); err != nil && !errors.Is(err, ErrBadPayment) {
+			s.d.Log.Warn("billing: invoice check", "payment", p.ID, "provider", p.Provider, "err", err)
+		}
 	}
 	if _, err := q.ExpirePayments(ctx, now.Add(-pendingTTL).Unix()); err != nil {
 		s.d.Log.Error("billing: expire", "err", err)

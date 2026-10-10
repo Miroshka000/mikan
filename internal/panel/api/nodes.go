@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -24,26 +25,34 @@ import (
 )
 
 type NodeInfo struct {
-	ID          int64      `json:"id"`
-	Name        string     `json:"name" doc:"Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений"`
-	Local       bool       `json:"local" doc:"Своя нода панели"`
-	Address     string     `json:"address" doc:"host:port API ноды; пусто у своей ноды"`
-	Host        string     `json:"host" doc:"Адрес для клиентов"`
-	Domain      string     `json:"domain"`
-	PublicName  string     `json:"public_name" doc:"Публичное имя для канала состояния; пустое — нода скрыта из списка"`
-	Enabled     bool       `json:"enabled"`
-	Inbounds    int        `json:"inbounds"`
-	Status      string     `json:"status" enum:"ok,error,unknown"`
-	Error       string     `json:"error,omitempty"`
-	Version     string     `json:"version,omitempty"`
-	Listeners   int        `json:"listeners"`
-	ListenersOK int        `json:"listeners_ok"`
-	Conns       int        `json:"conns"`
-	CPUPercent  float64    `json:"cpu_percent" doc:"Загрузка процессора всего сервера, не только ноды"`
-	ProcCPU     *float64   `json:"proc_cpu_percent,omitempty" doc:"Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4"`
-	MemUsed     uint64     `json:"mem_used"`
-	MemTotal    uint64     `json:"mem_total"`
-	CheckedAt   *time.Time `json:"checked_at,omitempty"`
+	ID         int64  `json:"id"`
+	Name       string `json:"name" doc:"Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений"`
+	Local      bool   `json:"local" doc:"Своя нода панели"`
+	Address    string `json:"address" doc:"host:port API ноды; пусто у своей ноды"`
+	Host       string `json:"host" doc:"Адрес для клиентов"`
+	Domain     string `json:"domain"`
+	PublicName string `json:"public_name" doc:"Публичное имя для канала состояния; пустое — нода скрыта из списка"`
+	Enabled    bool   `json:"enabled"`
+	Inbounds   int    `json:"inbounds"`
+	Status     string `json:"status" enum:"ok,error,unknown"`
+	Error      string `json:"error,omitempty" doc:"Слова ошибки связи как есть, для «подробнее»"`
+	// Why the panel cannot reach the node, since when, and when it last could; the node's
+	// clock against the panel's; its last hello.
+	ErrorCode   string            `json:"error_code,omitempty" enum:"timeout,refused,unreachable,dns,pin_mismatch,tls,http_status,unknown" doc:"Почему панель не достучалась до ноды"`
+	ErrorParams map[string]string `json:"error_params,omitempty" doc:"host и port адреса API ноды, status ответа"`
+	ErrorSince  *time.Time        `json:"error_since,omitempty" doc:"С какого момента нет связи"`
+	LastOKAt    *time.Time        `json:"last_ok_at,omitempty" doc:"Когда нода последний раз отвечала (с запуска панели)"`
+	ClockSkew   *int64            `json:"clock_skew,omitempty" doc:"Часы ноды минус часы панели, секунды; нет у старых нод"`
+	Hello       *NodeHello        `json:"hello,omitempty" doc:"Последний hello ноды после запуска: достучалась ли панель в ответ"`
+	Version     string            `json:"version,omitempty"`
+	Listeners   int               `json:"listeners"`
+	ListenersOK int               `json:"listeners_ok"`
+	Conns       int               `json:"conns"`
+	CPUPercent  float64           `json:"cpu_percent" doc:"Загрузка процессора всего сервера, не только ноды"`
+	ProcCPU     *float64          `json:"proc_cpu_percent,omitempty" doc:"Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4"`
+	MemUsed     uint64            `json:"mem_used"`
+	MemTotal    uint64            `json:"mem_total"`
+	CheckedAt   *time.Time        `json:"checked_at,omitempty"`
 	// Traffic24h is what the node carried in the last day, both ways.
 	Traffic24h int64 `json:"traffic_24h" doc:"Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0"`
 	// Behind: the node runs an older version than the panel.
@@ -56,6 +65,11 @@ type NodeInfo struct {
 	// Certificate is the node's own one for its protocols on the node's TLS; nil: the
 	// node uses its self-signed certificate.
 	Certificate *NodeCertView `json:"certificate,omitempty"`
+	// TLS is the certificate its protocols on TLS use now; nil when not known.
+	TLS *NodeTLSView `json:"tls,omitempty"`
+	// FairShare splits ChannelMbps evenly between the users moving traffic through the node.
+	FairShare   bool   `json:"fair_share" doc:"Канал ноды делится поровну между теми, кто сейчас качает"`
+	ChannelMbps *int64 `json:"channel_mbps" doc:"Ширина канала ноды, Мбит/с в каждую сторону; null — не задана"`
 }
 
 type nodesOutput struct{ Body []NodeInfo }
@@ -86,6 +100,9 @@ type patchNodeInput struct {
 		Host       *string `json:"host,omitempty" maxLength:"253"`
 		Domain     *string `json:"domain,omitempty" maxLength:"253"`
 		Enabled    *bool   `json:"enabled,omitempty"`
+		FairShare  *bool   `json:"fair_share,omitempty" doc:"Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps"`
+		// The node's channel each way, which the fair share splits.
+		ChannelMbps *int64 `json:"channel_mbps,omitempty" minimum:"1" maximum:"100000" doc:"Ширина канала ноды, Мбит/с в каждую сторону"`
 	}
 }
 
@@ -149,7 +166,8 @@ func (h *handlers) orderNodes(ctx context.Context, in *orderNodesInput) (*struct
 
 func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inbound) NodeInfo {
 	v := NodeInfo{ID: n.ID, Name: n.Name, PublicName: n.PublicName, Local: n.Address == "", Address: n.Address, Host: domain.NodeHost(n), Domain: n.Domain,
-		Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown"}
+		Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
+		FairShare: n.FairShare != 0, ChannelMbps: ptrInt(n.ChannelMbps.Int64, n.ChannelMbps.Valid)}
 	if v.Local {
 		// The panel's own node is reached at the panel's address.
 		ep, _ := h.d.Settings.Endpoint(ctx)
@@ -157,6 +175,7 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 		v.Domain, _ = h.d.Settings.String(ctx, settings.KeyDomain)
 	}
 	v.Certificate = h.nodeCertView(n.ID, v.Host)
+	v.TLS = h.nodeTLSView(ctx, n)
 	if h.d.Nodes == nil {
 		return v
 	}
@@ -166,9 +185,24 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 	}
 	t := hv.CheckedAt
 	v.CheckedAt = &t
+	if !hv.LastOK.IsZero() {
+		last := hv.LastOK
+		v.LastOKAt = &last
+	}
+	if hello, ok := h.d.Nodes.Hello(n.ID); ok {
+		v.Hello = helloView(hello)
+	}
 	if !hv.OK {
-		v.Status, v.Error = "error", hv.Error
+		v.Status, v.Error, v.ErrorCode, v.ErrorParams = "error", hv.Error, hv.Code, hv.Params
+		if !hv.Since.IsZero() {
+			since := hv.Since
+			v.ErrorSince = &since
+		}
 		return v
+	}
+	if hv.Skew != nil {
+		s := int64(math.Round(hv.Skew.Seconds()))
+		v.ClockSkew = &s
 	}
 	v.Status, v.Version, v.Conns = "ok", hv.Health.Version, hv.Health.Conns
 	v.CPUPercent, v.MemUsed, v.MemTotal = hv.Health.System.CPUPercent, hv.Health.System.MemUsed, hv.Health.System.MemTotal
@@ -265,7 +299,7 @@ func (h *handlers) createNode(ctx context.Context, in *createNodeInput) (*nodeKe
 	if err != nil {
 		return nil, err
 	}
-	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: name, Host: host, Domain: dom, APIPort: b.APIPort}, h.d.Now())
+	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: name, Host: host, Domain: dom, APIPort: b.APIPort, PanelURL: h.panelURL(ctx)}, h.d.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -279,6 +313,16 @@ func (h *handlers) createNode(ctx context.Context, in *createNodeInput) (*nodeKe
 	out := &nodeKeyOutput{}
 	out.Body.Node, out.Body.Key, out.Body.Command = h.viewNode(ctx, n, inbounds), key, release.JoinCommand(key)
 	return out, nil
+}
+
+// panelURL is where a node's hello goes: the panel's own address and port ("" while the
+// panel has no address).
+func (h *handlers) panelURL(ctx context.Context) string {
+	ep, err := h.d.Settings.Endpoint(ctx)
+	if err != nil {
+		return ""
+	}
+	return ep.URL()
 }
 
 func (h *handlers) getNode(ctx context.Context, id int64) (db.Node, error) {
@@ -340,6 +384,21 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 			n.Enabled = 1
 		}
 	}
+	shaping := b.FairShare != nil || b.ChannelMbps != nil
+	if b.ChannelMbps != nil {
+		n.ChannelMbps = sql.NullInt64{Int64: *b.ChannelMbps, Valid: true}
+	}
+	if b.FairShare != nil {
+		n.FairShare = domain.Flag(*b.FairShare)
+	}
+	if n.FairShare != 0 && !n.ChannelMbps.Valid {
+		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.channel_mbps", Message: "channel_required"})
+	}
+	if shaping {
+		if err := h.d.Store.Q.SetNodeShaping(ctx, db.SetNodeShapingParams{FairShare: n.FairShare, ChannelMbps: n.ChannelMbps, UpdatedAt: h.d.Now().Unix(), ID: n.ID}); err != nil {
+			return nil, err
+		}
+	}
 	n, err = h.d.Store.Q.UpdateNode(ctx, db.UpdateNodeParams{Name: n.Name, Address: n.Address, PublicHost: n.PublicHost, Domain: n.Domain, PublicName: n.PublicName,
 		Enabled: n.Enabled, UpdatedAt: h.d.Now().Unix(), ID: n.ID})
 	if err != nil {
@@ -347,7 +406,8 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 	}
 	h.nodesChanged()
 	h.d.Changes.SlotsChanged()
-	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0})
+	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0,
+		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64})
 	return h.nodeInfo(ctx, n.ID)
 }
 
@@ -378,7 +438,7 @@ func (h *handlers) rekeyNode(ctx context.Context, in *nodeIDInput) (*nodeKeyOutp
 	if err != nil {
 		return nil, err
 	}
-	key, err := domain.RekeyNode(ctx, h.d.Store, panel, in.ID, h.d.Now())
+	key, err := domain.RekeyNode(ctx, h.d.Store, panel, in.ID, h.panelURL(ctx), h.d.Now())
 	switch {
 	case errors.Is(err, domain.ErrUnknownNode):
 		return nil, huma.Error404NotFound("not_found")
@@ -474,6 +534,17 @@ func (h *handlers) deleteNode(ctx context.Context, in *nodeIDInput) (*struct{}, 
 		if err := q.DeleteNode(ctx, n.ID); err != nil {
 			return err
 		}
+		// The bot's route may still name it from when it went through it: the admin
+		// panel would offer a node that is gone.
+		set := settings.New(q)
+		if route, ok, err := settings.Get[tgbot.Route](ctx, set, tgbot.KeyRoute); err != nil {
+			return err
+		} else if ok && route.NodeID == n.ID {
+			route.NodeID = 0
+			if err := settings.Set(ctx, set, tgbot.KeyRoute, route); err != nil {
+				return err
+			}
+		}
 		return q.DeleteNodeStateOf(ctx, strconv.FormatInt(n.ID, 10))
 	})
 	if err != nil {
@@ -499,6 +570,10 @@ func (h *handlers) deleteNode(ctx context.Context, in *nodeIDInput) (*struct{}, 
 func (h *handlers) nodesChanged() {
 	if h.d.Nodes != nil {
 		h.d.Nodes.NodesChanged()
+	}
+	// A new node, address or domain gets its public certificate now, not at the next round.
+	if h.d.WakeNodeCerts != nil {
+		h.d.WakeNodeCerts()
 	}
 }
 

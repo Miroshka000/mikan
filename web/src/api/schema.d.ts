@@ -653,8 +653,59 @@ export interface paths {
         /** Поставить ноде свой сертификат */
         put: operations["set-node-certificate"];
         post?: never;
-        /** Вернуть ноде самоподписанный сертификат */
+        /** Убрать свой сертификат ноды: вернётся публичный, полученный панелью, или самоподписанный */
         delete: operations["clear-node-certificate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/certificate/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Получить публичный сертификат ноды сейчас (ждёт до 90 с) */
+        post: operations["renew-node-certificate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить ноду: связь, версия, часы, протоколы, порты, интернет, каскад */
+        post: operations["check-node"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/check-russia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить порты ноды из России через check-host.net */
+        post: operations["check-node-russia"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1061,8 +1112,25 @@ export interface paths {
         /** Поставить свой сертификат панели */
         put: operations["set-certificate"];
         post?: never;
-        /** Вернуть сертификат Let's Encrypt */
+        /** Убрать свой сертификат панели: вернётся автоматический */
         delete: operations["clear-certificate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/certificate/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить сертификаты панели и нод снаружи: что отдают порты, DNS, порт 80, заказы */
+        post: operations["check-certificate"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1077,7 +1145,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Запросить сертификат Let's Encrypt сейчас */
+        /** Получить сертификат панели сейчас: ждёт до 90 с и отвечает тем, что вышло (ordering — заказ ещё идёт) */
         post: operations["renew-certificate"];
         delete?: never;
         options?: never;
@@ -1280,6 +1348,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить сервер панели */
+        post: operations["check-server"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tariffs": {
         parameters: {
             query?: never;
@@ -1402,6 +1487,23 @@ export interface paths {
         post: operations["telegram-infrastructure-connect"];
         /** Отключить чат администратора для уведомлений */
         delete: operations["telegram-infrastructure-disconnect"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/telegram/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Как бот отправит текст с Markdown */
+        post: operations["telegram-preview"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1580,6 +1682,58 @@ export interface paths {
         post?: never;
         /** Отвязать устройство: его ключи сгорают */
         delete: operations["unbind-device"];
+        options?: never;
+        head?: never;
+        /** Переименовать привязанное устройство */
+        patch: operations["rename-device"];
+        trace?: never;
+    };
+    "/api/v1/users/{id}/bound-devices/{device}/ban": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Заблокировать устройство: отвязать и не давать привязаться снова по его ID */
+        post: operations["ban-device"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/device-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Заблокированные устройства пользователя */
+        get: operations["device-bans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/device-bans/{ban}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Разблокировать устройство: оно снова сможет привязаться */
+        delete: operations["unban-device"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1883,6 +2037,18 @@ export interface components {
             public_enabled?: boolean;
             public_summary?: boolean;
         };
+        Attempt: {
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            ca: "letsencrypt" | "zerossl" | "google";
+            /** @description Слова центра сертификации или системы как есть */
+            detail?: string;
+            /** @description Код errors.acme; пусто — сертификат получен */
+            error?: string;
+            /** @description Кто держал порт 80 (port80_busy), если это видно */
+            holder?: string;
+        };
         AuditEntry: {
             /** @description Например user.create, settings.update, auth.login_failed */
             action: string;
@@ -1986,12 +2152,24 @@ export interface components {
             /** Format: date-time */
             last_seen: string;
             model: string;
+            /** @description Своё имя устройства от админа или подписчика; пусто — имя от приложения (модель, система) */
+            name: string;
             online: boolean;
             os: string;
             os_version: string;
+            /**
+             * Format: int64
+             * @description Байты к устройству с тех пор, как оно привязано
+             */
+            traffic_down: number;
+            /**
+             * Format: int64
+             * @description Байты от устройства с тех пор, как оно привязано (до 0.5.0.5 не считались)
+             */
+            traffic_up: number;
         };
         BroadcastInputBody: {
-            /** @description Обычный текст; {brand} — название сервиса */
+            /** @description Текст с Markdown, как тексты бота; {brand} — название сервиса */
             text: string;
         };
         BroadcastOutputBody: {
@@ -2070,17 +2248,78 @@ export interface components {
             /** @description Служебный вход для других нод; есть, когда кто-то выходит через эту ноду */
             relay?: components["schemas"]["CascadeRelay"];
         };
+        CertCheck: {
+            /** @description Что именно, текст — certCheck.<code> в языке панели */
+            code: string;
+            /** @description Подробности как есть: ошибка соединения или ответ центра сертификации */
+            detail?: string;
+            fix?: components["schemas"]["CertFix"];
+            /** @description Что проверено: served, compat, dns, port80, acme, node_cert, node_port */
+            id: string;
+            /** @description Имя ноды, если проверка про ноду */
+            node?: string;
+            /** Format: int64 */
+            node_id?: number;
+            params?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "ok" | "info" | "warn" | "fail";
+        };
+        CertFix: {
+            /** @enum {string} */
+            action: "renew" | "renew_node" | "use_zerossl" | "update_node" | "copy";
+            /** @description Команда для сервера (action copy) */
+            command?: string;
+            /** Format: int64 */
+            node_id?: number;
+        };
         CertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
             cert: string;
             /** @description Закрытый ключ в PEM (privkey.pem): RSA от 2048 бит, ECDSA P-256/384/521 или Ed25519 */
             key: string;
         };
+        CertReport: {
+            /** Format: date-time */
+            checked_at: string;
+            checks: components["schemas"]["CertCheck"][];
+        };
+        CheckItem: {
+            /** @description Почему не ok: timeout, refused, pin_mismatch, behind, skew, busy и другие */
+            code?: string;
+            /** @description Слова ошибки как есть, для «подробнее» */
+            detail?: string;
+            /**
+             * @description Что исправит: кнопка в панели или команда на сервере
+             * @enum {string}
+             */
+            fix?: "rekey" | "update_node" | "old_node" | "open_port" | "start_node" | "check_host" | "check_dns" | "free_port" | "sync_time" | "update_panel" | "free_disk" | "check_outbound" | "restart_panel" | "exit_node";
+            /** @description Что проверено: link, hello, version, update, skew, listeners, listener, port, relay, cascade, node_dns, node_internet, node_github, node_ghcr, node_disk, node_memory, diagnose, local_node, dns, internet, github, ghcr, disk, memory, clock, updates */
+            id: string;
+            params?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "ok" | "warn" | "fail" | "skip";
+        };
         CheckTargetInputBody: {
             /** @description host:port */
             dest: string;
             /** @description Имя для клиентов; по умолчанию — хост из dest */
             sni?: string;
+        };
+        CheckView: {
+            /** Format: date-time */
+            at: string;
+            items: components["schemas"]["CheckItem"][];
+            /** @description Отчёт для чата: адреса, домены, порт API и ключи скрыты */
+            report: string;
+        };
+        CityResult: {
+            city: string;
+            id: string;
+            ports: components["schemas"]["PortResult"][];
         };
         ClientEndpoint: {
             /**
@@ -2106,6 +2345,8 @@ export interface components {
             /** @description Кнопка Mini App со страницей подписки */
             mini_app: boolean;
             notify: components["schemas"]["Notify"];
+            /** @description Кнопка «Промокоды» в главном меню (нужен Mini App) */
+            promo_button: boolean;
             /** @description Уведомления с 22:00 до 9:00 МСК приходят без звука */
             quiet_night: boolean;
             texts: components["schemas"]["Texts"];
@@ -2166,7 +2407,7 @@ export interface components {
             node_id?: number;
             port?: string;
             /** @enum {string} */
-            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
+            preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "vless_tls_ws" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
         };
         CreateNodeInputBody: {
             /**
@@ -2197,6 +2438,23 @@ export interface components {
         DNSPolicy: {
             match: string;
             servers: string[];
+        };
+        DeviceBanView: {
+            /** @description Кто заблокировал; пусто — ключ API или удалённый админ */
+            admin: string;
+            /** Format: date-time */
+            banned_at: string;
+            /** @description ID устройства, которому закрыта привязка */
+            hwid: string;
+            /** Format: int64 */
+            id: number;
+            /** @description Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило */
+            label: string;
+            /**
+             * Format: date-time
+             * @description Подписчик сам отвязал устройство: оно сможет привязаться снова с этого момента; пусто — заблокировано админом навсегда
+             */
+            until?: string;
         };
         DeviceView: {
             /** Format: date-time */
@@ -2446,6 +2704,8 @@ export interface components {
             listen: string;
             name: string;
             network: string;
+            /** @description Работает на сертификате ноды (Hysteria2, TUIC, AnyTLS, TrustTunnel, VLESS TLS): с самоподписанным в sing-box приложениях не появится */
+            node_cert?: boolean;
             /** Format: int64 */
             node_id: number;
             /** @description Hysteria2: salamander, gecko или пусто (без обфускации); у других типов поля нет */
@@ -2638,6 +2898,22 @@ export interface components {
             /** @description Публично доверенный для адреса: приложения принимают его без пина */
             trusted: boolean;
         };
+        NodeHello: {
+            /** Format: date-time */
+            at: string;
+            code?: string;
+            /** @description Адрес ноды в панели */
+            host?: string;
+            /** @description Hello пришёл не с того IP, что указан в панели */
+            ip_differs: boolean;
+            /** @description Панель достучалась до ноды в ответ на её hello */
+            ok: boolean;
+            params?: {
+                [key: string]: string;
+            };
+            /** @description Адрес, с которого пришёл hello */
+            seen_ip?: string;
+        };
         NodeInfo: {
             /** @description host:port API ноды; пусто у своей ноды */
             address: string;
@@ -2646,8 +2922,18 @@ export interface components {
             /** @description Панель может обновить ноду сама: удалённая, отвечает, версия 0.5.0.2 или новее; старую обновляют один раз вручную командой mikan update на её сервере */
             can_update: boolean;
             certificate?: components["schemas"]["NodeCertView"];
+            /**
+             * Format: int64
+             * @description Ширина канала ноды, Мбит/с в каждую сторону; null — не задана
+             */
+            channel_mbps: number | null;
             /** Format: date-time */
             checked_at?: string;
+            /**
+             * Format: int64
+             * @description Часы ноды минус часы панели, секунды; нет у старых нод
+             */
+            clock_skew?: number;
             /** Format: int64 */
             conns: number;
             /**
@@ -2657,13 +2943,37 @@ export interface components {
             cpu_percent: number;
             domain: string;
             enabled: boolean;
+            /** @description Слова ошибки связи как есть, для «подробнее» */
             error?: string;
+            /**
+             * @description Почему панель не достучалась до ноды
+             * @enum {string}
+             */
+            error_code?: "timeout" | "refused" | "unreachable" | "dns" | "pin_mismatch" | "tls" | "http_status" | "unknown";
+            /** @description host и port адреса API ноды, status ответа */
+            error_params?: {
+                [key: string]: string;
+            };
+            /**
+             * Format: date-time
+             * @description С какого момента нет связи
+             */
+            error_since?: string;
+            /** @description Канал ноды делится поровну между теми, кто сейчас качает */
+            fair_share: boolean;
+            /** @description Последний hello ноды после запуска: достучалась ли панель в ответ */
+            hello?: components["schemas"]["NodeHello"];
             /** @description Адрес для клиентов */
             host: string;
             /** Format: int64 */
             id: number;
             /** Format: int64 */
             inbounds: number;
+            /**
+             * Format: date-time
+             * @description Когда нода последний раз отвечала (с запуска панели)
+             */
+            last_ok_at?: string;
             /** Format: int64 */
             listeners: number;
             /** Format: int64 */
@@ -2685,6 +2995,7 @@ export interface components {
             public_name: string;
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
+            tls?: components["schemas"]["NodeTLSView"];
             /**
              * Format: int64
              * @description Сколько унесла нода за последние сутки (вверх и вниз вместе), байты; у только что добавленной ноды 0
@@ -2726,6 +3037,47 @@ export interface components {
              * @description Сколько унесли все ноды вместе
              */
             total: number;
+        };
+        NodeStatus: {
+            /** @description Последние попытки получить сертификат, свежие первыми */
+            attempts?: components["schemas"]["Attempt"][];
+            /**
+             * @description Кто выдал сертификат, который у ноды сейчас
+             * @enum {string}
+             */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            /** @enum {string} */
+            ca_wanted?: "letsencrypt" | "zerossl" | "google";
+            /** Format: date-time */
+            checked_at?: string;
+            /** @description Код errors.acme: node_outdated — нода старее панели и не умеет получать сертификат */
+            error?: string;
+            error_detail?: string;
+            holder?: string;
+            identifier: string;
+            issuer?: string;
+            names?: string[];
+            /** Format: date-time */
+            not_after?: string;
+            ordering?: boolean;
+            /** Format: date-time */
+            retry_at?: string;
+        };
+        NodeTLSView: {
+            acme?: components["schemas"]["NodeStatus"];
+            /** @enum {string} */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            issuer?: string;
+            /**
+             * @description custom — свой, acme — публичный, полученный панелью для ноды, panel — публичный сертификат панели (своя нода), self-signed — самоподписанный
+             * @enum {string}
+             */
+            kind: "custom" | "acme" | "panel" | "self-signed";
+            names?: string[];
+            /** Format: date-time */
+            not_after?: string;
+            /** @description Ссылки закрепляют самоподписанный сертификат: в sing-box приложениях (SFA, SFI) протоколы ноды на TLS не появятся, TUIC без проверки сертификата */
+            pinned: boolean;
         };
         NodeView: {
             /** Format: date-time */
@@ -2956,10 +3308,10 @@ export interface components {
              */
             mode: "light" | "dark" | "system";
             /**
-             * @description Палитра темы, как темы панели
+             * @description Тема, как темы панели. mikan, ocean, sakura и forest следуют mode; остальные светлые или тёмные сами
              * @enum {string}
              */
-            palette: "mikan" | "ocean" | "sakura" | "forest";
+            palette: "mikan" | "ocean" | "sakura" | "forest" | "latte" | "snow" | "dawn" | "dune" | "graphite" | "abyss" | "ember" | "plum" | "moss" | "terminal" | "nord" | "mocha" | "tokyo" | "dracula" | "aurora" | "cosmos";
             /** @enum {string} */
             radius: "small" | "medium" | "large";
         };
@@ -3055,8 +3407,15 @@ export interface components {
             secret?: string;
         };
         PatchNodeInputBody: {
+            /**
+             * Format: int64
+             * @description Ширина канала ноды, Мбит/с в каждую сторону
+             */
+            channel_mbps?: number;
             domain?: string;
             enabled?: boolean;
+            /** @description Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps */
+            fair_share?: boolean;
             host?: string;
             name?: string;
             /** @description Публичное имя ноды; пустое — не публиковать её в канале */
@@ -3074,6 +3433,15 @@ export interface components {
             trial_tariff_id?: number;
         };
         PatchSettingsInputBody: {
+            /**
+             * @description Смена центра выпускает сертификаты панели и нод заново
+             * @enum {string}
+             */
+            acme_ca?: "letsencrypt" | "zerossl" | "google";
+            /** @description Ключ HMAC (base64url); пусто — убрать. Обратно не показывается */
+            acme_eab_hmac?: string;
+            acme_eab_kid?: string;
+            acme_email?: string;
             app_branding?: boolean;
             auto_port?: boolean;
             auto_sni?: boolean;
@@ -3088,6 +3456,7 @@ export interface components {
             default_lang?: "auto" | "ru" | "en";
             device_binding?: boolean;
             device_require_hwid?: boolean;
+            device_unbind?: components["schemas"]["UnbindRules"];
             domain?: string;
             /** @enum {string} */
             happ_crypt?: "off" | "api" | "local";
@@ -3167,6 +3536,13 @@ export interface components {
             name?: string;
             never_expires?: boolean;
             note?: string;
+            /**
+             * Format: int64
+             * @description Скорость, Мбит/с в каждую сторону
+             */
+            speed_limit?: number;
+            /** @description Снять ограничение скорости */
+            speed_unlimited?: boolean;
             tags?: string[];
             /**
              * Format: int64
@@ -3291,6 +3667,15 @@ export interface components {
             /** @description Подключения, которые считаются в этот пул */
             inbounds: string[];
             name: string;
+        };
+        PortResult: {
+            error?: string;
+            /** Format: int64 */
+            ms?: number;
+            ok: boolean;
+            pending?: boolean;
+            /** Format: int64 */
+            port: number;
         };
         Preview: {
             /** @description Пользователи, которых mikan не примет, с причиной */
@@ -3484,6 +3869,14 @@ export interface components {
             /** @description Показываются один раз */
             recovery_codes: string[];
         };
+        RenameDeviceInputBody: {
+            /** @description Своё имя устройства, до 40 символов одной строкой; пустое — вернуть имя от приложения */
+            name: string;
+        };
+        RenameDeviceOutputBody: {
+            /** @description Имя, как оно сохранено: без пробелов по краям */
+            name: string;
+        };
         Report: {
             /** Format: int64 */
             created: number;
@@ -3584,6 +3977,19 @@ export interface components {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
         };
+        RussiaPort: {
+            /** @description api или имя подключения */
+            name: string;
+            /** Format: int64 */
+            port: number;
+        };
+        RussiaView: {
+            /** Format: date-time */
+            at: string;
+            cached: boolean;
+            cities: components["schemas"]["CityResult"][];
+            ports: components["schemas"]["RussiaPort"][];
+        };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
             ip: string;
@@ -3610,6 +4016,17 @@ export interface components {
             user_agent: string;
         };
         SettingsView: {
+            /**
+             * @description Центр сертификации панели и нод: letsencrypt, zerossl (нужен e-mail) или google (нужен ключ EAB). IP-адреса всегда получают сертификат Let's Encrypt
+             * @enum {string}
+             */
+            acme_ca: "letsencrypt" | "zerossl" | "google";
+            /** @description Google Trust Services: ключ HMAC сохранён (сам ключ не показывается) */
+            acme_eab_hmac_set: boolean;
+            /** @description Google Trust Services: keyId ключа EAB */
+            acme_eab_kid: string;
+            /** @description E-mail для центра сертификации; ZeroSSL привязывает к нему аккаунт */
+            acme_email: string;
             admin_url: string;
             /** @description Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки */
             app_branding: boolean;
@@ -3634,6 +4051,8 @@ export interface components {
             device_binding: boolean;
             /** @description Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место) */
             device_require_hwid: boolean;
+            /** @description Сколько устройств подписчик может отвязать сам и через сколько отвязанное может вернуться */
+            device_unbind: components["schemas"]["UnbindRules"];
             domain: string;
             /**
              * @description Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама
@@ -3721,17 +4140,40 @@ export interface components {
             up_bps: number;
         };
         Status: {
+            /** @description Последние попытки получить сертификат, свежие первыми */
+            attempts?: components["schemas"]["Attempt"][];
+            /** @enum {string} */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            /**
+             * @description Куда уйдёт следующий заказ: выбранный центр, для IP всегда Let's Encrypt
+             * @enum {string}
+             */
+            ca_wanted: "letsencrypt" | "zerossl" | "google";
             /** Format: date-time */
             checked_at: string;
             error?: string;
+            /** @description Подробности ошибки как есть, для «подробнее» */
+            error_detail?: string;
+            /** @description Кто держит порт 80 (port80_busy), если это видно */
+            holder?: string;
             identifier: string;
             issuer?: string;
-            /** @enum {string} */
-            kind: "self-signed" | "letsencrypt" | "custom";
+            /**
+             * @description acme — выдан центром сертификации автоматически (ca), custom — свой, self-signed — временный самоподписанный
+             * @enum {string}
+             */
+            kind: "self-signed" | "acme" | "custom";
             names?: string[];
             /** Format: date-time */
             not_after: string;
-            /** @description Свой сертификат публично доверенный для адреса панели */
+            /** @description Заказ идёт прямо сейчас */
+            ordering?: boolean;
+            /**
+             * Format: date-time
+             * @description rate_limited: когда центр снова примет заказ
+             */
+            retry_at?: string;
+            /** @description Сертификат публично доверенный для адреса панели */
             trusted?: boolean;
         };
         SubDocBody: {
@@ -3820,6 +4262,11 @@ export interface components {
             reset_strategy: "none" | "month_start" | "period";
             /** Format: int64 */
             sort?: number;
+            /**
+             * Format: int64
+             * @description Скорость, Мбит/с в каждую сторону; не передана — без ограничения
+             */
+            speed_limit?: number;
             /** @description Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений */
             terms?: components["schemas"]["TermBody"][];
             /** Format: int64 */
@@ -3860,6 +4307,11 @@ export interface components {
             reset_strategy: "none" | "month_start" | "period";
             /** Format: int64 */
             sort: number;
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; null — без ограничения
+             */
+            speed_limit: number | null;
             /** @description Сроки, на которые продаётся тариф, по порядку; первый — тот же, что duration_days, price_stars и price_rub */
             terms: components["schemas"]["TermView"][];
             /**
@@ -3895,6 +4347,18 @@ export interface components {
             id: number;
             name: string;
             username: string;
+        };
+        TelegramPreviewInputBody: {
+            /** @description Текст бота с Markdown */
+            text: string;
+            /** @description Значения переменных {name}; без них переменные остаются как написаны */
+            vars?: {
+                [key: string]: string;
+            };
+        };
+        TelegramPreviewOutputBody: {
+            /** @description Сообщение, как его отправит бот: HTML Telegram */
+            html: string;
         };
         TelegramRoute: {
             /**
@@ -4088,6 +4552,23 @@ export interface components {
             real_ip?: boolean;
             sniffer?: boolean;
         };
+        UnbindRules: {
+            /**
+             * Format: int64
+             * @description За сколько дней считается лимит (скользящее окно)
+             */
+            days: number;
+            /**
+             * Format: int64
+             * @description Сколько устройств подписчик может отвязать за days; 0 — без ограничения
+             */
+            limit: number;
+            /**
+             * Format: int64
+             * @description Сколько часов отвязанное подписчиком устройство не может привязаться снова; 0 — сразу
+             */
+            return_hours: number;
+        };
         UpdateStatus: {
             /** @description RFC 3339 */
             at: string;
@@ -4232,6 +4713,11 @@ export interface components {
              * @enum {string}
              */
             source: "admin" | "bot" | "trial" | "import";
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; null — без ограничения
+             */
+            speed_limit: number | null;
             /** @enum {string} */
             state: "active" | "expiring" | "limited" | "expired" | "disabled";
             sub_url: string;
@@ -5898,6 +6384,99 @@ export interface operations {
             };
         };
     };
+    "renew-node-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeTLSView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node-russia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RussiaView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "rekey-node": {
         parameters: {
             query?: never;
@@ -6982,6 +7561,35 @@ export interface operations {
             };
         };
     };
+    "check-certificate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CertReport"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "renew-certificate": {
         parameters: {
             query?: never;
@@ -6991,12 +7599,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Accepted */
-            202: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Status"];
+                };
             };
             /** @description Error */
             default: {
@@ -7512,6 +8122,35 @@ export interface operations {
             };
         };
     };
+    "check-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-tariffs": {
         parameters: {
             query?: never;
@@ -7868,6 +8507,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "telegram-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelegramPreviewInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramPreviewOutputBody"];
+                };
             };
             /** @description Error */
             default: {
@@ -8337,6 +9009,135 @@ export interface operations {
             path: {
                 id: number;
                 device: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "rename-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                device: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameDeviceInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenameDeviceOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "ban-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                device: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceBanView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "device-bans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceBanView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "unban-device": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                ban: number;
             };
             cookie?: never;
         };

@@ -17,10 +17,17 @@ export type Info = {
   expires_at?: string;
   resets_at?: string;
   device_limit: number;
+  speed_limit?: number;
   protocols: string[];
   binding: boolean;
   devices?: Device[];
   unbind_after?: string;
+  /** The admin's unbind rules: so many per unbind_days (0: no limit), so many left now (-1: no limit). */
+  unbind_limit?: number;
+  unbind_days?: number;
+  unbinds_left?: number;
+  /** An unbound device may not connect again for so many hours; 0: at once. */
+  return_hours?: number;
   telegram?: string;
   pools?: { name: string; limit?: number; used: number; extra?: number }[];
   /** The servers of the user's connections, by their names. */
@@ -30,7 +37,8 @@ export type Info = {
   announce_url?: string;
 };
 
-export type Device = { id: number; os: string; os_version: string; model: string; app: string; shared: boolean; created_at: string; last_seen: string };
+/** `name` is the device's own name (the subscriber's or the admin's); "" shows what the app reported. */
+export type Device = { id: number; name: string; os: string; os_version: string; model: string; app: string; shared: boolean; created_at: string; last_seen: string; used?: number };
 
 /** One of the subscriptions a Telegram account owns (the Mini App's /tg/session). */
 export type TgSub = { token: string; name: string };

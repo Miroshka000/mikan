@@ -10,11 +10,14 @@ Running `mikan` with no arguments opens a menu in the terminal: status, updates,
 | Command | What it does |
 |---|---|
 | `mikan status` | containers, CPU and memory, panel state, available update |
+| `mikan doctor` | check the panel's or node's server, a hint on every line, see below |
 | `mikan logs [panel\|node]` | live logs, <kbd>Ctrl</kbd>+<kbd>C</kbd> stops |
 | `mikan restart` | restart the containers |
 | `mikan update [--check]` | update now, a backup first, rollback on failure. `--check` only checks |
 | `mikan install [flags]` | install; on an installed server it opens the menu |
 | `mikan uninstall [-y]` | stop and remove the command, data stays in `/opt/mikan` |
+
+`mikan doctor` works on a panel's server and on a node's server. It checks Docker and the containers, that the ports are listening, ufw rules for the node API port, the panel port and the protocol ports, time sync (`timedatectl` and the HTTP Date header from github.com, 30 s tolerance), DNS, outbound HTTPS to github.com and ghcr.io (needed for updates), disk (✗ under 500 MiB, ! under 2 GiB) and memory. On a node it also re-sends the hello to the panel and prints the result. Each line is marked ✓, ! or ✗ and has a fix line; if anything is ✗, the command exits with a non-zero code. `mikan status` suggests `mikan doctor` when something is wrong. This is the tool for when the panel cannot reach the node at all. The same set of checks for the panel's server is in the panel itself: the "Check server" button in **Settings → System**.
 
 ## Access
 
@@ -54,6 +57,7 @@ The panel's own node has number 1, and its address and domain are changed in the
 | `mikan cert set --cert fullchain.pem --key privkey.pem [--node N]` | your own certificate for the panel or a node |
 | `mikan cert show [--node N]` | what is installed now |
 | `mikan cert clear [--node N]` | go back to Let's Encrypt (for a node: self-signed) |
+| `mikan cert proxy <domain>` | nginx or Caddy holds port 80: pass Let's Encrypt's checks through it to the panel or node (the rule is backed up, the config tested and reloaded) |
 
 ## REALITY masking sites
 

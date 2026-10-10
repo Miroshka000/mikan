@@ -1,16 +1,67 @@
 ---
 title: Domain and certificates
-description: Let's Encrypt for a domain and an IP, your own certificate for the panel and nodes, the subscription port.
+description: Public certificates for the panel and nodes, the choice of certificate authority, the check, your own certificate, the subscription port.
 ---
 
 ## Panel certificate
 
-The panel gets a Let's Encrypt certificate by itself and renews it:
+The panel gets a public certificate by itself and renews it:
 
 - **with a domain**: a regular certificate for the domain;
 - **without a domain**: a short-lived certificate for the IP address, about six days, renewed automatically.
 
-Issuing needs port 80 open, and it is used for a few seconds. If the certificate cannot be obtained, the panel runs with a self-signed one: the browser warns you once, some apps will not accept the subscription, and Telegram will not open the Mini App. The status is shown in **Settings → Security → Panel certificate**, with a "Request now" button.
+Issuing needs port 80 open, and it is used for a few seconds. If the certificate cannot be obtained, the panel runs with a self-signed one: the browser warns you once, some apps will not accept the subscription, and Telegram will not open the Mini App. The status is shown in **Settings → Security → Panel certificate**. The "Get now" button (after a failure, "Retry") waits up to 90 seconds and shows the result or the reason right in the card.
+
+## Certificate authority
+
+By default certificates are issued by Let's Encrypt. You can pick another authority in **Settings → Security → Panel certificate**:
+
+| Authority | What you need |
+| --- | --- |
+| Let's Encrypt | Nothing, it is the default. |
+| ZeroSSL | Only an e-mail: the panel gets the account key (EAB) from ZeroSSL by itself. |
+| Google Trust Services | An EAB key: `keyId` and HMAC. Create it in Google Cloud with `gcloud publicca external-account-keys create`. The HMAC is stored in the panel and never shown back. |
+
+The choice applies to the panel and to all nodes. When you change the authority, certificates are reissued, and the old ones keep working until the new ones arrive.
+
+:::note
+Only Let's Encrypt certifies IP addresses. An install or a node without a domain stays on Let's Encrypt whatever is chosen.
+:::
+
+:::tip[Old Android and TVs]
+Android 7.0 and older and TV boxes do not trust Let's Encrypt: in 2024 it dropped the old cross-signed chain. ZeroSSL's chain leads to roots these devices have (USERTrust and AAA). If everything works on the phone but the TV shows a certificate error, choose ZeroSSL. It needs a domain.
+:::
+
+## Check the certificate
+
+The "Check the certificate" button in **Settings → Security** looks at the panel from outside and shows:
+
+- what the panel port and the subscription port actually serve: who issued the certificate, for which names, until when, whether the chain is complete, and whether it is someone else's certificate (for example nginx or certbot in front of the panel);
+- whether the domain's A and AAAA records point to this server and whether the domain goes through the Cloudflare proxy (the orange cloud: turn it off, it must be grey);
+- whether port 80 reaches the panel for the authority's check. The panel puts a test token on its port 80 and fetches it through the public address. It fetches it from the server itself, so a hoster firewall that blocks only outside traffic may not show up;
+- how the last certificate orders went;
+- for each node: its certificate and what the ports of its TLS-over-TCP protocols (AnyTLS, TrustTunnel, VLESS TLS) serve.
+
+Each problem comes with a fix: a button ("Get now", "Retry", "Switch to ZeroSSL", "Update the node") or a command for the server that you can copy, for example `ufw allow 80/tcp` or `ss -ltnp 'sport = :80'`.
+
+## If a certificate is not issued
+
+The panel explains errors in plain words. Here is what it can tell you:
+
+- port 80 is busy with another program (with its name, if it could be found out);
+- port 80 is closed in the hoster's firewall or in ufw;
+- nothing answers on port 80;
+- another web server answers on port 80;
+- the domain is behind the Cloudflare proxy;
+- the domain points to another server;
+- the domain has no A or AAAA record;
+- a CAA record forbids this authority to issue certificates;
+- a rate limit, with the time after which the authority accepts orders again;
+- problems with the EAB key;
+- the server could not reach the certificate authority;
+- the node is too old.
+
+An unknown error is shown as it is, in the authority's own words, under "More".
 
 ## Change the domain or address
 
@@ -22,7 +73,7 @@ Subscription links are built from this address. If clients already use subscript
 
 ## Own certificate
 
-If port 80 is closed, or you need a wildcard, a Cloudflare Origin certificate or a certificate from your own CA, install your own: **Settings → Security → Panel certificate → Own certificate**. You need "Certificate with its chain" (`fullchain.pem`) and "Private key" (`privkey.pem`), as a file or as text. Port 80 is not needed then. To go back, use "Back to Let's Encrypt".
+If port 80 is closed, or you need a wildcard, a Cloudflare Origin certificate or a certificate from your own CA, install your own: **Settings → Security → Panel certificate → Own certificate**. You need "Certificate with its chain" (`fullchain.pem`) and "Private key" (`privkey.pem`), as a file or as text. Port 80 is not needed then. To go back, use "Back to the automatic one".
 
 The same from the command line, handy for a certbot or acme.sh renewal hook:
 
@@ -36,13 +87,34 @@ certbot renew --deploy-hook \
   'mikan cert set --cert $RENEWED_LINEAGE/fullchain.pem --key $RENEWED_LINEAGE/privkey.pem'
 ```
 
-The new file is picked up without a restart. `mikan cert show` shows what is installed now, and `mikan cert clear` goes back to Let's Encrypt.
+The new file is picked up without a restart. `mikan cert show` shows what is installed now, and `mikan cert clear` goes back to the automatic public certificate.
 
 ## Node certificate
 
-Hysteria2, TUIC, AnyTLS and TrustTunnel use the node's certificate. By default it is self-signed, and clients receive its fingerprint (the pin) in the subscription. Your own certificate is installed with the **Certificate** button on the node card or with `mikan cert set ... --node N`. A publicly trusted certificate goes to clients without a pin, so renewing it breaks nothing.
+The panel itself orders a public certificate for each remote node: for the node's domain if it has one, otherwise for its IP (a six-day Let's Encrypt certificate, renewed automatically). The authority checks the node on the node's port 80 (HTTP-01). The node opens port 80 only for the few seconds of a check and releases it after.
 
-If the panel has a domain, the panel's own node serves the panel's public certificate on these protocols by itself.
+So port 80/tcp must be open on the node's server. The installer opens it in ufw, and `mikan update` opens it on nodes installed earlier. If port 80 on the node is held by another program (nginx, Caddy), the panel says so and names the program when the node can tell. Like on the panel, you can set a port for the check on the node with the line `MIKAN_ACME_LISTEN=127.0.0.1:18080` in `/opt/mikan/.env` on the node's server (then `cd /opt/mikan && docker compose up -d`), and pass `/.well-known/acme-challenge/` there from the web server.
+
+The certificate used by the node's protocols on TLS is chosen in this order:
+
+1. The node's own uploaded certificate (**Nodes → node → ⋯ → Certificate**, or `mikan cert set ... --node N`). It wins over everything.
+2. The public certificate the panel got for this node.
+3. On the panel's own node: the panel's public certificate (for a domain, and now also for an IP).
+4. A self-signed certificate whose fingerprint (the pin) goes into links. Only as a fallback.
+
+With a public certificate, subscription links carry no pin and no "insecure". Then Hysteria2, TUIC, AnyTLS, TrustTunnel and VLESS TLS of this node also appear in sing-box apps (SFA, SFI, SFM, SFT), and TUIC checks the certificate. Links switch only after the node has actually taken the new certificate. Apps that have not refreshed the subscription keep the old pinned link until they do.
+
+Nodes older than the panel cannot get a public certificate: the card says "update the node". They keep working on the pinned self-signed certificate. With it, sing-box apps do not show the node's TLS protocols, and TUIC goes without certificate verification.
+
+The certificate status is shown on the node card, see [Nodes](/mikan/en/nodes/nodes/#node-certificate).
+
+## Your own certbot or nginx on port 80
+
+If certbot or nginx is already installed on the server and holds port 80, it gets in the way of the authority's check. "Check the certificate" names it. There are three ways out:
+
+- free port 80;
+- pass `/.well-known/acme-challenge/` to the panel through `MIKAN_ACME_LISTEN`, as the installer does for nginx and Caddy;
+- upload your own certificate, which wins over the public one.
 
 ## Subscription port
 

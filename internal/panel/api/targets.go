@@ -106,7 +106,7 @@ func (h *handlers) scanTargets(ctx context.Context, in *scanTargetsInput) (*scan
 	out.Body.IP = ip
 	// Self-steal: the SNI is the server's own domain and matches its IP, the target is the
 	// panel with its Let's Encrypt certificate.
-	if local && domain != "" && h.d.Cert != nil && h.d.Cert().Kind == "letsencrypt" {
+	if local && domain != "" && h.d.Cert != nil && h.d.Cert().Kind == "acme" {
 		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		r := scan.Check(cctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(h.panelPort(ctx))), domain, h.scanOptions(ctx))
 		cancel()

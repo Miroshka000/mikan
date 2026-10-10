@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,14 @@ type Key struct {
 	CertPEM   string `json:"cert"`
 	KeyPEM    string `json:"key"`
 	NodeLabel string `json:"name,omitempty"`
+	// PanelURL is where the node says hello once it runs (https://host:port, no path): the
+	// panel then dials it back at once and the installer prints how that went. Keys of
+	// panels before it have none, and a node of such a key just waits for its panel.
+	PanelURL string `json:"panel,omitempty"`
+	// Host is where clients reach the node, its domain or IP: the name its certificate is
+	// ordered for. The installer names it in the command that lets Let's Encrypt through a
+	// web server on port 80. Keys of older panels have none.
+	Host string `json:"host,omitempty"`
 }
 
 const keyPrefix = "mikan1."
@@ -136,7 +145,63 @@ func DecodeKey(s string) (Key, error) {
 	if _, err := tls.X509KeyPair([]byte(k.CertPEM), []byte(k.KeyPEM)); err != nil {
 		return k, fmt.Errorf("node key: %w", err)
 	}
+	// The hello is a convenience: a panel address that is not one is dropped, not fatal.
+	if !ValidPanelURL(k.PanelURL) {
+		k.PanelURL = ""
+	}
 	return k, nil
+}
+
+// ValidPanelURL says whether s is a panel's base address: https, a host, no user, path,
+// query or fragment.
+func ValidPanelURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil &&
+		(u.Path == "" || u.Path == "/") && u.RawQuery == "" && u.Fragment == "" && u.Opaque == ""
+}
+
+// Sign signs msg with a PEM private key of Generate.
+func Sign(keyPEM string, msg []byte) ([]byte, error) {
+	block, _ := pem.Decode([]byte(keyPEM))
+	if block == nil {
+		return nil, errors.New("nodetls: no private key")
+	}
+	k, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	priv, ok := k.(ed25519.PrivateKey)
+	if !ok {
+		return nil, errors.New("nodetls: not an Ed25519 key")
+	}
+	return ed25519.Sign(priv, msg), nil
+}
+
+// Verify checks sig over msg against the key of a PEM certificate and returns the
+// certificate's pin (as Fingerprint).
+func Verify(certPEM string, msg, sig []byte) (string, error) {
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return "", errors.New("nodetls: no certificate")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", err
+	}
+	pub, ok := cert.PublicKey.(ed25519.PublicKey)
+	if !ok {
+		return "", errors.New("nodetls: not an Ed25519 certificate")
+	}
+	if !ed25519.Verify(pub, msg, sig) {
+		return "", errors.New("nodetls: bad signature")
+	}
+	sum := sha256.Sum256(block.Bytes)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// SamePin compares two pins in constant time.
+func SamePin(a, b string) bool {
+	return len(a) == len(b) && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 // ServerConfig is the node side: TLS 1.3, and only the panel's pinned certificate may connect.

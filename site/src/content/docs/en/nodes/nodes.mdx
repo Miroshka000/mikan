@@ -14,7 +14,7 @@ A node accepts client connections, and mihomo runs inside it. One node always ru
 1. In the **Nodes** section click "Add node" and fill in:
    - **Name**: the group in the subscription. A flag at the start of the name is added to the names of its protocols, for example "🇺🇸 VLESS XHTTP".
    - **Server IP**.
-   - **Domain**, optional: used instead of the IP in Hysteria2 and TUIC links.
+   - **Domain**, optional: used instead of the IP in Hysteria2 and TUIC links, and the panel orders the node's certificate for it. Without a domain, the certificate is issued for the IP.
    - **API port**, random by default.
    - **Name in status channel**, optional: see [Notifications](/mikan/en/operations/alerts/).
 
@@ -24,15 +24,17 @@ A node accepts client connections, and mihomo runs inside it. One node always ru
    curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash -s -- --join KEY
    ```
 
-3. Run it as root on the node's server. The installer sets up Docker and the node and opens the ports.
+3. Run it as root on the node's server. The installer sets up Docker and the node and opens the ports, including 80/tcp, which is needed for the node's certificate check. Then it waits up to 75 seconds for the panel to reach the node and prints the result in the terminal, for example "✓ The panel connected to this node." If it did not work, it names the reason and the fix, for example: "✗ The panel could not reach port 31234 here: timed out. Open the port in the hoster's firewall panel; ufw: ufw allow 31234/tcp". A failed check does not fail the install.
 
-4. In about 30 seconds the node's state in the panel changes to "Working".
+4. While the install runs, the key window shows live steps: "Waiting for the install on the server", "The panel reached port N", "The key fits", "Protocols started X/Y", "Internet access works". A step that failed shows its reason and what to do. When all pass, the node's protocols are already in the subscriptions. You can close the window at any time, and the status stays on the card.
 
 </Steps>
 
 :::caution[The key is shown once]
-The panel stores only the key's fingerprint. If you lose it, the "New key" button on the node card issues a new one, and the old one stops working immediately. On the node's server, the new key is accepted by `mikan join KEY`.
+The panel stores only the key's fingerprint. If you lose it, the "Change key" button in the node card menu issues a new one, and the old one stops working immediately. On the node's server, the new key is accepted by `mikan join KEY`.
 :::
+
+The key carries the panel's address: when the node starts, it reports itself to the panel with a signed request, and the panel dials the node back at once. Keys from older panels have no panel address, so there is no such check for them and the node works as before. If the node's server goes out to the internet from a different IP than the one set in the panel, both the terminal and the panel say so: "the node reported from IP Y, the panel has X". Fix the address in **Configure**.
 
 The key contains the node's private key. To keep it out of the process list, you can pass it through the `MIKAN_JOIN_KEY` variable. The `--panel-ip IP` flag opens the node's API port only to the panel's address.
 
@@ -40,18 +42,86 @@ You can also add a node from the panel's server: `mikan node add --name NAME --h
 
 ## Node card
 
-The card shows the state, address, how many protocols are running, connections, CPU and memory load, version and certificate. Since 0.5.0.3 it also shows the node's traffic, which is in a chart and on the overview too. Buttons:
+The card shows the state, address, how many protocols are running, connections, CPU and memory load, version and certificate. Since 0.5.0.3 it also shows the node's traffic, which is in a chart and on the overview too.
+
+The **Certificate** row shows which certificate is in use right now: a public one (with the authority and the expiry), the panel's, your own, or a self-signed one. If there is no public certificate yet, it says why in plain words. The "Get now" button requests it at once and waits up to 90 seconds for the result. More in [Node certificate](#node-certificate). Buttons:
 
 - **Configure**: name, address, domain, and the "Serves clients" switch. A node that is turned off does not accept connections and disappears from subscriptions.
+- **Check node**: a full check with a list and hints, see [If a node does not connect](#if-a-node-does-not-connect).
 - **WARP**: exit to the internet through Cloudflare, see [WARP](/mikan/en/nodes/warp/).
 - **Cascade**: where the node sends other nodes' traffic, see [Cascades](/mikan/en/nodes/cascades/).
 - **Speed**: a check of the node's connection.
-- **Certificate**: your own TLS certificate for Hysteria2, TUIC, AnyTLS and TrustTunnel, see [Domain and certificates](/mikan/en/start/domain/#node-certificate).
+- **Certificate**: your own TLS certificate for Hysteria2, TUIC, AnyTLS, TrustTunnel and VLESS TLS. It wins over the public one, see [Domain and certificates](/mikan/en/start/domain/#node-certificate).
 - **Delete**: removes the node from the panel. The server itself is cleaned with `mikan uninstall` on it. A node that carries a cascade or the bot's connection to Telegram cannot be deleted while it is in use.
+
+## Node certificate
+
+The panel itself orders a public certificate for each remote node: for its domain if it has one, otherwise for its IP (a six-day Let's Encrypt certificate, renewed automatically). The certificate authority checks the node on port 80 (HTTP-01). The node opens port 80 only for the few seconds of a check and releases it after.
+
+- **Port 80/tcp** must be open on the node's server. The installer opens it in ufw, and `mikan update` opens it on nodes installed earlier. Open your hosting provider's firewall yourself.
+- If port 80 on the node is held by another program, the panel says so and names it. For nginx and Caddy one command on the node's server is enough; the panel shows it with the node's address:
+
+  ```bash
+  mikan cert proxy node.example.com
+  ```
+
+  It adds a rule for `/.well-known/acme-challenge/` only to nginx or Caddy (the config is backed up, tested and reloaded, other sites are left alone), sets `MIKAN_ACME_LISTEN` and restarts the node. Then press Retry on the node's card. `mikan doctor` on the node checks port 80 too and suggests this command. Once port 80 is free again, the same command gives it back to the node.
+- With a public certificate, links carry no pin and no "insecure": the node's TLS protocols also appear in sing-box apps, and TUIC checks the certificate. Links switch only after the node has taken the new certificate.
+- A node older than the panel cannot get a public certificate: the card says "update the node". It keeps working on the self-signed certificate with a pin.
+- Your own certificate uploaded with the **Certificate** button wins over the public one.
+- The certificate authority is chosen in **Settings → Security → Panel certificate** and is shared by the panel and all nodes.
+
+The order in which a certificate is chosen, the errors and the "Check the certificate" button are described in [Domain and certificates](/mikan/en/start/domain/#node-certificate).
 
 ## Server order
 
 When there is more than one node, up and down arrows appear on the cards. The order of nodes in the panel becomes the order of servers in the subscription, in all apps.
+
+## If a node does not connect
+
+When the panel cannot reach a node, the card shows the concrete reason and what to do, not a generic "Server is not responding". Commands have copy buttons. The card also says how many minutes ago the node was last in touch, and when the link was lost. "Details" holds the raw error.
+
+| Reason | What happened | What to do |
+|---|---|---|
+| Timed out | the API port does not answer: the hoster's firewall or ufw closed it, or the server is off | open the port in the hoster's control panel; on the server `ufw allow PORT/tcp` |
+| Connection refused | the server answers, but nothing listens on the port: the node is not installed, stopped or crashed | `mikan status`, `mikan logs node`, or run the install command |
+| No route | the IP cannot be reached: the address is wrong or the server is off | the "Change address" button |
+| Name not found | DNS does not know the node's name | check the domain's record or use the IP |
+| Key does not fit | the key is outdated or belongs to another node or panel | "Reissue key", then `mikan join NEW_KEY` on the node |
+| Another program answered | something other than the node answers on this port, for example a web server | free the port or change the API port |
+
+If the node's clock differs from the panel's by 30 seconds or more, the card warns: REALITY and TLS connections break because of it. Turn on time sync on the node's server: `timedatectl set-ntp true`. Older nodes do not report their time, so there is no warning for them.
+
+### Check node
+
+The **Check node** button is in the card menu, and on a failing card it is shown right on the card. It opens a list of checks, each with a status and what to do: a button where the panel can do it ("Reissue key", "Update node", "Change address", "Check again"), or a ready command where only the server can help. It checks:
+
+- the link to the node's API, with the reason from the table above;
+- the node's "hello", see [Add a node](#add-a-node);
+- the node's version against the panel's and the result of the last update in words, for example "the node did not update to X, it stayed on Y";
+- the clock;
+- protocols: how many are running out of how many, and for each failed one its port and reason, for example "port busy";
+- TCP reachability of each TCP protocol's port from the panel's side;
+- the node's own look at its server: DNS, internet, access to GitHub and GHCR (needed for updates), disk and memory. The node cannot see ufw, the port reachability check above covers it;
+- the cascade: for an entry node, whether entry → exit → internet works and where it breaks, see [Cascades](/mikan/en/nodes/cascades/#checking-a-cascade). If other nodes go out through this one, its relay port is shown too.
+
+For old nodes, the lines that need newer data are marked "skipped" with a hint to update the node.
+
+The **Copy a report for the chat** button copies a plain-text report where IPs, domains, the API port and keys are masked. It is safe to paste into the [support chat](/mikan/en/support/).
+
+### Check from Russia
+
+A separate button in the same window, because it calls an external service. The panel asks check-host.net to connect over TCP to the node's API port and to up to two TCP protocol ports from its checkers in Russian cities, and shows the result for each city.
+
+:::caution[What this check does not see]
+It shows only blocks by IP and port. It will not notice DPI or the whitelists of mobile operators: the ports may open and clients still fail to connect.
+:::
+
+The result is cached for 2 minutes, and one check runs at a time.
+
+### If the panel cannot reach the node at all
+
+Log in to the node's server and run `mikan doctor`, see [The mikan command](/mikan/en/operations/cli/#server). For the panel's own server there is a "Check server" button in **Settings → System**: it does the same in the panel.
 
 ## Updating nodes from the panel
 
@@ -64,6 +134,14 @@ A node installs only signed releases and never rolls back to an older version.
 :::note[Nodes on 0.5.0.1 and older]
 They need the `mikan update` command once on their server, and the panel shows it on the card. After that they update from the panel.
 :::
+
+## Share the channel evenly
+
+In **Edit node**, the **Share the channel evenly** switch and the **Channel width** in Mbit/s: what the node really gives each way. "From the test" takes the number from the last [speed check](#speed-check).
+
+Every second the node looks at who is downloading now and splits the channel evenly between them. Light users get what they need, and the rest goes to those who hit their share, so the channel does not sit idle. A user alone gets the whole channel. A plan's speed stays the ceiling.
+
+Once it is on, the node's clients reconnect once; the apps do it themselves. While sharing is on, Vision runs without the kernel's splice: a bit more CPU.
 
 ## Speed check
 

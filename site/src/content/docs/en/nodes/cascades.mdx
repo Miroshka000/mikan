@@ -31,6 +31,16 @@ The **Cascade** button on a node card shows which nodes it sends traffic through
 
 There is also the **Where other nodes' traffic goes next** field: direct, through this node's WARP, or through one more node. This is how chains of three or more servers are built. The panel will not save loops, and a protocol cannot choose its own node as the exit.
 
+## Checking a cascade
+
+Open **Check node** on the entry node (A), see [Nodes](/mikan/en/nodes/nodes/#check-node). The panel checks the entry → exit → internet path and shows where it breaks:
+
+- **the exit node does not answer**: open its card, it has its own reason and hint;
+- **the relay on the exit node is not started**: the exit node did not bring up its port, see that node's check;
+- **the entry cannot reach the relay port on the exit** or **the exit has no internet**: the port is closed by the exit node's hoster firewall, or the exit server does not go out to the internet.
+
+On the exit node itself, if others go out through it, the check shows its relay port.
+
 ## If the relay port is taken
 
 If another program has taken the relay's port, the relay moves to a free port by itself when the "Move to another port when it is blocked" switch is on (**Settings → General → Automatic fixes**). When the relay is not working, a notification arrives in Telegram. This works with nodes on version 0.5.0.2 and newer.

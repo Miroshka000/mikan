@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/netip"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -78,7 +80,7 @@ type patchTelegramInput struct {
 
 type broadcastInput struct {
 	Body struct {
-		Text string `json:"text" minLength:"1" maxLength:"3500" doc:"Обычный текст; {brand} — название сервиса"`
+		Text string `json:"text" minLength:"1" maxLength:"3500" doc:"Текст с Markdown, как тексты бота; {brand} — название сервиса"`
 	}
 }
 
@@ -86,6 +88,34 @@ type broadcastOutput struct {
 	Body struct {
 		Queued int `json:"queued"`
 	}
+}
+
+type telegramPreviewInput struct {
+	Body struct {
+		Text string            `json:"text" maxLength:"3500" doc:"Текст бота с Markdown"`
+		Vars map[string]string `json:"vars,omitempty" maxProperties:"20" doc:"Значения переменных {name}; без них переменные остаются как написаны"`
+	}
+}
+
+type telegramPreviewOutput struct {
+	Body struct {
+		HTML string `json:"html" doc:"Сообщение, как его отправит бот: HTML Telegram"`
+	}
+}
+
+// previewTelegram shows the admin how the bot sends a text: the same conversion the bot
+// runs, without a bot.
+func (h *handlers) previewTelegram(_ context.Context, in *telegramPreviewInput) (*telegramPreviewOutput, error) {
+	vars := make(map[string]string, len(in.Body.Vars))
+	for k, v := range in.Body.Vars {
+		if len(k) > 20 || utf8.RuneCountInString(v) > 200 {
+			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.vars", Message: "tg_text"})
+		}
+		vars[k] = v
+	}
+	out := &telegramPreviewOutput{}
+	out.Body.HTML = tgbot.Render(in.Body.Text, vars)
+	return out, nil
 }
 
 type infrastructureConnectOutput struct {
@@ -126,6 +156,7 @@ func (h *handlers) registerTelegram() {
 	tags := []string{"telegram"}
 	huma.Register(h.api, huma.Operation{OperationID: "get-telegram", Method: http.MethodGet, Path: "/api/v1/telegram", Summary: "Telegram-бот", Tags: tags}, h.getTelegram)
 	huma.Register(h.api, huma.Operation{OperationID: "update-telegram", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPatch, Path: "/api/v1/telegram", Summary: "Настроить Telegram-бота", Tags: tags}, h.updateTelegram)
+	huma.Register(h.api, huma.Operation{OperationID: "telegram-preview", Method: http.MethodPost, Path: "/api/v1/telegram/preview", Summary: "Как бот отправит текст с Markdown", Tags: tags}, h.previewTelegram)
 	huma.Register(h.api, huma.Operation{OperationID: "telegram-broadcast", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/telegram/broadcast", Summary: "Разослать сообщение всем в боте", Tags: tags, DefaultStatus: http.StatusAccepted}, h.broadcast)
 	huma.Register(h.api, huma.Operation{OperationID: "telegram-infrastructure-connect", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/telegram/infrastructure/connect", Summary: "Подключить чат администратора для уведомлений", Tags: tags}, h.connectInfrastructureAdmin)
 	huma.Register(h.api, huma.Operation{OperationID: "telegram-infrastructure-disconnect", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodDelete, Path: "/api/v1/telegram/infrastructure/connect", Summary: "Отключить чат администратора для уведомлений", Tags: tags, DefaultStatus: http.StatusNoContent}, h.disconnectInfrastructureAdmin)
@@ -155,7 +186,10 @@ func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 		st := h.d.Telegram.Status()
 		v.Running, v.Error = st.Running, st.Error
 		v.Config = h.d.Telegram.Config(ctx)
-		v.MiniAppURL = h.d.Telegram.MiniAppURL(ctx)
+		// The address carries the sub path, which is the panel's secret.
+		if !hidesSecrets(ctx) {
+			v.MiniAppURL = h.d.Telegram.MiniAppURL(ctx)
+		}
 		if p := h.d.Telegram.Progress(); p.Total > 0 {
 			v.Broadcast = &TelegramBroadcast{Total: p.Total, Sent: p.Sent, Failed: p.Failed, Started: p.Started.Unix(), Active: p.Active()}
 		}
@@ -184,6 +218,14 @@ func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 		}
 	}
 	v.Route = TelegramRoute{Mode: route.Mode, NodeID: route.NodeID, Proxy: tgbot.MaskProxy(route.Proxy)}
+	if route.NodeID != 0 {
+		// A node deleted since (or before this was kept clean) is no choice to offer back.
+		if _, err := h.d.Store.Q.GetNode(ctx, route.NodeID); errors.Is(err, sql.ErrNoRows) {
+			v.Route.NodeID = 0
+		} else if err != nil {
+			return v, err
+		}
+	}
 	if v.Linked, err = h.d.Store.Q.CountTgLinks(ctx); err != nil {
 		return v, err
 	}
@@ -387,7 +429,13 @@ func (h *handlers) nextRoute(ctx context.Context, r tgbot.Route, mode string, no
 	switch mode {
 	case tgbot.RouteNode:
 		n, err := h.d.Store.Q.GetNode(ctx, nodeID)
-		if err != nil || n.Address == "" {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return r, tgFieldErr("route", "tg_route_node_missing")
+		case err != nil:
+			h.d.Log.Warn("telegram: the route's node not read", "node", nodeID, "err", err)
+			return r, err
+		case n.Address == "":
 			// The panel's own node shares its server, and with it the block.
 			return r, tgFieldErr("route", "tg_route_node")
 		}

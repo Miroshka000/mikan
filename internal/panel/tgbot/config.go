@@ -18,6 +18,9 @@ type Config struct {
 	CleanChat bool         `json:"clean_chat" doc:"Удалять сообщения пользователя, чтобы в чате было одно меню"`
 	// QuietNight: the automatic notices from 22:00 to 9:00 Moscow time come without a sound.
 	QuietNight bool `json:"quiet_night" doc:"Уведомления с 22:00 до 9:00 МСК приходят без звука"`
+	// PromoButton: «Промокоды» under the menu, opening the Mini App at the promo code field.
+	// It needs the Mini App. A bot saved before this option has it on.
+	PromoButton bool `json:"promo_button" doc:"Кнопка «Промокоды» в главном меню (нужен Mini App)"`
 }
 
 // MenuButton of the main menu. Built-in actions open screens; "url" opens a link, "page"
@@ -76,10 +79,11 @@ func Default(lang string) Config {
 			{ID: "support", Action: "support", Label: l("💬 Поддержка", "💬 Support"), On: true, Row: true},
 			{ID: "app", Action: "app", Label: l("🌐 Открыть страницу подписки", "🌐 Open the subscription page"), On: true},
 		},
-		Notify:     Notify{Expire3d: true, Expire1d: true, Expired: true, Traffic90: true, Traffic100: true},
-		MiniApp:    true,
-		CleanChat:  true,
-		QuietNight: true,
+		Notify:      Notify{Expire3d: true, Expire1d: true, Expired: true, Traffic90: true, Traffic100: true},
+		MiniApp:     true,
+		CleanChat:   true,
+		QuietNight:  true,
+		PromoButton: true,
 	}
 }
 

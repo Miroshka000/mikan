@@ -404,6 +404,18 @@ func TestBot(t *testing.T) {
 	if !strings.Contains(text(edit), "Pixel 9") || buttons(edit)["❌ Pixel 9"] != "dc:"+strconv.FormatInt(bound[0].ID, 10) {
 		t.Fatalf("devices: %q %v", text(edit), buttons(edit))
 	}
+	// The rules under the list: what is left of the limit, and the pause of an unbound device.
+	if !strings.Contains(text(edit), "Можно отвязать ещё 1 из 1 за сутки.") || !strings.Contains(text(edit), "не сможет подключиться снова 1 день") {
+		t.Fatalf("the rules: %q", text(edit))
+	}
+	// Asking first says to close the app, or it comes back.
+	e.later()
+	n = e.tg.count()
+	e.press(anna, menuMsg, "dc:"+strconv.FormatInt(bound[0].ID, 10))
+	edit, _ = find(e.tg.wait(t, n, "editMessageText"), "editMessageText")
+	if !strings.Contains(text(edit), "Отвязать «Pixel 9»?") || !strings.Contains(text(edit), "только через 1 день: сначала закройте на нём приложение") {
+		t.Fatalf("confirmation: %q", text(edit))
+	}
 	e.later()
 	n = e.tg.count()
 	e.press(anna, menuMsg, "du:"+strconv.FormatInt(bound[0].ID, 10))
@@ -417,6 +429,27 @@ func TestBot(t *testing.T) {
 	edit, _ = find(e.tg.wait(t, n, "editMessageText"), "editMessageText")
 	if !strings.Contains(text(edit), "Следующее устройство можно отвязать") {
 		t.Fatalf("second unbind the same day: %q", text(edit))
+	}
+	// While none is left the list has no buttons to tap, only the line with the moment.
+	e.later()
+	n = e.tg.count()
+	e.press(anna, menuMsg, "d")
+	edit, _ = find(e.tg.wait(t, n, "editMessageText"), "editMessageText")
+	if !strings.Contains(text(edit), "<b>⏳ Следующее устройство можно отвязать") {
+		t.Fatalf("the wait on top: %q", text(edit))
+	}
+	for label := range buttons(edit) {
+		if strings.HasPrefix(label, "❌") {
+			t.Fatalf("an unbind button while none is left: %v", buttons(edit))
+		}
+	}
+	// A confirmation asked for before stays closed: the list again.
+	e.later()
+	n = e.tg.count()
+	e.press(anna, menuMsg, "dc:"+strconv.FormatInt(bound[1].ID, 10))
+	edit, _ = find(e.tg.wait(t, n, "editMessageText"), "editMessageText")
+	if strings.Contains(text(edit), "Отвязать «") {
+		t.Fatalf("a confirmation past the limit: %q", text(edit))
 	}
 
 	// Somebody else's device id does nothing.
@@ -619,7 +652,7 @@ func TestConfigSavedBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := b.Config(ctx)
-	if !c.QuietNight {
+	if !c.QuietNight || !c.PromoButton {
 		t.Fatal("an option added later keeps its default")
 	}
 	if c.CleanChat || c.Notify.Expire1d || c.Texts.Main != "Привет" || len(c.Buttons) != 2 || c.Buttons[1].Label != "Продлить" || c.Buttons[1].Row {

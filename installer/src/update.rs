@@ -777,12 +777,13 @@ pub fn converge(say: &mut dyn FnMut(&str)) -> Result<()> {
     let install = Install::load()?;
     let root = Path::new(DIR);
     // The pool of ports the panel moves a blocked inbound to may have grown since the
-    // install opened it: ufw gets the whole of it again (a rule it has is left as it is).
+    // install opened it, and a node installed before public node certificates lacks port 80:
+    // ufw gets them again (a rule it has is left as it is).
     if install.ufw()
         && crate::system::ufw_active()
-        && let Err(e) = host::pool_rules().iter().try_for_each(|r| host::allow(r))
+        && let Err(e) = host::update_rules().iter().try_for_each(|r| host::allow(r))
     {
-        say(&format!("ufw did not take the ports of the pool ({e:#}): open them yourself"));
+        say(&format!("ufw did not take port 80 and the ports of the pool ({e:#}): open them yourself"));
     }
     if !install.node && install.env.get("MIKAN_DATABASE_URL").is_none() {
         // post-update must never activate the PostgreSQL compose over a live SQLite

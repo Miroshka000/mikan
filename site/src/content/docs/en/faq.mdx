@@ -7,7 +7,7 @@ description: Common problems when installing and running mikan, and what to do a
 
 ### Port 80 or 443 is taken by nginx or Caddy
 
-The installer will not stop. Protocols whose port is taken get other free ports. If a domain is set, the installer offers to add a rule for Let's Encrypt checks to nginx or Caddy: the config is saved, validated and restored if there is an error. If port 80 is held by another program, such as Apache, there will be no Let's Encrypt certificate until the port is freed. You can [install your own certificate](/mikan/en/start/domain/#own-certificate).
+The installer will not stop. Protocols whose port is taken get other free ports. If a domain is set, the installer offers to add a rule for the certificate authority's checks to nginx or Caddy (`/.well-known/acme-challenge/` goes to the panel through `MIKAN_ACME_LISTEN`): the config is saved, validated and restored if there is an error. If port 80 is held by another program, such as Apache, there will be no public certificate until the port is freed or you pass the checks to the panel. You can [install your own certificate](/mikan/en/start/domain/#own-certificate). The same goes for nodes: port 80 on their server is also needed for the certificate, see [Node certificate](/mikan/en/nodes/nodes/#node-certificate).
 
 ### The installer does not accept the domain
 
@@ -25,7 +25,33 @@ On the server: `mikan url`, `mikan reset-password`, `mikan disable-2fa`. More in
 
 ### The browser complains about the certificate, the Mini App does not open
 
-The panel is running with a self-signed certificate because it could not get one from Let's Encrypt. Check that port 80 is open from outside, including in your hosting provider's firewall, and click "Request now" in **Settings → Security → Panel certificate**.
+The panel is running with a self-signed certificate because it could not get a public one. Click "Check the certificate" in **Settings → Security**: the check shows the reason and suggests a fix. Most often it is one of these:
+
+- port 80 is closed from outside, including in your hosting provider's firewall (`ufw allow 80/tcp`);
+- the domain goes through the Cloudflare proxy: turn off the orange cloud, it must be grey;
+- certbot or nginx sits on port 80: see the question about [your own certbot](#your-own-certbot-on-the-server-gets-in-the-panels-way).
+
+When the cause is fixed, click "Get now" in **Settings → Security → Panel certificate**. The button waits up to 90 seconds and shows the result or the reason right in the card. An error the panel does not recognize is shown in the certificate authority's own words under "More". Details in [Domain and certificates](/mikan/en/start/domain/#if-a-certificate-is-not-issued).
+
+### The certificate is not issued, "Get now" does nothing
+
+1. Open **Settings → Security** and click "Check the certificate". Each problem there has a button or a command for the server.
+2. Open port 80/tcp on the server and in your hosting provider's firewall. The certificate authority needs it for a few seconds.
+3. If the domain is behind Cloudflare, switch the record to "DNS only" (the grey cloud).
+4. Check that the domain's A and AAAA records point to this server.
+5. If certbot or nginx holds port 80, free it or pass the checks to the panel.
+6. If the panel mentions a rate limit, wait for the time it names: the authority lifts the limit by itself.
+7. If the authority does not answer or refuses, you can switch to ZeroSSL (it needs only an e-mail).
+
+Without a domain, only Let's Encrypt issues a certificate for the IP, so another authority will not help there.
+
+### Your own certbot on the server gets in the panel's way
+
+Certbot or nginx on port 80 intercept the certificate authority's check, and "Check the certificate" names them. There are three ways out: free port 80, pass `/.well-known/acme-challenge/` to the panel through `MIKAN_ACME_LISTEN` (the installer does this for nginx and Caddy), or upload your own certificate, which wins over the public one. The certbot renewal hook is described in [Own certificate](/mikan/en/start/domain/#own-certificate), the rest in [Your own certbot or nginx on port 80](/mikan/en/start/domain/#your-own-certbot-or-nginx-on-port-80).
+
+### It works on the phone, but the TV or an old Android shows a certificate error
+
+Android 7.0 and older and TV boxes do not trust Let's Encrypt: in 2024 it dropped the old cross-signed chain. Choose ZeroSSL in **Settings → Security → Panel certificate**: its chain leads to roots these devices have. It needs a domain, and ZeroSSL needs only an e-mail. Certificates are reissued, and the old ones keep working until the new ones arrive. More in [Certificate authority](/mikan/en/start/domain/#certificate-authority).
 
 ## Connections
 
@@ -35,7 +61,18 @@ These protocols run over UDP. Some hosting providers and networks block UDP enti
 
 ### The app does not see a protocol
 
-A subscription gives an app only what it can run. Happ and v2RayTun will not get TUIC and AnyTLS, and TrustTunnel, Mieru and other new protocols go only to Clash apps with a recent core. The "Delivered to" line in the connection form shows who gets it. See the [table](/mikan/en/protocols/presets/#who-gets-what).
+A subscription gives an app only what it can run. Happ and v2RayTun will not get TUIC and AnyTLS, and TrustTunnel, Mieru and other new protocols go only to Clash apps with a recent core. The "Delivered to" line in the connection form shows who gets it. See the [table](/mikan/en/protocols/presets/#who-gets-what). If some apps have a protocol and SFA or SFI do not, see the next question.
+
+### It works here but not there: Hysteria2, TUIC, AnyTLS are missing in SFA or SFI
+
+sing-box apps (SFA, SFI, SFM, SFT) get a node's protocols on TLS only if the node has a public certificate. While the node has a self-signed certificate with a pin, these protocols are not given to them, and TUIC goes without certificate verification. What to do:
+
+1. Open the node's card in **Nodes**: the "Certificate" row shows what is in use and why there is no public one. Click "Get now".
+2. If it says "update the node", update it with the **Update** button: nodes older than the panel cannot get a public certificate.
+3. If the certificate is not issued, open port 80/tcp on the node's server (`mikan update` on the node opens it in ufw) and click "Check the certificate" in **Settings → Security**.
+4. After that, ask to refresh the subscription. Links switch once the node has taken the new certificate, and apps that have not refreshed the subscription keep the old link.
+
+More in [Node certificate](/mikan/en/start/domain/#node-certificate).
 
 ### I changed the port and clients do not connect
 
@@ -43,7 +80,11 @@ Apps refresh the subscription once an hour. Ask them to update the subscription 
 
 ### A device says there are no free slots
 
-Device binding is on and the plan's limit is used up. Unbind the old device in the user's card, or the subscriber can do it on the subscription page or in the bot (once a day).
+Device binding is on and the plan's limit is used up. Unbind the old device in the user's card, or the subscriber can do it on the subscription page or in the bot (how many and how often is set in the subscription settings).
+
+### The app says "This device is blocked"
+
+The administrator banned this device for this user. Lift the ban in the user's card: **Devices → Banned → Unban**. On its next subscription update the device takes a free place.
 
 ### Automatic fixes do not move a blocked port
 
@@ -53,7 +94,15 @@ They wait for cut-off devices from at least two different networks and 30 minute
 
 ### A node shows "No connection"
 
-The panel could not reach the node's API port. Check that the node is running (`mikan status` on its server) and that the API port is open in the hosting provider's firewall for the panel's address. If the key may have been lost, issue a new one with the "New key" button and accept it on the node with `mikan join`.
+The panel could not reach the node. The reason and what to do are written right on the card, for example "the API port does not answer: open it in the hoster's firewall". Click **Check node**: it has a full list of checks with hints, and the "Copy a report for the chat" button gives text without IPs and keys for support. If the panel cannot reach the node at all, run `mikan doctor` on its server. All reasons are listed in the [Nodes](/mikan/en/nodes/nodes/#if-a-node-does-not-connect) section.
+
+### A node did not update
+
+Open **Check node**: the update line says in words what happened, for example "the node did not update to X, it stayed on Y". Click "Update node". If the node is on 0.5.0.1 or older, run `mikan update` once on its server. More in [Updating nodes from the panel](/mikan/en/nodes/nodes/#updating-nodes-from-the-panel).
+
+### The panel says the node's IP is different
+
+The node's server goes out to the internet from a different address than the one set in the panel ("the node reported from IP Y, the panel has X"). If clients cannot connect, fix the address with the "Change address" button or in **Configure**.
 
 ### WARP fails the check
 

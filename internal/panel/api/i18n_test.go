@@ -48,6 +48,8 @@ var codesByText = []string{
 	// subs.TemplateError, as a detail's Message.
 	"template_yaml", "template_empty", "template_groups", "template_group_name", "template_group_dup", "template_group_member",
 	"template_rule", "template_rule_target", "template_rule_set",
+	// checkCA, as a detail's Message.
+	"email_invalid", "eab_kid_invalid", "eab_hmac_invalid", "zerossl_email_required", "google_eab_required",
 }
 
 // codesNotShown are sent but never shown by their text, so they need none.

@@ -139,6 +139,9 @@ export function InboundsPage() {
                   {i.apps.length > 0 && i.apps.length < 5 ? (
                     <p className="mt-2 text-xs text-[var(--ink-500)]">{t("inbounds.appsLine", { list: i.apps.map((a) => tMaybe(`inbounds.apps.${a}`) ?? a).join(", ") })}</p>
                   ) : null}
+                  {i.enabled && i.node_cert && nodes.data?.find((n) => n.id === i.node_id)?.tls?.pinned ? (
+                    <p className="mt-2 text-xs text-[var(--ink-500)]">{t("certs.pinnedNote")}</p>
+                  ) : null}
                   {i.status === "error" && i.error ? (
                     <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
                       {listenerError(i.error)}

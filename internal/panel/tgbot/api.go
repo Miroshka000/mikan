@@ -12,6 +12,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -90,8 +91,12 @@ func (c *Client) do(parent context.Context, req *http.Request, out any) error {
 		if parent.Err() != nil {
 			return parent.Err()
 		}
-		// The error text would carry the URL, and the URL the token.
-		return ErrUnreachable
+		// The error text would carry the URL, and the URL the token: only the cause is kept.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
 	defer resp.Body.Close()
 	var r struct {
@@ -104,7 +109,7 @@ func (c *Client) do(parent context.Context, req *http.Request, out any) error {
 		} `json:"parameters"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return ErrUnreachable
+		return fmt.Errorf("%w: HTTP %d is not a Bot API answer", ErrUnreachable, resp.StatusCode)
 	}
 	if !r.OK {
 		return &APIError{Code: r.ErrorCode, Description: r.Description, RetryAfter: time.Duration(r.Parameters.RetryAfter) * time.Second}
@@ -242,7 +247,24 @@ func (c *Client) Send(ctx context.Context, chat int64, text string, kb *Keyboard
 		in["reply_markup"] = kb
 	}
 	err := c.call(ctx, "sendMessage", in, &m)
+	if unparsable(err) {
+		asPlain(in, text)
+		err = c.call(ctx, "sendMessage", in, &m)
+	}
 	return m, err
+}
+
+// unparsable: Telegram refused the message's HTML. The admin's texts are made to parse
+// (markdown.go); should one still not, it goes as plain text instead of not at all.
+func unparsable(err error) bool {
+	var ae *APIError
+	return errors.As(err, &ae) && ae.Code == 400 && strings.Contains(strings.ToLower(ae.Description), "can't parse entities")
+}
+
+// asPlain makes a request's HTML text plain.
+func asPlain(in map[string]any, text string) {
+	in["text"] = plainText(text)
+	delete(in, "parse_mode")
 }
 
 // SendTo is Send for a Telegram channel target: its numeric chat id or @username.
@@ -279,6 +301,10 @@ func (c *Client) Edit(ctx context.Context, chat, msg int64, text string, kb *Key
 		in["reply_markup"] = kb
 	}
 	err := c.call(ctx, "editMessageText", in, nil)
+	if unparsable(err) {
+		asPlain(in, text)
+		err = c.call(ctx, "editMessageText", in, nil)
+	}
 	var ae *APIError
 	if errors.As(err, &ae) && strings.Contains(ae.Description, "message is not modified") {
 		return nil

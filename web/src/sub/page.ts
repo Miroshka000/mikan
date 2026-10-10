@@ -4,6 +4,7 @@
 import type { CSSProperties } from "react";
 import type { components } from "../api/schema";
 import type { Platform } from "./apps";
+import { followsMode, isDarkTheme, isTheme } from "../lib/themes";
 
 export type PageConfig = components["schemas"]["Page"];
 export type PageBlock = components["schemas"]["PageBlock"];
@@ -95,7 +96,15 @@ export function onColor(color: string): string {
  * page's <html>, or the admin's preview frame.
  */
 export function lookAttrs(look: PageLook, scheme: "light" | "dark", accent?: string): { data: Record<string, string>; style: CSSProperties } {
+  // A panel theme other than the four that follow the mode is light or dark by itself, and
+  // brings all of its tokens (styles/themes.css) through data-theme and data-tone.
+  const own = !followsMode(look.palette) && isTheme(look.palette);
+  if (own) scheme = isDarkTheme(look.palette) ? "dark" : "light";
   const data: Record<string, string> = { palette: look.palette, scheme, font: look.font, radius: look.radius, cards: look.cards };
+  if (own) {
+    data.theme = look.palette;
+    data.tone = scheme;
+  }
   const style: Record<string, string> = {};
   if (accent) {
     data.accent = "own";
@@ -109,7 +118,7 @@ export function lookAttrs(look: PageLook, scheme: "light" | "dark", accent?: str
 export function paintLook(el: HTMLElement, look: PageLook, scheme: "light" | "dark", accent?: string) {
   const { data, style } = lookAttrs(look, scheme, accent);
   el.classList.add("sub-look");
-  for (const k of ["palette", "scheme", "font", "radius", "cards", "accent"]) {
+  for (const k of ["palette", "scheme", "font", "radius", "cards", "accent", "theme", "tone"]) {
     if (data[k]) el.dataset[k] = data[k];
     else delete el.dataset[k];
   }

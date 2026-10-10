@@ -10,6 +10,7 @@ import { t } from "../../../i18n";
 import { bytes, dateShort } from "../../../lib/format";
 import { PoolLimitsField } from "../pools";
 import { tariffSummary } from "../tariffs";
+import { LimitPicker } from "./limit-picker";
 import { Section, Stat } from "./section";
 
 export function TariffSection({ u }: { u: User }) {
@@ -26,6 +27,7 @@ export function TariffSection({ u }: { u: User }) {
           <div className="font-display text-base font-medium tracking-tight">{current?.name ?? t("userDrawer.customTerms")}</div>
           <div className="mt-0.5 text-xs text-[var(--ink-500)]">
             {u.traffic_limit != null ? bytes(u.traffic_limit) : t("userDrawer.noTrafficLimit")} · {u.device_limit != null ? t("userDrawer.devicesShort", { n: u.device_limit }) : t("userDrawer.noDeviceLimit")}
+            {u.speed_limit != null ? ` · ${t("tariffs.speedShort", { n: u.speed_limit })}` : ""}
             {current?.price_label ? ` · ${current.price_label}` : ""}
           </div>
         </div>
@@ -47,6 +49,7 @@ export function TariffSection({ u }: { u: User }) {
           </Menu.Portal>
         </Menu.Root>
       </div>
+      <SpeedRow u={u} />
       <Confirm
         open={pick !== null}
         onOpenChange={(v) => !v && setPick(null)}
@@ -68,6 +71,29 @@ export function TariffSection({ u }: { u: User }) {
         }
       />
     </Section>
+  );
+}
+
+/** The client's own speed cap; the tariff sets it, here it changes for this client only. */
+function SpeedRow({ u }: { u: User }) {
+  const toast = useToast();
+  const update = useUserMutation(userActions.update);
+  return (
+    <div className="mt-3">
+      <LimitPicker
+        label={t("userDrawer.speed")}
+        value={u.speed_limit}
+        presets={[10, 25, 50, 100]}
+        min={1}
+        max={100000}
+        unit={t("tariffs.mbps")}
+        busy={update.isPending}
+        onChange={(n, done) =>
+          update.mutate({ id: u.id, body: n === null ? { speed_unlimited: true } : { speed_limit: n } }, { onSuccess: done, onError: (e) => toast.error(errorText(e)) })
+        }
+      />
+      <p className="mt-2 text-xs text-[var(--ink-500)]">{t("userDrawer.speedHint")}</p>
+    </div>
   );
 }
 

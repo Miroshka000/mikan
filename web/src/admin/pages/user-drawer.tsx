@@ -1,10 +1,10 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { CalendarPlus, MoreHorizontal, Power, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import { CalendarPlus, MoreHorizontal, Pencil, Power, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { errorText, type User } from "../../api/client";
+import { ApiError, errorText, type User } from "../../api/client";
 import { onePeriod, userActions, useUser, useUserMutation } from "../../api/hooks";
 import { Disclosure } from "../../components/layout";
-import { Confirm, Drawer } from "../../components/overlay";
+import { Confirm, Drawer, NameDialog } from "../../components/overlay";
 import { useToast } from "../../components/toast";
 import { QueryBoundary } from "../../components/query";
 import { Avatar, Button, Skeleton, StatePill } from "../../components/ui";
@@ -21,12 +21,20 @@ import { TorrentSection } from "./user/torrent";
 export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }) {
   const user = useUser(id);
   const u = user.data;
+  const [renaming, setRenaming] = useState(false);
   return (
     <Drawer
       wide
       open={!!id}
       onOpenChange={(v) => !v && onClose()}
       title={u?.name ?? t("userDrawer.fallbackTitle")}
+      titleAction={
+        u ? (
+          <button type="button" className="icon-btn shrink-0" aria-label={t("userDrawer.renameLabel", { name: u.name })} title={t("userDrawer.rename")} onClick={() => setRenaming(true)}>
+            <Pencil size={16} aria-hidden />
+          </button>
+        ) : undefined
+      }
       lead={u ? <Avatar name={u.name} seed={u.id} size="lg" /> : undefined}
       meta={
         u ? (
@@ -51,13 +59,53 @@ export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }
         }
       >
         {/* A failed poll keeps the card (and the forms in it); the notice sits above it. */}
-        {(data) => <UserBody key={data.id} u={data} onDeleted={onClose} />}
+        {(data) => <UserBody key={data.id} u={data} onDeleted={onClose} onRename={() => setRenaming(true)} />}
       </QueryBoundary>
+      {u ? <RenameUser u={u} open={renaming} onOpenChange={setRenaming} /> : null}
     </Drawer>
   );
 }
 
-function UserBody({ u, onDeleted }: { u: User; onDeleted: () => void }) {
+/** A new name for the client: the link, the keys and the devices stay as they are. */
+function RenameUser({ u, open, onOpenChange }: { u: User; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const toast = useToast();
+  const update = useUserMutation(userActions.update);
+  // A refused name stands under the field; anything else is a toast.
+  const fieldError = update.error instanceof ApiError ? update.error.fields.name : undefined;
+  return (
+    <NameDialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) update.reset();
+        onOpenChange(v);
+      }}
+      title={t("userDrawer.renameTitle")}
+      label={t("userDrawer.renameField")}
+      hint={t("userDrawer.renameHint")}
+      initial={u.name}
+      maxLength={100}
+      error={fieldError}
+      loading={update.isPending}
+      onSubmit={(name) =>
+        update.mutate(
+          { id: u.id, body: { name } },
+          {
+            onSuccess: (r) => {
+              onOpenChange(false);
+              update.reset();
+              toast.ok(t("userDrawer.renamed", { name: r.name }));
+            },
+            onError: (e) => {
+              if (!(e instanceof ApiError && e.fields.name)) toast.error(errorText(e));
+            },
+          },
+        )
+      }
+    />
+  );
+}
+
+function UserBody({ u, onDeleted, onRename }: { u: User; onDeleted: () => void; onRename: () => void }) {
   const toast = useToast();
   const extend = useUserMutation(userActions.extend);
   const reset = useUserMutation(userActions.reset);
@@ -96,6 +144,9 @@ function UserBody({ u, onDeleted }: { u: User; onDeleted: () => void }) {
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
+              <Menu.Item className="menu-item" onSelect={onRename}>
+                <Pencil size={16} aria-hidden /> {t("userDrawer.rename")}
+              </Menu.Item>
               <Menu.Item className="menu-item" onSelect={() => setConfirm("reissue")}>
                 <RefreshCw size={16} aria-hidden /> {t("userDrawer.reissue")}
               </Menu.Item>
