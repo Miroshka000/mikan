@@ -67,7 +67,7 @@ func (h *handlers) registerCerts() {
 		Summary: "Получить публичный сертификат ноды сейчас (ждёт до 90 с)", Tags: []string{"node"}}, h.renewNodeCertificate)
 	huma.Register(h.api, huma.Operation{OperationID: "set-certificate", Method: http.MethodPut, Path: "/api/v1/settings/certificate", Summary: "Поставить свой сертификат панели",
 		Tags: tags, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.setCertificate)
-	huma.Register(h.api, huma.Operation{OperationID: "clear-certificate", Method: http.MethodDelete, Path: "/api/v1/settings/certificate", Summary: "Вернуть сертификат Let's Encrypt",
+	huma.Register(h.api, huma.Operation{OperationID: "clear-certificate", Method: http.MethodDelete, Path: "/api/v1/settings/certificate", Summary: "Убрать свой сертификат панели: вернётся автоматический",
 		Tags: tags, Metadata: sessionOnly, Extensions: sessionOnlyExt, DefaultStatus: http.StatusNoContent}, h.clearCertificate)
 	nodeTags := []string{"node"}
 	huma.Register(h.api, huma.Operation{OperationID: "set-node-certificate", Method: http.MethodPut, Path: "/api/v1/nodes/{id}/certificate", Summary: "Поставить ноде свой сертификат",

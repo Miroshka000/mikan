@@ -10961,7 +10961,7 @@
             "description": "Error"
           }
         },
-        "summary": "Вернуть сертификат Let's Encrypt",
+        "summary": "Убрать свой сертификат панели: вернётся автоматический",
         "tags": [
           "settings"
         ],

@@ -14,7 +14,7 @@ A node accepts client connections, and mihomo runs inside it. One node always ru
 1. In the **Nodes** section click "Add node" and fill in:
    - **Name**: the group in the subscription. A flag at the start of the name is added to the names of its protocols, for example "🇺🇸 VLESS XHTTP".
    - **Server IP**.
-   - **Domain**, optional: used instead of the IP in Hysteria2 and TUIC links.
+   - **Domain**, optional: used instead of the IP in Hysteria2 and TUIC links, and the panel orders the node's certificate for it. Without a domain, the certificate is issued for the IP.
    - **API port**, random by default.
    - **Name in status channel**, optional: see [Notifications](/mikan/en/operations/alerts/).
 
@@ -24,7 +24,7 @@ A node accepts client connections, and mihomo runs inside it. One node always ru
    curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash -s -- --join KEY
    ```
 
-3. Run it as root on the node's server. The installer sets up Docker and the node and opens the ports. Then it waits up to 75 seconds for the panel to reach the node and prints the result in the terminal, for example "✓ The panel connected to this node." If it did not work, it names the reason and the fix, for example: "✗ The panel could not reach port 31234 here: timed out. Open the port in the hoster's firewall panel; ufw: ufw allow 31234/tcp". A failed check does not fail the install.
+3. Run it as root on the node's server. The installer sets up Docker and the node and opens the ports, including 80/tcp, which is needed for the node's certificate check. Then it waits up to 75 seconds for the panel to reach the node and prints the result in the terminal, for example "✓ The panel connected to this node." If it did not work, it names the reason and the fix, for example: "✗ The panel could not reach port 31234 here: timed out. Open the port in the hoster's firewall panel; ufw: ufw allow 31234/tcp". A failed check does not fail the install.
 
 4. While the install runs, the key window shows live steps: "Waiting for the install on the server", "The panel reached port N", "The key fits", "Protocols started X/Y", "Internet access works". A step that failed shows its reason and what to do. When all pass, the node's protocols are already in the subscriptions. You can close the window at any time, and the status stays on the card.
 
@@ -42,15 +42,30 @@ You can also add a node from the panel's server: `mikan node add --name NAME --h
 
 ## Node card
 
-The card shows the state, address, how many protocols are running, connections, CPU and memory load, version and certificate. Since 0.5.0.3 it also shows the node's traffic, which is in a chart and on the overview too. Buttons:
+The card shows the state, address, how many protocols are running, connections, CPU and memory load, version and certificate. Since 0.5.0.3 it also shows the node's traffic, which is in a chart and on the overview too.
+
+The **Certificate** row shows which certificate is in use right now: a public one (with the authority and the expiry), the panel's, your own, or a self-signed one. If there is no public certificate yet, it says why in plain words. The "Get now" button requests it at once and waits up to 90 seconds for the result. More in [Node certificate](#node-certificate). Buttons:
 
 - **Configure**: name, address, domain, and the "Serves clients" switch. A node that is turned off does not accept connections and disappears from subscriptions.
 - **Check node**: a full check with a list and hints, see [If a node does not connect](#if-a-node-does-not-connect).
 - **WARP**: exit to the internet through Cloudflare, see [WARP](/mikan/en/nodes/warp/).
 - **Cascade**: where the node sends other nodes' traffic, see [Cascades](/mikan/en/nodes/cascades/).
 - **Speed**: a check of the node's connection.
-- **Certificate**: your own TLS certificate for Hysteria2, TUIC, AnyTLS and TrustTunnel, see [Domain and certificates](/mikan/en/start/domain/#node-certificate).
+- **Certificate**: your own TLS certificate for Hysteria2, TUIC, AnyTLS, TrustTunnel and VLESS TLS. It wins over the public one, see [Domain and certificates](/mikan/en/start/domain/#node-certificate).
 - **Delete**: removes the node from the panel. The server itself is cleaned with `mikan uninstall` on it. A node that carries a cascade or the bot's connection to Telegram cannot be deleted while it is in use.
+
+## Node certificate
+
+The panel itself orders a public certificate for each remote node: for its domain if it has one, otherwise for its IP (a six-day Let's Encrypt certificate, renewed automatically). The certificate authority checks the node on port 80 (HTTP-01). The node opens port 80 only for the few seconds of a check and releases it after.
+
+- **Port 80/tcp** must be open on the node's server. The installer opens it in ufw, and `mikan update` opens it on nodes installed earlier. Open your hosting provider's firewall yourself.
+- If port 80 on the node is held by another program (nginx, Caddy), the panel says so and names the program when the node can tell. You can set a port for the check on the node with the line `MIKAN_ACME_LISTEN=127.0.0.1:18080` in `/opt/mikan/.env` on the node's server (then `cd /opt/mikan && docker compose up -d`), and pass `/.well-known/acme-challenge/` there from the web server, like on the panel.
+- With a public certificate, links carry no pin and no "insecure": the node's TLS protocols also appear in sing-box apps, and TUIC checks the certificate. Links switch only after the node has taken the new certificate.
+- A node older than the panel cannot get a public certificate: the card says "update the node". It keeps working on the self-signed certificate with a pin.
+- Your own certificate uploaded with the **Certificate** button wins over the public one.
+- The certificate authority is chosen in **Settings → Security → Panel certificate** and is shared by the panel and all nodes.
+
+The order in which a certificate is chosen, the errors and the "Check the certificate" button are described in [Domain and certificates](/mikan/en/start/domain/#node-certificate).
 
 ## Server order
 

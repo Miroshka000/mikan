@@ -1078,7 +1078,7 @@ export interface paths {
         /** Поставить свой сертификат панели */
         put: operations["set-certificate"];
         post?: never;
-        /** Вернуть сертификат Let's Encrypt */
+        /** Убрать свой сертификат панели: вернётся автоматический */
         delete: operations["clear-certificate"];
         options?: never;
         head?: never;
