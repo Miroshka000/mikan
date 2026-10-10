@@ -426,7 +426,7 @@ func nodeCert(n Node, panel acme.Status) CertCheck {
 		// The panel's own node takes the panel's certificate once it is public.
 		ch.Status, ch.Code = Warn, "node_local_self_signed"
 		ch.CertFix = &CertFix{Action: FixRenew}
-		if panel.Kind == "custom" {
+		if panel.Kind == "custom" || panel.Error == "no_public_host" {
 			ch.CertFix = nil
 		}
 		return ch

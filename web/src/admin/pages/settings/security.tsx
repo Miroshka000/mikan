@@ -124,7 +124,7 @@ export function CertificateCard({ s }: { s: Schemas["SettingsView"] }) {
       ) : null}
       <p className="mb-3 text-xs text-[var(--ink-500)]">{custom ? t("settings.certOwnNote") : t("settings.certNote")}</p>
       <div className="flex flex-wrap gap-2">
-        {!custom ? (
+        {!custom && c.error !== "no_public_host" ? (
           <Button size="sm" loading={renew.isPending} disabled={renew.isPending || c.ordering} onClick={() => renew.mutate()}>
             <RefreshCw size={16} aria-hidden /> {failed ? t("certs.retry") : t("certs.getNow")}
           </Button>
