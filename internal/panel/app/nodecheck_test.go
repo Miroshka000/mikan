@@ -74,7 +74,9 @@ func TestCheckNodeAndHello(t *testing.T) {
 			if n.Address == "" {
 				return nodesync.Target{}, nodesync.ErrNoNode
 			}
-			return nodesync.Target{Node: fake, TLS: func() (*nodeapi.TLSFiles, error) { return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, nil }, Address: n.Address}, nil
+			return nodesync.Target{Node: fake, TLS: func() (*nodeapi.TLSFiles, string, error) {
+				return &nodeapi.TLSFiles{CertPEM: "c", KeyPEM: "k"}, "", nil
+			}, Address: n.Address}, nil
 		}
 	})
 	if err := domain.Seed(ctx, h.st, h.now); err != nil {

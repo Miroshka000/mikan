@@ -677,6 +677,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить ноду: связь, версия, часы, протоколы, порты, интернет, каскад */
+        post: operations["check-node"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/nodes/{id}/check-russia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить порты ноды из России через check-host.net */
+        post: operations["check-node-russia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/key": {
         parameters: {
             query?: never;
@@ -1309,6 +1343,23 @@ export interface paths {
         post?: never;
         /** Убрать логотип или фон страницы подписки */
         delete: operations["delete-sub-page-image"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Проверить сервер панели */
+        post: operations["check-server"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2141,11 +2192,41 @@ export interface components {
             checked_at: string;
             checks: components["schemas"]["CertCheck"][];
         };
+        CheckItem: {
+            /** @description Почему не ok: timeout, refused, pin_mismatch, behind, skew, busy и другие */
+            code?: string;
+            /** @description Слова ошибки как есть, для «подробнее» */
+            detail?: string;
+            /**
+             * @description Что исправит: кнопка в панели или команда на сервере
+             * @enum {string}
+             */
+            fix?: "rekey" | "update_node" | "old_node" | "open_port" | "start_node" | "check_host" | "check_dns" | "free_port" | "sync_time" | "update_panel" | "free_disk" | "check_outbound" | "restart_panel" | "exit_node";
+            /** @description Что проверено: link, hello, version, update, skew, listeners, listener, port, relay, cascade, node_dns, node_internet, node_github, node_ghcr, node_disk, node_memory, diagnose, local_node, dns, internet, github, ghcr, disk, memory, clock, updates */
+            id: string;
+            params?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            status: "ok" | "warn" | "fail" | "skip";
+        };
         CheckTargetInputBody: {
             /** @description host:port */
             dest: string;
             /** @description Имя для клиентов; по умолчанию — хост из dest */
             sni?: string;
+        };
+        CheckView: {
+            /** Format: date-time */
+            at: string;
+            items: components["schemas"]["CheckItem"][];
+            /** @description Отчёт для чата: адреса, домены, порт API и ключи скрыты */
+            report: string;
+        };
+        CityResult: {
+            city: string;
+            id: string;
+            ports: components["schemas"]["PortResult"][];
         };
         ClientEndpoint: {
             /**
@@ -2705,6 +2786,22 @@ export interface components {
             /** @description Публично доверенный для адреса: приложения принимают его без пина */
             trusted: boolean;
         };
+        NodeHello: {
+            /** Format: date-time */
+            at: string;
+            code?: string;
+            /** @description Адрес ноды в панели */
+            host?: string;
+            /** @description Hello пришёл не с того IP, что указан в панели */
+            ip_differs: boolean;
+            /** @description Панель достучалась до ноды в ответ на её hello */
+            ok: boolean;
+            params?: {
+                [key: string]: string;
+            };
+            /** @description Адрес, с которого пришёл hello */
+            seen_ip?: string;
+        };
         NodeInfo: {
             /** @description host:port API ноды; пусто у своей ноды */
             address: string;
@@ -2715,6 +2812,11 @@ export interface components {
             certificate?: components["schemas"]["NodeCertView"];
             /** Format: date-time */
             checked_at?: string;
+            /**
+             * Format: int64
+             * @description Часы ноды минус часы панели, секунды; нет у старых нод
+             */
+            clock_skew?: number;
             /** Format: int64 */
             conns: number;
             /**
@@ -2724,13 +2826,35 @@ export interface components {
             cpu_percent: number;
             domain: string;
             enabled: boolean;
+            /** @description Слова ошибки связи как есть, для «подробнее» */
             error?: string;
+            /**
+             * @description Почему панель не достучалась до ноды
+             * @enum {string}
+             */
+            error_code?: "timeout" | "refused" | "unreachable" | "dns" | "pin_mismatch" | "tls" | "http_status" | "unknown";
+            /** @description host и port адреса API ноды, status ответа */
+            error_params?: {
+                [key: string]: string;
+            };
+            /**
+             * Format: date-time
+             * @description С какого момента нет связи
+             */
+            error_since?: string;
+            /** @description Последний hello ноды после запуска: достучалась ли панель в ответ */
+            hello?: components["schemas"]["NodeHello"];
             /** @description Адрес для клиентов */
             host: string;
             /** Format: int64 */
             id: number;
             /** Format: int64 */
             inbounds: number;
+            /**
+             * Format: date-time
+             * @description Когда нода последний раз отвечала (с запуска панели)
+             */
+            last_ok_at?: string;
             /** Format: int64 */
             listeners: number;
             /** Format: int64 */
@@ -3408,6 +3532,15 @@ export interface components {
             inbounds: string[];
             name: string;
         };
+        PortResult: {
+            error?: string;
+            /** Format: int64 */
+            ms?: number;
+            ok: boolean;
+            pending?: boolean;
+            /** Format: int64 */
+            port: number;
+        };
         Preview: {
             /** @description Пользователи, которых mikan не примет, с причиной */
             invalid: components["schemas"]["List"];
@@ -3699,6 +3832,19 @@ export interface components {
         RoutesPreviewOutputBody: {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
+        };
+        RussiaPort: {
+            /** @description api или имя подключения */
+            name: string;
+            /** Format: int64 */
+            port: number;
+        };
+        RussiaView: {
+            /** Format: date-time */
+            at: string;
+            cached: boolean;
+            cities: components["schemas"]["CityResult"][];
+            ports: components["schemas"]["RussiaPort"][];
         };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
@@ -6077,6 +6223,68 @@ export interface operations {
             };
         };
     };
+    "check-node": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-node-russia": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RussiaView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "rekey-node": {
         parameters: {
             query?: never;
@@ -7710,6 +7918,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "check-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckView"];
+                };
             };
             /** @description Error */
             default: {

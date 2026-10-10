@@ -996,6 +996,63 @@
         ],
         "type": "object"
       },
+      "CheckItem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "Почему не ok: timeout, refused, pin_mismatch, behind, skew, busy и другие",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Слова ошибки как есть, для «подробнее»",
+            "type": "string"
+          },
+          "fix": {
+            "description": "Что исправит: кнопка в панели или команда на сервере",
+            "enum": [
+              "rekey",
+              "update_node",
+              "old_node",
+              "open_port",
+              "start_node",
+              "check_host",
+              "check_dns",
+              "free_port",
+              "sync_time",
+              "update_panel",
+              "free_disk",
+              "check_outbound",
+              "restart_panel",
+              "exit_node"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "description": "Что проверено: link, hello, version, update, skew, listeners, listener, port, relay, cascade, node_dns, node_internet, node_github, node_ghcr, node_disk, node_memory, diagnose, local_node, dns, internet, github, ghcr, disk, memory, clock, updates",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "fail",
+              "skip"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "type": "object"
+      },
       "CheckTargetInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1012,6 +1069,54 @@
         },
         "required": [
           "dest"
+        ],
+        "type": "object"
+      },
+      "CheckView": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CheckItem"
+            },
+            "type": "array"
+          },
+          "report": {
+            "description": "Отчёт для чата: адреса, домены, порт API и ключи скрыты",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "items",
+          "report"
+        ],
+        "type": "object"
+      },
+      "CityResult": {
+        "additionalProperties": false,
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/PortResult"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ports",
+          "id",
+          "city"
         ],
         "type": "object"
       },
@@ -2628,6 +2733,46 @@
         ],
         "type": "object"
       },
+      "NodeHello": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "host": {
+            "description": "Адрес ноды в панели",
+            "type": "string"
+          },
+          "ip_differs": {
+            "description": "Hello пришёл не с того IP, что указан в панели",
+            "type": "boolean"
+          },
+          "ok": {
+            "description": "Панель достучалась до ноды в ответ на её hello",
+            "type": "boolean"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "seen_ip": {
+            "description": "Адрес, с которого пришёл hello",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "ok",
+          "ip_differs"
+        ],
+        "type": "object"
+      },
       "NodeInfo": {
         "additionalProperties": false,
         "properties": {
@@ -2650,6 +2795,11 @@
             "format": "date-time",
             "type": "string"
           },
+          "clock_skew": {
+            "description": "Часы ноды минус часы панели, секунды; нет у старых нод",
+            "format": "int64",
+            "type": "integer"
+          },
           "conns": {
             "format": "int64",
             "type": "integer"
@@ -2666,7 +2816,38 @@
             "type": "boolean"
           },
           "error": {
+            "description": "Слова ошибки связи как есть, для «подробнее»",
             "type": "string"
+          },
+          "error_code": {
+            "description": "Почему панель не достучалась до ноды",
+            "enum": [
+              "timeout",
+              "refused",
+              "unreachable",
+              "dns",
+              "pin_mismatch",
+              "tls",
+              "http_status",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "error_params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "host и port адреса API ноды, status ответа",
+            "type": "object"
+          },
+          "error_since": {
+            "description": "С какого момента нет связи",
+            "format": "date-time",
+            "type": "string"
+          },
+          "hello": {
+            "$ref": "#/components/schemas/NodeHello",
+            "description": "Последний hello ноды после запуска: достучалась ли панель в ответ"
           },
           "host": {
             "description": "Адрес для клиентов",
@@ -2679,6 +2860,11 @@
           "inbounds": {
             "format": "int64",
             "type": "integer"
+          },
+          "last_ok_at": {
+            "description": "Когда нода последний раз отвечала (с запуска панели)",
+            "format": "date-time",
+            "type": "string"
           },
           "listeners": {
             "format": "int64",
@@ -4569,6 +4755,33 @@
         ],
         "type": "object"
       },
+      "PortResult": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "pending": {
+            "type": "boolean"
+          },
+          "port": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "port",
+          "ok"
+        ],
+        "type": "object"
+      },
       "Preview": {
         "additionalProperties": false,
         "properties": {
@@ -5404,6 +5617,55 @@
         },
         "required": [
           "profile"
+        ],
+        "type": "object"
+      },
+      "RussiaPort": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "description": "api или имя подключения",
+            "type": "string"
+          },
+          "port": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "port",
+          "name"
+        ],
+        "type": "object"
+      },
+      "RussiaView": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "cached": {
+            "type": "boolean"
+          },
+          "cities": {
+            "items": {
+              "$ref": "#/components/schemas/CityResult"
+            },
+            "type": "array"
+          },
+          "ports": {
+            "items": {
+              "$ref": "#/components/schemas/RussiaPort"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "ports",
+          "at",
+          "cities",
+          "cached"
         ],
         "type": "object"
       },
@@ -9498,6 +9760,92 @@
         ]
       }
     },
+    "/api/v1/nodes/{id}/check": {
+      "post": {
+        "operationId": "check-node",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Проверить ноду: связь, версия, часы, протоколы, порты, интернет, каскад",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}/check-russia": {
+      "post": {
+        "operationId": "check-node-russia",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RussiaView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Проверить порты ноды из России через check-host.net",
+        "tags": [
+          "node"
+        ]
+      }
+    },
     "/api/v1/nodes/{id}/key": {
       "post": {
         "operationId": "rekey-node",
@@ -11722,6 +12070,37 @@
           "sub-page"
         ],
         "x-session-only": true
+      }
+    },
+    "/api/v1/system/check": {
+      "post": {
+        "operationId": "check-server",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Проверить сервер панели",
+        "tags": [
+          "settings"
+        ]
       }
     },
     "/api/v1/tariffs": {
