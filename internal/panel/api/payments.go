@@ -10,6 +10,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 )
@@ -42,8 +43,10 @@ type patchPaymentSettingsInput struct {
 		AllowNew           *bool  `json:"allow_new,omitempty"`
 		RenewResetsTraffic *bool  `json:"renew_resets_traffic,omitempty"`
 		TrialTariffID      *int64 `json:"trial_tariff_id,omitempty" minimum:"0" doc:"Тариф пробного периода; 0 — выключить"`
-		TrialStars         *int64 `json:"trial_stars,omitempty" minimum:"0" maximum:"10000" doc:"Цена пробного периода в Stars; 0 — не за Stars"`
-		TrialRub           *int64 `json:"trial_rub,omitempty" minimum:"0" maximum:"100000000" doc:"Цена пробного периода в копейках, от 100 (1 ₽); 0 — не за рубли. Обе 0 — пробный период бесплатный"`
+		// The bounds are domain.MaxPriceStars and domain.MaxPriceRub, which a tag cannot
+		// name; the handler checks the prices against them.
+		TrialStars *int64 `json:"trial_stars,omitempty" minimum:"0" maximum:"10000" doc:"Цена пробного периода в Stars; 0 — не за Stars"`
+		TrialRub   *int64 `json:"trial_rub,omitempty" minimum:"0" maximum:"100000000" doc:"Цена пробного периода в копейках, от 100 (1 ₽); 0 — не за рубли. Обе 0 — пробный период бесплатный"`
 	}
 }
 
@@ -162,13 +165,22 @@ func (h *handlers) updatePaymentSettings(ctx context.Context, in *patchPaymentSe
 		}
 		c.TrialTariffID = *b.TrialTariffID
 	}
+	// The trial costs what a tariff may cost (domain.CheckPrices); 0 is no price at all,
+	// and both prices at 0 make it free.
 	if b.TrialStars != nil {
+		if n := *b.TrialStars; n != 0 && !domain.PriceStarsOK(n) {
+			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.trial_stars", Message: "bad_price"})
+		}
 		c.TrialStars = *b.TrialStars
 	}
 	if b.TrialRub != nil {
-		// As a tariff's price: no less than a ruble.
-		if n := *b.TrialRub; n > 0 && n < 100 {
-			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.trial_rub", Message: "trial_rub_min"})
+		if n := *b.TrialRub; n != 0 && !domain.PriceRubOK(n) {
+			// A price under a ruble is the mistake worth its own words.
+			message := "bad_price"
+			if n < domain.MinPriceRub {
+				message = "trial_rub_min"
+			}
+			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.trial_rub", Message: message})
 		}
 		c.TrialRub = *b.TrialRub
 	}

@@ -14,6 +14,7 @@ import { Button, EmptyState, ErrorState, Field, PageHeader, Pill, Skeleton, Spin
 import { t, tMaybe } from "../../i18n";
 import { useDraft } from "../../lib/draft";
 import { dateShort, days, money, num, time } from "../../lib/format";
+import { badRub, badStars, kopecks } from "../../lib/price";
 import { PAYMENT_TABS, type PaymentsSearch } from "../search";
 import { AddonsCard, addonName, useAddons } from "./payment-addons";
 import { PromoSection } from "./promocodes";
@@ -316,17 +317,18 @@ function RulesCard({ s }: { s: Settings }) {
     // The trial's price as a tariff's: empty is no price, both empty a free trial.
     const errs: Record<string, string> = {};
     const starsN = Number(form.trialStars);
-    const rubN = Math.round(Number(form.trialRub.replace(",", ".")) * 100);
-    if (form.trialStars.trim() && (!Number.isInteger(starsN) || starsN < 1 || starsN > 10000)) errs.trial_stars = t("tariffs.errStars");
-    if (form.trialRub.trim() && (!Number.isFinite(rubN) || rubN < 100 || rubN > 100000000)) errs.trial_rub = t("tariffs.errRub");
+    const rubN = kopecks(form.trialRub);
+    if (badStars(form.trialStars)) errs.trial_stars = t("tariffs.errStars");
+    if (badRub(form.trialRub)) errs.trial_rub = t("tariffs.errRub");
     setErrors(errs);
     if (Object.keys(errs).length) return;
     save.mutate({
       allow_new: form.allowNew,
       renew_resets_traffic: form.resetTraffic,
       trial_tariff_id: form.trial,
-      trial_stars: form.trialStars.trim() ? starsN : 0,
-      trial_rub: form.trialRub.trim() ? rubN : 0,
+      // No trial, no price: a price left in the hidden fields does not come back later.
+      trial_stars: form.trial && form.trialStars.trim() ? starsN : 0,
+      trial_rub: form.trial && form.trialRub.trim() ? rubN : 0,
     });
   };
   return (
@@ -349,7 +351,10 @@ function RulesCard({ s }: { s: Settings }) {
           />
           <div className="pt-4">
             <Field label={t("payments.trial")} htmlFor="pay-trial" hint={`${form.trialStars.trim() || form.trialRub.trim() ? t("payments.trialSubPaid") : t("payments.trialSub")}${s.trials ? ` ${t("payments.trialsGiven", { n: s.trials })}` : ""}`}>
-              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => setForm((f) => ({ ...f, trial: Number(e.target.value) }))}>
+              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => {
+                  const trial = Number(e.target.value);
+                  setForm((f) => (trial ? { ...f, trial } : { ...f, trial, trialStars: "", trialRub: "" }));
+                }}>
                 <option value={0}>{t("payments.trialOff")}</option>
                 {(tariffs.data ?? []).map((tr) => (
                   <option key={tr.id} value={tr.id}>
@@ -371,7 +376,7 @@ function RulesCard({ s }: { s: Settings }) {
             ) : null}
           </div>
         </div>
-        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
+        <FormActions dirty={dirty} saving={save.isPending} onReset={() => { reset(); setErrors({}); }} />
       </form>
     </section>
   );

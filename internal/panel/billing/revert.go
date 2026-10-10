@@ -286,7 +286,7 @@ func (s *Service) refunded(ctx context.Context, id int64) (Reverted, error) {
 			return err
 		case "pending", "expired", "paid", "failed":
 			// Refunded before it was applied: it never will be.
-			n, err := q.MarkLatePromoRefunded(ctx, db.MarkLatePromoRefundedParams{RefundedAt: at, ID: id})
+			n, err := q.MarkRefundedUnapplied(ctx, db.MarkRefundedUnappliedParams{RefundedAt: at, ID: id})
 			open = n == 1
 			return err
 		}

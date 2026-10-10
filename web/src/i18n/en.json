@@ -251,6 +251,7 @@
       "timeout": "The payment system did not answer in time",
       "user_gone": "The subscription was deleted after the invoice",
       "package_gone": "The package's pool was deleted after the invoice",
+      "trial_refund_failed": "The trial was paid for but can no longer be given, and the refund did not go through. Refund it by hand",
       "yookassa_bad_response": "YooKassa sent an answer the panel does not understand",
       "yookassa_bad_id": "YooKassa returned a bad payment id",
       "cryptobot_bad_response": "CryptoBot sent an answer the panel does not understand",

@@ -40,8 +40,9 @@ var (
 
 // codesByText reach the web as text with no literal the scan sees.
 var codesByText = []string{
-	// billing.errCode: payments.error of a paid payment the panel could not apply yet.
-	"addon_unreachable", "no_slots", "timeout", "user_gone", "package_gone",
+	// billing.errCode: payments.error of a paid payment the panel could not apply yet,
+	// and billing.refundTrial for a paid trial it may neither give nor refund.
+	"addon_unreachable", "no_slots", "timeout", "user_gone", "package_gone", "trial_refund_failed",
 	// subs.Routes.Check, as a detail's Message.
 	"routes_service", "routes_target", "routes_direct", "routes_dns",
 	"routes_lists_many", "routes_list_name", "routes_list_url", "routes_list_behavior", "routes_list_format", "routes_servers",

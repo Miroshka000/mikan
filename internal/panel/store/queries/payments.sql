@@ -38,7 +38,8 @@ UPDATE payments SET status = sqlc.arg(new_status) WHERE id = sqlc.arg(id) AND st
 -- name: MarkPaymentRefunded :execrows
 UPDATE payments SET status = 'refunded', refunded_at = $1 WHERE id = $2 AND status = 'applied';
 
--- name: MarkLatePromoRefunded :execrows
+-- name: MarkRefundedUnapplied :execrows
+-- A refund of what was never applied: the invoice gave nothing back to take away.
 UPDATE payments SET status = 'refunded', refunded_at = sqlc.arg(refunded_at), error = '' WHERE id = sqlc.arg(id) AND status IN ('pending','expired','paid','failed');
 
 -- name: FindOpenPayment :one

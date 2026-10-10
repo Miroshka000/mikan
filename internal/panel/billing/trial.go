@@ -65,6 +65,21 @@ func (s *Service) trialAllowed(ctx context.Context, q *db.Queries, tgID int64) (
 	return n == 0, err
 }
 
+// trialAllowedFor: the account of payment pay may still be given the trial, asked while
+// that payment is already paid, so it does not count against itself. Everything else does:
+// a trial taken, a subscription of its own, a plan or a second trial paid for in the
+// meantime. The trial a payment bought is given once, to someone who had nothing.
+func (s *Service) trialAllowedFor(ctx context.Context, q *db.Queries, pay db.Payment) (bool, error) {
+	if taken, err := q.HasTrial(ctx, pay.TgID); err != nil || taken {
+		return false, err
+	}
+	if n, err := q.CountTgLinksOf(ctx, pay.TgID); err != nil || n > 0 {
+		return false, err
+	}
+	n, err := q.CountUserPaidPaymentsExcept(ctx, db.CountUserPaidPaymentsExceptParams{TgID: pay.TgID, ID: pay.ID})
+	return n == 0, err
+}
+
 // Trial gives tgID the free trial: a subscription on the trial tariff, linked to the
 // account. Once per account: the trial is taken on the transaction that makes the
 // subscription, so two taps (or two chats of one account) make one.
@@ -196,16 +211,29 @@ func (s *Service) TrialInvoice(ctx context.Context, tgID int64, provider string)
 
 // applyTrial makes the paid trial on q's transaction: a subscription on the tariff and
 // for the term the payment was made for, linked to the buyer, with the trial taken by the
-// account. A second paid trial of one account (two invoices paid at once) still gives what
-// was paid for; the trial stays taken by the first.
+// account. ErrTrialUsed when the account may no longer be given it (it took its trial,
+// became a customer, or paid for a second trial): nothing is made then, and Apply gives
+// the money back instead.
 func (s *Service) applyTrial(ctx context.Context, q *db.Queries, pay db.Payment) (db.User, error) {
-	now := s.d.Now()
-	taken, err := q.TakeTrial(ctx, db.TakeTrialParams{TgID: pay.TgID, TariffID: pay.TariffID, CreatedAt: now.Unix()})
+	allowed, err := s.trialAllowedFor(ctx, q, pay)
 	if err != nil {
 		return db.User{}, err
 	}
-	u, err := s.d.Users.CreateOn(ctx, q, domain.CreateInput{Name: buyerName(ctx, q, pay.TgID), Note: "Telegram · trial", TariffID: pay.TariffID.Int64,
-		TermDays: pay.TermDays, Source: domain.UserFromTrial}, domain.Patch{})
+	if !allowed {
+		return db.User{}, ErrTrialUsed
+	}
+	now := s.d.Now()
+	// The trial is taken on the transaction that gives it, so two invoices paid at once
+	// make one trial: the second finds it taken and is given back.
+	if taken, err := q.TakeTrial(ctx, db.TakeTrialParams{TgID: pay.TgID, TariffID: pay.TariffID, CreatedAt: now.Unix()}); err != nil {
+		return db.User{}, err
+	} else if taken == 0 {
+		return db.User{}, ErrTrialUsed
+	}
+	// Bought like every other payment, with the trial's own source and note: a tariff
+	// archived since the invoice still gives what was paid for.
+	u, _, err := s.d.Users.Purchase(ctx, q, domain.PurchaseInput{TariffID: pay.TariffID.Int64, Term: pay.TermDays,
+		Name: buyerName(ctx, q, pay.TgID), Note: "Telegram · trial", Source: domain.UserFromTrial})
 	if err != nil {
 		return db.User{}, err
 	}
@@ -215,10 +243,5 @@ func (s *Service) applyTrial(ctx context.Context, q *db.Queries, pay db.Payment)
 	if err := q.SetTgCurrent(ctx, db.SetTgCurrentParams{Current: u.ID, TgID: pay.TgID}); err != nil {
 		return db.User{}, err
 	}
-	if taken > 0 {
-		if err := q.SetTrialUser(ctx, db.SetTrialUserParams{UserID: sql.NullInt64{Int64: u.ID, Valid: true}, TgID: pay.TgID}); err != nil {
-			return db.User{}, err
-		}
-	}
-	return u, nil
+	return u, q.SetTrialUser(ctx, db.SetTrialUserParams{UserID: sql.NullInt64{Int64: u.ID, Valid: true}, TgID: pay.TgID})
 }

@@ -145,3 +145,91 @@ func TestPaidTrialRefund(t *testing.T) {
 		t.Fatalf("a refund gave the trial back: %v", err)
 	}
 }
+
+// Two trial invoices paid at once give one trial: the second is given back. It is paid
+// without a pre-checkout on purpose, as an adapter's webhook arrives, or as a pre-checkout
+// answered before the first payment landed would have let it through.
+func TestPaidTrialPaidTwice(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.priceTrial()
+	first, err := e.s.TrialInvoice(ctx, 916, Stars)
+	must(t, err)
+	// A second invoice of the same account: within the first minutes the open one is
+	// shown again instead.
+	e.now = e.now.Add(invoiceReuse + time.Minute)
+	second, err := e.s.TrialInvoice(ctx, 916, Stars)
+	must(t, err)
+	if second.ID == first.ID {
+		t.Fatal("the second tap reused the open invoice")
+	}
+	users := e.users()
+	must(t, e.s.StarsPaid(ctx, 916, first.Payload, "ch-trial-1", "XTR", 1))
+	// Telegram is down for the refund: the payment waits with its reason on it.
+	e.tg.refundErr = errors.New("Telegram unavailable")
+	if err := e.s.StarsPaid(ctx, 916, second.Payload, "ch-trial-2", "XTR", 1); err == nil {
+		t.Fatal("a second trial that could not be refunded passed as done")
+	}
+	if got := e.payment(second.ID); got.Status != "paid" || got.Error != "trial_refund_failed" {
+		t.Fatalf("the second paid trial after a failed refund: %+v", got)
+	}
+	// The reconcile pass tries the refund again, and Telegram is back.
+	e.tg.refundErr = nil
+	e.s.Reconcile(ctx)
+	if got := e.payment(first.ID); got.Status != "applied" {
+		t.Fatalf("the first paid trial is %q", got.Status)
+	}
+	got := e.payment(second.ID)
+	if got.Status != "refunded" || !got.RefundedAt.Valid || got.Error != "" {
+		t.Fatalf("the second paid trial: %+v", got)
+	}
+	if e.users() != users+1 {
+		t.Fatalf("two paid trials made %d subscriptions", e.users()-users)
+	}
+	if refunds := append([]string(nil), e.tg.refunds...); len(refunds) != 1 || refunds[0] != "ch-trial-2" {
+		t.Fatalf("refunds %v", refunds)
+	}
+	if links, err := e.st.Q.ListTgLinksOf(ctx, 916); err != nil || len(links) != 1 {
+		t.Fatalf("links %+v %v", links, err)
+	}
+}
+
+// What was true at the invoice is asked again before the Stars are taken: an account that
+// became a customer in between pays nothing.
+func TestPaidTrialPreCheckoutAsksAgain(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.priceTrial()
+	p, err := e.s.TrialInvoice(ctx, 917, Stars)
+	must(t, err)
+	must(t, e.s.PreCheckout(ctx, 917, p.Payload, "XTR", 1))
+	u, err := e.s.d.Users.Create(ctx, domain.CreateInput{Name: "bought one", TariffID: e.sale.ID})
+	must(t, err)
+	must(t, e.st.Q.LinkTg(ctx, db.LinkTgParams{UserID: u.ID, TgID: 917, CreatedAt: e.now.Unix()}))
+	if err := e.s.PreCheckout(ctx, 917, p.Payload, "XTR", 1); !errors.Is(err, ErrTrialUsed) {
+		t.Fatalf("a customer's trial invoice passed the pre-checkout: %v", err)
+	}
+}
+
+// An invoice outlives the offer it was made for: the trial turned off, made free, or moved
+// to another tariff. The pre-checkout refuses it either way, so no Stars are taken.
+func TestPaidTrialPreCheckoutAfterTheOfferChanged(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	trial := e.priceTrial()
+	p, err := e.s.TrialInvoice(ctx, 918, Stars)
+	must(t, err)
+	for _, c := range []struct {
+		what string
+		cfg  Config
+	}{
+		{"off", Config{Enabled: true, Stars: true}},
+		{"free", Config{Enabled: true, Stars: true, TrialTariffID: trial.ID}},
+		{"on another tariff", Config{Enabled: true, Stars: true, TrialTariffID: e.sale.ID, TrialStars: 1}},
+	} {
+		must(t, settings.Set(ctx, e.s.d.Settings, KeyConfig, c.cfg))
+		if err := e.s.PreCheckout(ctx, 918, p.Payload, "XTR", 1); !errors.Is(err, ErrTrialOff) {
+			t.Fatalf("the pre-checkout of an invoice for a trial %s: %v", c.what, err)
+		}
+	}
+}

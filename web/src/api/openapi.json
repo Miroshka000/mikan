@@ -4281,7 +4281,7 @@
             "type": "boolean"
           },
           "trial_rub": {
-            "description": "Цена пробного периода в копейках; 0 — не за рубли. Обе 0 — пробный период бесплатный",
+            "description": "Цена пробного периода в копейках, от 100 (1 ₽); 0 — не за рубли. Обе 0 — пробный период бесплатный",
             "format": "int64",
             "maximum": 100000000,
             "minimum": 0,
@@ -4290,7 +4290,7 @@
           "trial_stars": {
             "description": "Цена пробного периода в Stars; 0 — не за Stars",
             "format": "int64",
-            "maximum": 100000,
+            "maximum": 10000,
             "minimum": 0,
             "type": "integer"
           },
