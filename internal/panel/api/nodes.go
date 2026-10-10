@@ -534,6 +534,17 @@ func (h *handlers) deleteNode(ctx context.Context, in *nodeIDInput) (*struct{}, 
 		if err := q.DeleteNode(ctx, n.ID); err != nil {
 			return err
 		}
+		// The bot's route may still name it from when it went through it: the admin
+		// panel would offer a node that is gone.
+		set := settings.New(q)
+		if route, ok, err := settings.Get[tgbot.Route](ctx, set, tgbot.KeyRoute); err != nil {
+			return err
+		} else if ok && route.NodeID == n.ID {
+			route.NodeID = 0
+			if err := settings.Set(ctx, set, tgbot.KeyRoute, route); err != nil {
+				return err
+			}
+		}
 		return q.DeleteNodeStateOf(ctx, strconv.FormatInt(n.ID, 10))
 	})
 	if err != nil {

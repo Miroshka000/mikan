@@ -218,6 +218,14 @@ func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 		}
 	}
 	v.Route = TelegramRoute{Mode: route.Mode, NodeID: route.NodeID, Proxy: tgbot.MaskProxy(route.Proxy)}
+	if route.NodeID != 0 {
+		// A node deleted since (or before this was kept clean) is no choice to offer back.
+		if _, err := h.d.Store.Q.GetNode(ctx, route.NodeID); errors.Is(err, sql.ErrNoRows) {
+			v.Route.NodeID = 0
+		} else if err != nil {
+			return v, err
+		}
+	}
 	if v.Linked, err = h.d.Store.Q.CountTgLinks(ctx); err != nil {
 		return v, err
 	}

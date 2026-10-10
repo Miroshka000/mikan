@@ -522,19 +522,22 @@ function RouteCard({ v }: { v: View }) {
   const [error, setError] = useState("");
   const remote = (nodes.data ?? []).filter((n) => !n.local);
   const nodeName = (id?: number) => remote.find((n) => n.id === id)?.name ?? `#${id}`;
+  // Only a node of the list can be chosen. A saved route may still name a node deleted
+  // since: React would show the first option for it while the form sent the old id.
+  const picked = remote.some((n) => n.id === nodeId && tunnels(n.version)) ? nodeId : 0;
   const now =
     saved.mode === "node"
       ? t("telegram.routeNowNode", { name: nodeName(saved.node_id) })
       : saved.mode === "proxy"
         ? t("telegram.routeNowProxy", { proxy: saved.proxy ?? "" })
         : t("telegram.routeNowDirect");
-  const changed = mode !== saved.mode || (mode === "node" && nodeId !== (saved.node_id ?? 0)) || (mode === "proxy" && proxy.trim() !== "");
-  const ready = mode === "direct" || (mode === "node" && nodeId > 0) || (mode === "proxy" && (proxy.trim() !== "" || !!saved.proxy));
+  const changed = mode !== saved.mode || (mode === "node" && picked !== (saved.node_id ?? 0)) || (mode === "proxy" && proxy.trim() !== "");
+  const ready = mode === "direct" || (mode === "node" && picked > 0) || (mode === "proxy" && (proxy.trim() !== "" || !!saved.proxy));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setError("");
     const route: Schemas["PatchTelegramInputBody"]["route"] =
-      mode === "node" ? { mode, node_id: nodeId } : mode === "proxy" ? { mode, ...(proxy.trim() ? { proxy: proxy.trim() } : {}) } : { mode };
+      mode === "node" ? { mode, node_id: picked } : mode === "proxy" ? { mode, ...(proxy.trim() ? { proxy: proxy.trim() } : {}) } : { mode };
     patch.mutate(
       { route },
       {
@@ -594,7 +597,7 @@ function RouteCard({ v }: { v: View }) {
             </div>
           ) : (
             <Field label={t("telegram.routeNodeLabel")} htmlFor="tg-route-node" hint={t("telegram.routeNodeHint")} error={error}>
-              <select id="tg-route-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
+              <select id="tg-route-node" className="input max-w-[320px]" value={picked} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
                 <option value={0} disabled>
                   {t("telegram.routeNodePick")}
                 </option>
