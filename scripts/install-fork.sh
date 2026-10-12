@@ -54,7 +54,7 @@ fi
 
 # REV печатается при каждом запуске: видно, какая именно копия скрипта сейчас выполняется
 # (за прокси или кэшем curl на сервере может отдаться не та).
-REV="2026-10-12.5"
+REV="2026-10-12.6"
 TRACE=0
 DIED=0
 die() { DIED=1; printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
@@ -283,7 +283,41 @@ elif [ "$DRY_RUN" != 1 ]; then
   printf '%s\n' "$OLD_IMAGE" >"$STATE_FILE"
 fi
 
-step "1/6. Что стоит сейчас"
+step "1/7. Образ форка доступен"
+# Тянем ДО того, как что-либо меняем. Реестр может отказать (пакет в ghcr по умолчанию
+# закрытый), и тогда сбой стоит ноль секунд и не требует отката — в прошлый раз образ не
+# тянулся, стек уже переключился, и всё пришлось возвращать назад.
+if docker image inspect "$FORK_IMAGE" >/dev/null 2>&1; then
+  ok "$FORK_IMAGE уже есть на сервере"
+elif [ "$DRY_RUN" = 1 ]; then
+  printf '  \033[2m(пробный запуск) docker pull %s\033[0m\n' "$FORK_IMAGE"
+else
+  printf '  docker pull %s … ' "$FORK_IMAGE"
+  if docker pull "$FORK_IMAGE" >/tmp/mikan-pull.log 2>&1; then
+    printf '\033[32mок\033[0m\n'
+  else
+    printf '\033[31mне скачался\033[0m\n'
+    sed -n '1,6p' /tmp/mikan-pull.log | sed 's/^/    /' >&2
+    # Подсказка про закрытый пакет — по имени из самого образа, а не зашитая.
+    reg=$(printf '%s' "$FORK_IMAGE" | sed -E 's|^([^/]+)/.*|\1|')
+    case $FORK_IMAGE in */*/*) owner=$(printf '%s' "$FORK_IMAGE" | sed -E 's|^[^/]+/||; s|/.*||') ;; *) owner="" ;; esac
+    {
+      printf '\n  Образ %s сервер не достаёт. Два пути:\n\n' "$FORK_IMAGE"
+      if [ -n "$owner" ]; then
+        printf '  1) Открыть пакет — тогда тянет кто угодно, без входа:\n'
+        printf '     github.com/%s → Packages → %s → Package settings → Change visibility → Public\n\n' \
+          "$owner" "$(printf '%s' "$FORK_IMAGE" | sed -E 's|^[^/]+/[^/]+/||; s|:[^:]*$||')"
+      fi
+      printf '  2) Войти на сервере под своим аккаунтом:\n'
+      printf '     docker login %s -u %s\n' "$reg" "${owner:-$reg}"
+      printf '     (токен: github.com/settings/tokens → Generate new token → read:packages)\n\n'
+      printf '  Ничего не изменено: образ прежний, база на месте.\n\n'
+    } >&2
+    exit 1
+  fi
+fi
+
+step "2/7. Что стоит сейчас"
 info "каталог $MIKAN_DIR · образ $OLD_IMAGE · скрипт $REV"
 
 # Стек может быть не поднят — тогда читать схему нечем. Поднимаем базу и пробуем ещё раз.
@@ -312,7 +346,7 @@ TARIFFS=$(sql "SELECT count(*) FROM tariffs")
 PAYMENTS=$(sql "SELECT count(*) FROM payments")
 ok "схема PostgreSQL $BEFORE_SCHEMA · $USERS клиентов · $TARIFFS тарифов · $PAYMENTS платежей"
 
-step "2/6. Защита от тихого отката на обычный mikan"
+step "3/7. Защита от тихого отката на обычный mikan"
 STOCK_VERSION=$(dc exec -T panel mikan version 2>/dev/null | tr -d '[:space:]' || true)
 FORK_VERSION=$(docker run --rm --entrypoint mikan "$FORK_IMAGE" version 2>/dev/null | tr -d '[:space:]' || true)
 ok "сейчас ${STOCK_VERSION:-?}, в форке ${FORK_VERSION:-?}"
@@ -327,7 +361,7 @@ else
   switch_off nodes_follow_panel || ok "автообновление нод выключено"
 fi
 
-step "3/6. Резервная копия"
+step "4/7. Резервная копия"
 if [ "$DRY_RUN" = 1 ]; then
   info "(пробный запуск) копия .env и pg_dump всей схемы в $BACKUP_NAME"
 else
@@ -344,21 +378,17 @@ else
   ok ".env:  $(basename "$ENV_BACKUP")"
 fi
 
-step "4/6. Переключение на образ форка"
+step "5/7. Переключение на образ форка"
 if [ "$DRY_RUN" = 1 ]; then
   info "(пробный запуск) MIKAN_IMAGE=$FORK_IMAGE"
 else
   env_set MIKAN_IMAGE "$FORK_IMAGE"
   ok "MIKAN_IMAGE=$FORK_IMAGE"
 fi
-if docker image inspect "$FORK_IMAGE" >/dev/null 2>&1; then
-  ok "образ есть локально, тянуть нечего"
-else
-  run "подтянуть образ" dc pull panel node
-fi
+ok "образ уже на сервере (первый шаг)"
 run "перезапустить стек" dc up -d --wait --wait-timeout "$WAIT_SECONDS"
 
-step "5/6. Проверка"
+step "6/7. Проверка"
 FAILED=0
 if [ "$DRY_RUN" = 1 ]; then
   info "(пробный запуск) проверка пропущена"
@@ -389,7 +419,7 @@ if [ "$FAILED" = 1 ] && [ "$DRY_RUN" != 1 ]; then
   die "откат выполнен, панель на обычном mikan"
 fi
 
-step "6/6. Готово"
+step "7/7. Готово"
 [ "$DRY_RUN" = 1 ] || info "$(dc ps --format '{{.Service}}: {{.Status}}' 2>/dev/null | tr '\n' ' ')"
 cat <<EOF
 
