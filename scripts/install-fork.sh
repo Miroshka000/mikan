@@ -93,6 +93,11 @@ docker compose version >/dev/null 2>&1 || die "нужен docker compose v2"
 
 dc() { docker compose --project-directory "$MIKAN_DIR" -f "$MIKAN_DIR/compose.yaml" "$@"; }
 env_get() { sed -n "s/^$1=//p" "$MIKAN_DIR/.env" | head -n1; }
+# Кто и что в базе: compose инсталлера задаёт их константами, но читать их из .env надёжнее.
+DBPASS=$(env_get MIKAN_POSTGRES_PASSWORD)
+DBUSER=$(env_get MIKAN_POSTGRES_USER); DBUSER=${DBUSER:-mikan}
+DBNAME=$(env_get MIKAN_POSTGRES_DB); DBNAME=${DBNAME:-mikan}
+SQL_ERR=""
 env_set() { # в пробном запуске не пишет ничего
   local key=$1 val=$2
   [ "$DRY_RUN" = 1 ] && return 0
@@ -102,9 +107,21 @@ env_set() { # в пробном запуске не пишет ничего
     printf '%s=%s\n' "$key" "$val" >>"$MIKAN_DIR/.env"
   fi
 }
-# psql через exec: у образа ENTRYPOINT mikan, и `docker compose run` подставил бы его перед
-# psql, а exec его не трогает.
-sql() { dc exec -T panel sh -c 'psql "$MIKAN_DATABASE_URL" -tAX -v ON_ERROR_STOP=1 -c "$1"' _ "$1"; }
+# psql через контейнер базы, а не через панель: панель может быть остановлена (её как раз и
+# собираемся менять), а psql в образе postgres есть всегда. Если не вышло — пробуем панель.
+sql() { # sql ЗАПРОС → строка ответа; при ошибке возвращает 1, а саму ошибку — в SQL_ERR
+  local out
+  if out=$(dc exec -T -e PGPASSWORD="$DBPASS" postgres psql -U "$DBUSER" -d "$DBNAME" -tAX -v ON_ERROR_STOP=1 -c "$1" 2>&1); then
+    printf '%s' "$out" | tr -d '[:space:]'
+    return 0
+  fi
+  if out=$(dc exec -T panel sh -c 'psql "$MIKAN_DATABASE_URL" -tAX -v ON_ERROR_STOP=1 -c "$1"' _ "$1" 2>&1); then
+    printf '%s' "$out" | tr -d '[:space:]'
+    return 0
+  fi
+  SQL_ERR="$out"
+  return 1
+}
 newer_than() { # newer_than A B → 0, если A строго новее B
   local a b
   a=$(printf '%s' "${1#v}" | awk -F'[.-]' '{printf "%d.%d.%d.%d", $1, $2, $3, ($4 ~ /^[0-9]+$/ ? $4 : 0)}')
@@ -115,7 +132,7 @@ newer_than() { # newer_than A B → 0, если A строго новее B
 }
 switch_off() { # выключает переключатель, только если он был включён; 0 — был и выключен
   local was
-  was=$(sql "SELECT value FROM settings WHERE key='$1'" 2>/dev/null | tr -d '[:space:]')
+  was=$(sql "SELECT value FROM settings WHERE key='$1'" 2>/dev/null)
   if [ "$was" = "true" ]; then
     sql "UPDATE settings SET value='false' WHERE key='$1'" >/dev/null
     warn "$1 был включён и выключен"
@@ -163,7 +180,7 @@ if [ -n "$BACKUP" ]; then
   sleep 5
   dc exec -T panel mikan health >/dev/null 2>&1 || { dc logs panel --tail 15 2>&1 | sed 's/^/    /' >&2; die "панель не поднялась — база на месте, логи выше"; }
   ok "панель отвечает"
-  SCHEMA=$(dc exec -T panel sh -c 'psql "$MIKAN_DATABASE_URL" -tAX -c "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied"' 2>/dev/null | tr -d '[:space:]')
+  SCHEMA=$(sql "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied" 2>/dev/null)
   ok "схема: ${SCHEMA:-?}"
   printf '\n\033[32mГотово.\033[0m Панель на обычном mikan, база — на состояние копии %s.\n' "$BASE"
   exit 0
@@ -192,8 +209,23 @@ fi
 [ -n "$FORK_IMAGE" ] || die "укажи образ форка: --image ghcr.io/<репозиторий>/mikan:<тег> (или FORK_IMAGE=...)"
 
 STAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP_NAME="backup-${STAMP}-before-fork.dump"
-BACKUP_HOST="$MIKAN_DIR/data/panel/$BACKUP_NAME"
+# Копия для отката — ПЕРВАЯ, снятая до перехода. Копии, снятые позже, уже содержат
+# миграцию форка, и обычный mikan на них не поднимется («schema 16 is newer than this
+# binary supports»), поэтому на повторных запусках новую не делаем, а помним первую.
+FIRST_BACKUP=""
+# `ls` без совпадений возвращает 1, а с pipefail и set -e это молча оборвало бы весь
+# скрипт, поэтому пустой результат — обычный случай, а не ошибка.
+for f in "$MIKAN_DIR"/data/panel/backup-*-before-fork.dump; do
+  [ -e "$f" ] || break
+  FIRST_BACKUP="$f"; break
+done
+if [ -n "$FIRST_BACKUP" ]; then
+  BACKUP_NAME=$(basename "$FIRST_BACKUP"); BACKUP_HOST=$FIRST_BACKUP
+  [ "$DRY_RUN" = 0 ] && ok "копия для отката уже есть: $BACKUP_NAME"
+else
+  BACKUP_NAME="backup-${STAMP}-before-fork.dump"
+  BACKUP_HOST="$MIKAN_DIR/data/panel/$BACKUP_NAME"
+fi
 ENV_BACKUP="$MIKAN_DIR/.env.before-fork-${STAMP}"
 
 OLD_IMAGE=$(env_get MIKAN_IMAGE)
@@ -211,11 +243,32 @@ fi
 
 step "1/6. Что стоит сейчас"
 info "каталог $MIKAN_DIR · образ $OLD_IMAGE"
-BEFORE_SCHEMA=$(sql "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied" 2>/dev/null | tr -d '[:space:]')
-[ -n "$BEFORE_SCHEMA" ] || die "панель не отвечает или схема неизвестна — проверь, что стек запущен"
-USERS=$(sql "SELECT count(*) FROM users" | tr -d '[:space:]')
-TARIFFS=$(sql "SELECT count(*) FROM tariffs" | tr -d '[:space:]')
-PAYMENTS=$(sql "SELECT count(*) FROM payments" | tr -d '[:space:]')
+
+# Стек может быть не поднят — тогда читать схему нечем. Поднимаем базу и пробуем ещё раз.
+# Время ограничено: сервер без доступа к реестру иначе висел бы тут минутами.
+if ! dc ps --status running --services 2>/dev/null | grep -qx postgres; then
+  warn "база не запущена — поднимаю (не дольше двух минут)"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 60 dc up -d postgres >/dev/null 2>&1 || true
+  else
+    dc up -d postgres >/dev/null 2>&1 || true
+  fi
+  for _ in $(seq 1 20); do
+    dc exec -T postgres pg_isready -q >/dev/null 2>&1 && break
+    sleep 3
+  done
+fi
+if ! BEFORE_SCHEMA=$(sql "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied"); then
+  printf '\n  \033[31mне читаю базу.\033[0m\n'
+  if [ -n "$SQL_ERR" ]; then printf '%s\n' "$SQL_ERR" | sed 's/^/    /' | head -8; else printf '    \033[2m(postgres и панель не ответили)\033[0m\n'; fi
+  printf '\n  \033[2mсостояние стека:\033[0m\n'
+  dc ps 2>&1 | sed 's/^/    /'
+  printf '\n'
+  die "база недоступна. Если панель не запущена — cd $MIKAN_DIR && docker compose up -d, потом повтори."
+fi
+USERS=$(sql "SELECT count(*) FROM users")
+TARIFFS=$(sql "SELECT count(*) FROM tariffs")
+PAYMENTS=$(sql "SELECT count(*) FROM payments")
 ok "схема PostgreSQL $BEFORE_SCHEMA · $USERS клиентов · $TARIFFS тарифов · $PAYMENTS платежей"
 
 step "2/6. Защита от тихого отката на обычный mikan"
@@ -235,7 +288,7 @@ fi
 
 step "3/6. Резервная копия"
 if [ "$DRY_RUN" = 1 ]; then
-  info "(пробный запуск) копия .env и pg_dump всей схемы в $(basename "$BACKUP_NAME")"
+  info "(пробный запуск) копия .env и pg_dump всей схемы в $BACKUP_NAME"
 else
   cp -a "$MIKAN_DIR/.env" "$ENV_BACKUP"
   if [ ! -e "$BACKUP_HOST" ]; then
@@ -272,16 +325,16 @@ else
   sleep 5
   dc exec -T panel mikan health >/dev/null 2>&1 ||
     { warn "health не проходит, панель ещё поднимается"; sleep 20; dc exec -T panel mikan health >/dev/null 2>&1 || FAILED=1; }
-  AFTER=$(sql "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied" 2>/dev/null | tr -d '[:space:]')
+  AFTER=$(sql "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied" 2>/dev/null)
   if [ -n "$AFTER" ] && [ "$AFTER" -ge 16 ] 2>/dev/null; then ok "схема $BEFORE_SCHEMA → $AFTER"; else warn "схема ${AFTER:-?}, ожидалось ≥ 16"; FAILED=1; fi
-  T=$(sql "SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE 'referral%'" | tr -d '[:space:]')
+  T=$(sql "SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE 'referral%'")
   [ "$T" = "5" ] && ok "пять таблиц referral_* созданы" || { warn "таблиц referral_*: ${T:-0}"; FAILED=1; }
   for pair in "users:$USERS" "tariffs:$TARIFFS"; do
     table=${pair%%:*}; want=${pair##*:}
-    got=$(sql "SELECT count(*) FROM $table" | tr -d '[:space:]')
+    got=$(sql "SELECT count(*) FROM $table")
     [ "$got" = "$want" ] && ok "$table на месте: $got" || { warn "$table: стало $got, было $want"; FAILED=1; }
   done
-  P=$(sql "SELECT count(*) FROM payments" | tr -d '[:space:]')
+  P=$(sql "SELECT count(*) FROM payments")
   [ -n "$P" ] && [ "$P" -ge "$PAYMENTS" ] 2>/dev/null && ok "платежей на месте: $P" || { warn "платежей стало ${P:-0}, было $PAYMENTS"; FAILED=1; }
 fi
 
