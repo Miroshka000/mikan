@@ -30,9 +30,31 @@
 
 set -Eeuo pipefail
 
+MIKAN_DIR=${MIKAN_DIR:-/opt/mikan}
+
+# Почему всё перезапускается: переданный по пайпу скрипт (curl … | sudo bash -s -- …) bash
+# читает из stdin, и любая команда внутри наследует этот же stdin. `docker compose exec`
+# съедает остаток скрипта, и установщик молча останавливается на середине — с кодом 0, то
+# есть как будто всё прошло. Поэтому скрипт, пришедший не с терминала, читается целиком
+# один раз и запускается заново с закрытым stdin.
+if [ "${MIKAN_FORK_REEXEC:-0}" != 1 ] && [ ! -t 0 ] && [ ! -f "$0" ]; then
+  _self=$(mktemp) || exit 1
+  cat >"$_self"
+  # Пустой файл — значит stdin оказался не тем, чем казался: запускать нечего.
+  if [ ! -s "$_self" ]; then
+    rm -f "$_self"
+    echo "install-fork: не удалось прочитать скрипт из stdin" >&2
+    exit 1
+  fi
+  MIKAN_FORK_REEXEC=1 MIKAN_DIR="$MIKAN_DIR" FORK_IMAGE="${FORK_IMAGE:-}" bash "$_self" "$@" </dev/null
+  _rc=$?
+  rm -f "$_self"
+  exit "$_rc"
+fi
+
 # REV печатается при каждом запуске: видно, какая именно копия скрипта сейчас выполняется
 # (за прокси или кэшем curl на сервере может отдаться не та).
-REV="2026-10-12.4"
+REV="2026-10-12.5"
 TRACE=0
 DIED=0
 die() { DIED=1; printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
@@ -47,7 +69,6 @@ on_exit() {
 }
 trap on_exit EXIT
 
-MIKAN_DIR=${MIKAN_DIR:-/opt/mikan}
 FORK_IMAGE=${FORK_IMAGE:-}
 STOCK_IMAGE=${STOCK_IMAGE:-ghcr.io/miroshka000/mikan:latest}
 BACKUP=${BACKUP:-}
@@ -129,18 +150,18 @@ env_set() { # в пробном запуске не пишет ничего
 # psql через контейнер базы, а не через панель: панель может быть остановлена (её как раз и
 # собираемся менять), а psql в образе postgres есть всегда. Если не вышло — пробуем панель.
 sql() { # sql ЗАПРОС → строка ответа; при ошибке — сама ошибка в stderr и код 1
-  local out
-  if out=$(dc exec -T -e PGPASSWORD="$DBPASS" postgres psql -U "$DBUSER" -d "$DBNAME" -tAX -v ON_ERROR_STOP=1 -c "$1" 2>&1); then
-    printf '%s' "$out" | tr -d '[:space:]'
-    return 0
+  local out err
+  err=$(mktemp) || return 1
+  # stderr docker compose пишет и сам (+++ docker compose …, служебные строки) — в ответ он
+  # попадать не должен, поэтому он уходит в отдельный файл, а не склеивается через 2>&1.
+  if out=$(dc exec -T -e PGPASSWORD="$DBPASS" postgres psql -U "$DBUSER" -d "$DBNAME" -tAX -v ON_ERROR_STOP=1 -c "$1" 2>"$err"); then
+    rm -f "$err"; printf '%s' "$out" | tr -d '[:space:]'; return 0
   fi
-  if out=$(dc exec -T panel sh -c 'psql "$MIKAN_DATABASE_URL" -tAX -v ON_ERROR_STOP=1 -c "$1"' _ "$1" 2>&1); then
-    printf '%s' "$out" | tr -d '[:space:]'
-    return 0
+  if out=$(dc exec -T panel sh -c 'psql "$MIKAN_DATABASE_URL" -tAX -v ON_ERROR_STOP=1 -c "$1"' _ "$1" 2>>"$err"); then
+    rm -f "$err"; printf '%s' "$out" | tr -d '[:space:]'; return 0
   fi
-  # Ошибку печатаем отсюда: вызывающий получает sql() в подстановке команды, то есть в
-  # подпроцессе, и переменная отсюда наружу не вернулась бы.
-  printf '%s\n' "$out" >&2
+  cat "$err" >&2
+  rm -f "$err"
   return 1
 }
 newer_than() { # newer_than A B → 0, если A строго новее B
@@ -174,7 +195,7 @@ if [ -n "$BACKUP" ]; then
   printf 'Все платежи, клиенты и тарифы вернутся к состоянию на момент копии.\n'
   printf 'Реферальная программа (таблицы referral_*) исчезнет: её создаёт форк.\n'
   if [ "$ASSUME_YES" = 0 ] && [ "$DRY_RUN" = 0 ]; then
-    read -r -p 'Продолжить? (yes/no) ' answer
+    read -r -p 'Продолжить? (yes/no) ' answer </dev/tty || answer=no
     [ "$answer" = "yes" ] || die "отменено"
   fi
   [ "$DRY_RUN" = 1 ] || cp -a "$MIKAN_DIR/.env" "$MIKAN_DIR/.env.rollback-$(date +%Y%m%d-%H%M%S)"
