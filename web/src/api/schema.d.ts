@@ -1032,6 +1032,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Реферальная программа */
+        get: operations["get-referrals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Изменить реферальную программу */
+        patch: operations["update-referrals"];
+        trace?: never;
+    };
+    "/api/v1/referrals/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Приглашения и приглашённые */
+        get: operations["list-referral-links"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/referrals/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Начисления по реферальной программе */
+        get: operations["list-referral-rewards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -1859,6 +1911,22 @@ export interface components {
             /** @description Панель видит каталог данных сервера; иначе ставить адаптеры нельзя */
             supported: boolean;
         };
+        AdminStats: {
+            /** Format: int64 */
+            accounts: number;
+            /** Format: int64 */
+            earned: number;
+            /** Format: int64 */
+            earned_days: number;
+            /** Format: int64 */
+            invited: number;
+            /** Format: int64 */
+            owed: number;
+            /** Format: int64 */
+            paid: number;
+            /** Format: int64 */
+            spent: number;
+        };
         AdminView: {
             /** Format: int64 */
             id: number;
@@ -2609,7 +2677,7 @@ export interface components {
         };
         MenuButton: {
             /** @enum {string} */
-            action: "sub" | "devices" | "connect" | "renew" | "support" | "app" | "url" | "page";
+            action: "sub" | "devices" | "connect" | "renew" | "referral" | "support" | "app" | "url" | "page";
             /** @description Постоянный id кнопки */
             id: string;
             label: string;
@@ -3324,6 +3392,25 @@ export interface components {
             ip?: string;
             ok: boolean;
         };
+        Program: {
+            /**
+             * Format: int64
+             * @description Потолок баланса одного аккаунта в копейках; 0 — без потолка
+             */
+            balance_max: number;
+            /** @description Реферальная программа включена */
+            enabled: boolean;
+            /** @description Сообщать пригласившему о начислении */
+            notify: boolean;
+            rules: components["schemas"]["Rule"][];
+            /** @description Баланс списывается за счёт при оплате подписки */
+            spend: boolean;
+            /**
+             * Format: int64
+             * @description Сколько копеек стоит одна звёздочка Telegram; 0 — оплата звёздами не участвует
+             */
+            stars_rate: number;
+        };
         PromoBody: {
             code: string;
             /** @description Для fixed: RUB или XTR; RUB — копейки, XTR — Stars. Для percent: пусто — любая валюта, тогда min_order и max_discount равны 0. Для остальных типов не используется. */
@@ -3484,6 +3571,68 @@ export interface components {
             /** @description Показываются один раз */
             recovery_codes: string[];
         };
+        ReferralLinkView: {
+            code: string;
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Не пусто — реферал уже оплатил подписку
+             */
+            first_paid_at?: string;
+            referee_name?: string;
+            /** Format: int64 */
+            referee_tg_id: number;
+            /** Format: int64 */
+            referral_id: number;
+            referrer_code: string;
+            /** Format: int64 */
+            referrer_tg_id: number;
+        };
+        ReferralLinksOutputBody: {
+            items: components["schemas"]["ReferralLinkView"][];
+            /** Format: int64 */
+            total: number;
+        };
+        ReferralRewardView: {
+            /**
+             * Format: int64
+             * @description Копейки на баланс; 0 у правила днями
+             */
+            amount: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            days: number;
+            /** Format: int64 */
+            every_n: number;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            kind: "percent" | "days";
+            /** Format: int64 */
+            payment_id?: number;
+            /** Format: int64 */
+            referral_id: number;
+            referrer_name?: string;
+            /** Format: int64 */
+            referrer_tg_id: number;
+            /**
+             * Format: date-time
+             * @description Возврат платежа забрал начисление
+             */
+            reverted_at?: string;
+            rule_id: string;
+        };
+        ReferralRewardsOutputBody: {
+            items: components["schemas"]["ReferralRewardView"][];
+            /** Format: int64 */
+            total: number;
+        };
+        ReferralView: {
+            config: components["schemas"]["Program"];
+            stats: components["schemas"]["AdminStats"];
+        };
         Report: {
             /** Format: int64 */
             created: number;
@@ -3583,6 +3732,23 @@ export interface components {
         RoutesPreviewOutputBody: {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
+        };
+        Rule: {
+            enabled: boolean;
+            /**
+             * Format: int64
+             * @description percent: 1 — с каждой оплаты, N — с каждой N-й; days: сколько оплат дают бонус
+             */
+            every: number;
+            /** @description Постоянный id правила */
+            id: string;
+            /** @enum {string} */
+            kind: "percent" | "days";
+            /** @description Название для панели */
+            name: string;
+            tariff_ids: number[];
+            /** Format: int64 */
+            value: number;
         };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */
@@ -6847,6 +7013,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PromoCodeView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-referrals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Program"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-referral-links": {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralLinksOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-referral-rewards": {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferralRewardsOutputBody"];
                 };
             };
             /** @description Error */

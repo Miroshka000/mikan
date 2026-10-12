@@ -100,6 +100,13 @@ func (s *Service) takeBack(ctx context.Context, q *db.Queries, p db.Payment) (rv
 			return rv, u, err
 		}
 	}
+	// What the invitee paid the referrer goes back with it, and so does the share of the
+	// price the balance held for this invoice: a refund undoes the whole payment.
+	if s.d.Referral != nil {
+		if _, err = s.d.Referral.TakeBack(ctx, q, p.ID); err != nil {
+			return rv, u, err
+		}
+	}
 	if !p.UserID.Valid {
 		return rv, u, nil
 	}

@@ -607,7 +607,7 @@ func TestConfigSavedBefore(t *testing.T) {
 	}
 	defer st.Close()
 	b := New(Deps{Store: st, Settings: settings.New(st.Q), Log: slog.New(slog.NewTextHandler(io.Discard, nil))})
-	if c := b.Config(ctx); !c.QuietNight || len(c.Buttons) != 6 {
+	if c := b.Config(ctx); !c.QuietNight || len(c.Buttons) != 7 {
 		t.Fatalf("a fresh bot: %+v", c)
 	}
 	// As 0.3.6 saved it: no quiet_night yet, a menu of two buttons.

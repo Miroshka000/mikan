@@ -31,6 +31,7 @@ export const qk = {
   packages: ["packages"] as const,
   promocodes: ["promocodes"] as const,
   promocodeRedemptions: ["promocodes", "redemptions"] as const,
+  referrals: ["referrals"] as const,
   userGrants: (id: number) => ["users", "grants", id] as const,
   torrent: ["torrent"] as const,
   filters: ["filters"] as const,
@@ -382,6 +383,6 @@ export function usePromoMutations() {
   return { create, update, toggle, remove };
 }
 
-async function rawJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function rawJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   return rawApi(path, init) as Promise<T>;
 }

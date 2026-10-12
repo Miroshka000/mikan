@@ -16,14 +16,18 @@ import (
 
 // Callback data: m main, s subscription, d devices, dc:<id> confirm unbind, du:<id>
 // unbind, c connect, r renew, p:<button> the admin's page, w switch list, u:<user> show
-// that subscription, rm confirm removing it from the account, rd:<user> remove it.
+// that subscription, rm confirm removing it from the account, rd:<user> remove it,
+// f the referral programme, fh what it has earned.
 
 // screen renders what the chat sees for a press: text (HTML) and buttons.
 func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice string) (string, *Keyboard) {
 	w := wordsFor(cfg.Lang)
 	list, u, ok := b.subs(ctx, chat)
 	cmd, arg, _ := strings.Cut(data, ":")
-	// Buying a new subscription works with or without one.
+	// The referral programme and buying work with or without a subscription.
+	if cmd == "f" || cmd == "fh" {
+		return b.referral(ctx, w, chat, cmd, notice)
+	}
 	if b.canBuyNew(ctx) {
 		home := []Button{{Text: w.back, CallbackData: "m"}}
 		switch cmd {
@@ -140,10 +144,27 @@ func (b *Bot) welcome(ctx context.Context, cfg Config, w *words, chat int64, not
 	if sup := b.supportURL(ctx); sup != "" {
 		rows = append(rows, []Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
 	}
+	if b.referralButton(ctx, cfg) {
+		rows = append(rows, []Button{{Text: labelOf(cfg, "referral", w.refReferral), CallbackData: "f"}})
+	}
 	if rows == nil {
 		return text, nil
 	}
 	return text, &Keyboard{rows}
+}
+
+// referralButton: the welcome menu carries the programme too — an account with no
+// subscription is exactly the one that invites people.
+func (b *Bot) referralButton(ctx context.Context, cfg Config) bool {
+	if b.d.Referral == nil || !b.d.Referral.Setup(ctx).Enabled {
+		return false
+	}
+	for _, mb := range cfg.Buttons {
+		if mb.Action == "referral" && !mb.On {
+			return false
+		}
+	}
+	return true
 }
 
 // menu is the admin's main menu as buttons.
@@ -163,6 +184,11 @@ func (b *Bot) menu(ctx context.Context, cfg Config, w *words, subs int) *Keyboar
 			btn = Button{Text: mb.Label, CallbackData: "c"}
 		case "renew":
 			btn = Button{Text: mb.Label, CallbackData: "r"}
+		case "referral":
+			if !b.referralButton(ctx, cfg) {
+				continue
+			}
+			btn = Button{Text: mb.Label, CallbackData: "f"}
 		case "support":
 			sup := b.supportURL(ctx)
 			if sup == "" {
