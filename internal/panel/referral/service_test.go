@@ -449,3 +449,34 @@ type noChanges struct{}
 
 func (noChanges) PoliciesChanged() {}
 func (noChanges) SlotsChanged()    {}
+
+// The days rule needs a subscription to land on. With none there, the payment is still
+// counted towards the rule — the third invitee still earns a month — and nothing is lost
+// to a row that could not be written.
+func TestDaysRuleWithNoSubscriptionOfTheInviter(t *testing.T) {
+	e := newEnv(t)
+	e.program(Rule{ID: "d", Kind: KindDays, Value: 30, Every: 3, Enabled: true})
+	e.invite(inviter, invitee)
+	// The inviter never opened the referral screen and has no subscription.
+	if _, ok, err := e.s.currentSub(e.ctx, e.st.Q, inviter); err != nil || ok {
+		t.Fatalf("the fixture gave the inviter a subscription: %v %v", ok, err)
+	}
+	for i := range 3 {
+		e.pay(invitee, e.cheap, 7000, "RUB")
+		if got := e.balance(inviter); got != 0 {
+			t.Fatalf("payment %d credited money where none was due", i+1)
+		}
+	}
+	st, err := e.s.StatsOf(e.ctx, inviter)
+	must(t, err)
+	if st.Progress["d"] != 3 {
+		t.Fatalf("the rule counted %d payments, wanted 3", st.Progress["d"])
+	}
+	// The third payment fell on the step, so the counter is exactly at it: the next reward
+	// comes after three more, not two.
+	rows, err := e.st.Q.ListReferralRewardsOf(e.ctx, db.ListReferralRewardsOfParams{ReferrerTgID: inviter, Lim: 10})
+	must(t, err)
+	if len(rows) != 0 {
+		t.Fatalf("a term was granted with no subscription: %+v", rows)
+	}
+}

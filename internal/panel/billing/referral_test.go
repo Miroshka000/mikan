@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"mikan/internal/panel/promo"
 	"mikan/internal/panel/referral"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -169,5 +170,57 @@ func TestReferralHoldIsReleasedWhenNobodyPays(t *testing.T) {
 	e.s.Reconcile(ctx)
 	if got := balance(t, e, 101); got != 2000 {
 		t.Fatalf("an expired invoice kept %d kopecks", 2000-got)
+	}
+}
+
+// A balance and a promo code on one invoice: the balance comes off first (it is the buyer's
+// own money), the code is worked out against what is left, and neither is taken twice when
+// the same purchase is opened again.
+func TestReferralBalanceAndPromoOnOneInvoice(t *testing.T) {
+	e, refs, _ := referralEnv(t)
+	ctx := context.Background()
+	invite(t, refs, 101, 555)
+	must(t, e.st.Tx(ctx, func(q *db.Queries) error {
+		_, err := q.TakeReferralAccount(ctx, db.TakeReferralAccountParams{TgID: 101, Code: "both1", CreatedAt: e.now.Unix()})
+		return err
+	}))
+	must(t, e.st.Tx(ctx, func(q *db.Queries) error {
+		_, err := q.AddReferralBalance(ctx, db.AddReferralBalanceParams{TgID: 101, Amount: 3000, UpdatedAt: e.now.Unix()})
+		return err
+	}))
+	pc, err := e.st.Q.CreatePromoCode(ctx, db.CreatePromoCodeParams{Code: "BOTH10", Type: "percent", Value: 10,
+		Currency: "XTR", PerUserLimit: 5, TariffIds: "[]", Enabled: 1, CreatedAt: e.now.Unix()})
+	must(t, err)
+	e.s.d.Promo = promo.New(e.st, func() time.Time { return e.now })
+
+	// The tariff is 150 Stars; 30 Stars of balance and 10% off the remaining 120 = 108.
+	p, err := e.s.Invoice(ctx, InvoiceRequest{TgID: 101, TariffID: e.sale.ID, Provider: Stars, PromoCode: pc.Code})
+	must(t, err)
+	if p.Amount != 108 {
+		t.Fatalf("balance and promo together: %d Stars, wanted 108", p.Amount)
+	}
+	if got := balance(t, e, 101); got != 0 {
+		t.Fatalf("%d kopecks left after the invoice took them", got)
+	}
+	// The code counted against what was left to pay, not against the full price.
+	r, err := e.st.Q.GetPromoRedemptionByPayment(ctx, sql.NullInt64{Int64: p.ID, Valid: true})
+	must(t, err)
+	if r.OriginalAmount != 120 || r.DiscountAmount != 12 || r.FinalAmount != 108 {
+		t.Fatalf("the discount was worked out against the wrong price: %+v", r)
+	}
+
+	// The same purchase again: the same invoice, the balance not taken a second time.
+	again, err := e.s.Invoice(ctx, InvoiceRequest{TgID: 101, TariffID: e.sale.ID, Provider: Stars, PromoCode: pc.Code})
+	must(t, err)
+	if again.ID != p.ID || again.Amount != 108 {
+		t.Fatalf("the purchase was opened again: %d/%d, wanted %d/%d", again.ID, again.Amount, p.ID, 108)
+	}
+	if got := balance(t, e, 101); got != 0 {
+		t.Fatalf("the balance was taken twice: %d left", got)
+	}
+	var used int
+	must(t, e.st.DB.QueryRowContext(ctx, `SELECT count(*) FROM promo_redemptions WHERE promo_id=$1 AND status='reserved'`, pc.ID).Scan(&used))
+	if used != 1 {
+		t.Fatalf("the code was reserved %d times", used)
 	}
 }

@@ -490,6 +490,7 @@ func (s *Service) matchesOpenPayment(ctx context.Context, q *db.Queries, existin
 	// amount is what the price is after the referral balance, not the tariff's own price.
 	// An open invoice that already holds a share of that balance is the one to show again:
 	// taking the balance a second time for the same purchase is not what the buyer meant.
+	// With it, want is what is left to pay — the figure a promo code was worked out against.
 	want := amount
 	if s.d.Referral != nil {
 		held, ok, err := s.d.Referral.Held(ctx, q, existing.ID, existing.Currency, s.referralConfig(ctx))
@@ -497,10 +498,6 @@ func (s *Service) matchesOpenPayment(ctx context.Context, q *db.Queries, existin
 			return false, err
 		}
 		if ok {
-			// A code is worked out against what is left to pay, not against the held price.
-			if strings.TrimSpace(code) != "" {
-				return false, nil
-			}
 			want -= held
 		}
 	}
@@ -530,7 +527,7 @@ func (s *Service) matchesOpenPayment(ctx context.Context, q *db.Queries, existin
 	if err != nil {
 		return false, err
 	}
-	if r.Status != "reserved" || existing.Amount != r.FinalAmount || r.OriginalAmount != amount || r.Currency != existing.Currency || r.ExpiresAt.Valid && s.d.Now().Unix() >= r.ExpiresAt.Int64 {
+	if r.Status != "reserved" || existing.Amount != r.FinalAmount || r.OriginalAmount != want || r.Currency != existing.Currency || r.ExpiresAt.Valid && s.d.Now().Unix() >= r.ExpiresAt.Int64 {
 		return false, nil
 	}
 	pc, err := q.GetPromoCode(ctx, r.PromoID)
