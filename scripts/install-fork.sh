@@ -30,6 +30,23 @@
 
 set -Eeuo pipefail
 
+# REV печатается при каждом запуске: видно, какая именно копия скрипта сейчас выполняется
+# (за прокси или кэшем curl на сервере может отдаться не та).
+REV="2026-10-12.4"
+TRACE=0
+DIED=0
+die() { DIED=1; printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
+# Ловушка ERR с set -E срабатывает ещё и в подпроцессах (каждая неудачная docker-команда
+# внутри подстановки) — это шум. Поэтому ловим выход, а не ошибку команды: один раз, и только
+# если скрипт упал сам, а не через die() с уже написанным объяснением.
+on_exit() {
+  local rc=$?
+  [ "$rc" -eq 0 ] || [ "$DIED" = 1 ] && return 0
+  printf '\n\033[31m✗ упали на строке %s (код %s), ничего не сделано\033[0m\n' "$LINENO" "$rc" >&2
+  printf '  \033[2mскрипт %s. Повтори с --trace и пришли последние строки.\033[0m\n' "$REV" >&2
+}
+trap on_exit EXIT
+
 MIKAN_DIR=${MIKAN_DIR:-/opt/mikan}
 FORK_IMAGE=${FORK_IMAGE:-}
 STOCK_IMAGE=${STOCK_IMAGE:-ghcr.io/miroshka000/mikan:latest}
@@ -39,7 +56,6 @@ KEEP_AUTO_UPDATE=0
 ASSUME_YES=0
 WAIT_SECONDS=${WAIT_SECONDS:-180}
 
-die() { printf '\n\033[31m✗ %s\033[0m\n' "$*" >&2; exit 1; }
 step() { printf '\n\033[1;36m▸ %s\033[0m\n' "$*"; }
 ok() { printf '  \033[32m✓\033[0m %s\n' "$*"; }
 warn() { printf '  \033[33m!\033[0m %s\n' "$*"; }
@@ -61,6 +77,7 @@ usage() {
   --image ОБРАЗ          образ форка (или FORK_IMAGE=... в окружении)
   --rollback АРХИВ        вернуться на обычный mikan из копии базы
   --dry-run              ничего не менять, только показать
+  --trace                показать каждую команду (когда нужно понять, где оно встало)
   --keep-auto-update     не выключать автообновление (обычно не надо)
   --yes                  не спрашивать подтверждения
 Примеры:
@@ -80,6 +97,7 @@ while [ $# -gt 0 ]; do
       BACKUP=$2; shift 2 ;;
     --rollback=*) BACKUP=${1#*=}; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --trace) TRACE=1; shift ;;
     --keep-auto-update) KEEP_AUTO_UPDATE=1; shift ;;
     --yes|-y) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -87,6 +105,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+[ "$TRACE" = 1 ] && set -x
 [ "$(id -u)" = 0 ] || die "запусти от root: curl -fsSL <url> | sudo bash -s -- --image <образ>"
 command -v docker >/dev/null || die "docker не найден"
 docker compose version >/dev/null 2>&1 || die "нужен docker compose v2"
@@ -109,7 +128,7 @@ env_set() { # в пробном запуске не пишет ничего
 }
 # psql через контейнер базы, а не через панель: панель может быть остановлена (её как раз и
 # собираемся менять), а psql в образе postgres есть всегда. Если не вышло — пробуем панель.
-sql() { # sql ЗАПРОС → строка ответа; при ошибке возвращает 1, а саму ошибку — в SQL_ERR
+sql() { # sql ЗАПРОС → строка ответа; при ошибке — сама ошибка в stderr и код 1
   local out
   if out=$(dc exec -T -e PGPASSWORD="$DBPASS" postgres psql -U "$DBUSER" -d "$DBNAME" -tAX -v ON_ERROR_STOP=1 -c "$1" 2>&1); then
     printf '%s' "$out" | tr -d '[:space:]'
@@ -119,7 +138,9 @@ sql() { # sql ЗАПРОС → строка ответа; при ошибке в
     printf '%s' "$out" | tr -d '[:space:]'
     return 0
   fi
-  SQL_ERR="$out"
+  # Ошибку печатаем отсюда: вызывающий получает sql() в подстановке команды, то есть в
+  # подпроцессе, и переменная отсюда наружу не вернулась бы.
+  printf '%s\n' "$out" >&2
   return 1
 }
 newer_than() { # newer_than A B → 0, если A строго новее B
@@ -221,7 +242,7 @@ for f in "$MIKAN_DIR"/data/panel/backup-*-before-fork.dump; do
 done
 if [ -n "$FIRST_BACKUP" ]; then
   BACKUP_NAME=$(basename "$FIRST_BACKUP"); BACKUP_HOST=$FIRST_BACKUP
-  [ "$DRY_RUN" = 0 ] && ok "копия для отката уже есть: $BACKUP_NAME"
+  if [ "$DRY_RUN" = 0 ]; then ok "копия для отката уже есть: $BACKUP_NAME"; fi
 else
   BACKUP_NAME="backup-${STAMP}-before-fork.dump"
   BACKUP_HOST="$MIKAN_DIR/data/panel/$BACKUP_NAME"
@@ -242,7 +263,7 @@ elif [ "$DRY_RUN" != 1 ]; then
 fi
 
 step "1/6. Что стоит сейчас"
-info "каталог $MIKAN_DIR · образ $OLD_IMAGE"
+info "каталог $MIKAN_DIR · образ $OLD_IMAGE · скрипт $REV"
 
 # Стек может быть не поднят — тогда читать схему нечем. Поднимаем базу и пробуем ещё раз.
 # Время ограничено: сервер без доступа к реестру иначе висел бы тут минутами.
@@ -259,9 +280,8 @@ if ! dc ps --status running --services 2>/dev/null | grep -qx postgres; then
   done
 fi
 if ! BEFORE_SCHEMA=$(sql "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied"); then
-  printf '\n  \033[31mне читаю базу.\033[0m\n'
-  if [ -n "$SQL_ERR" ]; then printf '%s\n' "$SQL_ERR" | sed 's/^/    /' | head -8; else printf '    \033[2m(postgres и панель не ответили)\033[0m\n'; fi
-  printf '\n  \033[2mсостояние стека:\033[0m\n'
+  printf '\n  \033[31mне читаю базу — postgres и панель не ответили на запрос схемы.\033[0m\n\n'
+  printf '  \033[2mсостояние стека:\033[0m\n'
   dc ps 2>&1 | sed 's/^/    /'
   printf '\n'
   die "база недоступна. Если панель не запущена — cd $MIKAN_DIR && docker compose up -d, потом повтори."
