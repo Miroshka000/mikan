@@ -25,6 +25,7 @@ import (
 	"mikan/internal/panel/addons"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/promo"
+	"mikan/internal/panel/referral"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -94,6 +95,9 @@ type Deps struct {
 	// SubBase is https://host:port/<sub path>, where the webhooks are; "" without an address.
 	SubBase func(ctx context.Context) string
 	Promo   *promo.Service
+	// Referral is the bot's referral programme: what an invitee's payment gives the
+	// account that invited them, and what a balance pays of an invoice. nil: none.
+	Referral *referral.Service
 }
 
 type Service struct {
@@ -335,6 +339,16 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 		return db.Payment{}, err
 	}
 	defer unlock()
+	// What the referral balance pays of the price comes off first: it is the buyer's own
+	// money, and a promo code is worked out against what is left to pay.
+	refCfg := s.referralConfig(ctx)
+	held := int64(0)
+	if s.d.Referral != nil && refCfg.Spend {
+		if held, err = s.d.Referral.Off(ctx, req.TgID, amount, currency, refCfg); err != nil {
+			return db.Payment{}, err
+		}
+	}
+	base := amount - held
 	now := s.d.Now()
 	userID := sql.NullInt64{Int64: req.UserID, Valid: req.UserID != 0}
 	tariffID := sql.NullInt64{Int64: t.ID, Valid: true}
@@ -347,7 +361,7 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 			if existing.TermDays != termDays {
 				return false, nil
 			}
-			return s.matchesOpenPayment(ctx, q, existing, amount, req.PromoCode)
+			return s.matchesOpenPayment(ctx, q, existing, base, req.PromoCode)
 		},
 		func(q *db.Queries) (db.Payment, error) {
 			p, err := q.CreatePayment(ctx, db.CreatePaymentParams{Provider: req.Provider, Payload: secure.Token(32), TgID: req.TgID, Kind: kind, UserID: userID,
@@ -355,8 +369,23 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 			if err != nil {
 				return db.Payment{}, err
 			}
+			total := amount
+			if s.d.Referral != nil && refCfg.Spend {
+				// Recomputed on the account's own row: what the balance can pay may have
+				// changed since it was looked at outside.
+				off, err := s.d.Referral.Reserve(ctx, q, req.TgID, p.ID, amount, currency, refCfg)
+				if err != nil {
+					return db.Payment{}, err
+				}
+				if off > 0 {
+					total -= off
+					if _, err := q.SetPaymentAmount(ctx, db.SetPaymentAmountParams{Amount: total, ID: p.ID}); err != nil {
+						return db.Payment{}, err
+					}
+				}
+			}
 			if s.d.Promo != nil && strings.TrimSpace(req.PromoCode) != "" {
-				disc, err := s.d.Promo.ReserveDiscount(ctx, q, req.TgID, req.UserID, t.ID, amount, currency, req.PromoCode, p.ID)
+				disc, err := s.d.Promo.ReserveDiscount(ctx, q, req.TgID, req.UserID, t.ID, total, currency, req.PromoCode, p.ID)
 				if err != nil {
 					return db.Payment{}, err
 				}
@@ -364,6 +393,8 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 					return db.Payment{}, err
 				}
 				p.Amount = disc.Final
+			} else {
+				p.Amount = total
 			}
 			return p, nil
 		})
@@ -456,8 +487,25 @@ func (s *Service) newPayment(ctx context.Context, tgID int64, now time.Time,
 }
 
 func (s *Service) matchesOpenPayment(ctx context.Context, q *db.Queries, existing db.Payment, amount int64, code string) (bool, error) {
+	// amount is what the price is after the referral balance, not the tariff's own price.
+	// An open invoice that already holds a share of that balance is the one to show again:
+	// taking the balance a second time for the same purchase is not what the buyer meant.
+	want := amount
+	if s.d.Referral != nil {
+		held, ok, err := s.d.Referral.Held(ctx, q, existing.ID, existing.Currency, s.referralConfig(ctx))
+		if err != nil {
+			return false, err
+		}
+		if ok {
+			// A code is worked out against what is left to pay, not against the held price.
+			if strings.TrimSpace(code) != "" {
+				return false, nil
+			}
+			want -= held
+		}
+	}
 	if strings.TrimSpace(code) == "" {
-		if existing.Amount != amount {
+		if existing.Amount != want {
 			return false, nil
 		}
 		if s.d.Promo == nil {
@@ -522,6 +570,8 @@ func (s *Service) openPayment(ctx context.Context, p db.Payment, title, desc str
 		if s.d.Promo != nil {
 			_ = s.d.Promo.ReleasePayment(ctx, p.ID)
 		}
+		// The provider never took the invoice: what the balance held of it is its owner's.
+		s.referralBack(ctx, p.ID)
 		_ = q.SetPaymentError(ctx, db.SetPaymentErrorParams{Error: errCode(err), ID: p.ID})
 		s.d.Log.Warn("billing: invoice", "provider", p.Provider, "payment", p.ID, "err", err)
 		return db.Payment{}, fmt.Errorf("%w: %s", ErrProviderOff, errCode(err))
@@ -855,6 +905,7 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		u       db.User
 		created bool
 		done    bool
+		rewards []referral.Reward
 	)
 	// A payment is applied with the settings as they are; unreadable, it waits for the
 	// next attempt rather than guessing.
@@ -865,7 +916,7 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 	reset := cfg.RenewResetsTraffic
 	run := func(q *db.Queries) error {
 		// A conflict runs this again: nothing from an attempt that rolled back may stay.
-		pay, u, created, done = db.Payment{}, db.User{}, false, false
+		pay, u, created, done, rewards = db.Payment{}, db.User{}, false, false, nil
 		var err error
 		if pay, err = q.GetPayment(ctx, id); err != nil {
 			return err
@@ -915,6 +966,11 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 				return err
 			}
 		}
+		if s.d.Referral != nil {
+			if rewards, err = s.d.Referral.RewardPayment(ctx, q, pay); err != nil {
+				return err
+			}
+		}
 		if err := markApplied(ctx, q, id, u.ID, s.d.Now()); err != nil {
 			return err
 		}
@@ -938,10 +994,43 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 	s.d.Users.Changed()
 	pay.Status, pay.UserID = "applied", sql.NullInt64{Int64: u.ID, Valid: true}
 	s.d.Log.Info("billing: applied", "payment", id, "user", u.ID, "created", created)
+	// Told outside the transaction the reward was committed with: the bot may take a
+	// moment to answer, and nothing may hold the database for it.
+	if s.d.Referral != nil && len(rewards) > 0 {
+		s.d.Referral.Announce(ctx, rewards)
+	}
 	if tg := s.telegram(); tg != nil {
 		tg.Paid(ctx, pay, u, created)
 	}
 	return nil
+}
+
+// referralConfig is the referral programme as it is now; a read error leaves it off, which
+// only means nobody earns and no balance is spent for as long as the store is unwell.
+func (s *Service) referralConfig(ctx context.Context) referral.Program {
+	if s.d.Referral == nil {
+		return referral.Program{}
+	}
+	c, err := referral.Load(ctx, s.d.Settings)
+	if err != nil {
+		return referral.Program{}
+	}
+	return c
+}
+
+// referralBack gives the referral balance back what a payment held or earned for somebody,
+// on its own transaction. Used where the payment will never be applied.
+func (s *Service) referralBack(ctx context.Context, paymentID int64) {
+	if s.d.Referral == nil {
+		return
+	}
+	err := s.d.Store.Tx(ctx, func(q *db.Queries) error {
+		_, err := s.d.Referral.TakeBack(ctx, q, paymentID)
+		return err
+	})
+	if err != nil {
+		s.d.Log.Warn("billing: referral balance not given back", "payment", paymentID, "err", err)
+	}
 }
 
 // markApplied moves a paid payment to applied on the transaction that applied it: the
@@ -1091,6 +1180,9 @@ func (s *Service) Reconcile(ctx context.Context) {
 	}
 	if _, err := q.ExpirePayments(ctx, now.Add(-pendingTTL).Unix()); err != nil {
 		s.d.Log.Error("billing: expire", "err", err)
+	}
+	if s.d.Referral != nil {
+		_ = s.d.Referral.ReleaseClosed(ctx)
 	}
 	if s.d.Promo != nil {
 		_ = s.d.Promo.ReleaseExpired(ctx, now.Unix())

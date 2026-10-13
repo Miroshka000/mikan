@@ -1,6 +1,6 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { History as HistoryIcon, ListChecks, TriangleAlert, Undo2, Wallet } from "lucide-react";
+import { Gift, History as HistoryIcon, ListChecks, TriangleAlert, Undo2, Wallet } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, usePaymentSettings, useTariffs } from "../../api/hooks";
@@ -16,6 +16,7 @@ import { useDraft } from "../../lib/draft";
 import { dateShort, days, money, num, time } from "../../lib/format";
 import { PAYMENT_TABS, type PaymentsSearch } from "../search";
 import { AddonsCard, addonName, useAddons } from "./payment-addons";
+import { Referrals } from "./referrals";
 
 type Settings = Schemas["PaymentSettingsView"];
 type Payment = Schemas["PaymentView"];
@@ -33,7 +34,7 @@ const STATUS_TONE: Record<Status, "ok" | "warn" | "bad" | "off"> = {
 };
 const STATUSES: Status[] = ["applied", "paid", "pending", "failed", "expired", "refunded"];
 const BUILT_IN: Provider[] = ["stars"];
-const TAB_ICONS = { history: HistoryIcon, methods: Wallet, rules: ListChecks } as const;
+const TAB_ICONS = { history: HistoryIcon, methods: Wallet, rules: ListChecks, referrals: Gift } as const;
 type PaymentTab = NonNullable<PaymentsSearch["tab"]>;
 
 /** Why a payment failed or waits, in words when the code is known; a provider's own code as is. */
@@ -81,6 +82,8 @@ export function PaymentsPage() {
       >
         {shown === "history" ? (
           <History />
+        ) : shown === "referrals" ? (
+          <Referrals />
         ) : (
           <QueryBoundary query={settings} pending={<Skeleton style={{ height: 320, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
             {(v) =>
