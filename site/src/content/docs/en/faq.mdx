@@ -7,7 +7,7 @@ description: Common problems when installing and running mikan, and what to do a
 
 ### Port 80 or 443 is taken by nginx or Caddy
 
-The installer will not stop. Protocols whose port is taken get other free ports. If a domain is set, the installer offers to add a rule for Let's Encrypt checks to nginx or Caddy: the config is saved, validated and restored if there is an error. If port 80 is held by another program, such as Apache, there will be no Let's Encrypt certificate until the port is freed. You can [install your own certificate](/mikan/en/start/domain/#own-certificate).
+The installer will not stop. Protocols whose port is taken get other free ports. If a domain is set, the installer offers to add a rule for Let's Encrypt checks to nginx or Caddy: the config is saved, validated and restored if there is an error. If port 80 is held by another program, such as Apache, there will be no Let's Encrypt certificate until the port is freed. You can [install your own certificate](/mikanaddons/en/start/domain/#own-certificate).
 
 ### The installer does not accept the domain
 
@@ -21,7 +21,7 @@ Run `mikan install` again and it will continue. If the admin account already exi
 
 ### I lost the link, the password or 2FA
 
-On the server: `mikan url`, `mikan reset-password`, `mikan disable-2fa`. More in [First steps](/mikan/en/start/first-steps/#if-you-lose-access).
+On the server: `mikan url`, `mikan reset-password`, `mikan disable-2fa`. More in [First steps](/mikanaddons/en/start/first-steps/#if-you-lose-access).
 
 ### The browser complains about the certificate, the Mini App does not open
 
@@ -35,7 +35,7 @@ These protocols run over UDP. Some hosting providers and networks block UDP enti
 
 ### The app does not see a protocol
 
-A subscription gives an app only what it can run. Happ and v2RayTun will not get TUIC and AnyTLS, and TrustTunnel, Mieru and other new protocols go only to Clash apps with a recent core. The "Delivered to" line in the connection form shows who gets it. See the [table](/mikan/en/protocols/presets/#who-gets-what).
+A subscription gives an app only what it can run. Happ and v2RayTun will not get TUIC and AnyTLS, and TrustTunnel, Mieru and other new protocols go only to Clash apps with a recent core. The "Delivered to" line in the connection form shows who gets it. See the [table](/mikanaddons/en/protocols/presets/#who-gets-what).
 
 ### I changed the port and clients do not connect
 
@@ -47,7 +47,7 @@ Device binding is on and the plan's limit is used up. Unbind the old device in t
 
 ### Automatic fixes do not move a blocked port
 
-They wait for cut-off devices from at least two different networks and 30 minutes of confirmation. They do not work for connections behind a proxy, Hysteria2 port ranges and protocols with a single shared key. More in [Automatic fixes](/mikan/en/protocols/autotune/).
+They wait for cut-off devices from at least two different networks and 30 minutes of confirmation. They do not work for connections behind a proxy, Hysteria2 port ranges and protocols with a single shared key. More in [Automatic fixes](/mikanaddons/en/protocols/autotune/).
 
 ## Nodes
 
@@ -57,7 +57,7 @@ The panel could not reach the node's API port. Check that the node is running (`
 
 ### WARP fails the check
 
-The WARP window states the reason. Most often it is "no answer over UDP": the hosting provider blocks UDP to Cloudflare's endpoint. Connect your own WireGuard config with a different endpoint. All reasons are listed in the [WARP](/mikan/en/nodes/warp/#check) section.
+The WARP window states the reason. Most often it is "no answer over UDP": the hosting provider blocks UDP to Cloudflare's endpoint. Connect your own WireGuard config with a different endpoint. All reasons are listed in the [WARP](/mikanaddons/en/nodes/warp/#check) section.
 
 ## Updates
 
@@ -67,4 +67,4 @@ If the new version changed the database schema and did not start, the panel stay
 
 ### Where to find logs
 
-`mikan logs panel` and `mikan logs node`. If nothing helped, open an [issue on GitHub](https://github.com/Miroshka000/mikan/issues) with the logs, with addresses and keys removed from them.
+`mikan logs panel` and `mikan logs node`. If nothing helped, open an [issue on GitHub](https://github.com/o0hhs/mikanaddons/issues) with the logs, with addresses and keys removed from them.

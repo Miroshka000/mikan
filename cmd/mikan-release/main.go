@@ -4,7 +4,7 @@
 //
 //	mikan-release keygen -out release-signing.pem
 //	RELEASE_SIGNING_KEY="$(cat key.pem)" mikan-release manifest -version 0.3.9 \
-//	    -image ghcr.io/miroshka000/mikan -digest sha256:… \
+//	    -image ghcr.io/o0hhs/mikan -digest sha256:… \
 //	    -asset x86_64=dist/mikan-x86_64 -asset aarch64=dist/mikan-aarch64 \
 //	    -min-installer-file .github/min-installer -out dist
 //	mikan-release verify dist/manifest.json
@@ -134,7 +134,7 @@ func makeManifest(args []string) error {
 	version := fs.String("version", "", "release version, e.g. 0.5.0.1")
 	minInstaller := fs.String("min-installer", "", "minimum host installer version, only for a release that cannot run with an older one")
 	minInstallerFile := fs.String("min-installer-file", "", "file with the minimum installer version (# comments allowed); a missing file asks for none")
-	image := fs.String("image", "", "image repository, e.g. ghcr.io/miroshka000/mikan")
+	image := fs.String("image", "", "image repository, e.g. ghcr.io/o0hhs/mikan")
 	digest := fs.String("digest", "", "sha256 digest of the pushed multi-arch image")
 	changelog := fs.String("changelog", "CHANGELOG.md", "where the release notes are")
 	out := fs.String("out", "dist", "output directory")

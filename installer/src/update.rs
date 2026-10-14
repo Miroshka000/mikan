@@ -1255,7 +1255,7 @@ mod tests {
         };
         for v in releases {
             let body = format!(
-                r#"{{"version":"{v}","published":"2026-10-04T10:00:00Z","image":"ghcr.io/miroshka000/mikan","digest":"sha256:{}","installer":{{}}}}"#,
+                r#"{{"version":"{v}","published":"2026-10-04T10:00:00Z","image":"ghcr.io/o0hhs/mikan","digest":"sha256:{}","installer":{{}}}}"#,
                 "a".repeat(64)
             );
             put(format!("https://github.com/{}/releases/download/v{v}/manifest.json", release::REPO), body.into_bytes());

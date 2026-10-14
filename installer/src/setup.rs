@@ -906,7 +906,7 @@ mod tests {
         let root = tmpdir("resume");
         let mut p = plan();
         // nginx holds port 80: the panel answers Let's Encrypt on a local port behind it
-        write_files_in(&root, &p, "ghcr.io/miroshka000/mikan@sha256:aa", "0.4.4", None, Some(18080)).unwrap();
+        write_files_in(&root, &p, "ghcr.io/o0hhs/mikan@sha256:aa", "0.4.4", None, Some(18080)).unwrap();
         assert!(unfinished(&root), "the marker is there from the first file");
         let env = EnvFile::load(root.join(".env")).unwrap();
         assert_eq!(env.get("PANEL_PORT"), Some("21355"));
@@ -919,7 +919,7 @@ mod tests {
         p = Plan::from(&Options { port: Some(30000), ..Default::default() }).resumed(&env);
         assert!(p.resume);
         assert_eq!(p.port, 21355);
-        write_files_in(&root, &p, "ghcr.io/miroshka000/mikan@sha256:bb", "0.4.5", None, None).unwrap();
+        write_files_in(&root, &p, "ghcr.io/o0hhs/mikan@sha256:bb", "0.4.5", None, None).unwrap();
         let again = EnvFile::load(root.join(".env")).unwrap();
         assert_eq!((again.get("PANEL_PORT"), again.get("MIKAN_VERSION")), (Some("21355"), Some("0.4.5")));
         assert_eq!(again.get("MIKAN_ACME_LISTEN"), None, "port 80 is free now: the panel takes it");
@@ -935,7 +935,7 @@ mod tests {
         let root = tmpdir("resume-node");
         let key = "mikan1.AbC_-9";
         let p = Plan::from(&Options { join: Some(key.into()), ..Default::default() });
-        write_files_in(&root, &p, "ghcr.io/miroshka000/mikan", "0.4.4", Some(25305), None).unwrap();
+        write_files_in(&root, &p, "ghcr.io/o0hhs/mikan", "0.4.4", Some(25305), None).unwrap();
         let env = EnvFile::load(root.join(".env")).unwrap();
         assert_eq!((env.get("MIKAN_MODE"), env.get("NODE_API_PORT"), env.get("MIKAN_NODE_JOIN")), (Some("node"), Some("25305"), Some(key)));
         assert_eq!(fs::read_to_string(root.join("compose.yaml")).unwrap(), docker::NODE_COMPOSE);

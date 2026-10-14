@@ -11,13 +11,15 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
 
 /// The public half of the release signing key, the same as internal/release.PublicKey.
-pub const PUBLIC_KEY: &str = "Z3wSIPBSaJxh5CsGO8eINI0aM0kyrQ46EcJSNeH85W8=";
+/// This fork signs its own releases with its own key; a manifest signed with the upstream
+/// key is refused here.
+pub const PUBLIC_KEY: &str = "H+GnL17JW6e7qw4qsYOC2YNMFPLp1mTjJmUqops3z7o=";
 
-pub const REPO: &str = "Miroshka000/mikan";
+pub const REPO: &str = "o0hhs/mikanaddons";
 
 /// The project's own namespace on GitHub Packages: ghcr.io/<owner of REPO in lowercase>/,
 /// as internal/release checks it.
-const IMAGE_PREFIX: &str = "ghcr.io/miroshka000/";
+const IMAGE_PREFIX: &str = "ghcr.io/o0hhs/";
 
 /// Installs a node of an existing panel on a fresh server (internal/release.JoinCommand).
 pub fn join_command(key: &str) -> String {
@@ -440,7 +442,7 @@ mod tests {
 
     fn manifest(version: &str, image: &str) -> Vec<u8> {
         format!(
-            r#"{{"version":"{version}","published":"2026-09-29T10:00:00Z","image":"{image}","digest":"sha256:{}","installer":{{"x86_64":{{"url":"https://github.com/Miroshka000/mikan/releases/download/v{version}/mikan-x86_64","sha256":"{}"}}}},"notes":{{"en":"- x"}}}}"#,
+            r#"{{"version":"{version}","published":"2026-09-29T10:00:00Z","image":"{image}","digest":"sha256:{}","installer":{{"x86_64":{{"url":"https://github.com/o0hhs/mikanaddons/releases/download/v{version}/mikan-x86_64","sha256":"{}"}}}},"notes":{{"en":"- x"}}}}"#,
             "a".repeat(64),
             "b".repeat(64)
         )
@@ -451,10 +453,10 @@ mod tests {
     fn signed_manifests_only() {
         let signer = SigningKey::from_bytes(&[7; 32]);
         let key = signer.verifying_key();
-        let data = manifest("0.3.9", "ghcr.io/miroshka000/mikan");
+        let data = manifest("0.3.9", "ghcr.io/o0hhs/mikan");
         let sig = STANDARD.encode(signer.sign(&data).to_bytes());
         let m = parse(&data, &format!("{sig}\n"), &key).unwrap();
-        assert_eq!(m.reference(), format!("ghcr.io/miroshka000/mikan@sha256:{}", "a".repeat(64)));
+        assert_eq!(m.reference(), format!("ghcr.io/o0hhs/mikan@sha256:{}", "a".repeat(64)));
         assert_eq!(m.installer["x86_64"].sha256, "b".repeat(64));
 
         let mut tampered = data.clone();
@@ -475,7 +477,7 @@ mod tests {
     fn new_fields_do_not_break_old_installers() {
         let signer = SigningKey::from_bytes(&[7; 32]);
         let key = signer.verifying_key();
-        let text = String::from_utf8(manifest("0.4.4", "ghcr.io/miroshka000/mikan")).unwrap();
+        let text = String::from_utf8(manifest("0.4.4", "ghcr.io/o0hhs/mikan")).unwrap();
         let extended = text.replacen("{\"version\"", "{\"min_installer\":\"0.4.4\",\"channel\":\"stable\",\"version\"", 1).replacen(
             "\"sha256\":",
             "\"size\":123,\"sha256\":",
@@ -500,19 +502,19 @@ mod tests {
         let signer = SigningKey::from_bytes(&[7; 32]);
         let key = signer.verifying_key();
         let accept = |data: &[u8]| parse(data, &STANDARD.encode(signer.sign(data).to_bytes()), &key).is_ok();
-        assert!(accept(&manifest("0.4.4", "ghcr.io/miroshka000/mikan")));
+        assert!(accept(&manifest("0.4.4", "ghcr.io/o0hhs/mikan")));
         for bad in [
             "ghcr.io/someone-else/mikan",
-            "ghcr.io/miroshka000/../x",
-            "ghcr.io/miroshka000/Mi kan",
-            "ghcr.io/miroshka000/",
-            "ghcr.io/miroshka000/m$x",
+            "ghcr.io/o0hhs/../x",
+            "ghcr.io/o0hhs/Mi kan",
+            "ghcr.io/o0hhs/",
+            "ghcr.io/o0hhs/m$x",
         ] {
             assert!(!accept(&manifest("0.4.4", bad)), "{bad}");
         }
-        let short_hash = String::from_utf8(manifest("0.4.4", "ghcr.io/miroshka000/mikan")).unwrap().replace(&"b".repeat(64), "bb");
+        let short_hash = String::from_utf8(manifest("0.4.4", "ghcr.io/o0hhs/mikan")).unwrap().replace(&"b".repeat(64), "bb");
         assert!(!accept(short_hash.as_bytes()));
-        let plain_http = String::from_utf8(manifest("0.4.4", "ghcr.io/miroshka000/mikan")).unwrap().replace("https://", "http://");
+        let plain_http = String::from_utf8(manifest("0.4.4", "ghcr.io/o0hhs/mikan")).unwrap().replace("https://", "http://");
         assert!(!accept(plain_http.as_bytes()));
     }
 
@@ -667,7 +669,7 @@ mod tests {
         }
         fn release(&self, version: &str) -> String {
             let url = format!("https://github.com/{REPO}/releases/download/v{version}/manifest.json");
-            self.put(&url, manifest(version, "ghcr.io/miroshka000/mikan"));
+            self.put(&url, manifest(version, "ghcr.io/o0hhs/mikan"));
             url
         }
         /// An index of "version channel from" entries.
@@ -694,7 +696,7 @@ mod tests {
         for v in ["0.4.5", "0.5.0.0", "0.5.0.1", "0.5.0.2-rc.1", "0.6.0.0"] {
             f.release(v);
         }
-        let latest = manifest("0.5.0.0", "ghcr.io/miroshka000/mikan");
+        let latest = manifest("0.5.0.0", "ghcr.io/o0hhs/mikan");
         f.put(&latest_url(), latest);
         f.index(&[
             "0.4.5 stable 0.4.0",
@@ -735,7 +737,7 @@ mod tests {
         f.index(&["0.5.0.1 stable 0.4.5"]);
         f.put(
             &format!("https://github.com/{REPO}/releases/download/v0.5.0.1/manifest.json"),
-            manifest("0.5.0.2", "ghcr.io/miroshka000/mikan"),
+            manifest("0.5.0.2", "ghcr.io/o0hhs/mikan"),
         );
         fallback("a manifest of another version");
         f.files.borrow_mut().clear();

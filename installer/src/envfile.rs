@@ -135,11 +135,11 @@ mod tests {
         let mut e = EnvFile::parse("x".into(), "MIKAN_IMAGE=mikan:0.3.8\n# note\nPANEL_PORT=21355\nMIKAN_UFW=1\n");
         assert_eq!(e.get("MIKAN_IMAGE"), Some("mikan:0.3.8"));
         assert_eq!(e.get("MIKAN"), None);
-        e.set("MIKAN_IMAGE", "ghcr.io/miroshka000/mikan@sha256:abc").unwrap();
+        e.set("MIKAN_IMAGE", "ghcr.io/o0hhs/mikan@sha256:abc").unwrap();
         e.set("MIKAN_VERSION", "0.3.9").unwrap();
         assert_eq!(
             e.render(),
-            "MIKAN_IMAGE=ghcr.io/miroshka000/mikan@sha256:abc\n# note\nPANEL_PORT=21355\nMIKAN_UFW=1\nMIKAN_VERSION=0.3.9\n"
+            "MIKAN_IMAGE=ghcr.io/o0hhs/mikan@sha256:abc\n# note\nPANEL_PORT=21355\nMIKAN_UFW=1\nMIKAN_VERSION=0.3.9\n"
         );
         assert!(e.set("X", "a\nb").is_err());
     }
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn values_compose_reads_as_written() {
         let mut e = EnvFile::parse("x".into(), "");
-        for ok in ["ghcr.io/miroshka000/mikan@sha256:ab12", "0.4.4-rc.1+b2", "mikan1.AbC_-9", "21355", ""] {
+        for ok in ["ghcr.io/o0hhs/mikan@sha256:ab12", "0.4.4-rc.1+b2", "mikan1.AbC_-9", "21355", ""] {
             e.set("K", ok).unwrap();
         }
         for bad in ["a$HOME", "${X}", "a b", "a #b", "\"q\"", "'q'", "a`b", "a\\b", "a;b", "a\nb", "img?x=1", "a&b", "a%20b"] {

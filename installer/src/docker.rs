@@ -618,7 +618,7 @@ mod tests {
     #[test]
     fn pull_progress() {
         let mut p = PullProgress::default();
-        assert_eq!(p.feed("0.3.9: Pulling from miroshka000/mikan"), None);
+        assert_eq!(p.feed("0.3.9: Pulling from o0hhs/mikan"), None);
         assert_eq!(p.feed("4f4fb700ef54: Pulling fs layer"), Some(0.0));
         assert_eq!(p.feed("a1b2c3d4e5f6: Already exists"), Some(0.5));
         assert_eq!(p.feed("4f4fb700ef54: Download complete"), Some(0.5));

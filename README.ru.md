@@ -9,14 +9,14 @@
 
 **Быстрая и красивая VPN-панель на ядре [mihomo](https://github.com/MetaCubeX/mihomo): ставится одной командой и не требует присмотра.**
 
-[![Релиз](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=релиз&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
-[![Образ](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
+[![Релиз](https://img.shields.io/github/v/release/o0hhs/mikanaddons?color=f07a2e&label=релиз&style=flat-square)](https://github.com/o0hhs/mikanaddons/releases)
+[![Образ](https://img.shields.io/badge/ghcr.io-o0hhs%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/o0hhs/mikanaddons/pkgs/container/mikan)
 [![Лицензия](https://img.shields.io/badge/лицензия-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
 [![mihomo](https://img.shields.io/badge/ядро-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
-[![Telegram](https://img.shields.io/badge/Telegram-канал-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/mikanvpn)
-[![Telegram](https://img.shields.io/badge/Telegram-форум-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/+I2JFR7DbPow1ZmQy)
 
 [English](README.md) · **Русский** · [简体中文](README.zh-CN.md) · [فارسی](README.fa.md) · [Türkçe](README.tr.md) · [Español](README.es.md)
+
+<sub>Форк [mikan](https://github.com/Miroshka000/mikan) со встроенной реферальной программой и метками рекламных кампаний.</sub>
 
 </div>
 
@@ -27,7 +27,7 @@
 На чистом сервере с Ubuntu 22.04+ или Debian 12+ (amd64 или arm64):
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash
 ```
 
 Установщик по шагам:
@@ -41,10 +41,18 @@ curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install
 Нода для уже работающей панели: страница **Ноды** в панели (или `mikan node add`) выдаёт команду с ключом:
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash -s -- --join КЛЮЧ
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash -s -- --join КЛЮЧ
 ```
 
 Без вопросов, для скриптов: `… | sudo bash -s -- --yes --lang ru --domain vpn.example.com --email you@example.com` (все флаги: `mikan install --help`).
+
+### Переход с обычного mikan
+
+Уже стоит панель апстрима? `scripts/install-fork.sh` переключает работающий сервер на образ этого форка, с бэкапом и путём отката — данные не переписываются (форк добавляет только пустые таблицы). Укажи образ форка:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/o0hhs/mikanaddons/main/scripts/install-fork.sh | sudo bash -s -- --image ghcr.io/o0hhs/mikan:<тег>
+```
 
 ## Почему mikan
 
@@ -132,6 +140,22 @@ REST API с документацией прямо в панели, ключи с
 через способы оплаты с поддержкой возврата: Telegram Stars и адаптеры, которые заявили
 такую возможность. Тогда Mikan сможет вернуть оплату, если резерв промокода истёк до
 подтверждения платежа провайдером.
+
+## Реферальная программа
+
+Подписчики приглашают других своей ссылкой (`t.me/<бот>?start=ref_<код>`). Telegram-аккаунт
+навсегда закреплён за одним пригласившим, поэтому приглашённого нельзя посчитать дважды.
+Что получает пригласивший, задают правила, которые администратор пишет по тарифам: процент
+на внутренний баланс, бонусные дни к своей подписке или и то и другое, плюс правило с
+порогом «каждая N-я оплата». Балансом можно частично оплатить счёт. Программа включается,
+правила и тарифы задаются на странице **Платежи → Рефералы** в панели.
+
+## Метки рекламных кампаний
+
+Дайте каждой рекламе свою ссылку (`t.me/<бот>?start=camp_<метка>`) — и панель посчитает по
+каждой кампании, сколько людей пришло, сколько купило и сколько продлило. Статистика на
+той же странице **Платежи**, так что окупаемость кампании видно прямо в панели, а не только
+в рекламной сети.
 
 ## Скриншоты
 
@@ -233,7 +257,7 @@ MIKAN_TEST_DATABASE_URL=postgres://… go test ./...   # Go 1.27, тестова
 cd installer && cargo test                    # установщик (Rust)
 ```
 
-Разработка идёт в ветке `dev`. Пулл-реквесты в `main` собираются и проходят тесты, релизы публикуются по тегам.
+Разработка идёт в ветке `main`. Пулл-реквесты собираются и проходят тесты, релизы публикуются по тегам.
 
 ## Лицензия
 

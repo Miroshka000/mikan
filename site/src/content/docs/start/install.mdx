@@ -18,7 +18,7 @@ import { Steps } from '@astrojs/starlight/components';
 ## Команда
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash
 ```
 
 `install.sh` сначала проверяет подпись релиза и хеш установщика и только потом что-то ставит. Если Docker нет, он поставится с get.docker.com. Docker без compose v2 (пакет `docker.io` из Ubuntu 22.04 и Debian) установщик заменит, но только с вашего согласия: образы, тома и контейнеры останутся.
@@ -60,7 +60,7 @@ curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install
 С флагом `--yes` установщик ничего не спрашивает и берёт значения из флагов и умолчаний:
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh \
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh \
   | sudo bash -s -- --yes --lang ru --domain vpn.example.com --email you@example.com
 ```
 
@@ -100,7 +100,7 @@ curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install
 
 ## Нода для другой панели
 
-Если панель уже стоит, а нужна ещё одна точка выхода, на новом сервере ставится только нода. Команду с ключом выдаёт страница **Ноды**, подробнее в разделе [Ноды](/mikan/nodes/nodes/).
+Если панель уже стоит, а нужна ещё одна точка выхода, на новом сервере ставится только нода. Команду с ключом выдаёт страница **Ноды**, подробнее в разделе [Ноды](/mikanaddons/nodes/nodes/).
 
 ## Удаление
 

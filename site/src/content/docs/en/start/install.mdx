@@ -18,7 +18,7 @@ import { Steps } from '@astrojs/starlight/components';
 ## The command
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash
 ```
 
 `install.sh` first checks the release signature and the installer hash, and only then installs anything. If Docker is missing, it is installed from get.docker.com. Docker without compose v2 (the `docker.io` package from Ubuntu 22.04 and Debian) is replaced by the installer, but only with your consent: images, volumes and containers stay.
@@ -60,7 +60,7 @@ The password is shown only on the last screen. After you exit, the link and logi
 With the `--yes` flag the installer asks nothing and takes values from flags and defaults:
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh \
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh \
   | sudo bash -s -- --yes --lang en --domain vpn.example.com --email you@example.com
 ```
 
@@ -100,7 +100,7 @@ Run `mikan install` again and the installer continues from where it stopped. On 
 
 ## A node for another panel
 
-If the panel is already installed and you need one more exit point, only the node is installed on the new server. The command with a key comes from the **Nodes** page, more in the [Nodes](/mikan/en/nodes/nodes/) section.
+If the panel is already installed and you need one more exit point, only the node is installed on the new server. The command with a key comes from the **Nodes** page, more in the [Nodes](/mikanaddons/en/nodes/nodes/) section.
 
 ## Uninstalling
 

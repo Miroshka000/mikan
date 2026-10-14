@@ -19,7 +19,7 @@ import (
 )
 
 func manifest(version string) []byte {
-	m := release.Manifest{Version: version, Published: time.Unix(1_800_000_000, 0).UTC(), Image: "ghcr.io/miroshka000/mikan",
+	m := release.Manifest{Version: version, Published: time.Unix(1_800_000_000, 0).UTC(), Image: "ghcr.io/o0hhs/mikan",
 		Digest: "sha256:" + strings.Repeat("a", 64), Installer: map[string]release.Asset{}, Notes: map[string]string{"en": "- x"}}
 	data, _ := json.Marshal(m)
 	return data

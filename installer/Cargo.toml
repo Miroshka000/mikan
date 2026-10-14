@@ -6,7 +6,7 @@ edition = "2024"
 rust-version = "1.89"
 license = "GPL-3.0-only"
 description = "Installs the mikan VPN panel and manages it from the server's shell"
-repository = "https://github.com/Miroshka000/mikan"
+repository = "https://github.com/o0hhs/mikanaddons"
 publish = false
 
 # The release version comes from the tag: MIKAN_VERSION=v0.3.9 at build time.

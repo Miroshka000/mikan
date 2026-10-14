@@ -35,7 +35,7 @@ func TestUpdatesForTheHost(t *testing.T) {
 			mu.Lock()
 			channels = append(channels, q.Channel)
 			mu.Unlock()
-			return updates.Found{Manifest: release.Manifest{Version: latest, Published: time.Unix(1_800_000_000, 0), Image: "ghcr.io/miroshka000/mikan",
+			return updates.Found{Manifest: release.Manifest{Version: latest, Published: time.Unix(1_800_000_000, 0), Image: "ghcr.io/o0hhs/mikan",
 				Digest: "sha256:" + strings.Repeat("a", 64), Notes: map[string]string{"en": "- faster", "ru": "- быстрее"}}}, nil
 		}
 	})
@@ -118,7 +118,7 @@ func TestUpdatesGoals(t *testing.T) {
 	h := newHarness(t, func(o *Options) {
 		o.DataDir = t.TempDir()
 		o.Releases = func(context.Context, updates.Query) (updates.Found, error) {
-			return updates.Found{Manifest: release.Manifest{Version: "0.0.1", Published: time.Unix(1_800_000_000, 0), Image: "ghcr.io/miroshka000/mikan", Digest: "sha256:" + strings.Repeat("a", 64)},
+			return updates.Found{Manifest: release.Manifest{Version: "0.0.1", Published: time.Unix(1_800_000_000, 0), Image: "ghcr.io/o0hhs/mikan", Digest: "sha256:" + strings.Repeat("a", 64)},
 				Goals: release.Goals{Donate: "https://web.tribute.tg/d/REA", Items: []release.Goal{{ID: "utm", Title: map[string]string{"ru": "Метки"}, Target: 150, Raised: 40, Currency: "USD", Status: release.GoalOpen}}}}, nil
 		}
 	})

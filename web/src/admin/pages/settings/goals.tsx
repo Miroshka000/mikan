@@ -7,7 +7,7 @@ import { getLocale, t } from "../../../i18n";
 type Goal = Schemas["Goal"];
 
 /** The docs site's page with every goal and what is done. */
-const goalsPage = (lang: string) => `https://miroshka000.github.io/mikan/${lang === "en" ? "en/" : ""}support/`;
+const goalsPage = (lang: string) => `https://o0hhs.github.io/mikanaddons/${lang === "en" ? "en/" : ""}support/`;
 
 /**
  * What the project collects money for, as the signed release index says (it comes with

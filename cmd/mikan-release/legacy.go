@@ -52,7 +52,9 @@ const (
 	// serde_json's recursion limit, which unknown fields are parsed under too.
 	legacyMaxDepth = 100
 	// installer/src/release.rs IMAGE_PREFIX (0.5.0.0), the literal in valid_image (0.4.5).
-	legacyImagePrefix = "ghcr.io/miroshka000/"
+	// The fork signs and serves its own releases from ghcr.io/o0hhs/, so this is the
+	// namespace its own older clients would accept.
+	legacyImagePrefix = "ghcr.io/o0hhs/"
 )
 
 // legacyCheck says whether every client still in the field takes data with sig as the

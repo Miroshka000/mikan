@@ -2,10 +2,10 @@
 // src/content/docs (Russian) and src/content/docs/en (English).
 
 export const links = {
-	github: 'https://github.com/Miroshka000/mikan',
-	releases: 'https://github.com/Miroshka000/mikan/releases',
-	issues: 'https://github.com/Miroshka000/mikan/issues',
-	license: 'https://github.com/Miroshka000/mikan/blob/main/LICENSE',
+	github: 'https://github.com/o0hhs/mikanaddons',
+	releases: 'https://github.com/o0hhs/mikanaddons/releases',
+	issues: 'https://github.com/o0hhs/mikanaddons/issues',
+	license: 'https://github.com/o0hhs/mikanaddons/blob/main/LICENSE',
 	sponsor: 'https://web.tribute.tg/d/REA',
 	mihomo: 'https://github.com/MetaCubeX/mihomo',
 };
@@ -13,7 +13,7 @@ export const links = {
 // Two lines, so the command fits the hero without wrapping in odd places; bash reads the
 // trailing backslash as one command when it is pasted.
 export const installCommand =
-	'curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh \\\n  | sudo bash';
+	'curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh \\\n  | sudo bash';
 
 export type Lang = 'ru' | 'en';
 export type Screen = 'dashboard' | 'users' | 'inbounds' | 'telegram' | 'settings';

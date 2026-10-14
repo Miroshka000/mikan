@@ -50,7 +50,7 @@ func TestIndexSeedsThenGrows(t *testing.T) {
 	if got := versions(ix); got != "0.4.5/stable/0.4.0 0.5.0.0/stable/0.4.5 0.5.0.1/stable/0.4.5" {
 		t.Fatalf("seeded: %s", got)
 	}
-	if ix.Schema != release.IndexSchema || ix.Releases[2].Manifest != "https://github.com/Miroshka000/mikan/releases/download/v0.5.0.1/manifest.json" {
+	if ix.Schema != release.IndexSchema || ix.Releases[2].Manifest != "https://github.com/o0hhs/mikanaddons/releases/download/v0.5.0.1/manifest.json" {
 		t.Fatalf("seeded: %+v", ix)
 	}
 	// A pre-release goes to beta, and "latest" is none of the index's business.
