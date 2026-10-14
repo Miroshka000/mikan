@@ -804,12 +804,26 @@ pub fn install(opts: Options) -> Result<()> {
         return plain(opts, Some(EnvFile::load(root.join(".env"))?));
     }
     if root.join(".env").exists() {
-        if crate::tui::interactive() && !opts.yes {
+        let join = match &opts.join {
+            Some(_) => Some(crate::ops::Install::load()?.node),
+            None => None,
+        };
+        if join == Some(false) {
+            bail!("this server runs a mikan panel: a node of another panel needs a server of its own");
+        }
+        if join.is_none() && crate::tui::interactive() && !opts.yes {
             return crate::tui::menu();
         }
         crate::out(&format!("mikan is already installed in {DIR}: updating it."));
         let args = crate::update::UpdateArgs { target: opts.image_tar.or(opts.image), ..Default::default() };
-        return crate::update::update(&args, &mut crate::out, &mut |_| {});
+        crate::update::update(&args, &mut crate::out, &mut |_| {})?;
+        // The panel's node command run again on a node (a second try, a new key): the key
+        // it carries is the one the panel now waits for, and an update alone would keep the
+        // old one, which the panel refuses.
+        return match opts.join {
+            Some(key) => crate::ops::join(key.trim(), opts.panel_ip),
+            None => Ok(()),
+        };
     }
     if crate::tui::interactive() && !opts.yes {
         return crate::tui::wizard(opts);

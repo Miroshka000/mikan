@@ -3,6 +3,12 @@
 Each release has a section in English and in Russian; the release workflow puts them in
 the signed manifest, and the panel shows the one in its language.
 
+## 0.5.1.1
+### en
+- The node command from the panel run again on a server where mikan already runs (a second try, a reissued key) now gives the node the new key: before, it only updated the node and kept the old key, and the panel answered "the key did not fit". On a server with a panel it stops with a clear error instead.
+### ru
+- Команда ноды из панели, запущенная повторно на сервере, где mikan уже стоит (вторая попытка, перевыпущенный ключ), теперь даёт ноде новый ключ: раньше она только обновляла ноду и оставляла старый ключ, а панель отвечала «ключ не подошёл». На сервере с панелью она останавливается с понятной ошибкой.
+
 ## 0.5.1.0
 ### en
 - **Addons beyond payments, on one page**: Addons now has two tabs, Installed (the bot, payment methods, pages and the built-in tools in rows) and Catalog (search and filters), and its catalog offers bots and pages as well as payment methods; payment methods are installed there too. Before an addon is installed the admin sees what it may do (its permissions) and approves exactly that; an update that asks for more waits for a new approval. Third-party addons install from **sources** (Addons → Sources): the link to an author's file or catalog, or github.com/owner/repo (its latest release). Their addons are marked unofficial, nobody at mikan has reviewed them, and they install with the same approval, the image pinned by its digest. A source signed by its author pins the key (shown as a fingerprint): a changed key or a dropped signature is refused until the admin accepts the new fingerprint. Developer mode (a process of one's own on the server) stays for authors; the form for typing an image by hand is gone. An addon with its own pages opens them inside the panel, in an isolated frame.
