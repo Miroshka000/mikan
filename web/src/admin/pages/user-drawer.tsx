@@ -15,6 +15,7 @@ import { PoolsSection, TariffSection, TrafficSection } from "./user/traffic";
 import { ExpirySection } from "./user/expiry";
 import { NoteSection, ProtocolsSection, SubscriptionSection, TelegramSection } from "./user/access";
 import { DevicesSection } from "./user/devices";
+import { NodesSection } from "./user/nodes";
 import { OrganiseSection } from "./user/organise";
 import { TorrentSection } from "./user/torrent";
 
@@ -112,6 +113,7 @@ function UserBody({ u, onDeleted }: { u: User; onDeleted: () => void }) {
       <SubscriptionSection u={u} onReissue={() => setConfirm("reissue")} />
       <ExpirySection u={u} />
       <TrafficSection u={u} />
+      <NodesSection u={u} />
       <DevicesSection u={u} />
       <TariffSection u={u} />
       <NoteSection u={u} />

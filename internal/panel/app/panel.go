@@ -144,6 +144,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		p.Nodes = nodesync.NewManager(st, set, pool, o.Connect, o.Log, o.Now)
 		changes = p.Nodes
 		deps.Online = p.Nodes.Online
+		deps.NodeOnline = p.Nodes.OnlineOf
 		deps.Nodes = p.Nodes
 		p.NodeUpdates = nodeupdate.New(st, set, p.Nodes, o.Version, o.Log, o.Now)
 		deps.NodeUpdates = p.NodeUpdates

@@ -52,15 +52,18 @@ type Deps struct {
 	Log        *slog.Logger
 	Now        func() time.Time
 
-	Users     *domain.Users
-	Inbounds  *domain.Inbounds
-	Devices   *domain.Devices
-	Packages  *domain.Packages
-	Pool      *domain.Pool
-	Changes   domain.Changes
-	Online    func() map[string]nodeapi.Online
-	Cert      func() acme.Status
-	RenewCert func()
+	Users    *domain.Users
+	Inbounds *domain.Inbounds
+	Devices  *domain.Devices
+	Packages *domain.Packages
+	Pool     *domain.Pool
+	Changes  domain.Changes
+	Online   func() map[string]nodeapi.Online
+	// NodeOnline is one node's live view by slot name; nil without nodes or for a node that
+	// is not running. The per-node half of Online, for the node's card.
+	NodeOnline func(id int64) map[string]nodeapi.Online
+	Cert       func() acme.Status
+	RenewCert  func()
 	// RoutesPreview renders a Clash profile with routing in place of the saved one
 	// (subs.Handler.Preview); nil: no preview.
 	RoutesPreview func(ctx context.Context, req subs.PreviewRequest) ([]byte, error)
@@ -229,6 +232,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerTargets()
 	h.registerStats()
 	h.registerNodeTraffic()
+	h.registerNodeClients()
 	h.registerMetrics()
 	h.registerBackups()
 	h.registerImport()

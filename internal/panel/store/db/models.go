@@ -166,6 +166,15 @@ type Node struct {
 	TotalDown  int64
 }
 
+type NodeClient struct {
+	UserID    int64
+	NodeID    int64
+	Up        int64
+	Down      int64
+	FirstSeen int64
+	LastSeen  int64
+}
+
 type NodeRelay struct {
 	NodeID     int64
 	Port       string

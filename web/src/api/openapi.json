@@ -2770,6 +2770,84 @@
         ],
         "type": "object"
       },
+      "NodeClientView": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "description": "up + down",
+            "format": "int64",
+            "type": "integer"
+          },
+          "down": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "first_seen": {
+            "description": "Когда пользователя впервые увидели на ноде; null — время неизвестно",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_seen": {
+            "description": "Когда его в последний раз видели на ноде; null — время неизвестно",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "online": {
+            "description": "Подключён к этой ноде прямо сейчас",
+            "type": "boolean"
+          },
+          "up": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "up",
+          "down",
+          "bytes",
+          "online",
+          "first_seen",
+          "last_seen"
+        ],
+        "type": "object"
+      },
+      "NodeClientsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "Клиенты ноды, больше всех трафика сверху",
+            "items": {
+              "$ref": "#/components/schemas/NodeClientView"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "Сколько всего клиентов у ноды; items может быть короче",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ],
+        "type": "object"
+      },
       "NodeInfo": {
         "additionalProperties": false,
         "properties": {
@@ -7175,6 +7253,83 @@
         ],
         "type": "object"
       },
+      "UserNodeView": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "description": "up + down",
+            "format": "int64",
+            "type": "integer"
+          },
+          "down": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "first_seen": {
+            "description": "Когда пользователя впервые увидели на ноде; null — время неизвестно",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_seen": {
+            "description": "Когда его в последний раз видели на ноде; null — время неизвестно",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "online": {
+            "description": "Пользователь подключён к этой ноде прямо сейчас",
+            "type": "boolean"
+          },
+          "public_name": {
+            "description": "Имя ноды в подписке; пусто — берётся name",
+            "type": "string"
+          },
+          "up": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "node_id",
+          "name",
+          "public_name",
+          "up",
+          "down",
+          "bytes",
+          "online",
+          "first_seen",
+          "last_seen"
+        ],
+        "type": "object"
+      },
+      "UserNodesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "Ноды пользователя, больше всех трафика сверху",
+            "items": {
+              "$ref": "#/components/schemas/UserNodeView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "UserPoolView": {
         "additionalProperties": false,
         "properties": {
@@ -9987,6 +10142,64 @@
           "node"
         ],
         "x-session-only": true
+      }
+    },
+    "/api/v1/nodes/{id}/clients": {
+      "get": {
+        "description": "Кто ходил через ноду, когда его видели в последний раз и сколько он через неё унёс. Считается с версии, где это появилось: прошлое не восстанавливается.",
+        "operationId": "node-clients",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Сколько показать; всего клиентов в total",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 500,
+              "description": "Сколько показать; всего клиентов в total",
+              "format": "int64",
+              "maximum": 1000,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeClientsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Клиенты ноды",
+        "tags": [
+          "node"
+        ]
       }
     },
     "/api/v1/nodes/{id}/key": {
@@ -13734,6 +13947,50 @@
           }
         },
         "summary": "Шифрованная ссылка Happ на подписку пользователя",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/nodes": {
+      "get": {
+        "description": "Через какие ноды ходил пользователь, сколько унёс через каждую и когда его там видели в последний раз.",
+        "operationId": "user-nodes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserNodesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Ноды пользователя",
         "tags": [
           "users"
         ]
