@@ -8,6 +8,7 @@ import { PageHeader, Skeleton } from "../../../components/ui";
 import { t, type Key } from "../../../i18n";
 import { SETTINGS_PARTS, SETTINGS_TABS, type SettingsSearch } from "../../search";
 import { AutoCard, LanguageCard, ServiceCard, UpdatesCard } from "./general";
+import { ServerCheckCard } from "../node-check";
 import { GoalsCard } from "./goals";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { RoutingSection } from "./routing";
@@ -96,6 +97,7 @@ export function SettingsPage() {
               ) : tab === "system" ? (
                 <>
                   <UpdatesCard />
+                  <ServerCheckCard />
                   <GoalsCard />
                   <AutoCard s={s} />
                 </>

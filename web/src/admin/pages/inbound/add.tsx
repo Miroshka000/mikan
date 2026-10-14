@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
-import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
+import { api, unwrap, type Schemas } from "../../../api/client";
+import { onFormError } from "../../../lib/fields";
 import { qk, usePresets } from "../../../api/hooks";
-import { Drawer } from "../../../components/overlay";
+import { Drawer, DrawerFooter } from "../../../components/overlay";
 import { useToast } from "../../../components/toast";
 import { Button, Field } from "../../../components/ui";
 import { t } from "../../../i18n";
@@ -40,8 +41,7 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
     },
     onError: (e) => {
       validate.reset();
-      if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields);
-      else toast.error(errorText(e));
+      onFormError(e, toast, setErrors);
     },
   });
   const custom = preset === "custom";
@@ -64,14 +64,9 @@ export function AddDrawer({ open, onOpenChange, nodeId, nodeName }: { open: bool
       title={t("inbounds.newTitle")}
       meta={nodeName ? t("inbounds.newOn", { name: nodeName }) : custom ? t("inbounds.customMeta") : t("inbounds.newMeta")}
       footer={
-        <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="add-inbound" loading={create.isPending}>
-            {t("common.add")}
-          </Button>
-        </>
+        <DrawerFooter form="add-inbound" onCancel={() => onOpenChange(false)} loading={create.isPending}>
+          {t("common.add")}
+        </DrawerFooter>
       }
     >
       <form id="add-inbound" onSubmit={submit} className="pt-5" noValidate>

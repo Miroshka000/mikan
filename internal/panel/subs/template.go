@@ -34,10 +34,6 @@ func (e *TemplateError) Error() string { return e.Code + ": " + e.Detail }
 
 func templateErr(code, detail string) error { return &TemplateError{Code: code, Detail: detail} }
 
-// MaxTemplate is the size of the largest template: a full profile with rule lists is
-// a few dozen kilobytes.
-const MaxTemplate = 512 << 10
-
 func parseProfileTemplate(src string) (map[string]any, error) {
 	var cfg map[string]any
 	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {

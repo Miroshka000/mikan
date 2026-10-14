@@ -1,0 +1,139 @@
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+geodata-mode: false
+geox-url:
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
+dns:
+  enable: true
+  ipv6: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://1.1.1.1/dns-query#PROXY
+    - https://8.8.8.8/dns-query#PROXY
+  nameserver-policy:
+    geosite:category-ru:
+      - 77.88.8.8
+      - 77.88.8.1
+  proxy-server-nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxies:
+  - name: VLESS XHTTP
+    type: vless
+    server: 203.0.113.7
+    port: 443
+    client-fingerprint: chrome
+    network: xhttp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: false
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+    xhttp-opts:
+      mode: stream-one
+      path: /golden-path
+      reuse-settings:
+        h-max-request-times: 600-900
+        h-max-reusable-secs: 1800-3000
+        max-concurrency: 16-32
+  - name: Hysteria2
+    type: hysteria2
+    server: 203.0.113.7
+    port: 443
+    alpn:
+      - h3
+    fingerprint: ab12
+    obfs: salamander
+    obfs-password: golden-obfs-password
+    password: S3cr3t+/=
+    skip-cert-verify: false
+  - name: TUIC
+    type: tuic
+    server: 203.0.113.7
+    port: 8443
+    alpn:
+      - h3
+    congestion-controller: bbr
+    fingerprint: ab12
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    udp-relay-mode: native
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: VLESS Vision
+    type: vless
+    server: 203.0.113.7
+    port: 8443
+    client-fingerprint: chrome
+    flow: xtls-rprx-vision
+    network: tcp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies:
+      - Auto
+      - VLESS XHTTP
+      - Hysteria2
+      - TUIC
+      - VLESS Vision
+  - name: Auto
+    type: url-test
+    proxies:
+      - VLESS XHTTP
+      - Hysteria2
+      - TUIC
+      - VLESS Vision
+    interval: 300
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: PROXY
+    type: select
+    proxies:
+      - VPN
+    hidden: true
+rules:
+  - IP-CIDR,203.0.113.7/32,DIRECT,no-resolve
+  - DOMAIN,vpn.example.com,DIRECT
+  - GEOIP,LAN,DIRECT,no-resolve
+  - RULE-SET,mikan-blocked,VPN
+  - RULE-SET,mikan-blocked,REJECT
+  - RULE-SET,mikan-blocked-apps,VPN
+  - RULE-SET,mikan-blocked-apps,REJECT
+  - MATCH,DIRECT
+rule-providers:
+  mikan-blocked:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-blocked.yaml
+    proxy: VPN
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/clV2_provider.yaml
+  mikan-blocked-apps:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-blocked-apps.yaml
+    proxy: VPN
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/process-core.yaml

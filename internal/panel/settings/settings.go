@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,22 +30,40 @@ const (
 	// panel's own address. Links built on it survive a panel move — only its DNS moves.
 	KeySubDomain = "sub_domain"
 	KeyACMEEmail = "acme_email"
-	KeyGroupMain = "sub_group_main" // subscription group names, see subs.Groups
-	KeyGroupAuto = "sub_group_auto"
-	KeyRouting   = "sub_routing"  // subs.Routing
-	KeyRules     = "sub_rules"    // the admin's own Clash rules, as typed (subs.ParseRules)
-	KeyRoutes    = "sub_routes"   // services, direct apps and DNS of the profiles (subs.Routes)
-	KeyTemplate  = "sub_template" // the admin's own Clash profile (subs.Template); empty: none
+	// KeyACMECA is the certificate authority of the panel and its nodes (acme.ValidCA);
+	// unset: Let's Encrypt. KeyACMEEABKID and KeyACMEEABHMAC are Google Trust Services'
+	// external account key; the HMAC is a secret and never shown back.
+	KeyACMECA      = "acme_ca"
+	KeyACMEEABKID  = "acme_eab_kid"
+	KeyACMEEABHMAC = "acme_eab_hmac"
+	KeyGroupMain   = "sub_group_main" // subscription group names, see subs.Groups
+	KeyGroupAuto   = "sub_group_auto"
+	KeyRouting     = "sub_routing"  // subs.Routing
+	KeyRules       = "sub_rules"    // the admin's own Clash rules, as typed (subs.ParseRules)
+	KeyRoutes      = "sub_routes"   // services, direct apps and DNS of the profiles (subs.Routes)
+	KeyTemplate    = "sub_template" // the admin's own Clash profile (subs.Template); empty: none
 	// KeyFingerprint is the uTLS profile clients get where an inbound sets none
 	// (proto.Fingerprints); unset means proto.DefaultFingerprint.
 	KeyFingerprint = "client_fingerprint"
 	// Automatic moves (internal/panel/autotune), on unless switched off.
 	KeyAutoPort = "auto_port" // move an inbound whose port is blocked on the way to clients
 	KeyAutoSNI  = "auto_sni"  // replace a REALITY target that stopped working
+	// KeyAnyPort lets the panel's own port picks go past domain.PortPool when every port
+	// of it is taken: a new inbound with no port named, an automatic move.
+	KeyAnyPort = "any_port"
+	// KeyWideScan lets the search for REALITY sites go past the node's /24 to the rest of
+	// its /16 (scan.Options.Wide): more candidates, and many more connections.
+	KeyWideScan = "wide_sni_scan"
 	// Devices (domain.Devices): bind subscriptions to devices, on unless switched off;
 	// refuse apps that send no device id instead of seating them together, off by default.
 	KeyDeviceBinding = "device_binding"
 	KeyRequireHWID   = "device_require_hwid"
+	// KeyUnbindRules is how the subscriber may unbind devices (domain.UnbindRules); unset:
+	// domain.DefaultUnbindRules.
+	KeyUnbindRules = "device_unbind"
+	// KeyReissueRules is how often the subscriber may reissue their own link
+	// (domain.ReissueRules); unset: domain.DefaultReissueRules.
+	KeyReissueRules = "link_reissue"
 	// KeyDefaultLang is the language chosen at install: the admin panel and the subscription
 	// page open in it until a visitor picks one, and new names (tariffs, the auto group, the
 	// bot's menu) are written in it. "auto" or unset: the visitor's browser decides.
@@ -107,6 +127,8 @@ type Switch struct {
 var (
 	AutoPort      = Switch{KeyAutoPort, true}
 	AutoSNI       = Switch{KeyAutoSNI, true}
+	AnyPort       = Switch{KeyAnyPort, false}
+	WideScan      = Switch{KeyWideScan, false}
 	DeviceBinding = Switch{KeyDeviceBinding, true}
 	RequireHWID   = Switch{KeyRequireHWID, false}
 	AutoUpdate    = Switch{KeyAutoUpdate, false}
@@ -175,6 +197,10 @@ func (s *Settings) raw(ctx context.Context, key string) (string, bool, error) {
 	}
 	return raw, found, nil
 }
+
+// Raw is the stored JSON under key as it is, for a reader that falls back on its own
+// when the value does not parse; found is false when the key is absent.
+func (s *Settings) Raw(ctx context.Context, key string) (string, bool, error) { return s.raw(ctx, key) }
 
 func (s *Settings) read(ctx context.Context, key string) (string, bool, error) {
 	raw, err := s.q.GetSetting(ctx, key)
@@ -304,6 +330,14 @@ func (s *Settings) Paths(ctx context.Context) (Paths, error) {
 type Endpoint struct {
 	Host string
 	Port int
+}
+
+// URL is https://host:port, the panel's base address; "" while it has no host or port.
+func (e Endpoint) URL() string {
+	if e.Host == "" || e.Port <= 0 {
+		return ""
+	}
+	return "https://" + net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
 }
 
 // SubEndpoint is where subscription links point: the subscription domain when one is

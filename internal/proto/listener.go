@@ -52,7 +52,7 @@ func Listener(t Template, name, listen, port string, slots []Slot, cert Cert, o 
 		l["users"] = users(t.Type(), slots, ext)
 	}
 	listenerExtra(t, l)
-	if r.cert || ext.TLS == "node" {
+	if t.NodeCert() {
 		if cert.CertPath == "" {
 			return nil, errors.New("no node certificate for " + t.Type())
 		}

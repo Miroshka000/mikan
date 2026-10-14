@@ -144,7 +144,7 @@ var xhttpShared = []struct{ mihomo, xray string }{
 	{"x-padding-key", "xPaddingKey"}, {"x-padding-header", "xPaddingHeader"},
 	{"x-padding-placement", "xPaddingPlacement"}, {"x-padding-method", "xPaddingMethod"},
 	{"uplink-http-method", "uplinkHTTPMethod"},
-	{"session-placement", "sessionPlacement"}, {"session-key", "sessionKey"},
+	{"session-placement", "sessionIDPlacement"}, {"session-key", "sessionIDKey"}, // Xray's own names; mihomo reads both
 	{"seq-placement", "seqPlacement"}, {"seq-key", "seqKey"},
 	{"uplink-data-placement", "uplinkDataPlacement"}, {"uplink-data-key", "uplinkDataKey"},
 	{"uplink-chunk-size", "uplinkChunkSize"}, {"sc-max-each-post-bytes", "scMaxEachPostBytes"},
@@ -305,6 +305,15 @@ func (c *clientBuilder) transport() {
 			}
 			if v := scalar(cl["sc-min-posts-interval-ms"]); v != "" {
 				opts["sc-min-posts-interval-ms"], extra["scMinPostsIntervalMs"] = v, v
+			}
+			// Without a length Xray finds the table "too small" where mihomo draws 16-32.
+			if v := scalar(cl["session-table"]); v != "" {
+				l := scalar(cl["session-length"])
+				if l == "" {
+					l = defaultSessionLength
+				}
+				opts["session-table"], extra["sessionIDTable"] = v, v
+				opts["session-length"], extra["sessionIDLength"] = l, l
 			}
 		}
 		if len(extra) > 0 {

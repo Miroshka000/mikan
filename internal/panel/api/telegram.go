@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/netip"
@@ -10,13 +11,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/panel/addons/panelapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/infraalerts"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbot"
 )
 
@@ -27,7 +31,7 @@ type TelegramView struct {
 	TokenSet       bool                     `json:"token_set" doc:"Токен сохранён"`
 	TokenHint      string                   `json:"token_hint,omitempty" doc:"ID бота из токена"`
 	Running        bool                     `json:"running"`
-	Error          string                   `json:"error,omitempty" doc:"token_invalid, token_revoked, unreachable или ответ Telegram"`
+	Error          string                   `json:"error,omitempty" doc:"token_invalid, token_revoked, token_conflict (токен опрашивает ещё одна программа), unreachable или ответ Telegram"`
 	Bot            *TelegramBot             `json:"bot,omitempty"`
 	Config         tgbot.Config             `json:"config"`
 	Defaults       tgbot.Texts              `json:"defaults" doc:"Встроенные тексты на языке бота: пустое поле берёт их"`
@@ -38,6 +42,7 @@ type TelegramView struct {
 	Route          TelegramRoute            `json:"route" doc:"Как бот ходит в Telegram"`
 	Infrastructure infraalerts.AlertsConfig `json:"infrastructure"`
 	AdminChatSet   bool                     `json:"admin_chat_set"`
+	ChannelError   string                   `json:"channel_error,omitempty" doc:"Почему бот не может проверить подписку на канал: channel_not_admin (бот не администратор канала), channel_not_found, unreachable или ответ Telegram. Пока ошибка есть, обязательная подписка никого не останавливает"`
 }
 
 type TelegramRoute struct {
@@ -78,7 +83,7 @@ type patchTelegramInput struct {
 
 type broadcastInput struct {
 	Body struct {
-		Text string `json:"text" minLength:"1" maxLength:"3500" doc:"Обычный текст; {brand} — название сервиса"`
+		Text string `json:"text" minLength:"1" maxLength:"3500" doc:"Текст с Markdown, как тексты бота; {brand} — название сервиса"`
 	}
 }
 
@@ -88,6 +93,34 @@ type broadcastOutput struct {
 	}
 }
 
+type telegramPreviewInput struct {
+	Body struct {
+		Text string            `json:"text" maxLength:"3500" doc:"Текст бота с Markdown"`
+		Vars map[string]string `json:"vars,omitempty" maxProperties:"20" doc:"Значения переменных {name}; без них переменные остаются как написаны"`
+	}
+}
+
+type telegramPreviewOutput struct {
+	Body struct {
+		HTML string `json:"html" doc:"Сообщение, как его отправит бот: HTML Telegram"`
+	}
+}
+
+// previewTelegram shows the admin how the bot sends a text: the same conversion the bot
+// runs, without a bot.
+func (h *handlers) previewTelegram(_ context.Context, in *telegramPreviewInput) (*telegramPreviewOutput, error) {
+	vars := make(map[string]string, len(in.Body.Vars))
+	for k, v := range in.Body.Vars {
+		if len(k) > 20 || utf8.RuneCountInString(v) > 200 {
+			return nil, fieldErr("body.vars", "tg_text")
+		}
+		vars[k] = v
+	}
+	out := &telegramPreviewOutput{}
+	out.Body.HTML = tgbot.Render(in.Body.Text, vars)
+	return out, nil
+}
+
 type infrastructureConnectOutput struct {
 	Body struct {
 		URL string `json:"url"`
@@ -95,11 +128,11 @@ type infrastructureConnectOutput struct {
 }
 
 func (h *handlers) connectInfrastructureAdmin(ctx context.Context, _ *struct{}) (*infrastructureConnectOutput, error) {
-	if h.d.Telegram == nil {
+	if h.d.Gateway == nil {
 		return nil, huma.Error503ServiceUnavailable("bot_unavailable")
 	}
-	url, err := h.d.Telegram.BeginInfrastructureAdminConnect(ctx)
-	if errors.Is(err, tgbot.ErrOff) {
+	url, err := h.d.Gateway.BeginInfrastructureAdminConnect(ctx)
+	if errors.Is(err, tgate.ErrOff) {
 		return nil, huma.Error409Conflict("bot_off")
 	}
 	if err != nil {
@@ -112,10 +145,10 @@ func (h *handlers) connectInfrastructureAdmin(ctx context.Context, _ *struct{}) 
 }
 
 func (h *handlers) disconnectInfrastructureAdmin(ctx context.Context, _ *struct{}) (*struct{}, error) {
-	if h.d.Telegram == nil {
+	if h.d.Gateway == nil {
 		return nil, huma.Error503ServiceUnavailable("bot_unavailable")
 	}
-	if err := h.d.Telegram.DisconnectInfrastructureAdmin(ctx); err != nil {
+	if err := h.d.Gateway.DisconnectInfrastructureAdmin(ctx); err != nil {
 		return nil, err
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "telegram.infrastructure_disconnect", "telegram", "", nil)
@@ -126,6 +159,7 @@ func (h *handlers) registerTelegram() {
 	tags := []string{"telegram"}
 	huma.Register(h.api, huma.Operation{OperationID: "get-telegram", Method: http.MethodGet, Path: "/api/v1/telegram", Summary: "Telegram-бот", Tags: tags}, h.getTelegram)
 	huma.Register(h.api, huma.Operation{OperationID: "update-telegram", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPatch, Path: "/api/v1/telegram", Summary: "Настроить Telegram-бота", Tags: tags}, h.updateTelegram)
+	huma.Register(h.api, huma.Operation{OperationID: "telegram-preview", Method: http.MethodPost, Path: "/api/v1/telegram/preview", Summary: "Как бот отправит текст с Markdown", Tags: tags}, h.previewTelegram)
 	huma.Register(h.api, huma.Operation{OperationID: "telegram-broadcast", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/telegram/broadcast", Summary: "Разослать сообщение всем в боте", Tags: tags, DefaultStatus: http.StatusAccepted}, h.broadcast)
 	huma.Register(h.api, huma.Operation{OperationID: "telegram-infrastructure-connect", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/telegram/infrastructure/connect", Summary: "Подключить чат администратора для уведомлений", Tags: tags}, h.connectInfrastructureAdmin)
 	huma.Register(h.api, huma.Operation{OperationID: "telegram-infrastructure-disconnect", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodDelete, Path: "/api/v1/telegram/infrastructure/connect", Summary: "Отключить чат администратора для уведомлений", Tags: tags, DefaultStatus: http.StatusNoContent}, h.disconnectInfrastructureAdmin)
@@ -135,10 +169,10 @@ func (h *handlers) registerTelegram() {
 func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 	var v TelegramView
 	var err error
-	if v.Enabled, err = h.d.Settings.On(ctx, tgbot.Enabled); err != nil {
+	if v.Enabled, err = h.d.Settings.On(ctx, tgate.Enabled); err != nil {
 		return v, err
 	}
-	token, err := h.d.Settings.String(ctx, tgbot.KeyToken)
+	token, err := h.d.Settings.String(ctx, tgate.KeyToken)
 	if err != nil {
 		return v, err
 	}
@@ -148,42 +182,48 @@ func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 			v.TokenHint = id
 		}
 	}
-	if bot, ok, _ := settings.Get[tgbot.User](ctx, h.d.Settings, tgbot.KeyBot); ok && token != "" {
+	if bot, ok, _ := settings.Get[tgate.User](ctx, h.d.Settings, tgate.KeyBot); ok && token != "" {
 		v.Bot = &TelegramBot{Username: bot.Username, Name: bot.FirstName}
 	}
-	if h.d.Telegram != nil {
-		st := h.d.Telegram.Status()
+	if h.d.Gateway != nil {
+		st := h.d.Gateway.Status()
 		v.Running, v.Error = st.Running, st.Error
-		v.Config = h.d.Telegram.Config(ctx)
+		v.ChannelError = h.d.Gateway.ChannelError(ctx)
+	}
+	v.Config = h.d.Telegram.Config(ctx)
+	// The address carries the sub path, which is the panel's secret.
+	if !hidesSecrets(ctx) {
 		v.MiniAppURL = h.d.Telegram.MiniAppURL(ctx)
-		if p := h.d.Telegram.Progress(); p.Total > 0 {
-			v.Broadcast = &TelegramBroadcast{Total: p.Total, Sent: p.Sent, Failed: p.Failed, Started: p.Started.Unix(), Active: p.Active()}
-		}
-	} else {
-		lang, err := h.d.Settings.Lang(ctx)
-		if err != nil {
-			return v, err
-		}
-		v.Config = tgbot.Default(lang)
+	}
+	if p := h.d.Telegram.Progress(); p.Total > 0 {
+		v.Broadcast = &TelegramBroadcast{Total: p.Total, Sent: p.Sent, Failed: p.Failed, Started: p.Started.Unix(), Active: p.Active()}
 	}
 	v.Defaults = tgbot.DefaultTexts(v.Config.Lang)
 	v.Infrastructure, _, err = settings.GetOver(ctx, h.d.Settings, infraalerts.KeyConfig, infraalerts.Default())
 	if err != nil {
 		return v, err
 	}
-	if h.d.Telegram != nil {
-		_, v.AdminChatSet, err = h.d.Telegram.InfrastructureAdminChat(ctx)
+	if h.d.Gateway != nil {
+		_, v.AdminChatSet, err = h.d.Gateway.InfrastructureAdminChat(ctx)
 		if err != nil {
 			return v, err
 		}
 	}
-	route := tgbot.Route{Mode: tgbot.RouteDirect}
-	if h.d.Telegram != nil {
-		if route, err = h.d.Telegram.LoadRoute(ctx); err != nil {
+	route := tgate.Route{Mode: tgate.RouteDirect}
+	if h.d.Gateway != nil {
+		if route, err = h.d.Gateway.LoadRoute(ctx); err != nil {
 			return v, err
 		}
 	}
-	v.Route = TelegramRoute{Mode: route.Mode, NodeID: route.NodeID, Proxy: tgbot.MaskProxy(route.Proxy)}
+	v.Route = TelegramRoute{Mode: route.Mode, NodeID: route.NodeID, Proxy: tgate.MaskProxy(route.Proxy)}
+	if route.NodeID != 0 {
+		// A node deleted since (or before this was kept clean) is no choice to offer back.
+		if _, err := h.d.Store.Q.GetNode(ctx, route.NodeID); errors.Is(err, sql.ErrNoRows) {
+			v.Route.NodeID = 0
+		} else if err != nil {
+			return v, err
+		}
+	}
 	if v.Linked, err = h.d.Store.Q.CountTgLinks(ctx); err != nil {
 		return v, err
 	}
@@ -212,19 +252,15 @@ func cutToken(t string) (id, secret string, ok bool) {
 	return m[1], m[2], true
 }
 
-func tgFieldErr(field, code string) error {
-	return huma.Error422UnprocessableEntity(code, &huma.ErrorDetail{Location: "body." + field, Message: code})
-}
-
 func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (*telegramOutput, error) {
-	if h.d.Telegram == nil {
+	if h.d.Gateway == nil {
 		return nil, huma.Error503ServiceUnavailable("bot_unavailable")
 	}
 	b := in.Body
 	details := map[string]any{}
 	// Everything is checked before anything is written: a refused field leaves the bot as
 	// it was, not half changed.
-	route, err := h.d.Telegram.LoadRoute(ctx)
+	route, err := h.d.Gateway.LoadRoute(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -233,27 +269,27 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 			return nil, err
 		}
 	}
-	token, err := h.d.Settings.String(ctx, tgbot.KeyToken)
+	token, err := h.d.Settings.String(ctx, tgate.KeyToken)
 	if err != nil {
 		return nil, err
 	}
-	var bot *tgbot.User
+	var bot *tgate.User
 	if b.Token != nil {
 		token = *b.Token
 		if token == "" {
 			details["token"] = "removed"
 		} else {
 			if _, _, ok := cutToken(token); !ok {
-				return nil, tgFieldErr("token", "tg_token_format")
+				return nil, fieldErr("body.token", "tg_token_format")
 			}
 			// Through the route as it will be: a new route is proven by the token's check.
-			me, err := h.d.Telegram.CheckTokenVia(ctx, token, route)
-			var ae *tgbot.APIError
+			me, err := h.d.Gateway.CheckTokenVia(ctx, token, route)
+			var ae *tgate.APIError
 			switch {
 			case errors.As(err, &ae) && (ae.Code == 401 || ae.Code == 404):
-				return nil, tgFieldErr("token", "tg_token_invalid")
-			case err != nil && b.Route != nil && route.Mode != tgbot.RouteDirect:
-				return nil, tgFieldErr("route", "tg_route_unreachable")
+				return nil, fieldErr("body.token", "tg_token_invalid")
+			case err != nil && b.Route != nil && route.Mode != tgate.RouteDirect:
+				return nil, fieldErr("body.route", "tg_route_unreachable")
 			case err != nil:
 				return nil, huma.Error502BadGateway("tg_unreachable")
 			}
@@ -261,14 +297,14 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 			details["token"], details["bot"] = "set", me.Username
 		}
 	}
-	if b.Route != nil && route.Mode != tgbot.RouteDirect && bot == nil {
-		if err := h.d.Telegram.CheckRoute(ctx, route, token); err != nil {
-			return nil, tgFieldErr("route", "tg_route_unreachable")
+	if b.Route != nil && route.Mode != tgate.RouteDirect && bot == nil {
+		if err := h.d.Gateway.CheckRoute(ctx, route, token); err != nil {
+			return nil, fieldErr("body.route", "tg_route_unreachable")
 		}
 	}
 	if b.Config != nil {
 		if err := b.Config.Validate(); err != nil {
-			return nil, tgFieldErr("config", err.Error())
+			return nil, fieldErr("body.config", err.Error())
 		}
 		details["config"] = true
 	}
@@ -276,7 +312,7 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 		details["infrastructure"] = true
 	}
 	if b.Enabled != nil && *b.Enabled && token == "" {
-		return nil, tgFieldErr("enabled", "tg_no_token")
+		return nil, fieldErr("body.enabled", "tg_no_token")
 	}
 
 	// One transaction: a token saved without the route that reaches it, or a route without
@@ -293,37 +329,37 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 			}
 			merged := b.Infrastructure.Merge(current)
 			if err := merged.Validate(); err != nil {
-				return tgFieldErr("infrastructure", err.Error())
+				return fieldErr("body.infrastructure", err.Error())
 			}
 			infrastructure = &merged
 		}
 		if b.Enabled != nil && *b.Enabled && b.Token == nil {
 			// The token checked above may have been removed meanwhile.
-			if cur, err := set.String(ctx, tgbot.KeyToken); err != nil {
+			if cur, err := set.String(ctx, tgate.KeyToken); err != nil {
 				return err
 			} else if cur == "" {
-				return tgFieldErr("enabled", "tg_no_token")
+				return fieldErr("body.enabled", "tg_no_token")
 			}
 		}
 		if b.Route != nil {
-			if err := settings.Set(ctx, set, tgbot.KeyRoute, route); err != nil {
+			if err := settings.Set(ctx, set, tgate.KeyRoute, route); err != nil {
 				return err
 			}
 		}
 		if b.Token != nil {
-			if err := settings.Set(ctx, set, tgbot.KeyToken, token); err != nil {
+			if err := settings.Set(ctx, set, tgate.KeyToken, token); err != nil {
 				return err
 			}
 			if bot != nil {
-				if err := settings.Set(ctx, set, tgbot.KeyBot, *bot); err != nil {
+				if err := settings.Set(ctx, set, tgate.KeyBot, *bot); err != nil {
 					return err
 				}
-			} else if err := settings.Set(ctx, set, tgbot.KeyEnabled, false); err != nil {
+			} else if err := settings.Set(ctx, set, tgate.KeyEnabled, false); err != nil {
 				return err
 			}
 		}
 		if b.Config != nil {
-			if err := settings.Set(ctx, set, tgbot.KeyConfig, *b.Config); err != nil {
+			if err := settings.Set(ctx, set, tgate.KeyConfig, *b.Config); err != nil {
 				return err
 			}
 		}
@@ -333,7 +369,16 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 			}
 		}
 		if b.Enabled != nil {
-			return settings.Set(ctx, set, tgbot.KeyEnabled, *b.Enabled)
+			// Turning the bot on again brings the official bot addon back if none answers, also
+			// after the admin removed it.
+			if was, _, err := settings.Get[bool](ctx, set, tgate.KeyEnabled); err != nil {
+				return err
+			} else if *b.Enabled && !was {
+				if err := settings.Set(ctx, set, panelapi.AutoBotKey, true); err != nil {
+					return err
+				}
+			}
+			return settings.Set(ctx, set, tgate.KeyEnabled, *b.Enabled)
 		}
 		return nil
 	})
@@ -343,7 +388,7 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 	if b.Enabled != nil {
 		details["enabled"] = *b.Enabled
 	}
-	h.d.Telegram.Reload()
+	h.d.Gateway.Reload()
 	h.audit(ctx, sessionOf(ctx).AdminID, "telegram.update", "telegram", "", details)
 	v, err := h.telegramView(ctx)
 	if err != nil {
@@ -382,29 +427,35 @@ func (h *handlers) proxyHostOK(ctx context.Context, host string) bool {
 }
 
 // nextRoute checks a route change; nothing is saved here.
-func (h *handlers) nextRoute(ctx context.Context, r tgbot.Route, mode string, nodeID int64, proxy *string, details map[string]any) (tgbot.Route, error) {
+func (h *handlers) nextRoute(ctx context.Context, r tgate.Route, mode string, nodeID int64, proxy *string, details map[string]any) (tgate.Route, error) {
 	r.Mode = mode
 	switch mode {
-	case tgbot.RouteNode:
+	case tgate.RouteNode:
 		n, err := h.d.Store.Q.GetNode(ctx, nodeID)
-		if err != nil || n.Address == "" {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return r, fieldErr("body.route", "tg_route_node_missing")
+		case err != nil:
+			h.d.Log.Warn("telegram: the route's node not read", "node", nodeID, "err", err)
+			return r, err
+		case n.Address == "":
 			// The panel's own node shares its server, and with it the block.
-			return r, tgFieldErr("route", "tg_route_node")
+			return r, fieldErr("body.route", "tg_route_node")
 		}
 		r.NodeID = n.ID
 		details["route"], details["node"] = mode, n.Name
-	case tgbot.RouteProxy:
+	case tgate.RouteProxy:
 		if proxy != nil {
 			r.Proxy = strings.TrimSpace(*proxy)
 		}
-		u, err := tgbot.ParseProxy(r.Proxy)
+		u, err := tgate.ParseProxy(r.Proxy)
 		if err != nil {
-			return r, tgFieldErr("route", "tg_proxy_invalid")
+			return r, fieldErr("body.route", "tg_proxy_invalid")
 		}
 		if !h.proxyHostOK(ctx, u.Hostname()) {
-			return r, tgFieldErr("route", "tg_proxy_private")
+			return r, fieldErr("body.route", "tg_proxy_private")
 		}
-		details["route"], details["proxy"] = mode, tgbot.ProxyHost(r.Proxy)
+		details["route"], details["proxy"] = mode, tgate.ProxyHost(r.Proxy)
 	default:
 		details["route"] = mode
 	}
@@ -412,12 +463,9 @@ func (h *handlers) nextRoute(ctx context.Context, r tgbot.Route, mode string, no
 }
 
 func (h *handlers) broadcast(ctx context.Context, in *broadcastInput) (*broadcastOutput, error) {
-	if h.d.Telegram == nil {
-		return nil, huma.Error503ServiceUnavailable("bot_unavailable")
-	}
 	n, err := h.d.Telegram.Broadcast(ctx, in.Body.Text)
 	switch {
-	case errors.Is(err, tgbot.ErrOff):
+	case errors.Is(err, tgate.ErrOff):
 		return nil, huma.Error409Conflict("bot_off")
 	case errors.Is(err, tgbot.ErrBusy):
 		return nil, huma.Error409Conflict("broadcast_busy")

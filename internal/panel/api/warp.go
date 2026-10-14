@@ -16,6 +16,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/warp"
+	"mikan/internal/textutil"
 )
 
 type WarpView struct {
@@ -150,7 +151,7 @@ func (h *handlers) warpView(ctx context.Context, nodeID int64, check, force bool
 		case err != nil:
 			// Not "no status": the admin must see that the node did not answer, and why.
 			h.d.Log.Warn("warp: the node did not answer a check", "node", nodeID, "err", err)
-			v.Status = &WarpCheck{Error: "node_unreachable", Detail: clipText(err.Error(), 200), CheckedAt: h.d.Now().UTC()}
+			v.Status = &WarpCheck{Error: "node_unreachable", Detail: textutil.Clip(err.Error(), 200), CheckedAt: h.d.Now().UTC()}
 		case s.Configured:
 			v.Status = &WarpCheck{s.OK, s.IP, s.Warp, s.Colo, s.Error, s.Detail, s.CheckedAt}
 		}
@@ -242,10 +243,10 @@ func (h *handlers) patchWarp(ctx context.Context, in *warpPatchInput) (*warpOutp
 	if b.Routes != nil {
 		rs, bad := warp.ParseRoutes(*b.Routes)
 		if len(bad) > 0 {
-			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.routes", Message: "warp_bad_route", Value: bad[0]})
+			return nil, fieldErrValue("body.routes", "warp_bad_route", bad[0])
 		}
 		if err := rs.Check(); err != nil {
-			return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.routes", Message: err.Error()})
+			return nil, fieldErr("body.routes", err.Error())
 		}
 		raw, _ := json.Marshal(rs.All())
 		routes = string(raw)
@@ -253,7 +254,7 @@ func (h *handlers) patchWarp(ctx context.Context, in *warpPatchInput) (*warpOutp
 	if b.License != nil {
 		plus, err := h.d.Warp.SetLicense(ctx, w.AccountID, w.AccountToken, strings.TrimSpace(*b.License))
 		if err != nil {
-			return nil, huma.Error422UnprocessableEntity("validation", warpDetail("body.license", err))
+			return nil, fieldErrs(warpDetail("body.license", err))
 		}
 		if err := h.d.Store.Q.SetNodeWarpPlus(ctx, db.SetNodeWarpPlusParams{Plus: domain.Flag(plus), UpdatedAt: h.d.Now().Unix(), NodeID: in.ID}); err != nil {
 			return nil, err

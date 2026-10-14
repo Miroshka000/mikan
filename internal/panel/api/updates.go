@@ -140,7 +140,7 @@ func (h *handlers) patchUpdates(ctx context.Context, in *patchUpdatesInput) (*up
 		return nil, huma.Error409Conflict("updates_unavailable")
 	}
 	if in.Body.Channel != nil && !release.ValidChannel(*in.Body.Channel) {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.channel", Message: "bad_channel"})
+		return nil, fieldErr("body.channel", "bad_channel")
 	}
 	auto, err := h.d.Settings.On(ctx, settings.AutoUpdate)
 	if err != nil {

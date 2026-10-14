@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { RotateCcw } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { api, ApiError, errorText, unwrap, type Inbound, type Schemas } from "../../../api/client";
+import { api, unwrap, type Inbound, type Schemas } from "../../../api/client";
+import { fieldErrors, onFormError } from "../../../lib/fields";
 import { qk, useNodes, usePools, usePresets, useSettings } from "../../../api/hooks";
 import { Disclosure } from "../../../components/layout";
-import { Drawer } from "../../../components/overlay";
+import { Drawer, DrawerFooter } from "../../../components/overlay";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented } from "../../../components/ui";
 import { XHTTP_DEFAULT, XhttpTuning, type XHTTP } from "./xhttp";
@@ -95,10 +96,10 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
     },
     onError: (e) => {
       validate.reset();
-      if (e instanceof ApiError && Object.keys(e.fields).length) {
-        setErrors(e.fields);
-        setTab(e.fields.config ? "config" : e.fields.xhttp ? "xhttp" : "main");
-      } else toast.error(errorText(e));
+      if (onFormError(e, toast, setErrors)) {
+        const fields = fieldErrors(e);
+        setTab(fields.config ? "config" : fields.xhttp ? "xhttp" : "main");
+      }
     },
   });
   const configChanged = !!inbound && config !== inbound.config;
@@ -185,14 +186,9 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
         ) : undefined
       }
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="edit-inbound" loading={save.isPending}>
-            {t("common.save")}
-          </Button>
-        </>
+        <DrawerFooter form="edit-inbound" onCancel={onClose} loading={save.isPending}>
+          {t("common.save")}
+        </DrawerFooter>
       }
     >
       <form id="edit-inbound" onSubmit={submit} className="pt-5" noValidate>

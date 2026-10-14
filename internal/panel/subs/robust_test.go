@@ -146,6 +146,8 @@ func TestInvoiceFailure(t *testing.T) {
 		{billing.ErrNotYours, http.StatusConflict, "not_yours", false},
 		{billing.ErrProviderOff, http.StatusConflict, "provider_off", false},
 		{promo.ErrRefundUnsupported, http.StatusConflict, "promo_unavailable", false},
+		{promo.ErrAlreadyApplied, http.StatusConflict, "promo_unavailable", false},
+		{fmt.Errorf("invoice: %w", promo.ErrReservationExpired), http.StatusConflict, "promo_unavailable", false},
 		{fmt.Errorf("%w: yookassa_unreachable", billing.ErrProviderOff), http.StatusBadGateway, "invoice_failed", false}, // billing logged it
 		{errors.New("database is locked"), http.StatusBadGateway, "invoice_failed", true},
 	} {

@@ -11,14 +11,19 @@ import (
 // "admin" when set.
 type words struct {
 	welcome, main, renew, expiring, expired, traffic90, trafficEnd string // admin
+	channel, freeButton                                            string // admin: the channel's screen, the free plan's button
 
 	back, yesUnbind, cancel, subscriptions, openPage, support, promo   string
 	subTitle, devicesTitle, connectTitle, switchTitle                  string
 	stateActive, stateExpiring, stateLimited, stateExpired, stateOff   string
 	forever, termUntil, noLimit, trafficOf, trafficNoLimit, resets     string
 	devicesNone, devicesOff, devicesNote, confirmUnbind, unbound, wait string
-	connectText, linked, alreadyLinked, linkExpired, linkInvalid       string
-	linkLimit, noSub, sharedPlace, device, justNow                     string
+	// The admin's unbind rules: what is left in the window, the pause of an unbound device.
+	unbindLeft, returnNote, confirmReturn, unbindFailed          string
+	unbindOff, returnNever, confirmNever                         string
+	perDay, perWeek, perMonth, perDays, hours                    string
+	connectText, linked, alreadyLinked, linkExpired, linkInvalid string
+	linkLimit, noSub, sharedPlace, device, justNow               string
 	// Taking a subscription off the Telegram account: it keeps working in the apps.
 	removeSub, confirmRemove, yesRemove, removed string
 	// A subscription already linked to another account is moved only if its owner agrees.
@@ -33,10 +38,16 @@ type words struct {
 
 	// The shop.
 	buy, buyTitle, renewTitle, payHow, payStars, payCard, payCrypto, payAddon, payButton, invoice, payNew, payRenew string
-	notForSale, payUnavailable, tooManyInvoices, payStale, paidNew, paidRenew                                       string
+	notForSale, payUnavailable, tooManyInvoices, paidNew, paidRenew                                                 string
 	trial, trialDone, trialUsed, trialOff, trialOpen, trialFail                                                     string
+	trialPaid, trialTitle                                                                                           string // the priced trial: its button with the price, its title over the ways to pay
+	trialNotGiven                                                                                                   string // a paid trial not given, its money back by hand
 	pickTerm, priceFrom                                                                                             string
 	poolOut                                                                                                         string // a traffic pool used up
+
+	// The channel a subscriber must join, and the free plan.
+	channelJoin, channelCheck, channelNotYet             string
+	freeDone, freeActive, freeOff, freeFail, freeChannel string
 
 	// Traffic packages.
 	buyTraffic, trafficTitle, payPackage, packageGone, paidPackage, plusPackages string
@@ -63,15 +74,25 @@ var ru = words{
 	expired:    "⛔️ Подписка «{name}» закончилась. Чтобы продлить, напишите в поддержку.",
 	traffic90:  "📦 Израсходовано 90% трафика подписки «{name}»: осталось {left}.",
 	trafficEnd: "📦 Трафик подписки «{name}» на этот период закончился. Обновится {reset}.",
+	channel:    "Чтобы пользоваться ботом {brand}, подпишитесь на наш канал. Потом нажмите «Проверить».",
+	freeButton: "🎁 Бесплатный тариф",
 
 	back: "⬅️ Назад", promo: "🎟 Промокоды", yesUnbind: "✅ Да, отвязать", cancel: "↩️ Отмена", subscriptions: "🔁 Подписки", openPage: "🌐 Открыть страницу подписки", support: "💬 Поддержка",
 	subTitle: "Подписка «%s»", devicesTitle: "Устройства", connectTitle: "Подключить устройство", switchTitle: "Какую подписку показать?",
 	stateActive: "✅ Работает", stateExpiring: "⏳ Скоро закончится", stateLimited: "📦 Трафик на этот период закончился", stateExpired: "⛔️ Подписка закончилась", stateOff: "⏸ Доступ приостановлен",
 	forever: "бессрочно", termUntil: "до %s — осталось %s", noLimit: "без лимита", trafficOf: "%s из %s", trafficNoLimit: "%s, без лимита", resets: "🔄 Обновится: %s",
-	devicesNone:       "Устройства появятся здесь, когда приложение загрузит подписку.",
-	devicesOff:        "Привязка устройств выключена: одновременно можно подключаться не больше чем с %s адресов.",
-	devicesNote:       "Отвязанное устройство сразу отключается, а место освобождается. Отвязывать можно одно устройство в сутки.",
-	confirmUnbind:     "Отвязать «%s»? Оно сразу отключится.",
+	devicesNone:   "Устройства появятся здесь, когда приложение загрузит подписку.",
+	devicesOff:    "Привязка устройств выключена: одновременно можно подключаться не больше чем с %s адресов.",
+	devicesNote:   "Отвязанное устройство сразу отключается, а место освобождается.",
+	confirmUnbind: "Отвязать «%s»? Оно сразу отключится.",
+	unbindLeft:    "Можно отвязать ещё %d из %d за %s.",
+	returnNote:    "Отвязанное устройство не сможет подключиться снова %s, поэтому сначала закройте на нём приложение.",
+	confirmReturn: "Подключиться снова оно сможет только через %s: сначала закройте на нём приложение, иначе оно сразу попробует вернуться.",
+	unbindFailed:  "⚠️ Не получилось отвязать устройство. Попробуйте ещё раз чуть позже.",
+	unbindOff:     "Отвязать устройство может только администратор: напишите в поддержку.",
+	returnNever:   "Отвязанное устройство подключится снова, только если разрешит администратор.",
+	confirmNever:  "Подключиться снова оно сможет, только если разрешит администратор: сначала закройте на нём приложение.",
+	perDay:        "сутки", perWeek: "неделю", perMonth: "месяц", perDays: "%s", hours: "%d ч",
 	unbound:           "✅ «%s» отвязано.",
 	removeSub:         "🗑 Убрать из бота",
 	confirmRemove:     "Убрать подписку «%s» из этого Telegram?\n\nОна продолжит работать в приложениях, но уведомления о ней сюда приходить перестанут. Чтобы вернуть её, пришлите сюда ссылку на подписку.",
@@ -111,16 +132,27 @@ var ru = words{
 	priceFrom:       "от %s",
 	payUnavailable:  "Оплата сейчас недоступна. Попробуйте позже или напишите в поддержку.",
 	tooManyInvoices: "Слишком много счетов подряд. Попробуйте через час.",
-	payStale:        "Счёт устарел. Откройте меню бота и оплатите заново.",
 	trial:           "🎁 Попробовать бесплатно",
 	trialDone:       "🎁 Пробная подписка готова: %s.\n\nСсылка и инструкции в меню.",
 	trialUsed:       "Пробный период даётся один раз, и только тем, у кого ещё не было подписки.",
 	trialOff:        "Пробный период сейчас недоступен.",
 	trialOpen:       "📱 Открыть подписку",
 	trialFail:       "Не получилось выдать пробный период. Попробуйте позже или напишите в поддержку.",
+	trialPaid:       "🎁 Попробовать за %s",
+	trialTitle:      "🎁 Пробный период",
+	trialNotGiven:   "🎁 Пробный период у вас уже был, поэтому платёж %s не засчитан и подписка не выдана. Деньги вернём: напишите в поддержку.",
 	paidNew:         "✅ Оплата получена — подписка «%s» готова (тариф «%s»).\n\nДобавьте ссылку в приложение:\n<code>%s</code>",
 	paidRenew:       "✅ Оплата получена — подписка «%s» продлена до %s.",
 	poolOut:         "закончился до сброса",
+
+	channelJoin:   "📢 Подписаться на канал",
+	channelCheck:  "✅ Проверить",
+	channelNotYet: "Пока не видим вас в канале. Подпишитесь и нажмите «Проверить» ещё раз.",
+	freeDone:      "🎁 Бесплатная подписка готова: %s.\n\nСсылка и инструкции в меню.",
+	freeActive:    "Бесплатная подписка у вас уже есть. Новую можно взять, когда она закончится.",
+	freeOff:       "Бесплатный тариф сейчас недоступен.",
+	freeFail:      "Не получилось выдать бесплатный тариф. Попробуйте позже или напишите в поддержку.",
+	freeChannel:   "Бесплатный тариф для подписчиков нашего канала. Подпишитесь и нажмите «Проверить».",
 
 	buyTraffic:   "📦 Докупить трафик",
 	trafficTitle: "Трафик для подписки «%s»: выберите пакет",
@@ -174,15 +206,25 @@ var en = words{
 	expired:    "⛔️ Subscription “{name}” has ended. Message support to renew it.",
 	traffic90:  "📦 90% of the traffic of “{name}” is used: {left} left.",
 	trafficEnd: "📦 The traffic of “{name}” for this period is used up. It renews {reset}.",
+	channel:    "To use the {brand} bot, join our channel, then tap “Check”.",
+	freeButton: "🎁 Free plan",
 
 	back: "⬅️ Back", promo: "🎟 Promo codes", yesUnbind: "✅ Yes, unbind", cancel: "↩️ Cancel", subscriptions: "🔁 Subscriptions", openPage: "🌐 Open the subscription page", support: "💬 Support",
 	subTitle: "Subscription “%s”", devicesTitle: "Devices", connectTitle: "Connect a device", switchTitle: "Which subscription to show?",
 	stateActive: "✅ Working", stateExpiring: "⏳ Ends soon", stateLimited: "📦 Traffic for this period is used up", stateExpired: "⛔️ The subscription has ended", stateOff: "⏸ Access is paused",
 	forever: "no end date", termUntil: "until %s — %s left", noLimit: "unlimited", trafficOf: "%s of %s", trafficNoLimit: "%s, unlimited", resets: "🔄 Renews: %s",
-	devicesNone:       "Devices appear here once an app loads the subscription.",
-	devicesOff:        "Device binding is off: at most %s addresses can be connected at once.",
-	devicesNote:       "An unbound device is disconnected at once and its place frees up. You can unbind one device a day.",
-	confirmUnbind:     "Unbind “%s”? It disconnects at once.",
+	devicesNone:   "Devices appear here once an app loads the subscription.",
+	devicesOff:    "Device binding is off: at most %s addresses can be connected at once.",
+	devicesNote:   "An unbound device is disconnected at once and its place frees up.",
+	confirmUnbind: "Unbind “%s”? It disconnects at once.",
+	unbindLeft:    "You can unbind %d more of %d per %s.",
+	returnNote:    "An unbound device cannot connect again for %s, so close the app on it first.",
+	confirmReturn: "It can connect again only in %s: close the app on it first, or it tries to come back at once.",
+	unbindFailed:  "⚠️ The device was not unbound. Please try again a little later.",
+	unbindOff:     "Only the administrator can unbind a device: write to support.",
+	returnNever:   "An unbound device connects again only if the administrator lets it.",
+	confirmNever:  "It can connect again only if the administrator lets it: close the app on it first.",
+	perDay:        "day", perWeek: "week", perMonth: "month", perDays: "%s", hours: "%d h",
 	unbound:           "✅ “%s” is unbound.",
 	removeSub:         "🗑 Remove from the bot",
 	confirmRemove:     "Remove the subscription “%s” from this Telegram account?\n\nIt keeps working in the apps, but its notices stop coming here. To bring it back, send its subscription link here.",
@@ -222,16 +264,27 @@ var en = words{
 	priceFrom:       "from %s",
 	payUnavailable:  "Payment is not available right now. Try later or message support.",
 	tooManyInvoices: "Too many invoices in a row. Try again in an hour.",
-	payStale:        "The invoice is out of date. Open the bot's menu and pay again.",
 	trial:           "🎁 Try it for free",
 	trialDone:       "🎁 Your trial subscription is ready: %s.\n\nThe link and instructions are in the menu.",
 	trialUsed:       "The trial is given once, and only to people who have not had a subscription.",
 	trialOff:        "The trial is not available now.",
 	trialOpen:       "📱 Open the subscription",
 	trialFail:       "Could not give the trial. Try later or message support.",
+	trialPaid:       "🎁 Try it for %s",
+	trialTitle:      "🎁 Trial",
+	trialNotGiven:   "🎁 You have had the trial already, so the payment of %s is not counted and no subscription is given. The money comes back: message support.",
 	paidNew:         "✅ Payment received — subscription “%s” is ready (plan “%s”).\n\nAdd the link to your app:\n<code>%s</code>",
 	paidRenew:       "✅ Payment received — subscription “%s” is renewed until %s.",
 	poolOut:         "used up until the reset",
+
+	channelJoin:   "📢 Join the channel",
+	channelCheck:  "✅ Check",
+	channelNotYet: "We do not see you in the channel yet. Join it and tap “Check” again.",
+	freeDone:      "🎁 Your free subscription is ready: %s.\n\nThe link and instructions are in the menu.",
+	freeActive:    "You already have a free subscription. You can take a new one when it ends.",
+	freeOff:       "The free plan is not available now.",
+	freeFail:      "Could not give the free plan. Try later or message support.",
+	freeChannel:   "The free plan is for our channel's subscribers. Join it and tap “Check”.",
 
 	buyTraffic:   "📦 Buy more traffic",
 	trafficTitle: "Traffic for subscription “%s”: pick a package",
@@ -284,12 +337,20 @@ func wordsFor(lang string) *words {
 	return &ru
 }
 
-// render fills {variables} into an admin's (or built-in) text. The text itself is plain:
-// it is escaped for Telegram's HTML, and so are the values.
-//
+// render turns an admin's (or built-in) text into the bot's HTML: its Markdown becomes
+// formatting (markdown.go), the rest is escaped, and the {variables} are filled in. A
+// value is text whatever it holds: a subscriber's name with stars or tags stays as typed.
+func render(text string, vars map[string]string) string {
+	return markdownHTML(text, func(s string) string { return fill(s, vars) })
+}
+
+// Render is render for the panel's preview: the HTML the bot would send for text.
+func Render(text string, vars map[string]string) string { return render(text, vars) }
+
+// fill escapes a run of text for Telegram's HTML and fills its {variables}, escaped too.
 // One pass over the text: a value that itself holds {something} is not filled again, and
 // the result does not depend on the order the variables are listed in.
-func render(text string, vars map[string]string) string {
+func fill(text string, vars map[string]string) string {
 	rest := html.EscapeString(text)
 	var out strings.Builder
 	for {
@@ -369,6 +430,27 @@ func (w *words) bytes(n int64) string {
 	return s + " " + units[i]
 }
 
+// period is the unbind window in words: "сутки", "неделю", "10 дней".
+func (w *words) period(days int) string {
+	switch days {
+	case 1:
+		return w.perDay
+	case 7:
+		return w.perWeek
+	case 30:
+		return w.perMonth
+	}
+	return fmt.Sprintf(w.perDays, w.days(days))
+}
+
+// span is a pause in hours, whole days as days.
+func (w *words) span(hours int) string {
+	if hours >= 24 && hours%24 == 0 {
+		return w.days(hours / 24)
+	}
+	return fmt.Sprintf(w.hours, hours)
+}
+
 func (w *words) ago(t, now time.Time) string {
 	d := now.Sub(t)
 	switch {
@@ -387,5 +469,6 @@ func (w *words) ago(t, now time.Time) string {
 // DefaultTexts are the built-in texts the admin's empty fields fall back to.
 func DefaultTexts(lang string) Texts {
 	w := wordsFor(lang)
-	return Texts{Welcome: w.welcome, Main: w.main, Renew: w.renew, Expiring: w.expiring, Expired: w.expired, Traffic90: w.traffic90, TrafficEnd: w.trafficEnd}
+	return Texts{Welcome: w.welcome, Main: w.main, Renew: w.renew, Expiring: w.expiring, Expired: w.expired, Traffic90: w.traffic90, TrafficEnd: w.trafficEnd,
+		Channel: w.channel, FreeButton: w.freeButton}
 }

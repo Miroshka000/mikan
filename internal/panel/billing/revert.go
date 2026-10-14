@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/events"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
 
@@ -24,6 +26,8 @@ type userState struct {
 	TariffID      *int64 `json:"tariff_id"`
 	TrafficLimit  *int64 `json:"traffic_limit"`
 	DeviceLimit   *int64 `json:"device_limit"`
+	SpeedLimit    *int64 `json:"speed_limit,omitempty"` // payments before speed caps have none: no cap then
+	DeviceMode    string `json:"device_mode,omitempty"` // payments before the modes have none: the user keeps theirs
 	ResetStrategy string `json:"reset_strategy"`
 	BillingDay    *int64 `json:"billing_day"`
 	ExpiresAt     *int64 `json:"expires_at"`
@@ -37,31 +41,17 @@ type revertInfo struct {
 	Set     *userState `json:"set,omitempty"`
 }
 
-func nullPtr(n sql.NullInt64) *int64 {
-	if !n.Valid {
-		return nil
-	}
-	return &n.Int64
-}
-
-func ptrNull(p *int64) sql.NullInt64 {
-	if p == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: *p, Valid: true}
-}
-
 func stateOf(u db.User) *userState {
-	return &userState{Status: u.Status, TariffID: nullPtr(u.TariffID), TrafficLimit: nullPtr(u.TrafficLimit), DeviceLimit: nullPtr(u.DeviceLimit),
-		ResetStrategy: u.ResetStrategy, BillingDay: nullPtr(u.BillingDay), ExpiresAt: nullPtr(u.ExpiresAt)}
+	return &userState{Status: u.Status, TariffID: store.Int64Ptr(u.TariffID), TrafficLimit: store.Int64Ptr(u.TrafficLimit), DeviceLimit: store.Int64Ptr(u.DeviceLimit),
+		SpeedLimit: store.Int64Ptr(u.SpeedLimit), DeviceMode: u.DeviceMode, ResetStrategy: u.ResetStrategy, BillingDay: store.Int64Ptr(u.BillingDay), ExpiresAt: store.Int64Ptr(u.ExpiresAt)}
 }
 
 // sameOffer: the user still has the tariff and limits the payment set. The term and the
 // status are the admin's to change, so they are not compared.
 func (s *userState) sameOffer(u db.User) bool {
 	o := stateOf(u)
-	return eqPtr(s.TariffID, o.TariffID) && eqPtr(s.TrafficLimit, o.TrafficLimit) && eqPtr(s.DeviceLimit, o.DeviceLimit) && eqPtr(s.BillingDay, o.BillingDay) &&
-		s.ResetStrategy == o.ResetStrategy
+	return eqPtr(s.TariffID, o.TariffID) && eqPtr(s.TrafficLimit, o.TrafficLimit) && eqPtr(s.DeviceLimit, o.DeviceLimit) && eqPtr(s.SpeedLimit, o.SpeedLimit) && eqPtr(s.BillingDay, o.BillingDay) &&
+		s.ResetStrategy == o.ResetStrategy && (s.DeviceMode == "" || s.DeviceMode == o.DeviceMode)
 }
 
 func eqPtr(a, b *int64) bool {
@@ -139,7 +129,7 @@ func (s *Service) takeBackTariff(ctx context.Context, q *db.Queries, p db.Paymen
 	if !rv.Exact {
 		// Applied before the snapshot existed: a new subscription is turned off, a renewal
 		// loses the days of its term.
-		ri = revertInfo{Created: p.Kind == "new"}
+		ri = revertInfo{Created: p.Kind == "new" || p.Kind == KindTrial}
 	}
 	now := s.d.Now().Unix()
 	// Payments after this one build on it: the subscription stays, only this term goes.
@@ -169,8 +159,8 @@ func (s *Service) takeBackTariff(ctx context.Context, q *db.Queries, p db.Paymen
 			return rv, u, err
 		}
 		if ok {
-			par.Status, par.TariffID, par.TrafficLimit, par.DeviceLimit = ri.Prior.Status, ptrNull(ri.Prior.TariffID), ptrNull(ri.Prior.TrafficLimit), ptrNull(ri.Prior.DeviceLimit)
-			par.ResetStrategy, par.BillingDay = ri.Prior.ResetStrategy, ptrNull(ri.Prior.BillingDay)
+			par.Status, par.TariffID, par.TrafficLimit, par.DeviceLimit = ri.Prior.Status, domain.NullInt(ri.Prior.TariffID), domain.NullInt(ri.Prior.TrafficLimit), domain.NullInt(ri.Prior.DeviceLimit)
+			par.ResetStrategy, par.BillingDay, par.SpeedLimit = ri.Prior.ResetStrategy, domain.NullInt(ri.Prior.BillingDay), domain.NullInt(ri.Prior.SpeedLimit)
 			rv.TariffRestored = true
 			if ri.Prior.TariffID != nil {
 				restoreTariff = *ri.Prior.TariffID
@@ -179,6 +169,13 @@ func (s *Service) takeBackTariff(ctx context.Context, q *db.Queries, p db.Paymen
 	}
 	if u, err = q.UpdateUser(ctx, par); err != nil {
 		return rv, u, err
+	}
+	if rv.TariffRestored && ri.Prior.DeviceMode != "" && u.DeviceMode != ri.Prior.DeviceMode {
+		// The mode comes back with the limit it counts.
+		if err = q.SetUserDeviceMode(ctx, db.SetUserDeviceModeParams{DeviceMode: ri.Prior.DeviceMode, UpdatedAt: now, ID: u.ID}); err != nil {
+			return rv, u, err
+		}
+		u.DeviceMode = ri.Prior.DeviceMode
 	}
 	switch {
 	case !rv.TariffRestored:
@@ -220,7 +217,7 @@ func (s *Service) termOf(ctx context.Context, q *db.Queries, p db.Payment) (int6
 // userParams is u as it is, to change some of it.
 func userParams(u db.User, now int64) db.UpdateUserParams {
 	return db.UpdateUserParams{Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID,
-		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, ResetStrategy: u.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
+		TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, SpeedLimit: u.SpeedLimit, ResetStrategy: u.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
 		ExpiresAt: u.ExpiresAt, Inbounds: u.Inbounds, BillingDay: u.BillingDay, UpdatedAt: now, ID: u.ID}
 }
 
@@ -237,7 +234,7 @@ func rolledBack(cur sql.NullInt64, ri revertInfo, appliedAt, days, now int64) sq
 	var next sql.NullInt64
 	switch {
 	case ri.Set != nil:
-		set := ptrNull(ri.Set.ExpiresAt)
+		set := domain.NullInt(ri.Set.ExpiresAt)
 		base := appliedAt
 		if ri.Prior != nil && ri.Prior.ExpiresAt != nil {
 			base = max(*ri.Prior.ExpiresAt, appliedAt)
@@ -247,7 +244,7 @@ func rolledBack(cur sql.NullInt64, ri revertInfo, appliedAt, days, now int64) sq
 			// Unlimited before: unlimited again.
 		case cur == set && ri.Prior != nil && !set.Valid:
 			// The payment made it unlimited: the old end comes back as it was.
-			next = ptrNull(ri.Prior.ExpiresAt)
+			next = domain.NullInt(ri.Prior.ExpiresAt)
 		case cur == set && ri.Prior != nil:
 			next = sql.NullInt64{Int64: base, Valid: true}
 		case !cur.Valid || !set.Valid:
@@ -289,24 +286,33 @@ func (s *Service) refunded(ctx context.Context, id int64) (Reverted, error) {
 		}
 		at := sql.NullInt64{Int64: s.d.Now().Unix(), Valid: true}
 		switch p.Status {
-		case "applied":
+		case PaymentApplied:
 			n, err := q.MarkPaymentRefunded(ctx, db.MarkPaymentRefundedParams{RefundedAt: at, ID: id})
 			if err != nil || n != 1 {
 				return err
 			}
 			done = true
-			rv, u, err = s.takeBack(ctx, q, p)
-			return err
-		case "pending", "expired", "paid", "failed":
+			if rv, u, err = s.takeBack(ctx, q, p); err != nil {
+				return err
+			}
+			return emitPayment(ctx, q, s.d.Now(), events.PaymentRefunded, p, u.ID, false, rv.Action == "disabled")
+		case PaymentPending, PaymentExpired, PaymentPaid, PaymentFailed:
 			// Refunded before it was applied: it never will be.
 			n, err := q.MarkLatePromoRefunded(ctx, db.MarkLatePromoRefundedParams{RefundedAt: at, ID: id})
 			open = n == 1
-			return err
+			if err != nil || !open {
+				return err
+			}
+			// Still a refund the addons count: told once, in the transaction of the change.
+			return emitPayment(ctx, q, s.d.Now(), events.PaymentRefunded, p, 0, false, false)
 		}
 		return nil
 	})
 	if err != nil {
 		return Reverted{}, err
+	}
+	if open {
+		s.d.Events.Kick()
 	}
 	if open && s.d.Promo != nil {
 		if err := s.d.Promo.ReleasePayment(ctx, id); err != nil {
@@ -316,11 +322,12 @@ func (s *Service) refunded(ctx context.Context, id int64) (Reverted, error) {
 	if !done {
 		return rv, nil
 	}
+	s.d.Events.Kick()
 	s.d.Users.Changed()
 	s.d.Log.Info("billing: refunded", "payment", id, "action", rv.Action, "exact", rv.Exact)
-	if tg := s.telegram(); tg != nil {
-		p.Status = "refunded"
-		tg.Refunded(ctx, p, u, rv.Action == "disabled")
+	if n := s.notifier(); n != nil {
+		p.Status = PaymentRefunded
+		n.Refunded(ctx, p, u, rv.Action == "disabled")
 	}
 	return rv, nil
 }

@@ -82,6 +82,18 @@ func TestNodeTrafficEndpoints(t *testing.T) {
 	if shares.Items[0].ID != other || shares.Items[0].Bytes != 3000 || shares.Items[1].ID != 1 || !shares.Items[1].Local || shares.Items[1].Bytes != 330 || shares.Total != 3330 {
 		t.Fatalf("shares of 24h: %s", body)
 	}
+	// The accounting began 20 days ago: inside 30 days, so that period says from when;
+	// 24 hours are covered whole and say nothing.
+	if strings.Contains(string(body), `"since"`) {
+		t.Fatalf("24h covered by the accounting carries a since: %s", body)
+	}
+	_, body = k.asKey(k.read, http.MethodGet, "/stats/nodes?range=30d", nil)
+	var month struct {
+		Since *time.Time `json:"since"`
+	}
+	if json.Unmarshal(body, &month) != nil || month.Since == nil || month.Since.Unix() != (day-20)*86400 {
+		t.Fatalf("30d starts before the accounting: %s", body)
+	}
 
 	// The card of each node: the last day.
 	resp, body = k.asKey(k.read, http.MethodGet, "/nodes", nil)

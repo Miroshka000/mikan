@@ -10,7 +10,7 @@ import { Field, PageHeader, Segmented, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
 import { useDraft } from "../../lib/draft";
 import { fieldErrors } from "../../lib/fields";
-import { BackToAddons } from "./addons";
+import { BackToAddons } from "./addon-row";
 
 type View = Schemas["FiltersView"];
 

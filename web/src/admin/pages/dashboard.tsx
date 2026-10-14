@@ -300,6 +300,8 @@ function NodeTrafficCard() {
             {t("dashboard.nodeTraffic")}
           </h2>
           <div className="card-sub">{shares.data ? t("dashboard.nodeTrafficSub", { total: bytes(total) }) : "…"}</div>
+          {/* The per-node accounting is younger than the period: a shorter one shows the same. */}
+          {shares.data?.since ? <div className="card-sub">{t("dashboard.nodeTrafficSince", { date: dateShort(shares.data.since) })}</div> : null}
         </div>
         <Segmented
           label={t("dashboard.period")}

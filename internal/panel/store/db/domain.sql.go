@@ -8,6 +8,8 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/lib/pq"
 )
 
 const addTariffTerm = `-- name: AddTariffTerm :exec
@@ -214,9 +216,9 @@ func (q *Queries) CreateInbound(ctx context.Context, arg CreateInboundParams) (I
 }
 
 const createTariff = `-- name: CreateTariff :one
-INSERT INTO tariffs (name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, created_at, billing_day, price_stars, price_rub, on_sale)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale
+INSERT INTO tariffs (name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, created_at, billing_day, price_stars, price_rub, on_sale, speed_limit, description)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale, speed_limit, description, device_mode
 `
 
 type CreateTariffParams struct {
@@ -232,6 +234,8 @@ type CreateTariffParams struct {
 	PriceStars    sql.NullInt64
 	PriceRub      sql.NullInt64
 	OnSale        int64
+	SpeedLimit    sql.NullInt64
+	Description   string
 }
 
 func (q *Queries) CreateTariff(ctx context.Context, arg CreateTariffParams) (Tariff, error) {
@@ -248,6 +252,8 @@ func (q *Queries) CreateTariff(ctx context.Context, arg CreateTariffParams) (Tar
 		arg.PriceStars,
 		arg.PriceRub,
 		arg.OnSale,
+		arg.SpeedLimit,
+		arg.Description,
 	)
 	var i Tariff
 	err := row.Scan(
@@ -265,15 +271,18 @@ func (q *Queries) CreateTariff(ctx context.Context, arg CreateTariffParams) (Tar
 		&i.PriceStars,
 		&i.PriceRub,
 		&i.OnSale,
+		&i.SpeedLimit,
+		&i.Description,
+		&i.DeviceMode,
 	)
 	return i, err
 }
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy,
-                   period_days, period_start, expires_at, inbounds, sub_token, slot_id, created_at, updated_at, billing_day, source)
-VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16, $17)
-RETURNING id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, unbound_at, source, hidden, folder_id
+                   period_days, period_start, expires_at, inbounds, sub_token, slot_id, created_at, updated_at, billing_day, source, speed_limit)
+VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16, $17, $18)
+RETURNING id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, source, hidden, folder_id, speed_limit, device_mode
 `
 
 type CreateUserParams struct {
@@ -294,6 +303,7 @@ type CreateUserParams struct {
 	UpdatedAt     int64
 	BillingDay    sql.NullInt64
 	Source        string
+	SpeedLimit    sql.NullInt64
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
@@ -315,6 +325,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		arg.UpdatedAt,
 		arg.BillingDay,
 		arg.Source,
+		arg.SpeedLimit,
 	)
 	var i User
 	err := row.Scan(
@@ -342,10 +353,11 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.BillingDay,
-		&i.UnboundAt,
 		&i.Source,
 		&i.Hidden,
 		&i.FolderID,
+		&i.SpeedLimit,
+		&i.DeviceMode,
 	)
 	return i, err
 }
@@ -447,7 +459,7 @@ func (q *Queries) GetSlot(ctx context.Context, id int64) (Slot, error) {
 }
 
 const getTariff = `-- name: GetTariff :one
-SELECT id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale FROM tariffs WHERE id = $1
+SELECT id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale, speed_limit, description, device_mode FROM tariffs WHERE id = $1
 `
 
 func (q *Queries) GetTariff(ctx context.Context, id int64) (Tariff, error) {
@@ -468,12 +480,15 @@ func (q *Queries) GetTariff(ctx context.Context, id int64) (Tariff, error) {
 		&i.PriceStars,
 		&i.PriceRub,
 		&i.OnSale,
+		&i.SpeedLimit,
+		&i.Description,
+		&i.DeviceMode,
 	)
 	return i, err
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, unbound_at, source, hidden, folder_id FROM users WHERE id = $1
+SELECT id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, source, hidden, folder_id, speed_limit, device_mode FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -504,16 +519,17 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.BillingDay,
-		&i.UnboundAt,
 		&i.Source,
 		&i.Hidden,
 		&i.FolderID,
+		&i.SpeedLimit,
+		&i.DeviceMode,
 	)
 	return i, err
 }
 
 const getUserBySubToken = `-- name: GetUserBySubToken :one
-SELECT id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, unbound_at, source, hidden, folder_id FROM users WHERE sub_token = $1
+SELECT id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, source, hidden, folder_id, speed_limit, device_mode FROM users WHERE sub_token = $1
 `
 
 func (q *Queries) GetUserBySubToken(ctx context.Context, subToken string) (User, error) {
@@ -544,10 +560,11 @@ func (q *Queries) GetUserBySubToken(ctx context.Context, subToken string) (User,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.BillingDay,
-		&i.UnboundAt,
 		&i.Source,
 		&i.Hidden,
 		&i.FolderID,
+		&i.SpeedLimit,
+		&i.DeviceMode,
 	)
 	return i, err
 }
@@ -835,7 +852,7 @@ func (q *Queries) ListTariffTerms(ctx context.Context, tariffID int64) ([]Tariff
 }
 
 const listTariffs = `-- name: ListTariffs :many
-SELECT id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale FROM tariffs WHERE archived = 0 ORDER BY sort, id
+SELECT id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale, speed_limit, description, device_mode FROM tariffs WHERE archived = 0 ORDER BY sort, id
 `
 
 func (q *Queries) ListTariffs(ctx context.Context) ([]Tariff, error) {
@@ -862,6 +879,49 @@ func (q *Queries) ListTariffs(ctx context.Context) ([]Tariff, error) {
 			&i.PriceStars,
 			&i.PriceRub,
 			&i.OnSale,
+			&i.SpeedLimit,
+			&i.Description,
+			&i.DeviceMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTgLinksOfUsers = `-- name: ListTgLinksOfUsers :many
+SELECT l.user_id, l.tg_id, COALESCE(c.username, '') AS username, COALESCE(c.first_name, '') AS first_name
+FROM tg_links l LEFT JOIN tg_chats c ON c.tg_id = l.tg_id WHERE l.user_id = ANY($1::bigint[])
+`
+
+type ListTgLinksOfUsersRow struct {
+	UserID    int64
+	TgID      int64
+	Username  string
+	FirstName string
+}
+
+func (q *Queries) ListTgLinksOfUsers(ctx context.Context, ids []int64) ([]ListTgLinksOfUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTgLinksOfUsers, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTgLinksOfUsersRow{}
+	for rows.Next() {
+		var i ListTgLinksOfUsersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.TgID,
+			&i.Username,
+			&i.FirstName,
 		); err != nil {
 			return nil, err
 		}
@@ -908,6 +968,45 @@ func (q *Queries) ListUserDevices(ctx context.Context, userID int64) ([]Device, 
 	return items, nil
 }
 
+const listUserNamesAfter = `-- name: ListUserNamesAfter :many
+SELECT id, name FROM users WHERE id > $1::BIGINT ORDER BY id LIMIT $2::INT
+`
+
+type ListUserNamesAfterParams struct {
+	After int64
+	Lim   int32
+}
+
+type ListUserNamesAfterRow struct {
+	ID   int64
+	Name string
+}
+
+// A page of users by id with just what a search reads, for the Panel API's cursor: stable
+// while users come and go. The rows of the page itself come from ListUsersByIDs.
+func (q *Queries) ListUserNamesAfter(ctx context.Context, arg ListUserNamesAfterParams) ([]ListUserNamesAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserNamesAfter, arg.After, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserNamesAfterRow{}
+	for rows.Next() {
+		var i ListUserNamesAfterRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSlots = `-- name: ListUserSlots :many
 SELECT s.name FROM slots s JOIN users u ON u.slot_id = s.id WHERE u.id = $1
 UNION
@@ -939,7 +1038,7 @@ func (q *Queries) ListUserSlots(ctx context.Context, userID int64) ([]string, er
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, unbound_at, source, hidden, folder_id FROM users ORDER BY id DESC
+SELECT id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, source, hidden, folder_id, speed_limit, device_mode FROM users ORDER BY id DESC
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -976,10 +1075,113 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.BillingDay,
-			&i.UnboundAt,
 			&i.Source,
 			&i.Hidden,
 			&i.FolderID,
+			&i.SpeedLimit,
+			&i.DeviceMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersByIDs = `-- name: ListUsersByIDs :many
+SELECT id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, source, hidden, folder_id, speed_limit, device_mode FROM users WHERE id = ANY($1::bigint[]) ORDER BY id
+`
+
+func (q *Queries) ListUsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersByIDs, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []User{}
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Contact,
+			&i.Note,
+			&i.Tags,
+			&i.Status,
+			&i.TariffID,
+			&i.TrafficLimit,
+			&i.DeviceLimit,
+			&i.ResetStrategy,
+			&i.PeriodDays,
+			&i.PeriodStart,
+			&i.UsedUp,
+			&i.UsedDown,
+			&i.TotalUp,
+			&i.TotalDown,
+			&i.ExpiresAt,
+			&i.Inbounds,
+			&i.SubToken,
+			&i.SlotID,
+			&i.OnlineAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.BillingDay,
+			&i.Source,
+			&i.Hidden,
+			&i.FolderID,
+			&i.SpeedLimit,
+			&i.DeviceMode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersToReset = `-- name: ListUsersToReset :many
+SELECT id, period_start, reset_strategy, billing_day, period_days FROM users
+WHERE reset_strategy = 'month_start'
+   OR reset_strategy = 'period' AND period_start + GREATEST(period_days, 1) * 86400 <= $1::bigint
+`
+
+type ListUsersToResetRow struct {
+	ID            int64
+	PeriodStart   int64
+	ResetStrategy string
+	BillingDay    sql.NullInt64
+	PeriodDays    int64
+}
+
+// The users whose traffic period may be over: every monthly one (its day depends on the
+// billing day, checked in Go), and the periodic ones whose period has run out.
+func (q *Queries) ListUsersToReset(ctx context.Context, now int64) ([]ListUsersToResetRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersToReset, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersToResetRow{}
+	for rows.Next() {
+		var i ListUsersToResetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PeriodStart,
+			&i.ResetStrategy,
+			&i.BillingDay,
+			&i.PeriodDays,
 		); err != nil {
 			return nil, err
 		}
@@ -1065,6 +1267,21 @@ func (q *Queries) SetNodeState(ctx context.Context, arg SetNodeStateParams) erro
 	return err
 }
 
+const setTariffDeviceMode = `-- name: SetTariffDeviceMode :exec
+UPDATE tariffs SET device_mode = $1 WHERE id = $2
+`
+
+type SetTariffDeviceModeParams struct {
+	DeviceMode string
+	ID         int64
+}
+
+// A statement of its own, beside CreateTariff and UpdateTariff, which stay as they are.
+func (q *Queries) SetTariffDeviceMode(ctx context.Context, arg SetTariffDeviceModeParams) error {
+	_, err := q.db.ExecContext(ctx, setTariffDeviceMode, arg.DeviceMode, arg.ID)
+	return err
+}
+
 const setUserCredentials = `-- name: SetUserCredentials :exec
 UPDATE users SET slot_id = $1, sub_token = $2, updated_at = $3 WHERE id = $4
 `
@@ -1083,6 +1300,21 @@ func (q *Queries) SetUserCredentials(ctx context.Context, arg SetUserCredentials
 		arg.UpdatedAt,
 		arg.ID,
 	)
+	return err
+}
+
+const setUserDeviceMode = `-- name: SetUserDeviceMode :exec
+UPDATE users SET device_mode = $1, updated_at = $2 WHERE id = $3
+`
+
+type SetUserDeviceModeParams struct {
+	DeviceMode string
+	UpdatedAt  int64
+	ID         int64
+}
+
+func (q *Queries) SetUserDeviceMode(ctx context.Context, arg SetUserDeviceModeParams) error {
+	_, err := q.db.ExecContext(ctx, setUserDeviceMode, arg.DeviceMode, arg.UpdatedAt, arg.ID)
 	return err
 }
 
@@ -1276,9 +1508,9 @@ func (q *Queries) UpdateInbound(ctx context.Context, arg UpdateInboundParams) (I
 const updateTariff = `-- name: UpdateTariff :one
 UPDATE tariffs
 SET name = $1, traffic_limit = $2, duration_days = $3, device_limit = $4, reset_strategy = $5, price_label = $6, sort = $7, billing_day = $8,
-    price_stars = $9, price_rub = $10, on_sale = $11
+    price_stars = $9, price_rub = $10, on_sale = $11, speed_limit = $13, description = $14
 WHERE id = $12
-RETURNING id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale
+RETURNING id, name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, archived, created_at, billing_day, price_stars, price_rub, on_sale, speed_limit, description, device_mode
 `
 
 type UpdateTariffParams struct {
@@ -1294,6 +1526,8 @@ type UpdateTariffParams struct {
 	PriceRub      sql.NullInt64
 	OnSale        int64
 	ID            int64
+	SpeedLimit    sql.NullInt64
+	Description   string
 }
 
 func (q *Queries) UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tariff, error) {
@@ -1310,6 +1544,8 @@ func (q *Queries) UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tar
 		arg.PriceRub,
 		arg.OnSale,
 		arg.ID,
+		arg.SpeedLimit,
+		arg.Description,
 	)
 	var i Tariff
 	err := row.Scan(
@@ -1327,6 +1563,9 @@ func (q *Queries) UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tar
 		&i.PriceStars,
 		&i.PriceRub,
 		&i.OnSale,
+		&i.SpeedLimit,
+		&i.Description,
+		&i.DeviceMode,
 	)
 	return i, err
 }
@@ -1334,9 +1573,10 @@ func (q *Queries) UpdateTariff(ctx context.Context, arg UpdateTariffParams) (Tar
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET name = $1, contact = $2, note = $3, tags = $4, status = $5, tariff_id = $6, traffic_limit = $7, device_limit = $8,
-    reset_strategy = $9, period_days = $10, period_start = $11, expires_at = $12, inbounds = $13, updated_at = $14, billing_day = $15
+    reset_strategy = $9, period_days = $10, period_start = $11, expires_at = $12, inbounds = $13, updated_at = $14, billing_day = $15,
+    speed_limit = $17
 WHERE id = $16
-RETURNING id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, unbound_at, source, hidden, folder_id
+RETURNING id, name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy, period_days, period_start, used_up, used_down, total_up, total_down, expires_at, inbounds, sub_token, slot_id, online_at, created_at, updated_at, billing_day, source, hidden, folder_id, speed_limit, device_mode
 `
 
 type UpdateUserParams struct {
@@ -1356,6 +1596,7 @@ type UpdateUserParams struct {
 	UpdatedAt     int64
 	BillingDay    sql.NullInt64
 	ID            int64
+	SpeedLimit    sql.NullInt64
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
@@ -1376,6 +1617,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		arg.UpdatedAt,
 		arg.BillingDay,
 		arg.ID,
+		arg.SpeedLimit,
 	)
 	var i User
 	err := row.Scan(
@@ -1403,10 +1645,11 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.BillingDay,
-		&i.UnboundAt,
 		&i.Source,
 		&i.Hidden,
 		&i.FolderID,
+		&i.SpeedLimit,
+		&i.DeviceMode,
 	)
 	return i, err
 }

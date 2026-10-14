@@ -1,0 +1,57 @@
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+dns:
+  enable: true
+  ipv6: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies:
+      - Авто
+      - "\U0001F1F3\U0001F1F1 Нидерланды"
+      - "\U0001F1FA\U0001F1F8 США"
+    include-all-proxies: true
+  - name: Авто
+    type: url-test
+    include-all-proxies: true
+    interval: 300
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1F3\U0001F1F1 Нидерланды"
+    type: url-test
+    interval: 300
+    mikan:
+      nodes:
+        - "\U0001F1F3\U0001F1F1 Нидерланды"
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1FA\U0001F1F8 США"
+    type: url-test
+    interval: 300
+    mikan:
+      nodes:
+        - "\U0001F1FA\U0001F1F8 США"
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: PROXY
+    type: select
+    proxies:
+      - VPN
+    hidden: true
+rules:
+  - GEOIP,LAN,DIRECT,no-resolve
+  - MATCH,VPN
+  - MATCH,REJECT

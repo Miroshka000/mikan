@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
+import { api, apiCodeText, errorText, unwrap, type Schemas } from "../../../api/client";
 import { useTariffs } from "../../../api/hooks";
 import { FormActions } from "../../../components/layout";
 import { useToast } from "../../../components/toast";
 import { Button, Field } from "../../../components/ui";
-import { t, tMaybe, type Key } from "../../../i18n";
+import { t, type Key } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
-import { fieldErrors } from "../../../lib/fields";
+import { fieldErrors, onFormError } from "../../../lib/fields";
 
 type Kind = "marzban" | "pasarguard" | "remnawave";
 const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave"];
@@ -24,7 +24,7 @@ export function ImportCard() {
   const [tariff, setTariff] = useState<number | "">("");
   const job = useQuery({
     queryKey: ["import-status"],
-    queryFn: () => unwrap(api.GET("/api/v1/import/status", {})),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/status", { signal })),
     refetchInterval: (q) => (busy(q.state.data?.state) ? 1000 : false),
   });
   const st = job.data;
@@ -106,7 +106,7 @@ export function ImportCard() {
         ) : (
           <FormActions saving={check.isPending} disabled={!src.url.trim()} label={t("settings.import.check")} />
         )}
-        {st?.state === "failed" ? <div className="banner err mt-3">{t("settings.import.failed", { error: tMaybe(`errors.api.${st.error}`) ?? st.error ?? "" })}</div> : null}
+        {st?.state === "failed" ? <div className="banner err mt-3">{t("settings.import.failed", { error: apiCodeText(st.error ?? "") })}</div> : null}
         {preview ? (
           <div className="panel-soft mt-3 p-3 text-[13px]">
             <div className="font-medium">{t("settings.import.found", { total: preview.total, n: preview.new })}</div>
@@ -165,7 +165,7 @@ function Names({ label, list, bad }: { label: Key; list: { names: string[]; coun
 export function LegacyLinksCard() {
   const qc = useQueryClient();
   const toast = useToast();
-  const q = useQuery({ queryKey: ["legacy-links"], queryFn: () => unwrap(api.GET("/api/v1/import/legacy", {})) });
+  const q = useQuery({ queryKey: ["legacy-links"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/legacy", { signal })) });
   const v = q.data;
   const { draft, setDraft, dirty, reset } = useDraft({ path: v?.path ?? "", kind: (v?.kind || "") as Kind | "" });
   const [secret, setSecret] = useState("");
@@ -177,7 +177,7 @@ export function LegacyLinksCard() {
       toast.ok(t("settings.import.legacySaved"));
     },
     onError: (e) => {
-      if (!(e instanceof ApiError && Object.keys(e.fields).length)) toast.error(errorText(e));
+      onFormError(e, toast);
     },
   });
   const errors = fieldErrors(save.error);

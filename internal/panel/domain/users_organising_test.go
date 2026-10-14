@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -29,14 +28,14 @@ func TestEveryCreationPathSetsTheSource(t *testing.T) {
 	// A purchase that makes the user is the bot's; one that renews leaves the source as it was.
 	var bought, renewed db.User
 	err = st.Tx(ctx, func(q *db.Queries) (err error) {
-		bought, _, err = users.Purchase(ctx, q, 0, std.ID, sql.NullInt64{}, "buyer", false)
+		bought, _, err = users.Purchase(ctx, q, PurchaseInput{TariffID: std.ID, Name: "buyer"})
 		return err
 	})
 	if err != nil || bought.Source != UserFromBot {
 		t.Fatalf("a purchase: %q %v", bought.Source, err)
 	}
 	err = st.Tx(ctx, func(q *db.Queries) (err error) {
-		renewed, _, err = users.Purchase(ctx, q, plain.ID, std.ID, sql.NullInt64{}, "", false)
+		renewed, _, err = users.Purchase(ctx, q, PurchaseInput{UserID: plain.ID, TariffID: std.ID})
 		return err
 	})
 	if err != nil || renewed.Source != UserFromAdmin {

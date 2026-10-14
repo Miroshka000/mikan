@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"mikan/internal/panel/addons"
 	"mikan/internal/panel/campaigns"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/events"
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/referral"
 	"mikan/internal/panel/secure"
@@ -61,24 +61,56 @@ type Config struct {
 	// TrialTariffID is the tariff of the free trial a Telegram account may take once in
 	// the bot; 0: no trial. It works with selling off too: it takes no payment.
 	TrialTariffID int64 `json:"trial_tariff_id,omitempty"`
+	// TrialStars and TrialRub (kopecks) put a price on the trial; both 0: it is free. A
+	// priced trial is bought in the bot and the Mini App, once per account like the free
+	// one, through the providers that take its price: it needs selling on.
+	TrialStars int64 `json:"trial_stars,omitempty"`
+	TrialRub   int64 `json:"trial_rub,omitempty"`
+	// FreeTariffID is the tariff of the free plan (free.go): unlike the trial, an account
+	// takes it again once its previous free subscription has ended; 0: no free plan. It
+	// takes no payment, so it works with selling off too.
+	FreeTariffID int64 `json:"free_tariff_id,omitempty"`
+	// FreeCondition is what the free plan asks of an account: FreeNoCondition, or
+	// FreeChannel, a subscription to the bot's channel.
+	FreeCondition string `json:"free_condition,omitempty"`
 }
+
+// TrialPaid: the trial has a price and is bought, not taken.
+func (c Config) TrialPaid() bool { return c.TrialStars > 0 || c.TrialRub > 0 }
 
 // DefaultConfig: selling off until the admin turns it on; then Stars (it needs nothing but
 // the bot) and new buyers are welcome.
 var DefaultConfig = Config{Stars: true, AllowNew: true, RenewResetsTraffic: true}
 
-// Telegram is the bot's part: Stars invoices and refunds, and telling buyers.
+// Telegram is the Telegram gateway's part (tgate.Gateway): Stars invoices and refunds, the
+// bot's link and its channel. It stays in the panel whatever runs the bot's screens.
 type Telegram interface {
 	// InvoiceLink makes a Stars invoice link (createInvoiceLink); "" when the bot is off.
 	InvoiceLink(ctx context.Context, title, description, payload string, stars int64) (string, error)
 	RefundStars(ctx context.Context, tgID int64, chargeID string) error
+	// BotURL is https://t.me/<bot>, "" while the bot is off.
+	BotURL(ctx context.Context) string
+	// Channel is the link to join the bot's channel (the one its mandatory subscription
+	// asks for); ok is false while no channel is set up.
+	Channel(ctx context.Context) (url string, ok bool)
+	// Subscribed: the account is a member of the bot's channel. An error when the bot
+	// cannot ask: it is off, or it is not an admin of the channel.
+	Subscribed(ctx context.Context, tgID int64) (bool, error)
+}
+
+// Notifier tells buyers what came of their payments. The panel writes the deprecated bot.*
+// events through it (tgbot.Notifications), for the bot builds released before the payment
+// events; the payment.* and trial.not_given events the bot addon reads are written by billing
+// itself, in the transaction of the change.
+type Notifier interface {
 	// Paid tells the buyer the subscription is ready.
 	Paid(ctx context.Context, p db.Payment, u db.User, created bool)
 	// Refunded tells the buyer the payment was refunded and what it gave is taken back:
 	// u is the subscription after that (zero when it is gone), disabled that it was turned off.
 	Refunded(ctx context.Context, p db.Payment, u db.User, disabled bool)
-	// BotURL is https://t.me/<bot>, "" while the bot is off.
-	BotURL(ctx context.Context) string
+	// TrialNotGiven tells the buyer a paid trial was not given (the account had its trial)
+	// and the money comes back by hand: the payment method cannot refund it.
+	TrialNotGiven(ctx context.Context, p db.Payment)
 }
 
 type Deps struct {
@@ -90,7 +122,7 @@ type Deps struct {
 	// TrustProxy reads the client's IP from X-Forwarded-For: adapters check where a
 	// webhook came from (YooKassa's addresses).
 	TrustProxy bool
-	MaxLinks   int64 // subscriptions one Telegram account may hold
+	MaxLinks   int64 // subscriptions one Telegram account may hold (tgate.MaxLinks)
 	// Addons are the marketplace's payment adapters; nil: none.
 	Addons *addons.Manager
 	// SubBase is https://host:port/<sub path>, where the webhooks are; "" without an address.
@@ -102,22 +134,22 @@ type Deps struct {
 	// Campaigns are the ad campaign tags: which tagged link a buyer arrived through, so a
 	// campaign's first purchases and renewals are counted. nil: none.
 	Campaigns *campaigns.Service
+	// Events wakes the addons reading the feed after a payment, a trial or a refund; nil: no
+	// one waits (the events are written all the same).
+	Events *events.Hub
 }
 
 type Service struct {
-	d             Deps
-	mu            sync.Mutex
-	promoRefundMu sync.Mutex
-	promoRefunds  map[int64]*promoRefundLock
-	tg            Telegram
-	buyersMu      sync.Mutex
-	buyers        map[int64]*buyerLock
+	d            Deps
+	mu           sync.Mutex
+	promoRefunds keyedLock // by payment: one late-promo refund of it at a time
+	tg           Telegram
+	notify       Notifier
+	buyers       keyedLock // by Telegram account: one invoice opened at a time
+	trialRefunds keyedLock // by payment: one refund of a trial that may not be given at a time
 }
 
 func New(d Deps) *Service {
-	if d.MaxLinks == 0 {
-		d.MaxLinks = 5
-	}
 	return &Service{d: d}
 }
 
@@ -134,6 +166,19 @@ func (s *Service) telegram() Telegram {
 	return s.tg
 }
 
+// SetNotifier connects what tells buyers; until then nobody is told.
+func (s *Service) SetNotifier(n Notifier) {
+	s.mu.Lock()
+	s.notify = n
+	s.mu.Unlock()
+}
+
+func (s *Service) notifier() Notifier {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.notify
+}
+
 // Errors the bot and the Mini App show to buyers.
 var (
 	ErrNotForSale   = errors.New("not_for_sale")
@@ -147,17 +192,26 @@ var (
 	// ErrRefundNotApplied: Telegram returned the Stars, but taking back what the payment
 	// gave failed; refunding again finishes it.
 	ErrRefundNotApplied = errors.New("refund_not_applied")
+	// ErrRecorded: the payment is saved with its charge, only applying it failed; the
+	// reconcile pass finishes it, so the report of the payment need not come again.
+	ErrRecorded = errors.New("payment_recorded")
 )
 
 // LoadConfig reads the payment settings. A read error is returned, never replaced by the
 // defaults: settings changed on top of those and saved would switch selling off and
 // forget the providers.
 func (s *Service) LoadConfig(ctx context.Context) (Config, error) {
+	return LoadConfig(ctx, s.d.Settings)
+}
+
+// LoadConfig is Service.LoadConfig over the given settings: a transaction's, when the
+// payment settings are read to be changed.
+func LoadConfig(ctx context.Context, set *settings.Settings) (Config, error) {
 	// Payment settings saved before the switch existed (0.4.0, 0.4.1) come from panels that
 	// set up selling: they keep selling. A panel that never saved them starts with it off.
 	saved := DefaultConfig
 	saved.Enabled = true
-	c, found, err := settings.GetOver(ctx, s.d.Settings, KeyConfig, saved)
+	c, found, err := settings.GetOver(ctx, set, KeyConfig, saved)
 	switch {
 	case err != nil:
 		return DefaultConfig, err
@@ -292,13 +346,8 @@ type InvoiceRequest struct {
 // Invoice opens a payment and returns it with the URL to pay at. An open invoice for the
 // same purchase made in the last minutes is returned again instead of a new one.
 func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, error) {
-	if strings.TrimSpace(req.PromoCode) != "" && s.d.Promo == nil {
-		return db.Payment{}, promo.ErrUnavailable
-	}
-	if strings.TrimSpace(req.PromoCode) != "" {
-		if err := s.validatePromoProvider(ctx, req.Provider); err != nil {
-			return db.Payment{}, err
-		}
+	if err := s.promoGuard(ctx, req.Provider, req.PromoCode); err != nil {
+		return db.Payment{}, err
 	}
 	q := s.d.Store.Q
 	t, err := q.GetTariff(ctx, req.TariffID)
@@ -373,7 +422,8 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 			if err != nil {
 				return db.Payment{}, err
 			}
-			total := amount
+			// The referral balance pays what it can of the invoice first, then the promo
+			// code takes its share off what is left to pay.
 			if s.d.Referral != nil && refCfg.Spend {
 				// Recomputed on the account's own row: what the balance can pay may have
 				// changed since it was looked at outside.
@@ -382,23 +432,14 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 					return db.Payment{}, err
 				}
 				if off > 0 {
-					total -= off
-					if _, err := q.SetPaymentAmount(ctx, db.SetPaymentAmountParams{Amount: total, ID: p.ID}); err != nil {
+					if _, err := q.SetPaymentAmount(ctx, db.SetPaymentAmountParams{Amount: amount - off, ID: p.ID}); err != nil {
 						return db.Payment{}, err
 					}
+					p.Amount = amount - off
 				}
 			}
-			if s.d.Promo != nil && strings.TrimSpace(req.PromoCode) != "" {
-				disc, err := s.d.Promo.ReserveDiscount(ctx, q, req.TgID, req.UserID, t.ID, total, currency, req.PromoCode, p.ID)
-				if err != nil {
-					return db.Payment{}, err
-				}
-				if _, err := q.SetPaymentAmount(ctx, db.SetPaymentAmountParams{Amount: disc.Final, ID: p.ID}); err != nil {
-					return db.Payment{}, err
-				}
-				p.Amount = disc.Final
-			} else {
-				p.Amount = total
+			if err := s.discount(ctx, q, &p, req.UserID, t.ID, req.PromoCode); err != nil {
+				return db.Payment{}, err
 			}
 			return p, nil
 		})
@@ -412,41 +453,83 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 	return s.openPayment(ctx, p, t.Name, Describe(t, term.Days, lang))
 }
 
+// promoGuard refuses a promo code before anything is opened: codes are off, or the
+// provider takes none. Invoice and PackageInvoice both ask it.
+func (s *Service) promoGuard(ctx context.Context, provider, code string) error {
+	if strings.TrimSpace(code) == "" {
+		return nil
+	}
+	if s.d.Promo == nil {
+		return promo.ErrUnavailable
+	}
+	return s.validatePromoProvider(ctx, provider)
+}
+
+// discount reserves a promo code's discount for the payment p just created, in the same
+// transaction, and sets the amount to pay to what is left: for a tariff, or for a package
+// of the subscription on tariffID. Without a code it does nothing.
+func (s *Service) discount(ctx context.Context, q *db.Queries, p *db.Payment, userID, tariffID int64, code string) error {
+	if s.d.Promo == nil || strings.TrimSpace(code) == "" {
+		return nil
+	}
+	d, err := s.d.Promo.ReserveDiscount(ctx, q, p.TgID, userID, tariffID, p.Amount, p.Currency, code, p.ID)
+	if err != nil {
+		return err
+	}
+	if _, err := q.SetPaymentAmount(ctx, db.SetPaymentAmountParams{Amount: d.Final, ID: p.ID}); err != nil {
+		return err
+	}
+	p.Amount = d.Final
+	return nil
+}
+
 // lockBuyer lets one invoice of a Telegram account be opened at a time, the provider's
 // answer included: a second tap waits and gets the first invoice again instead of a new
 // one. It gives up when ctx ends.
 func (s *Service) lockBuyer(ctx context.Context, tgID int64) (unlock func(), err error) {
-	s.buyersMu.Lock()
-	if s.buyers == nil {
-		s.buyers = map[int64]*buyerLock{}
+	return s.buyers.lock(ctx, tgID)
+}
+
+// keyedLock is a lock per key (a buyer, a payment), there only while it is held or
+// waited for.
+type keyedLock struct {
+	mu   sync.Mutex
+	keys map[int64]*keyTurn
+}
+
+// keyTurn is one key's turn.
+type keyTurn struct {
+	turn    chan struct{}
+	waiting int // holder and waiters: the key goes when none is left
+}
+
+// lock waits for key's turn, or gives up when ctx ends.
+func (k *keyedLock) lock(ctx context.Context, key int64) (unlock func(), err error) {
+	k.mu.Lock()
+	if k.keys == nil {
+		k.keys = map[int64]*keyTurn{}
 	}
-	l := s.buyers[tgID]
-	if l == nil {
-		l = &buyerLock{turn: make(chan struct{}, 1)}
-		s.buyers[tgID] = l
+	t := k.keys[key]
+	if t == nil {
+		t = &keyTurn{turn: make(chan struct{}, 1)}
+		k.keys[key] = t
 	}
-	l.waiting++
-	s.buyersMu.Unlock()
+	t.waiting++
+	k.mu.Unlock()
 	leave := func() {
-		s.buyersMu.Lock()
-		if l.waiting--; l.waiting == 0 {
-			delete(s.buyers, tgID)
+		k.mu.Lock()
+		if t.waiting--; t.waiting == 0 {
+			delete(k.keys, key)
 		}
-		s.buyersMu.Unlock()
+		k.mu.Unlock()
 	}
 	select {
-	case l.turn <- struct{}{}:
-		return func() { <-l.turn; leave() }, nil
+	case t.turn <- struct{}{}:
+		return func() { <-t.turn; leave() }, nil
 	case <-ctx.Done():
 		leave()
 		return nil, ctx.Err()
 	}
-}
-
-// buyerLock is one Telegram account's turn at opening invoices.
-type buyerLock struct {
-	turn    chan struct{}
-	waiting int // holder and waiters: the lock goes when none is left
 }
 
 // newPayment returns an open invoice matching the purchase (open true), or makes one with
@@ -519,7 +602,7 @@ func (s *Service) matchesOpenPayment(ctx context.Context, q *db.Queries, existin
 		if err != nil {
 			return false, err
 		}
-		return r.Status != "reserved", nil
+		return r.Status != promo.RedemptionReserved, nil
 	}
 	if s.d.Promo == nil {
 		return false, nil
@@ -531,7 +614,7 @@ func (s *Service) matchesOpenPayment(ctx context.Context, q *db.Queries, existin
 	if err != nil {
 		return false, err
 	}
-	if r.Status != "reserved" || existing.Amount != r.FinalAmount || r.OriginalAmount != want || r.Currency != existing.Currency || r.ExpiresAt.Valid && s.d.Now().Unix() >= r.ExpiresAt.Int64 {
+	if r.Status != promo.RedemptionReserved || existing.Amount != r.FinalAmount || r.OriginalAmount != want || r.Currency != existing.Currency || r.ExpiresAt.Valid && s.d.Now().Unix() >= r.ExpiresAt.Int64 {
 		return false, nil
 	}
 	pc, err := q.GetPromoCode(ctx, r.PromoID)
@@ -567,7 +650,7 @@ func (s *Service) openPayment(ctx context.Context, p db.Payment, title, desc str
 	q := s.d.Store.Q
 	ext, url, err := s.openInvoice(ctx, p, title, desc)
 	if err != nil {
-		_, _ = q.SetPaymentStatus(ctx, db.SetPaymentStatusParams{NewStatus: "failed", ID: p.ID, OldStatus: "pending"})
+		_, _ = q.SetPaymentStatus(ctx, db.SetPaymentStatusParams{NewStatus: PaymentFailed, ID: p.ID, OldStatus: PaymentPending})
 		if s.d.Promo != nil {
 			_ = s.d.Promo.ReleasePayment(ctx, p.ID)
 		}
@@ -672,8 +755,14 @@ func DescribeLimits(t db.Tariff, lang string) string {
 	} else {
 		parts = append(parts, pick("трафик без лимита", "unlimited traffic"))
 	}
-	if t.DeviceLimit.Valid {
+	if t.DeviceLimit.Valid && t.DeviceMode == domain.DeviceModeOnline {
+		// The buyer is not told of places: any number of devices, so many online at once.
+		parts = append(parts, fmt.Sprintf(pick("устройств одновременно: %d", "devices at once: %d"), t.DeviceLimit.Int64))
+	} else if t.DeviceLimit.Valid {
 		parts = append(parts, fmt.Sprintf(pick("устройств: %d", "devices: %d"), t.DeviceLimit.Int64))
+	}
+	if t.SpeedLimit.Valid {
+		parts = append(parts, fmt.Sprintf(pick("до %d Мбит/с", "up to %d Mbit/s"), t.SpeedLimit.Int64))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -681,7 +770,7 @@ func DescribeLimits(t db.Tariff, lang string) string {
 // PreCheckout is Telegram asking whether a Stars payment may go ahead.
 func (s *Service) PreCheckout(ctx context.Context, tgID int64, payload, currency string, amount int64) error {
 	p, err := s.d.Store.Q.GetPaymentByPayload(ctx, payload)
-	if err != nil || p.Provider != Stars || p.Status != "pending" || p.TgID != tgID || p.Currency != currency || p.Amount != amount {
+	if err != nil || p.Provider != Stars || p.Status != PaymentPending || p.TgID != tgID || p.Currency != currency || p.Amount != amount {
 		return ErrBadPayment
 	}
 	if s.d.Promo != nil {
@@ -691,6 +780,22 @@ func (s *Service) PreCheckout(ctx context.Context, tgID int64, payload, currency
 	}
 	if p.Kind == KindPackage {
 		return s.packageOnSale(ctx, p)
+	}
+	if p.Kind == KindTrial {
+		// The trial's tariff is seldom on sale itself: the price is the trial's. What has
+		// to hold is the offer, as at the invoice: a priced trial on this very tariff,
+		// and an account that may still be given it. Stars are not taken otherwise.
+		if t, ok := s.TrialTariff(ctx); !ok || !s.Config(ctx).TrialPaid() || t.ID != p.TariffID.Int64 {
+			return ErrTrialOff
+		}
+		allowed, err := s.trialAllowed(ctx, s.d.Store.Q, tgID)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return ErrTrialUsed
+		}
+		return nil
 	}
 	t, err := s.d.Store.Q.GetTariff(ctx, p.TariffID.Int64)
 	if err != nil || t.Archived != 0 || t.OnSale == 0 {
@@ -702,13 +807,26 @@ func (s *Service) PreCheckout(ctx context.Context, tgID int64, payload, currency
 }
 
 // StarsPaid records a successful_payment from the bot's own update stream and applies it.
+// Only a payment that matches no invoice is ErrBadPayment: a database that failed to
+// answer is returned as it is, so the bot offers the payment again instead of losing it.
 func (s *Service) StarsPaid(ctx context.Context, tgID int64, payload, chargeID, currency string, amount int64) error {
 	p, err := s.d.Store.Q.GetPaymentByPayload(ctx, payload)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("stars payment lookup: %w", err)
+	}
 	if err != nil || p.Provider != Stars || p.TgID != tgID || p.Currency != currency || p.Amount != amount || chargeID == "" {
 		s.d.Log.Error("billing: stars payment does not match an invoice", "tg", tgID, "amount", amount)
 		return ErrBadPayment
 	}
-	return s.paid(ctx, p, chargeID)
+	err = s.paid(ctx, p, chargeID)
+	if err == nil {
+		return nil
+	}
+	// Saved with this charge: the reconcile pass applies or refunds it from here.
+	if cur, e := s.d.Store.Q.GetPayment(ctx, p.ID); e == nil && cur.ExternalID.Valid && cur.ExternalID.String == chargeID {
+		return fmt.Errorf("%w: %w", ErrRecorded, err)
+	}
+	return err
 }
 
 // paid marks the payment paid (once) and applies it.
@@ -718,7 +836,7 @@ func (s *Service) paid(ctx context.Context, p db.Payment, externalID string) err
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		late := err == nil && latePromoPayment(r, paymentTime(p, s.d.Now().Unix()))
+		late := err == nil && promo.PaidLate(r, paymentTime(p, s.d.Now().Unix()))
 		if late {
 			handled, err := s.refundLatePromoPayment(ctx, p.ID, externalID, func(current db.Payment) error {
 				return s.refundPromoPayment(ctx, current, externalID)
@@ -738,6 +856,8 @@ func (s *Service) paid(ctx context.Context, p db.Payment, externalID string) err
 	}
 	if n == 1 {
 		s.d.Log.Info("billing: paid", "payment", p.ID, "provider", p.Provider, "amount", p.Amount, "currency", p.Currency)
+	} else if second, err := s.secondCharge(ctx, p, externalID); err != nil || second {
+		return err
 	}
 	err = s.Apply(ctx, p.ID)
 	if errors.Is(err, promo.ErrReservationExpired) && s.d.Promo != nil {
@@ -754,148 +874,30 @@ func (s *Service) paid(ctx context.Context, p db.Payment, externalID string) err
 	return err
 }
 
-func paymentTime(p db.Payment, fallback int64) int64 {
-	if p.PaidAt.Valid {
-		return p.PaidAt.Int64
-	}
-	return fallback
-}
-
-func latePromoPayment(r db.PromoRedemption, paidAt int64) bool {
-	if r.ExpiresAt.Valid && paidAt < r.ExpiresAt.Int64 {
-		return false
-	}
-	return r.Status == "released" || r.Status == "reserved" && r.ExpiresAt.Valid
-}
-
-func (s *Service) refundPromoPayment(ctx context.Context, p db.Payment, externalID string) error {
-	switch {
-	case p.Provider == Stars:
-		tg := s.telegram()
-		if tg == nil {
-			return errors.New("cannot refund expired Stars promo payment: Telegram bot is unavailable")
-		}
-		return tg.RefundStars(ctx, p.TgID, externalID)
-	case AddonID(p.Provider) != "":
-		cl, cfg, err := s.addonClient(ctx, AddonID(p.Provider))
-		if err != nil {
-			return err
-		}
-		return cl.Refund(ctx, cfg.Values, externalID, p.Amount, "mikan-promo-late-"+strconv.FormatInt(p.ID, 10))
-	default:
-		return errors.New("cannot refund expired promo payment from this provider")
-	}
-}
-
-// refundLatePromoPayment serializes late-payment refunds within the panel process and
-// reloads persistent state after taking the lock so webhook and reconciliation cannot
-// both refund the same invoice. Addon refunds also carry a stable provider idempotency key
-// to cover retries after a process restart.
-func (s *Service) refundLatePromoPayment(ctx context.Context, paymentID int64, externalID string, refund func(db.Payment) error) (bool, error) {
-	unlock := s.lockPromoRefund(paymentID)
-	defer unlock()
-
-	pay, err := s.d.Store.Q.GetPayment(ctx, paymentID)
+// secondCharge handles a report of an invoice already paid with another charge: a second
+// tap or a second device paid the same Stars invoice. That charge gave nothing, so its
+// Stars go back; another provider's is logged for the admin.
+func (s *Service) secondCharge(ctx context.Context, p db.Payment, externalID string) (bool, error) {
+	cur, err := s.d.Store.Q.GetPayment(ctx, p.ID)
 	if err != nil {
 		return false, err
 	}
-	if pay.Status == "refunded" {
-		if err := s.d.Promo.ReleasePayment(ctx, paymentID); err != nil {
-			return true, err
-		}
-		return true, nil
-	}
-	r, err := s.d.Promo.GetPaymentRedemption(ctx, paymentID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if !cur.ExternalID.Valid || cur.ExternalID.String == externalID {
 		return false, nil
 	}
-	if err != nil {
-		return false, err
-	}
-	late := latePromoPayment(r, paymentTime(pay, s.d.Now().Unix()))
-	if !late {
-		return false, nil
-	}
-	if externalID != "" {
-		if err := s.d.Store.Q.SetPaymentExternalID(ctx, db.SetPaymentExternalIDParams{ExternalID: sql.NullString{String: externalID, Valid: true}, ID: paymentID}); err != nil {
-			return true, s.markLatePromoRefundFailed(ctx, paymentID, err)
-		}
-	}
-	n, err := s.d.Store.Q.ClaimLatePromoRefund(ctx, db.ClaimLatePromoRefundParams{
-		RefundStartedAt: sql.NullInt64{Int64: s.d.Now().Unix(), Valid: true},
-		ID:              r.ID,
-		Now:             sql.NullInt64{Int64: s.d.Now().Unix(), Valid: true},
-		RetryAfter:      sql.NullInt64{Int64: s.d.Now().Add(-2 * time.Minute).Unix(), Valid: true},
-	})
-	if err != nil {
-		return true, err
-	}
-	if n != 1 {
-		// Another panel process owns the current refund attempt. Its stable provider key
-		// makes retry after a crashed process safe once the lease expires.
+	if p.Provider != Stars {
+		s.d.Log.Error("billing: a second charge for a paid invoice", "payment", p.ID, "provider", p.Provider, "charge", externalID)
 		return true, nil
 	}
-	if err := refund(pay); err != nil {
-		_ = s.markLatePromoRefundFailed(ctx, paymentID, err)
-		_ = s.d.Store.Q.ReleaseLatePromoRefundClaim(ctx, sql.NullInt64{Int64: paymentID, Valid: true})
+	tg := s.telegram()
+	if tg == nil {
+		return true, errors.New("cannot refund a second Stars charge: Telegram bot is unavailable")
+	}
+	if err := tg.RefundStars(ctx, p.TgID, externalID); err != nil {
 		return true, err
 	}
-	n, err = s.d.Store.Q.MarkLatePromoRefunded(ctx, db.MarkLatePromoRefundedParams{
-		RefundedAt: sql.NullInt64{Int64: s.d.Now().Unix(), Valid: true}, ID: paymentID,
-	})
-	if err != nil {
-		return true, s.markLatePromoRefundFailed(ctx, paymentID, err)
-	}
-	if n != 1 {
-		latest, err := s.d.Store.Q.GetPayment(ctx, paymentID)
-		if err != nil {
-			return true, err
-		}
-		if latest.Status != "refunded" {
-			return true, s.markLatePromoRefundFailed(ctx, paymentID, errors.New("promo late refund completed but payment status changed"))
-		}
-	}
-	if err := s.d.Promo.ReleasePayment(ctx, paymentID); err != nil {
-		return true, s.markLatePromoRefundFailed(ctx, paymentID, err)
-	}
-	s.d.Log.Warn("billing: late discounted payment refunded", "payment", paymentID, "provider", pay.Provider)
+	s.d.Log.Warn("billing: a second charge for a paid invoice refunded", "payment", p.ID, "charge", externalID)
 	return true, nil
-}
-
-func (s *Service) markLatePromoRefundFailed(ctx context.Context, paymentID int64, cause error) error {
-	if err := s.d.Store.Q.SetPaymentError(ctx, db.SetPaymentErrorParams{Error: "promo_late_refund_failed", ID: paymentID}); err != nil {
-		return errors.Join(cause, err)
-	}
-	return cause
-}
-
-type promoRefundLock struct {
-	mu   sync.Mutex
-	refs int
-}
-
-func (s *Service) lockPromoRefund(paymentID int64) func() {
-	s.promoRefundMu.Lock()
-	if s.promoRefunds == nil {
-		s.promoRefunds = make(map[int64]*promoRefundLock)
-	}
-	l := s.promoRefunds[paymentID]
-	if l == nil {
-		l = &promoRefundLock{}
-		s.promoRefunds[paymentID] = l
-	}
-	l.refs++
-	s.promoRefundMu.Unlock()
-	l.mu.Lock()
-	return func() {
-		l.mu.Unlock()
-		s.promoRefundMu.Lock()
-		l.refs--
-		if l.refs == 0 {
-			delete(s.promoRefunds, paymentID)
-		}
-		s.promoRefundMu.Unlock()
-	}
 }
 
 // Apply turns a paid payment into the subscription. It runs once per payment: the status
@@ -922,7 +924,7 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		if pay, err = q.GetPayment(ctx, id); err != nil {
 			return err
 		}
-		if pay.Status != "paid" {
+		if pay.Status != PaymentPaid {
 			done = true
 			return nil
 		}
@@ -937,6 +939,16 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 			}
 			return markApplied(ctx, q, id, u.ID, s.d.Now())
 		}
+		if pay.Kind == KindTrial {
+			if u, err = s.applyTrial(ctx, q, pay); err != nil {
+				return err
+			}
+			created = true
+			if err := markApplied(ctx, q, id, u.ID, s.d.Now()); err != nil {
+				return err
+			}
+			return q.SetPaymentRevert(ctx, db.SetPaymentRevertParams{Revert: purchaseRevert(true, false, db.User{}, u), ID: id})
+		}
 		var userID int64
 		var prior db.User
 		hadPrior := false
@@ -950,7 +962,8 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 				return err
 			}
 		}
-		if u, created, err = s.d.Users.Purchase(ctx, q, userID, pay.TariffID.Int64, pay.TermDays, buyerName(ctx, q, pay.TgID), reset); err != nil {
+		if u, created, err = s.d.Users.Purchase(ctx, q, domain.PurchaseInput{UserID: userID, TariffID: pay.TariffID.Int64,
+			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), TgID: pay.TgID, ResetTraffic: reset}); err != nil {
 			return err
 		}
 		if created {
@@ -982,11 +995,41 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		}
 		return q.SetPaymentRevert(ctx, db.SetPaymentRevertParams{Revert: purchaseRevert(created, hadPrior, prior, u), ID: id})
 	}
-	err = s.d.Store.Tx(ctx, run)
+	// The addons hear of it in the same transaction: never of a payment that rolled back.
+	told := func(q *db.Queries) error {
+		if err := run(q); err != nil || done {
+			return err
+		}
+		if err := emitPayment(ctx, q, s.d.Now(), events.PaymentPaid, pay, u.ID, created, false); err != nil {
+			return err
+		}
+		if pay.Kind == KindTrial {
+			return emitTrialStarted(ctx, q, s.d.Now(), u.ID, pay.TgID, pay.TariffID.Int64, pay.ID)
+		}
+		return nil
+	}
+	err = s.d.Store.Tx(ctx, told)
 	if errors.Is(err, domain.ErrNoSlots) {
 		if err = s.d.Users.RefillSlots(ctx); err == nil {
-			err = s.d.Store.Tx(ctx, run)
+			err = s.d.Store.Tx(ctx, told)
 		}
+	}
+	if err == nil && !done {
+		s.d.Events.Kick()
+	}
+	if errors.Is(err, ErrTrialUsed) {
+		// The account may no longer be given the trial it paid for: nothing was made, so
+		// the money goes back instead of the payment waiting for an apply that never comes.
+		if err := s.refundTrial(ctx, pay); err != nil {
+			// The admin sees why on the Payments page, as for an apply that failed; a
+			// refund the provider refused has said so already (trial_refund_failed).
+			if cur, qerr := s.d.Store.Q.GetPayment(ctx, id); qerr == nil && cur.Error == "" {
+				_ = s.d.Store.Q.SetPaymentError(ctx, db.SetPaymentErrorParams{Error: errCode(err), ID: id})
+			}
+			s.d.Log.Error("billing: refund of a trial", "payment", id, "err", err)
+			return err
+		}
+		return nil
 	}
 	if err != nil {
 		// Paid but not applied: the reconcile pass tries again, the admin sees why.
@@ -998,15 +1041,15 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		return nil
 	}
 	s.d.Users.Changed()
-	pay.Status, pay.UserID = "applied", sql.NullInt64{Int64: u.ID, Valid: true}
+	pay.Status, pay.UserID = PaymentApplied, sql.NullInt64{Int64: u.ID, Valid: true}
 	s.d.Log.Info("billing: applied", "payment", id, "user", u.ID, "created", created)
 	// Told outside the transaction the reward was committed with: the bot may take a
 	// moment to answer, and nothing may hold the database for it.
 	if s.d.Referral != nil && len(rewards) > 0 {
 		s.d.Referral.Announce(ctx, rewards)
 	}
-	if tg := s.telegram(); tg != nil {
-		tg.Paid(ctx, pay, u, created)
+	if n := s.notifier(); n != nil {
+		n.Paid(ctx, pay, u, created)
 	}
 	return nil
 }
@@ -1067,13 +1110,14 @@ func buyerName(ctx context.Context, q *db.Queries, tgID int64) string {
 // Refund returns a Stars payment to the buyer and takes back what it gave (revert.go).
 // Payments through adapters are refunded in the provider's dashboard. A failure after
 // Telegram refunded leaves the payment applied: refunding again finishes it, Telegram
-// answers a repeated refund as done.
+// answers a repeated refund as done. A payment paid but never applied (its subscription
+// or package deleted since the invoice) is refunded too: it gave nothing to take back.
 func (s *Service) Refund(ctx context.Context, id int64) (Reverted, error) {
 	p, err := s.d.Store.Q.GetPayment(ctx, id)
 	if err != nil {
 		return Reverted{}, err
 	}
-	if p.Provider != Stars || p.Status != "applied" || !p.ExternalID.Valid {
+	if p.Provider != Stars || p.Status != PaymentApplied && p.Status != PaymentPaid || !p.ExternalID.Valid {
 		return Reverted{}, ErrNotRefunable
 	}
 	tg := s.telegram()
@@ -1107,8 +1151,7 @@ func (s *Service) StarsRefunded(ctx context.Context, tgID int64, chargeID string
 }
 
 // Run reconciles in the background: applies paid payments that failed to apply, asks the
-// adapters about open invoices (a webhook may never come), expires invoices nobody paid
-// and gets the host to install the adapters that took over the built-in providers.
+// adapters about open invoices (a webhook may never come) and expires invoices nobody paid.
 func (s *Service) Run(ctx context.Context) {
 	t := time.NewTicker(reconcileEvery)
 	defer t.Stop()
@@ -1126,10 +1169,9 @@ func (s *Service) Run(ctx context.Context) {
 func (s *Service) Reconcile(ctx context.Context) {
 	now := s.d.Now()
 	q := s.d.Store.Q
-	s.installMoved(ctx)
 	// Paid but not applied payments are tried for as long as they stay so: the buyer
-	// paid, and the admin sees why on the Payments page. Pending ones are asked about for
-	// the week an invoice can still be paid in.
+	// paid, and the admin sees why on the Payments page. Pending ones are asked about while
+	// they are open (pendingTTL).
 	paid, err := q.ListPaidPayments(ctx)
 	if err != nil {
 		s.d.Log.Error("billing: reconcile", "err", err)
@@ -1138,6 +1180,9 @@ func (s *Service) Reconcile(ctx context.Context) {
 	for _, p := range paid {
 		if ctx.Err() != nil {
 			return
+		}
+		if p.Error == TrialRefundByHand {
+			continue // the admin's now: nothing a pass can do (RefundedByHand closes it)
 		}
 		if err := s.Apply(ctx, p.ID); errors.Is(err, promo.ErrReservationExpired) && s.d.Promo != nil && p.ExternalID.Valid {
 			if _, refundErr := s.refundLatePromoPayment(ctx, p.ID, p.ExternalID.String, func(current db.Payment) error {
@@ -1175,14 +1220,27 @@ func (s *Service) Reconcile(ctx context.Context) {
 		s.d.Log.Error("billing: reconcile", "err", err)
 		return
 	}
+	// A provider that failed to answer is not asked about its other invoices this pass:
+	// each call may take AdapterTimeout, and the next pass comes in a minute.
+	down := map[string]bool{}
 	for _, p := range open {
 		if ctx.Err() != nil {
 			return
 		}
-		if AddonID(p.Provider) == "" || !p.ExternalID.Valid || !dueCheck(p, now) {
+		if AddonID(p.Provider) == "" || !p.ExternalID.Valid || !dueCheck(p, now) || down[p.Provider] {
 			continue
 		}
-		_ = s.checkAddon(ctx, p.Provider, p.ExternalID.String)
+		// A refused amount is logged where it is found; the rest (the adapter or the provider
+		// is down, the credentials stopped working) would leave the invoice pending unseen.
+		err := s.checkAddonPayment(ctx, p)
+		if err == nil || errors.Is(err, ErrBadPayment) {
+			continue
+		}
+		s.d.Log.Warn("billing: invoice check", "payment", p.ID, "provider", p.Provider, "err", err)
+		var ae *addons.Error
+		if !errors.As(err, &ae) || ae.Status >= 500 {
+			down[p.Provider] = true
+		}
 	}
 	if _, err := q.ExpirePayments(ctx, now.Add(-pendingTTL).Unix()); err != nil {
 		s.d.Log.Error("billing: expire", "err", err)

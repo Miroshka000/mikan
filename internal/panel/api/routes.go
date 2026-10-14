@@ -79,12 +79,12 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 		return err == nil
 	}
 	if err := in.Body.SubRoutes.Check(exists); err != nil {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.sub_routes", Message: err.Error()})
+		return nil, fieldErr("body.sub_routes", err.Error())
 	}
 	req := subs.PreviewRequest{Routing: subs.ParseRouting(in.Body.SubRouting), Routes: in.Body.SubRoutes, Template: in.Body.SubTemplate, Starter: in.Body.Starter, Rules: in.Body.SubRules}
 	if in.Body.GroupMain != nil || in.Body.GroupAuto != nil {
 		// The saved names with the given ones over them, checked as a save would check them.
-		g, err := h.groups(ctx)
+		g, err := subs.LoadGroups(ctx, h.d.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +95,7 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 			g.Auto = strings.TrimSpace(*in.Body.GroupAuto)
 		}
 		if bad := h.checkGroups(ctx, g); len(bad) > 0 {
-			return nil, huma.Error422UnprocessableEntity("validation", bad...)
+			return nil, fieldErrs(bad...)
 		}
 		req.Groups = &g
 	}
@@ -105,7 +105,7 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 	}
 	var te *subs.TemplateError
 	if errors.As(err, &te) {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.sub_template", Message: te.Code, Value: te.Detail})
+		return nil, fieldErrValue("body.sub_template", te.Code, te.Detail)
 	}
 	if err != nil {
 		return nil, err

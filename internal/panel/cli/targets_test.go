@@ -13,6 +13,8 @@ import (
 	"mikan/internal/panel/presets"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/storetest"
+	"mikan/internal/panel/targets"
+	"mikan/internal/scan"
 )
 
 // The installer's SNI step: `targets scan --json` lists sites next to the server and the
@@ -29,7 +31,17 @@ func TestTargetsScanAndApply(t *testing.T) {
 	}
 	set := settings.New(st.Q)
 	// Nothing listens around 127.0.0.1 here: the scan finds no sites and the panel's own
-	// domain is not ready. No node runs either, so the panel scans by itself.
+	// domain is not ready. No node runs either, so the panel scans by itself. The real scan
+	// refuses a loopback address and would open 250 connections to a public one, so a fake
+	// stands in.
+	was := scanNeighbors
+	scanNeighbors = func(_ context.Context, ip string, limit int, o scan.Options) ([]scan.Result, int, error) {
+		if ip != "127.0.0.1" || limit != targets.ScanLimit || o.Any {
+			t.Errorf("scan of %s, limit %d, options %+v", ip, limit, o)
+		}
+		return nil, 253, nil
+	}
+	defer func() { scanNeighbors = was }()
 	for k, v := range map[string]any{settings.KeyPublicHost: "127.0.0.1", settings.KeyPanelPort: 1, settings.KeyDomain: "vpn.example.com"} {
 		if err := settings.Set(ctx, set, k, v); err != nil {
 			t.Fatal(err)

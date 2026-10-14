@@ -18,22 +18,25 @@ import (
 	"syscall"
 	"time"
 
+	"mikan/internal/acmechallenge"
 	"mikan/internal/node"
 	"mikan/internal/nodetls"
+	"mikan/internal/panel/config"
 )
 
 var version = "dev"
 
 func main() {
 	// The installer checks a join key before it sets the node up and learns the API port
-	// from it; the key comes in the environment so it does not show in the process list.
-	if len(os.Args) > 1 && os.Args[1] == "key-port" {
-		key, err := nodetls.DecodeKey(os.Getenv("MIKAN_NODE_JOIN"))
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "mikan-node:", err)
-			os.Exit(1)
-		}
-		fmt.Println(key.Port)
+	// from it (key-port), and the node's address as the panel has it, for its advice (key-host;
+	// empty for keys of older panels); the key comes in the environment so it does not show in
+	// the process list.
+	if len(os.Args) > 1 && (os.Args[1] == "key-port" || os.Args[1] == "key-host") {
+		printJoinKey(os.Args[1])
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "hello" {
+		helloOnce()
 		return
 	}
 	if err := run(); err != nil {
@@ -46,8 +49,8 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	dataDir := envOr("MIKAN_DATA_DIR", "/data")
-	sock := envOr("MIKAN_NODE_SOCKET", "/run/mikan/node.sock")
+	dataDir := envOr("MIKAN_DATA_DIR", config.DefaultDataDir)
+	sock := envOr("MIKAN_NODE_SOCKET", config.DefaultNodeSocket)
 
 	release, err := time.ParseDuration(envOr("MIKAN_DEVICE_RELEASE", "60s"))
 	if err != nil {
@@ -57,7 +60,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("MIKAN_ALLOW_PRIVATE: %w", err)
 	}
-	eng, err := node.Start(node.Options{DataDir: dataDir, Version: version, Log: log, DeviceRelease: release, AllowPrivate: allowPrivate})
+	// The panel's HTTP-01 challenges for this node's certificate: port 80, unless a web
+	// server of the admin's holds it and passes /.well-known/acme-challenge/ on.
+	acmeListen, err := acmechallenge.ParseListen(os.Getenv("MIKAN_ACME_LISTEN"))
+	if err != nil {
+		return fmt.Errorf("MIKAN_ACME_LISTEN: %w", err)
+	}
+	eng, err := node.Start(node.Options{DataDir: dataDir, Version: version, Log: log, DeviceRelease: release, AllowPrivate: allowPrivate, ACMEListen: acmeListen})
 	if err != nil {
 		return err
 	}
@@ -99,6 +108,7 @@ func run() error {
 		}
 		go serve(tls.NewListener(tcp, cfg))
 		log.Info("node api for the panel", "port", key.Port)
+		go helloLoop(ctx, key, dataDir, log)
 	}
 
 	t := time.NewTicker(10 * time.Second)
@@ -123,4 +133,20 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// printJoinKey prints one field of the join key in MIKAN_NODE_JOIN for the installer:
+// the port of the node's API for "key-port", its address for "key-host". A key that does
+// not decode stops the installer with the reason.
+func printJoinKey(field string) {
+	key, err := nodetls.DecodeKey(os.Getenv("MIKAN_NODE_JOIN"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "mikan-node:", err)
+		os.Exit(1)
+	}
+	if field == "key-port" {
+		fmt.Println(key.Port)
+		return
+	}
+	fmt.Println(key.Host)
 }

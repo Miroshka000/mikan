@@ -10,8 +10,10 @@ description: Plans with a term, traffic and several sale terms, users, devices a
 - **Traffic per period** in GB, or unlimited.
 - **Term**: "In days" (0 means no expiry) or "To a day of the month": N months and a billing day. The first term ends on the nearest such day, but not sooner than 15 days from now. In a month without that day, the term ends on the last day.
 - **Devices at once**: from 1 to 100, or unlimited.
+- **Speed** in Mbit/s, or unlimited: each way, for all of the user's devices together. A user's own speed is set in their card next to the plan: 10, 25, 50, 100, other or ∞. Each node holds the cap on its own, and with [channel sharing](/mikanaddons/en/nodes/nodes/#share-the-channel-evenly) the plan's speed stays the ceiling.
 - **When to reset traffic**: every 30 days, on the 1st (or on the billing day), never.
 - **Price label**: shown only in the panel.
+- **Description for buyers**: up to 300 characters and 5 lines of plain text. When the limits do not show what sets plans apart ("with white lists", "without"), say it here: the description appears in the bot and the Mini App next to the line built from the limits. Markup does not work, line breaks are kept. An empty description changes nothing.
 - **Pool limits**, if you have [traffic pools](/mikanaddons/en/billing/pools/).
 
 The **Selling** block: the "On sale" switch, a price in Telegram Stars and in rubles (at least one is required). **More terms** adds up to 12 options, for example 7, 30 and 90 days, each with its own price. Limits are not multiplied, and traffic resets by the plan's rule. The buyer picks a term in the bot and the Mini App, and the invoice remembers the term and price it was issued with.
@@ -24,6 +26,7 @@ An archived plan cannot be chosen for new users; nothing changes for existing on
 
 In the user card:
 
+- **Rename**: the pencil next to the name or **More actions → Rename**. A name is one line of up to 100 characters. The subscription link, keys and devices stay the same; the journal keeps the old name.
 - **Extend**: by 7, 30, 90 days or a year, or, with a billing day, by 1, 3, 6 or 12 months. There is also an exact end date and "No expiry".
 - **Billing day**: extending by a month runs the term to this day.
 - **Change plan**: limits come from the new plan, the term starts again from today, and used traffic is kept.
@@ -48,4 +51,31 @@ Without binding, a device is an IP address with an active connection, and its pl
 
 With the **Only apps with a device ID** switch, other apps get no subscription. Happ, Koala Clash, INCY, v2RayTun, FlClashX, ClashFest and SlothClash (unless it is turned off in its settings) send a device ID.
 
-A subscriber can unbind one device a day on the subscription page or in the bot; an administrator can do it any time in the user card. An unbound device is cut off immediately. Only bound devices take places, so a phone moving from Wi-Fi to mobile data does not turn into two devices.
+A subscriber unbinds devices themselves on the subscription page, in the Mini App or in the bot, under the rules of **Settings → Subscription → Devices**: how many devices per period (one a day by default; a week, a month, your own number, no limit, or "Not allowed": then only an administrator unbinds) and how soon an unbound device may connect again (a day by default, so that an app left open on it does not take the place back; "Never": until an administrator lets it). An administrator unbinds any time in the user card, and sees the pause after an unbind among the banned devices, where it can be lifted earlier. An unbound device is cut off immediately. Only bound devices take places, so a phone moving from Wi-Fi to mobile data does not turn into two devices.
+
+### How the device limit counts
+
+On a plan and on each client the device limit counts in one of two ways (in the plan form and in the client card, the Devices block):
+
+- **Bound devices**: as described above, each device with an ID takes a place, and no more than the limit can be bound.
+- **Online at once**: any number of devices may be bound, and only the ones connected at the same moment count. The server turns the extra ones away; it tells devices apart by address, so a phone on mobile data and a laptop at home count as two. Handy when a client cares more about switching between their own devices than about staying within places. The bot, the Mini App and the subscription page say "up to N at once".
+
+A client takes the plan's mode with its other limits when created, paid for or moved to another plan, and the client card can change it separately.
+
+### A new link by the subscriber
+
+In the bot (Subscription → "🔄 New link") and in the Mini App ("Change the link") a subscriber replaces the subscription link themselves if it fell into the wrong hands. The old link and the keys of all their devices stop working at once, so a confirmation comes first, and the new link after it: it has to be added to the apps. The administrator sets the limit in **Settings → Subscription → Devices → New link by the client**: "Not allowed" (only the administrator), or so many a day, a week, a month or an own number of days (once a day by default), or no limit. At the limit the button is gone and a line tells when it comes back. The audit log gets a `user.reissue` entry by the subscriber. The administrator reissues the link in the client card any time.
+
+### Device names
+
+A device is called what its app reports: the model, the system or the app itself. The administrator (the pencil in the user card) or the subscriber (on the subscription page and in the Mini App) can give it a name of up to 40 characters. An empty name brings back the one from the app. The bot lists devices by these names.
+
+### Banning a device
+
+An unbound device takes a place again on its next subscription update. To stop that, press **Ban** next to the device in the card:
+
+- the device is cut off at once and its keys burn;
+- it can no longer bind to this user by its ID, not with the same link and not after a reissue;
+- instead of servers the app shows "⛔ This device is blocked", with binding turned off too.
+
+A ban covers one user: on someone else's subscription the device works. Only a device with an ID can be banned. The "Connection addresses" rows and the shared place of apps without an ID cannot: one address is often shared by many people. The **Banned** list in the card shows when and by whom, and **Unban** lifts the ban. A subscriber cannot lift it. Bans and unbans go to the journal.

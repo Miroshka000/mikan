@@ -8,6 +8,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
 
@@ -55,7 +56,7 @@ func (h *handlers) listAudit(ctx context.Context, in *auditInput) (*auditOutput,
 	out.Body.Items = make([]AuditEntry, 0, len(rows))
 	for _, r := range rows {
 		e := AuditEntry{ID: r.ID, At: time.Unix(r.Ts, 0).UTC(), Action: r.Action, TargetType: r.TargetType.String, TargetID: r.TargetID.String,
-			IP: r.Ip.String, Details: json.RawMessage("null"), AdminID: ptrInt(r.AdminID.Int64, r.AdminID.Valid)}
+			IP: r.Ip.String, Details: json.RawMessage("null"), AdminID: store.Int64Ptr(r.AdminID)}
 		if r.Details.Valid {
 			e.Details = json.RawMessage(r.Details.String)
 		}

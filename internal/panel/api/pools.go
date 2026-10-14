@@ -117,7 +117,7 @@ func poolNameError(err error) error {
 func (h *handlers) createPool(ctx context.Context, in *poolInput) (*poolOutput, error) {
 	name := strings.TrimSpace(in.Body.Name)
 	if name == "" {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.name", Message: "name_blank"})
+		return nil, fieldErr("body.name", "name_blank")
 	}
 	p, err := h.d.Store.Q.CreateTrafficPool(ctx, db.CreateTrafficPoolParams{Name: name, CreatedAt: h.d.Now().Unix()})
 	if err != nil {
@@ -130,7 +130,7 @@ func (h *handlers) createPool(ctx context.Context, in *poolInput) (*poolOutput, 
 func (h *handlers) renamePool(ctx context.Context, in *poolPatchInput) (*poolOutput, error) {
 	name := strings.TrimSpace(in.Body.Name)
 	if name == "" {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.name", Message: "name_blank"})
+		return nil, fieldErr("body.name", "name_blank")
 	}
 	n, err := h.d.Store.Q.RenameTrafficPool(ctx, db.RenameTrafficPoolParams{Name: name, ID: in.ID})
 	if err != nil {
@@ -203,9 +203,7 @@ func (h *handlers) deletePool(ctx context.Context, in *userIDInput) (*struct{}, 
 }
 
 func (h *handlers) userPools(ctx context.Context, in *userIDInput) (*userPoolsOutput, error) {
-	if _, err := h.d.Store.Q.GetUser(ctx, in.ID); errors.Is(err, sql.ErrNoRows) {
-		return nil, huma.Error404NotFound("not_found")
-	} else if err != nil {
+	if err := requireUser(ctx, h.d.Store.Q, in.ID); err != nil {
 		return nil, err
 	}
 	ps, err := h.d.Store.Q.ListTrafficPools(ctx)
@@ -227,7 +225,7 @@ func (h *handlers) userPools(ctx context.Context, in *userIDInput) (*userPoolsOu
 	out := &userPoolsOutput{Body: make([]UserPoolView, 0, len(ps))}
 	for _, p := range ps {
 		r := mine[p.ID]
-		v := UserPoolView{PoolID: p.ID, Name: p.Name, TrafficLimit: ptrInt(r.TrafficLimit.Int64, r.TrafficLimit.Valid), UsedUp: r.UsedUp, UsedDown: r.UsedDown,
+		v := UserPoolView{PoolID: p.ID, Name: p.Name, TrafficLimit: store.Int64Ptr(r.TrafficLimit), UsedUp: r.UsedUp, UsedDown: r.UsedDown,
 			Extra: grants.Pool(in.ID, p.ID), Excluded: r.Excluded}
 		v.Exhausted = domain.PoolExhausted(r, v.Extra)
 		out.Body = append(out.Body, v)
@@ -236,21 +234,17 @@ func (h *handlers) userPools(ctx context.Context, in *userIDInput) (*userPoolsOu
 }
 
 func (h *handlers) setUserPools(ctx context.Context, in *userPoolsInput) (*userPoolsOutput, error) {
-	if _, err := h.d.Store.Q.GetUser(ctx, in.ID); errors.Is(err, sql.ErrNoRows) {
-		return nil, huma.Error404NotFound("not_found")
-	} else if err != nil {
+	if err := requireUser(ctx, h.d.Store.Q, in.ID); err != nil {
 		return nil, err
 	}
 	err := h.d.Store.Tx(ctx, func(q *db.Queries) error {
+		if err := checkPoolLimits(ctx, q, in.Body.Pools); err != nil {
+			return err
+		}
 		for _, p := range in.Body.Pools {
-			if _, err := q.GetTrafficPool(ctx, p.PoolID); errors.Is(err, sql.ErrNoRows) {
-				return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.pools", Message: "pool_not_found", Value: p.PoolID})
-			} else if err != nil {
-				return err
-			}
 			limit := sql.NullInt64{}
 			if p.TrafficLimit != nil && !p.Excluded {
-				limit = sql.NullInt64{Int64: *p.TrafficLimit, Valid: true}
+				limit = domain.NullInt(p.TrafficLimit)
 			}
 			if err := q.SetUserPoolLimit(ctx, db.SetUserPoolLimitParams{UserID: in.ID, PoolID: p.PoolID, TrafficLimit: limit, Excluded: p.Excluded}); err != nil {
 				return err
@@ -266,23 +260,33 @@ func (h *handlers) setUserPools(ctx context.Context, in *userPoolsInput) (*userP
 	return h.userPools(ctx, &userIDInput{ID: in.ID})
 }
 
+// checkPoolLimits refuses a list of pool limits that names a pool twice or a pool that is
+// not there, before anything is written: a user and a tariff are held to the same list.
+func checkPoolLimits(ctx context.Context, q *db.Queries, limits []PoolLimit) error {
+	seen := make(map[int64]bool, len(limits))
+	for _, p := range limits {
+		if seen[p.PoolID] {
+			return fieldErrValue("body.pools", "pool_duplicate", p.PoolID)
+		}
+		seen[p.PoolID] = true
+		switch err := domain.PoolExists(ctx, q, p.PoolID); {
+		case errors.As(err, new(*domain.FieldError)):
+			return fieldErrValue("body.pools", "pool_not_found", p.PoolID)
+		case err != nil:
+			return err
+		}
+	}
+	return nil
+}
+
 // setTariffPools replaces a tariff's pool limits on q's transaction. The list is checked
 // whole (a pool twice, an unknown pool) before the old limits go. A pool closed or opened
 // again reaches the tariff's users at once, unlike the limits, which come with a purchase
 // or a change of tariff: closing the expensive server to a cheap tariff is meant now. Only
 // the pools whose state changed are touched, so what the admin set on a user stays.
 func setTariffPools(ctx context.Context, q *db.Queries, tariffID int64, limits []PoolLimit) error {
-	seen := make(map[int64]bool, len(limits))
-	for _, p := range limits {
-		if seen[p.PoolID] {
-			return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.pools", Message: "pool_duplicate", Value: p.PoolID})
-		}
-		seen[p.PoolID] = true
-		if _, err := q.GetTrafficPool(ctx, p.PoolID); errors.Is(err, sql.ErrNoRows) {
-			return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.pools", Message: "pool_not_found", Value: p.PoolID})
-		} else if err != nil {
-			return err
-		}
+	if err := checkPoolLimits(ctx, q, limits); err != nil {
+		return err
 	}
 	before, err := q.ListTariffPools(ctx, tariffID)
 	if err != nil {
@@ -316,7 +320,7 @@ func setTariffPools(ctx context.Context, q *db.Queries, tariffID int64, limits [
 		}
 		var limit sql.NullInt64
 		if !p.Excluded && p.TrafficLimit != nil {
-			limit = sql.NullInt64{Int64: *p.TrafficLimit, Valid: true}
+			limit = domain.NullInt(p.TrafficLimit)
 		}
 		if err := q.SetTariffUsersPool(ctx, db.SetTariffUsersPoolParams{TariffID: tariffID, PoolID: p.PoolID, TrafficLimit: limit, Excluded: p.Excluded}); err != nil {
 			return err

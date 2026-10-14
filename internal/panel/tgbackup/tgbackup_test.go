@@ -25,7 +25,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/storetest"
-	"mikan/internal/panel/tgbot"
+	"mikan/internal/panel/tgate"
 )
 
 const password = "correct horse battery staple"
@@ -121,7 +121,7 @@ func TestMakeRefusesATooBigDumpFirst(t *testing.T) {
 			return err
 		}
 		defer f.Close()
-		return f.Truncate(tgbot.MaxDocument) // sparse: no 50 MB written
+		return f.Truncate(tgate.MaxDocument) // sparse: no 50 MB written
 	}
 	if _, _, err := Make(context.Background(), big, dir, password, time.Now()); !errors.Is(err, ErrTooBig) {
 		t.Fatalf("a 50 MB dump: %v", err)
@@ -158,13 +158,13 @@ func TestMakeGivesTheDumpADeadline(t *testing.T) {
 }
 
 type fakeBot struct {
-	client *tgbot.Client
+	client *tgate.Client
 	chat   int64
 }
 
-func (b fakeBot) InfrastructureClient(context.Context) (*tgbot.Client, error) {
+func (b fakeBot) InfrastructureClient(context.Context) (*tgate.Client, error) {
 	if b.client == nil {
-		return nil, tgbot.ErrOff
+		return nil, tgate.ErrOff
 	}
 	return b.client, nil
 }
@@ -180,7 +180,13 @@ type sent struct {
 }
 
 // fakeTelegram answers sendDocument and keeps what it got.
-func fakeTelegram(t *testing.T) (*tgbot.Client, func() []sent) {
+func fakeTelegram(t *testing.T) (*tgate.Client, func() []sent) {
+	api, got := fakeAPI(t)
+	return tgate.NewClient(api, "123:abc", nil), got
+}
+
+// fakeAPI is fakeTelegram's Bot API at its address.
+func fakeAPI(t *testing.T) (string, func() []sent) {
 	var mu sync.Mutex
 	var got []sent
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +218,7 @@ func fakeTelegram(t *testing.T) (*tgbot.Client, func() []sent) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "result": map[string]any{"message_id": 1, "chat": map[string]any{"id": 42}}})
 	}))
 	t.Cleanup(srv.Close)
-	return tgbot.NewClient(srv.URL, "123:abc", nil), func() []sent {
+	return srv.URL, func() []sent {
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]sent(nil), got...)
@@ -264,6 +270,28 @@ func TestSendGoesToTheAdminChat(t *testing.T) {
 	s.dump = func(context.Context, string) error { return errors.New("pg_dump: db.internal:5432 refused") }
 	if stt, _ := s.Send(ctx); stt.LastError != "backup_dump_failed" {
 		t.Fatalf("a failed dump: %+v", stt)
+	}
+}
+
+// The backups need the Telegram gateway only: its token, route and admin chat, not the
+// bot's screens, which may run elsewhere or not at all.
+func TestSendThroughTheGatewayAlone(t *testing.T) {
+	st := open(t)
+	ctx := context.Background()
+	set := settings.New(st.Q)
+	api, got := fakeAPI(t)
+	for k, v := range map[string]any{tgate.KeyToken: "123:abc", tgate.KeyInfraAdminChat: int64(42), KeyPassword: password} {
+		if err := settings.Set(ctx, set, k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gate := tgate.New(tgate.Deps{Store: st, Settings: set, API: api, Now: time.Now})
+	s := New(fakeDump([]byte("PGDMP-gate")), set, gate, t.TempDir(), func(context.Context) string { return "vpn.example.com" }, time.Now, nil)
+	if _, err := s.Send(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if g := got(); len(g) != 1 || g[0].chat != "42" || string(unpack(t, g[0].file, password)["data/panel/backup.dump"]) != "PGDMP-gate" {
+		t.Fatalf("sent: %+v", g)
 	}
 }
 
@@ -393,9 +421,9 @@ func TestCode(t *testing.T) {
 	for err, want := range map[error]string{
 		ErrNoChat:                     "no_admin_chat",
 		ErrTooBig:                     "backup_too_big",
-		tgbot.ErrOff:                  "bot_off",
-		tgbot.ErrUnreachable:          "tg_unreachable",
-		&tgbot.APIError{Code: 400}:    "tg_unreachable",
+		tgate.ErrOff:                  "bot_off",
+		tgate.ErrUnreachable:          "tg_unreachable",
+		&tgate.APIError{Code: 400}:    "tg_unreachable",
 		errors.New("pg: host x:5432"): "backup_failed",
 	} {
 		if got := Code(err); got != want {

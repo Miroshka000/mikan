@@ -95,26 +95,8 @@ func fetch(indexURL, latestURL string, pub ed25519.PublicKey, client *http.Clien
 		}
 		return io.ReadAll(io.LimitReader(resp.Body, limit))
 	}
-	// signed reads a file and its signature and parses them. The two are two requests: a
-	// release published between them leaves the new file with the old signature, and
-	// asking again gets a matching pair.
 	signed := func(ctx context.Context, u string, parse func(data []byte, sig string) error) error {
-		once := func() error {
-			data, err := get(ctx, u, 1<<20)
-			if err != nil {
-				return err
-			}
-			sig, err := get(ctx, u+".sig", 4096)
-			if err != nil {
-				return err
-			}
-			return parse(data, string(sig))
-		}
-		err := once()
-		if errors.Is(err, release.ErrSignature) {
-			err = once()
-		}
-		return err
+		return release.FetchSigned(ctx, get, u, 1<<20, parse)
 	}
 	manifest := func(ctx context.Context, u string) (m release.Manifest, err error) {
 		err = signed(ctx, u, func(data []byte, sig string) (err error) {

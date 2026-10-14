@@ -30,6 +30,9 @@ type nodeSharesOutput struct {
 	Body struct {
 		Items []NodeShare `json:"items" doc:"Все ноды, больше всех сверху"`
 		Total int64       `json:"total" doc:"Сколько унесли все ноды вместе"`
+		// Since is set when the period starts before the per-node accounting does: the
+		// totals then cover less than the period, and a shorter period shows the same.
+		Since *time.Time `json:"since,omitempty" doc:"Учёт по нодам начался позже начала периода: день, с которого он идёт"`
 	}
 }
 
@@ -109,5 +112,21 @@ func (h *handlers) nodeShares(ctx context.Context, in *rangeInput) (*nodeSharesO
 	}
 	// Biggest first; equal ones keep the subscription's order (ListNodes already has it).
 	slices.SortStableFunc(out.Body.Items, func(a, b NodeShare) int { return cmp.Compare(b.Bytes, a.Bytes) })
+	first, err := h.d.Store.Q.FirstNodeTrafficDay(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if start := time.Unix(first*86400, 0).UTC(); first > 0 && start.After(periodStart(h.d.Now(), in.Range)) {
+		out.Body.Since = &start
+	}
 	return out, nil
+}
+
+// periodStart is the first moment trafficSince counts for rng.
+func periodStart(now time.Time, rng string) time.Time {
+	daily, since := trafficSince(now, rng)
+	if daily {
+		return time.Unix(since*86400, 0).UTC()
+	}
+	return time.Unix(since*3600, 0).UTC()
 }

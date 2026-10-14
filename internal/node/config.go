@@ -21,7 +21,10 @@ var privateRules = []string{
 	"IP-CIDR,172.16.0.0/12,REJECT",
 	"IP-CIDR,192.168.0.0/16,REJECT",
 	"IP-CIDR,224.0.0.0/3,REJECT",
+	"IP-CIDR6,::/128,REJECT", // "any address": a connection to it reaches the host itself
 	"IP-CIDR6,::1/128,REJECT",
+	// IPv4 written as IPv6 (::ffff:127.0.0.1) does not match the IPv4 ranges above.
+	"IP-CIDR6,::ffff:0:0/96,REJECT",
 	"IP-CIDR6,fc00::/7,REJECT",
 	"IP-CIDR6,fe80::/10,REJECT",
 }

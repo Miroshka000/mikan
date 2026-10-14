@@ -9,27 +9,41 @@ import (
 	"strings"
 	"time"
 
+	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
-	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/tgate"
 )
 
 // Callback data: m main, s subscription, d devices, dc:<id> confirm unbind, du:<id>
 // unbind, c connect, r renew, p:<button> the admin's page, w switch list, u:<user> show
-// that subscription, rm confirm removing it from the account, rd:<user> remove it,
-// f the referral programme, fh what it has earned.
+// that subscription, rm confirm removing it from the account, rd:<user> remove it, rl
+// confirm a new link, rn:<user> issue it (reissue.go). f the referral programme, fh what
+// it has earned.
 
 // screen renders what the chat sees for a press: text (HTML) and buttons.
-func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice string) (string, *Keyboard) {
+func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice string) (string, *tgate.Keyboard) {
 	w := wordsFor(cfg.Lang)
-	list, u, ok := b.subs(ctx, chat)
 	cmd, arg, _ := strings.Cut(data, ":")
-	// The referral programme and buying work with or without a subscription.
+	// The channel stands in front of every screen but paying (ungated). Asked here, as the
+	// screen is drawn: off the update loop, a slow Telegram holds up this chat only.
+	switch {
+	case cmd == "gc":
+		if !b.passes(ctx, cfg, chat, true) {
+			return b.gateScreen(ctx, cfg, w, w.channelNotYet)
+		}
+		cmd = "m"
+	case !ungated[cmd] && !b.passes(ctx, cfg, chat, false):
+		return b.gateScreen(ctx, cfg, w, notice)
+	}
+	list, u, ok := b.subs(ctx, chat)
+	// Buying a new subscription works with or without one.
+	// The referral programme works with or without a subscription.
 	if cmd == "f" || cmd == "fh" {
 		return b.referral(ctx, w, chat, cmd, notice)
 	}
 	if b.canBuyNew(ctx) {
-		home := []Button{{Text: w.back, CallbackData: "m"}}
+		home := []tgate.Button{{Text: w.back, CallbackData: "m"}}
 		switch cmd {
 		case "b":
 			return b.shopList(ctx, w, w.buyTitle, "tn", notice, home)
@@ -37,18 +51,23 @@ func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice s
 			return b.shopTariff(ctx, w, arg, "tn", "pn", shopBack(w, "tn", arg, "b"))
 		case "pn":
 			id, _, _ := strings.Cut(arg, ":")
-			return b.shopInvoice(ctx, w, chat, 0, arg, []Button{{Text: w.back, CallbackData: "tn:" + id}})
+			return b.shopInvoice(ctx, w, chat, 0, arg, []tgate.Button{{Text: w.back, CallbackData: "tn:" + id}})
 		}
 	}
-	if cmd == "tr" {
+	switch cmd {
+	case "tr":
 		return b.takeTrial(ctx, w, chat)
+	case "tp":
+		return b.trialInvoice(ctx, w, chat, arg)
+	case "fp":
+		return b.takeFree(ctx, cfg, w, chat)
 	}
 	if !ok {
 		return b.welcome(ctx, cfg, w, chat, notice)
 	}
 	now := b.d.Now()
 	vars := b.vars(ctx, w, u, now)
-	back := []Button{{Text: w.back, CallbackData: "m"}}
+	back := []tgate.Button{{Text: w.back, CallbackData: "m"}}
 	withNotice := func(s string) string {
 		if notice != "" {
 			return html.EscapeString(notice) + "\n\n" + s
@@ -60,7 +79,7 @@ func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice s
 		return b.shopTariff(ctx, w, arg, "t", "py", shopBack(w, "t", arg, "r"))
 	case "py":
 		id, _, _ := strings.Cut(arg, ":")
-		return b.shopInvoice(ctx, w, chat, u.ID, arg, []Button{{Text: w.back, CallbackData: "t:" + id}})
+		return b.shopInvoice(ctx, w, chat, u.ID, arg, []tgate.Button{{Text: w.back, CallbackData: "t:" + id}})
 	case "s":
 		lines := []string{"<b>" + html.EscapeString(fmt.Sprintf(w.subTitle, u.Name)) + "</b>", html.EscapeString(vars["state"]), "",
 			"📅 " + html.EscapeString(vars["term"]), "📦 " + html.EscapeString(vars["traffic"])}
@@ -71,17 +90,31 @@ func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice s
 			lines = append(lines, html.EscapeString(fmt.Sprintf(w.resets, r)))
 		}
 		lines = append(lines, "📱 "+html.EscapeString(vars["devices"]))
-		rows := [][]Button{}
-		if offers := b.packageOffers(ctx, u.ID); len(offers) > 0 {
-			rows = append(rows, []Button{{Text: w.buyTraffic, CallbackData: "x"}})
+		newLink, linkLine := b.reissueRow(ctx, w, u)
+		if linkLine != "" {
+			lines = append(lines, linkLine)
 		}
-		rows = append(rows, []Button{{Text: w.removeSub, CallbackData: "rm"}})
-		return withNotice(strings.Join(lines, "\n")), &Keyboard{append(rows, back)}
+		rows := [][]tgate.Button{}
+		if offers := b.packageOffers(ctx, u.ID); len(offers) > 0 {
+			rows = append(rows, []tgate.Button{{Text: w.buyTraffic, CallbackData: "x"}})
+		}
+		if newLink != nil {
+			rows = append(rows, []tgate.Button{*newLink})
+		}
+		rows = append(rows, []tgate.Button{{Text: w.removeSub, CallbackData: "rm"}})
+		return withNotice(strings.Join(lines, "\n")), &tgate.Keyboard{InlineKeyboard: append(rows, back)}
 	case "rm":
 		// The id goes with the button: a tap after switching subscriptions removes the
 		// one that was asked about, not the one shown now.
-		return withNotice(html.EscapeString(fmt.Sprintf(w.confirmRemove, u.Name))), &Keyboard{[][]Button{
+		return withNotice(html.EscapeString(fmt.Sprintf(w.confirmRemove, u.Name))), &tgate.Keyboard{InlineKeyboard: [][]tgate.Button{
 			{{Text: w.yesRemove, CallbackData: "rd:" + strconv.FormatInt(u.ID, 10)}, {Text: w.cancel, CallbackData: "s"}}}}
+	case "rl":
+		text, kb, ok := b.reissueConfirm(ctx, w, u)
+		if !ok {
+			// Stale button: the subscription screen says why there is none now.
+			return b.screen(ctx, cfg, chat, "s", text)
+		}
+		return withNotice(text), kb
 	case "x", "xk", "xp":
 		return b.trafficShop(ctx, w, chat, u, cmd, arg, notice)
 	case "d", "dc":
@@ -89,74 +122,80 @@ func (b *Bot) screen(ctx context.Context, cfg Config, chat int64, data, notice s
 		return b.devices(ctx, w, u, cmd, id, notice, now)
 	case "c":
 		text := "<b>" + w.connectTitle + "</b>\n\n" + fmt.Sprintf(w.connectText, html.EscapeString(b.subURL(ctx, u)))
-		rows := [][]Button{}
+		rows := [][]tgate.Button{}
 		if btn, ok := b.pageButton(ctx, cfg, w, w.openPage); ok {
-			rows = append(rows, []Button{btn})
+			rows = append(rows, []tgate.Button{btn})
 		}
-		return withNotice(text), &Keyboard{append(rows, back)}
+		return withNotice(text), &tgate.Keyboard{InlineKeyboard: append(rows, back)}
 	case "r":
 		if offers, _ := b.offers(ctx); len(offers) > 0 {
 			text, kb := b.shopList(ctx, w, fmt.Sprintf(w.renewTitle, u.Name), "t", notice, nil)
 			if sup := b.supportURL(ctx); sup != "" {
-				kb.InlineKeyboard = append(kb.InlineKeyboard, []Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
+				kb.InlineKeyboard = append(kb.InlineKeyboard, []tgate.Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
 			}
 			kb.InlineKeyboard = append(kb.InlineKeyboard, back)
 			return text, kb
 		}
-		rows := [][]Button{}
+		rows := [][]tgate.Button{}
 		if sup := b.supportURL(ctx); sup != "" {
-			rows = append(rows, []Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
+			rows = append(rows, []tgate.Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
 		}
-		return withNotice(render(pick(cfg.Texts.Renew, w.renew), vars)), &Keyboard{append(rows, back)}
+		return withNotice(render(pick(cfg.Texts.Renew, w.renew), vars)), &tgate.Keyboard{InlineKeyboard: append(rows, back)}
 	case "p":
 		for _, btn := range cfg.Buttons {
 			if btn.Action == "page" && btn.ID == arg {
-				return withNotice(render(btn.Text, vars)), &Keyboard{[][]Button{back}}
+				return withNotice(render(btn.Text, vars)), &tgate.Keyboard{InlineKeyboard: [][]tgate.Button{back}}
 			}
 		}
 	case "w":
-		rows := [][]Button{}
+		rows := [][]tgate.Button{}
 		for _, s := range list {
 			mark := ""
 			if s.ID == u.ID {
 				mark = "✓ "
 			}
-			rows = append(rows, []Button{{Text: mark + s.Name, CallbackData: "u:" + strconv.FormatInt(s.ID, 10)}})
+			rows = append(rows, []tgate.Button{{Text: mark + s.Name, CallbackData: "u:" + strconv.FormatInt(s.ID, 10)}})
 		}
-		return w.switchTitle, &Keyboard{append(rows, back)}
+		return w.switchTitle, &tgate.Keyboard{InlineKeyboard: append(rows, back)}
 	}
-	return withNotice(render(pick(cfg.Texts.Main, w.main), vars)), b.menu(ctx, cfg, w, len(list))
+	return withNotice(render(pick(cfg.Texts.Main, w.main), vars)), b.menu(ctx, cfg, w, chat, len(list))
 }
 
-func (b *Bot) welcome(ctx context.Context, cfg Config, w *words, chat int64, notice string) (string, *Keyboard) {
+func (b *Bot) welcome(ctx context.Context, cfg Config, w *words, chat int64, notice string) (string, *tgate.Keyboard) {
 	brand := b.brand(ctx)
 	text := render(pick(cfg.Texts.Welcome, w.welcome), map[string]string{"brand": brand})
 	if notice != "" {
 		text = html.EscapeString(notice) + "\n\n" + text
 	}
-	var rows [][]Button
-	if b.d.Billing != nil && b.d.Billing.TrialOpen(ctx, chat) {
-		rows = append(rows, []Button{{Text: w.trial, CallbackData: "tr"}})
+	var rows [][]tgate.Button
+	shop := b.d.Backend.Shop()
+	if o, _, ok := shop.TrialOffer(ctx, chat); ok {
+		rows = append(rows, []tgate.Button{{Text: fmt.Sprintf(w.trialPaid, w.cheapest(billing.Offer{Stars: o.Stars, Rub: o.Rub})), CallbackData: "tr"}})
+	} else if shop.TrialOpen(ctx, chat) {
+		rows = append(rows, []tgate.Button{{Text: w.trial, CallbackData: "tr"}})
+	}
+	if btn, ok := b.freeButton(ctx, cfg, w, chat); ok {
+		rows = append(rows, []tgate.Button{btn})
 	}
 	if b.canBuyNew(ctx) {
-		rows = append(rows, []Button{{Text: w.buy, CallbackData: "b"}})
+		rows = append(rows, []tgate.Button{{Text: w.buy, CallbackData: "b"}})
 	}
 	if sup := b.supportURL(ctx); sup != "" {
-		rows = append(rows, []Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
+		rows = append(rows, []tgate.Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
 	}
 	if b.referralButton(ctx, cfg) {
-		rows = append(rows, []Button{{Text: labelOf(cfg, "referral", w.refReferral), CallbackData: "f"}})
+		rows = append(rows, []tgate.Button{{Text: labelOf(cfg, "referral", w.refReferral), CallbackData: "f"}})
 	}
 	if rows == nil {
 		return text, nil
 	}
-	return text, &Keyboard{rows}
+	return text, &tgate.Keyboard{InlineKeyboard: rows}
 }
 
 // referralButton: the welcome menu carries the programme too — an account with no
 // subscription is exactly the one that invites people.
 func (b *Bot) referralButton(ctx context.Context, cfg Config) bool {
-	if b.d.Referral == nil || !b.d.Referral.Setup(ctx).Enabled {
+	if !b.d.Backend.ReferralOn(ctx) {
 		return false
 	}
 	for _, mb := range cfg.Buttons {
@@ -168,121 +207,175 @@ func (b *Bot) referralButton(ctx context.Context, cfg Config) bool {
 }
 
 // menu is the admin's main menu as buttons.
-func (b *Bot) menu(ctx context.Context, cfg Config, w *words, subs int) *Keyboard {
-	var rows [][]Button
+func (b *Bot) menu(ctx context.Context, cfg Config, w *words, chat int64, subs int) *tgate.Keyboard {
+	var rows [][]tgate.Button
 	for _, mb := range cfg.Buttons {
 		if !mb.On {
 			continue
 		}
-		var btn Button
+		var btn tgate.Button
 		switch mb.Action {
 		case "sub":
-			btn = Button{Text: mb.Label, CallbackData: "s"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "s"}
 		case "devices":
-			btn = Button{Text: mb.Label, CallbackData: "d"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "d"}
 		case "connect":
-			btn = Button{Text: mb.Label, CallbackData: "c"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "c"}
 		case "renew":
-			btn = Button{Text: mb.Label, CallbackData: "r"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "r"}
 		case "referral":
 			if !b.referralButton(ctx, cfg) {
 				continue
 			}
-			btn = Button{Text: mb.Label, CallbackData: "f"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "f"}
 		case "support":
 			sup := b.supportURL(ctx)
 			if sup == "" {
 				continue
 			}
-			btn = Button{Text: mb.Label, URL: sup}
+			btn = tgate.Button{Text: mb.Label, URL: sup}
 		case "app":
 			var ok bool
 			if btn, ok = b.pageButton(ctx, cfg, w, mb.Label); !ok {
 				continue
 			}
 		case "url":
-			btn = Button{Text: mb.Label, URL: mb.URL}
+			btn = tgate.Button{Text: mb.Label, URL: mb.URL}
 		case "page":
-			btn = Button{Text: mb.Label, CallbackData: "p:" + mb.ID}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "p:" + mb.ID}
 		default:
 			continue
 		}
 		if mb.Row && len(rows) > 0 && len(rows[len(rows)-1]) < 3 {
 			rows[len(rows)-1] = append(rows[len(rows)-1], btn)
 		} else {
-			rows = append(rows, []Button{btn})
+			rows = append(rows, []tgate.Button{btn})
 		}
 	}
-	if url := b.miniAppURL(ctx, cfg); url != "" {
-		rows = append(rows, []Button{{Text: w.promo, WebApp: &WebApp{URL: url + "#promocodes"}}})
+	// The free plan comes back to the menu once the account's free subscription has ended.
+	if btn, ok := b.freeButton(ctx, cfg, w, chat); ok {
+		rows = append(rows, []tgate.Button{btn})
+	}
+	// The promo codes entry is the admin's to hide; the Mini App page keeps its field.
+	if url := b.miniAppURL(ctx, cfg); url != "" && cfg.PromoButton {
+		rows = append(rows, []tgate.Button{{Text: w.promo, WebApp: &tgate.WebApp{URL: url + "#promocodes"}}})
 	}
 	if subs > 1 {
-		rows = append(rows, []Button{{Text: fmt.Sprintf("%s (%d)", w.subscriptions, subs), CallbackData: "w"}})
+		rows = append(rows, []tgate.Button{{Text: fmt.Sprintf("%s (%d)", w.subscriptions, subs), CallbackData: "w"}})
 	}
-	return &Keyboard{InlineKeyboard: rows}
+	return &tgate.Keyboard{InlineKeyboard: rows}
 }
 
 // pageButton opens the subscription page: in the Mini App when Telegram can load it,
 // else in the browser.
-func (b *Bot) pageButton(ctx context.Context, cfg Config, w *words, label string) (Button, bool) {
+func (b *Bot) pageButton(ctx context.Context, cfg Config, w *words, label string) (tgate.Button, bool) {
 	if url := b.miniAppURL(ctx, cfg); url != "" {
-		return Button{Text: label, WebApp: &WebApp{URL: url}}, true
+		return tgate.Button{Text: label, WebApp: &tgate.WebApp{URL: url}}, true
 	}
-	return Button{}, false
+	return tgate.Button{}, false
 }
 
-func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id int64, notice string, now time.Time) (string, *Keyboard) {
-	back := []Button{{Text: w.back, CallbackData: "m"}}
-	binding, _ := b.d.Settings.On(ctx, settings.DeviceBinding)
+func (b *Bot) devices(ctx context.Context, w *words, u db.User, cmd string, id int64, notice string, now time.Time) (string, *tgate.Keyboard) {
+	back := []tgate.Button{{Text: w.back, CallbackData: "m"}}
+	binding := b.d.Backend.DeviceBinding(ctx)
 	head := "<b>" + w.devicesTitle + "</b> · " + html.EscapeString(b.vars(ctx, w, u, now)["devices"])
 	if !binding {
 		limit := "∞"
 		if u.DeviceLimit.Valid {
 			limit = strconv.FormatInt(u.DeviceLimit.Int64, 10)
 		}
-		return head + "\n\n" + html.EscapeString(fmt.Sprintf(w.devicesOff, limit)), &Keyboard{[][]Button{back}}
+		return head + "\n\n" + html.EscapeString(fmt.Sprintf(w.devicesOff, limit)), &tgate.Keyboard{InlineKeyboard: [][]tgate.Button{back}}
 	}
-	devs, err := b.d.Store.Q.ListBoundDevices(ctx, u.ID)
+	devs, err := b.d.Backend.Devices(ctx, u.ID)
 	if err != nil {
 		devs = nil
 	}
+	used, err := b.d.Backend.DeviceTraffic(ctx, u.ID)
+	if err != nil {
+		used = map[int64]int64{}
+	}
 	name := func(d db.BoundDevice) string { return deviceName(w, d) }
-	if cmd == "dc" {
+	rules, err := b.d.Backend.UnbindState(ctx, u.ID)
+	if err != nil {
+		b.d.Log.Warn("telegram: unbind rules", "err", err)
+	}
+	// No unbind buttons while none is left, or when only the admin unbinds.
+	waiting := !rules.Next.IsZero() || rules.Rules.Off
+	if cmd == "dc" && !waiting {
 		for _, d := range devs {
 			if d.ID == id {
-				return html.EscapeString(fmt.Sprintf(w.confirmUnbind, name(d))), &Keyboard{[][]Button{
+				text := html.EscapeString(fmt.Sprintf(w.confirmUnbind, name(d)))
+				switch r := rules.Rules.ReturnHours; {
+				case d.Hwid == "":
+				case r == domain.ReturnNever:
+					text += "\n\n" + html.EscapeString(w.confirmNever)
+				case r > 0:
+					text += "\n\n" + html.EscapeString(fmt.Sprintf(w.confirmReturn, w.span(r)))
+				}
+				return text, &tgate.Keyboard{InlineKeyboard: [][]tgate.Button{
 					{{Text: w.yesUnbind, CallbackData: "du:" + strconv.FormatInt(id, 10)}, {Text: w.cancel, CallbackData: "d"}}}}
 			}
 		}
 	}
 	lines := []string{head, ""}
-	if notice != "" {
+	switch {
+	case notice != "":
 		lines = append([]string{html.EscapeString(notice), ""}, lines...)
+	case !rules.Next.IsZero() && len(devs) > 0:
+		// No buttons to tap while the limit is reached: the line says when they come back.
+		lines = append([]string{"<b>" + html.EscapeString(fmt.Sprintf(w.wait, b.when(w, rules.Next))) + "</b>", ""}, lines...)
 	}
-	rows := [][]Button{}
+	rows := [][]tgate.Button{}
 	if len(devs) == 0 {
 		lines = append(lines, html.EscapeString(w.devicesNone))
 	}
 	for i, d := range devs {
 		meta := []string{}
+		if d.Name != "" && d.Model != "" {
+			meta = append(meta, d.Model)
+		}
 		if d.Hwid != "" && d.Model != "" && d.Os != "" {
 			meta = append(meta, strings.TrimSpace(d.Os+" "+d.OsVersion))
 		}
 		if app, _, _ := strings.Cut(strings.TrimSpace(d.App), " "); app != "" {
 			meta = append(meta, strings.Replace(app, "/", " ", 1))
 		}
+		if n := used[d.ID]; n > 0 {
+			meta = append(meta, w.bytes(n))
+		}
 		meta = append(meta, w.ago(time.Unix(d.LastSeen, 0), now))
 		lines = append(lines, fmt.Sprintf("%d. %s — %s", i+1, html.EscapeString(name(d)), html.EscapeString(strings.Join(meta, " · "))))
-		rows = append(rows, []Button{{Text: "❌ " + name(d), CallbackData: "dc:" + strconv.FormatInt(d.ID, 10)}})
+		if !waiting {
+			rows = append(rows, []tgate.Button{{Text: "❌ " + name(d), CallbackData: "dc:" + strconv.FormatInt(d.ID, 10)}})
+		}
 	}
 	if len(devs) > 0 {
-		lines = append(lines, "", html.EscapeString(w.devicesNote))
+		note := []string{w.devicesNote}
+		if !domain.BindsDevices(u.DeviceMode) {
+			note = append(note, linkWordsFor(w).onlineNote)
+		}
+		switch r := rules.Rules.ReturnHours; {
+		case rules.Rules.Off:
+			note = append(note, w.unbindOff)
+		case r == domain.ReturnNever:
+			note = append(note, w.returnNever)
+		case r > 0:
+			note = append(note, fmt.Sprintf(w.returnNote, w.span(r)))
+		}
+		if left := rules.Left(); left >= 0 && !waiting {
+			note = append(note[:1], append([]string{fmt.Sprintf(w.unbindLeft, left, rules.Rules.Limit, w.period(rules.Rules.Days))}, note[1:]...)...)
+		}
+		lines = append(lines, "", html.EscapeString(strings.Join(note, " ")))
 	}
-	return strings.Join(lines, "\n"), &Keyboard{append(rows, back)}
+	return strings.Join(lines, "\n"), &tgate.Keyboard{InlineKeyboard: append(rows, back)}
 }
 
+// deviceName: the device's own name (the admin's or the subscriber's, escaped where it is
+// shown), else what its app reported.
 func deviceName(w *words, d db.BoundDevice) string {
 	switch {
+	case d.Name != "":
+		return d.Name
 	case d.Hwid == "":
 		return w.sharedPlace
 	case d.Model != "":
@@ -301,44 +394,59 @@ func (b *Bot) act(ctx context.Context, chat int64, data string) (screen, notice 
 	id, _ := strconv.ParseInt(arg, 10, 64)
 	switch cmd {
 	case "du":
-		w := wordsFor(b.Config(ctx).Lang)
+		w := wordsFor(b.config(ctx).Lang)
 		_, u, ok := b.subs(ctx, chat)
 		if !ok {
 			return "m", ""
 		}
-		devs, _ := b.d.Store.Q.ListBoundDevices(ctx, u.ID)
+		devs, _ := b.d.Backend.Devices(ctx, u.ID)
 		for _, d := range devs {
 			if d.ID != id {
 				continue
 			}
-			err := b.d.Devices.Unbind(ctx, u.ID, id, true)
+			err := b.d.Backend.Unbind(ctx, u.ID, id)
 			switch {
 			case err == nil:
+				b.d.Log.Info("telegram: the subscriber unbound a device", "user", u.ID, "device", id)
 				return "d", fmt.Sprintf(w.unbound, deviceName(w, d))
 			case errors.Is(err, domain.ErrUnbindCooldown):
-				fresh, _ := b.d.Store.Q.GetUser(ctx, u.ID)
-				return "d", fmt.Sprintf(w.wait, b.when(w, domain.NextUnbind(fresh, b.d.Now())))
+				st, _ := b.d.Backend.UnbindState(ctx, u.ID)
+				return "d", fmt.Sprintf(w.wait, b.when(w, st.Next))
+			case errors.Is(err, domain.ErrNotFound):
+				return "d", ""
+			case errors.Is(err, domain.ErrUnbindOff):
+				return "d", w.unbindOff
+			default:
+				b.d.Log.Warn("telegram: device not unbound", "user", u.ID, "device", id, "err", err)
+				return "d", w.unbindFailed
 			}
 		}
 		return "d", ""
-	case "u":
+	case "rn":
+		return b.reissueAct(ctx, chat, id)
+	case "u", "xu":
+		// "xu" is the buy button of a traffic notice: that subscription's packages, not the
+		// one the menu shows now. Only a subscription of this account is switched to.
 		list, _, _ := b.subs(ctx, chat)
 		for _, s := range list {
 			if s.ID == id {
-				_ = b.d.Store.Q.SetTgCurrent(ctx, db.SetTgCurrentParams{Current: id, TgID: chat})
+				_ = b.d.Backend.SetCurrent(ctx, chat, id)
+				if cmd == "xu" {
+					return "x", ""
+				}
 			}
 		}
 		return "m", ""
 	case "rd":
 		// Only a subscription of this account, and only its link: the subscription itself
 		// stays as it is. The next one in the list is shown after it.
-		w := wordsFor(b.Config(ctx).Lang)
+		w := wordsFor(b.config(ctx).Lang)
 		list, _, _ := b.subs(ctx, chat)
 		for _, s := range list {
 			if s.ID != id {
 				continue
 			}
-			if err := b.d.Store.Q.UnlinkTg(ctx, id); err != nil {
+			if err := b.d.Backend.Unlink(ctx, id); err != nil {
 				b.d.Log.Warn("telegram: remove a subscription", "user", id, "err", err)
 				return "s", ""
 			}
@@ -359,7 +467,7 @@ func (b *Bot) when(w *words, t time.Time) string {
 
 // vars are the {variables} of the admin's texts for one subscription.
 func (b *Bot) vars(ctx context.Context, w *words, u db.User, now time.Time) map[string]string {
-	grants, err := domain.UserGrantsLeft(ctx, b.d.Store.Q, u.ID, now)
+	grants, err := b.d.Backend.GrantsLeft(ctx, u.ID, now)
 	if err != nil {
 		b.d.Log.Warn("telegram: traffic packages", "err", err)
 	}
@@ -398,16 +506,27 @@ func (b *Bot) vars(ctx context.Context, w *words, u db.User, now time.Time) map[
 	if t, ok := domain.NextReset(u, now); ok {
 		v["reset"] = w.shortDate(t)
 	}
-	n, _ := b.d.Store.Q.CountBoundDevices(ctx, u.ID)
+	n, _ := b.d.Backend.DeviceCount(ctx, u.ID)
 	v["devices"] = strconv.FormatInt(n, 10)
-	if u.DeviceLimit.Valid {
+	switch {
+	case u.DeviceLimit.Valid && !domain.BindsDevices(u.DeviceMode):
+		// "3 of 3" would tell of places that this limit does not have: it counts the devices
+		// online at once, whichever and however many are bound.
+		v["devices"] = fmt.Sprintf(linkWordsFor(w).onlineLimit, strconv.FormatInt(u.DeviceLimit.Int64, 10))
+	case u.DeviceLimit.Valid:
 		v["devices"] = fmt.Sprintf(w.trafficOf, v["devices"], strconv.FormatInt(u.DeviceLimit.Int64, 10))
 	}
+	// The subscription link itself: an admin's own menu text can show it without the
+	// "Connect" screen.
+	v["link"] = b.subURL(ctx, u)
 	return v
 }
 
-func (b *Bot) brand(ctx context.Context) string {
-	if s, _ := b.d.Settings.String(ctx, settings.KeyBrand); s != "" {
+func (b *Bot) brand(ctx context.Context) string { return brandOf(ctx, b.d.Backend) }
+
+// brandOf is the panel's name for the service as the bot says it.
+func brandOf(ctx context.Context, be Backend) string {
+	if s := be.Brand(ctx); s != "" {
 		return s
 	}
 	return "VPN"
@@ -415,46 +534,27 @@ func (b *Bot) brand(ctx context.Context) string {
 
 // supportURL is the panel's support link when Telegram can open it.
 func (b *Bot) supportURL(ctx context.Context) string {
-	s, _ := b.d.Settings.String(ctx, settings.KeySupportURL)
-	if safeURL(s) {
+	s := b.d.Backend.SupportURL(ctx)
+	if tgate.SafeURL(s) {
 		return s
 	}
 	return ""
 }
 
 func (b *Bot) subURL(ctx context.Context, u db.User) string {
-	if base := b.d.SubBase(ctx); base != "" {
-		return base + "/" + u.SubToken
-	}
-	return ""
+	return b.d.Backend.SubURL(ctx, u)
 }
 
 // poolLines: one line per traffic pool with a limit — "WL: 30 GB of 100 GB + packages 50 GB".
 func (b *Bot) poolLines(ctx context.Context, w *words, userID int64) []string {
-	rows, err := b.d.Store.Q.ListUserPools(ctx, userID)
-	if err != nil || len(rows) == 0 {
-		return nil
-	}
-	pools, err := b.d.Store.Q.ListTrafficPools(ctx)
+	pools, err := b.d.Backend.Pools(ctx, userID, b.d.Now())
 	if err != nil {
 		return nil
-	}
-	grants, err := domain.UserGrantsLeft(ctx, b.d.Store.Q, userID, b.d.Now())
-	if err != nil {
-		return nil
-	}
-	names := map[int64]string{}
-	for _, p := range pools {
-		names[p.ID] = p.Name
 	}
 	var out []string
-	for _, r := range rows {
-		if !r.TrafficLimit.Valid {
-			continue
-		}
-		extra := grants.Pool(userID, r.PoolID)
-		line := names[r.PoolID] + ": " + fmt.Sprintf(w.trafficOf, w.bytes(r.UsedUp+r.UsedDown), w.withPackages(r.TrafficLimit.Int64, extra))
-		if domain.PoolExhausted(r, extra) {
+	for _, p := range pools {
+		line := p.Name + ": " + fmt.Sprintf(w.trafficOf, w.bytes(p.Used), w.withPackages(p.Limit, p.Extra))
+		if p.Exhausted {
 			line += " — " + w.poolOut
 		}
 		out = append(out, line)

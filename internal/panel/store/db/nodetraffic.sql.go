@@ -46,6 +46,18 @@ func (q *Queries) AddNodeTraffic(ctx context.Context, arg AddNodeTrafficParams) 
 	return err
 }
 
+const firstNodeTrafficDay = `-- name: FirstNodeTrafficDay :one
+SELECT CAST(COALESCE(min(day), 0) AS BIGINT) FROM node_traffic_daily
+`
+
+// The day the per-node accounting has its first row: 0 when it has none yet.
+func (q *Queries) FirstNodeTrafficDay(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, firstNodeTrafficDay)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const nodeTrafficDaily = `-- name: NodeTrafficDaily :many
 SELECT day, up, down FROM node_traffic_daily WHERE node_id = $1 AND day >= $2 ORDER BY day
 `

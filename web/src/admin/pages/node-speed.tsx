@@ -1,10 +1,10 @@
 // The speed test of a node's own way to the internet: latency, jitter and loss of DNS
 // queries, then download and upload against Cloudflare. Run on the admin's word, the
 // latest hundred kept.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Gauge } from "lucide-react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
-import { qk } from "../../api/hooks";
+import { qk, SPEEDTESTS_LIMIT, useSpeedTests } from "../../api/hooks";
 import { Drawer } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
@@ -21,15 +21,11 @@ export function SpeedDrawer({ node, onClose }: { node: { id: number; name: strin
   const id = node?.id ?? 0;
   const qc = useQueryClient();
   const toast = useToast();
-  const history = useQuery({
-    queryKey: qk.speedTests(id),
-    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/speedtests", { params: { path: { id }, query: { limit: 30 } }, signal })),
-    enabled: !!node,
-  });
+  const history = useSpeedTests(node?.id);
   const run = useMutation({
     mutationFn: () => unwrap(api.POST("/api/v1/nodes/{id}/speedtest", { params: { path: { id } } })),
     onSuccess: (r) => {
-      qc.setQueryData<SpeedTest[]>(qk.speedTests(id), (old) => [r, ...(old ?? [])].slice(0, 30));
+      qc.setQueryData<SpeedTest[]>(qk.speedTests(id), (old) => [r, ...(old ?? [])].slice(0, SPEEDTESTS_LIMIT));
       if (r.error) toast.error(t("speed.broke", { error: r.error }));
     },
     onError: (e) => toast.error(errorText(e)),

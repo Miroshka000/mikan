@@ -23,6 +23,10 @@ type argonParams struct {
 
 var b64 = base64.RawStdEncoding
 
+// MinPassword is the shortest password an admin may set, in bytes: the shell (bootstrap) and
+// the panel (the password change form, its minLength tag) hold to the same.
+const MinPassword = 12
+
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, 16)
 	if _, err := rand.Read(salt); err != nil {

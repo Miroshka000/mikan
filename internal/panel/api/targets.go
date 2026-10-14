@@ -2,17 +2,14 @@ package api
 
 import (
 	"context"
-	"net"
+	"errors"
 	"net/http"
-	"strconv"
 	"sync"
-	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/nodeapi"
-	"mikan/internal/panel/settings"
-	"mikan/internal/proto"
+	"mikan/internal/panel/targets"
 	"mikan/internal/scan"
 )
 
@@ -42,36 +39,29 @@ func (h *handlers) registerTargets() {
 	huma.Register(h.api, huma.Operation{OperationID: "scan-targets", Method: http.MethodPost, Path: "/api/v1/inbounds/scan-targets", Summary: "Подобрать цели REALITY рядом с сервером", Tags: []string{"inbounds"}}, h.scanTargets)
 }
 
-// scanOptions is where the panel's own checks may connect: public addresses, and its own
-// port on loopback (self-steal). The name is resolved once and the address checked: a
-// name that leads inside is refused as private.
-func (h *handlers) scanOptions(ctx context.Context) scan.Options {
-	return scan.Options{LoopbackPort: h.panelPort(ctx), Resolve: h.d.Resolve}
-}
-
-func (h *handlers) panelPort(ctx context.Context) int {
-	p, _, _ := settings.Get[int](ctx, h.d.Settings, settings.KeyPanelPort)
-	return p
+// targetDeps is what the shared checks need from the panel. The check form is not tied to
+// a node, so the panel dials the site itself; a scan is the node's, when it can.
+func (h *handlers) targetDeps(nodeID int64) targets.Deps {
+	d := targets.Deps{Settings: h.d.Settings, Resolve: h.d.Resolve}
+	if h.d.Nodes != nil {
+		d.ScanTargets = func(ctx context.Context, req nodeapi.TargetScanRequest) (nodeapi.TargetScan, error) {
+			return h.d.Nodes.ScanTargets(ctx, nodeID, req)
+		}
+	}
+	return d
 }
 
 func (h *handlers) checkTarget(ctx context.Context, in *checkTargetInput) (*checkTargetOutput, error) {
-	host, port, err := net.SplitHostPort(in.Body.Dest)
-	if err != nil || host == "" {
+	r, err := h.targetDeps(0).Check(ctx, in.Body.Dest, in.Body.SNI)
+	switch {
+	case errors.Is(err, targets.ErrBadDest):
 		return nil, huma.Error422UnprocessableEntity("bad_dest", &huma.ErrorDetail{Location: "body.dest", Message: "dest_format"})
-	}
-	// The check dials from the server; internal addresses are not its business, except the
-	// panel's own port (self-steal).
-	dest := in.Body.Dest
-	selfSteal := (host == "127.0.0.1" || host == "localhost") && port == strconv.Itoa(h.panelPort(ctx))
-	if !selfSteal && !proto.PublicHost(host) {
+	case errors.Is(err, targets.ErrPrivateDest):
 		return nil, huma.Error422UnprocessableEntity("bad_dest", &huma.ErrorDetail{Location: "body.dest", Message: "reality_dest_private"})
+	case err != nil:
+		return nil, err
 	}
-	if selfSteal {
-		dest = net.JoinHostPort("127.0.0.1", port) // the check takes the literal address only
-	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	return &checkTargetOutput{Body: scan.Check(ctx, dest, in.Body.SNI, h.scanOptions(ctx))}, nil
+	return &checkTargetOutput{Body: r}, nil
 }
 
 type scanTargetsInput struct {
@@ -87,48 +77,16 @@ func (h *handlers) scanTargets(ctx context.Context, in *scanTargetsInput) (*scan
 	if err != nil {
 		return nil, err
 	}
-	var publicHost, domain string
-	if publicHost, err = h.d.Settings.String(ctx, settings.KeyPublicHost); err != nil {
-		return nil, err
-	}
-	if domain, err = h.d.Settings.String(ctx, settings.KeyDomain); err != nil {
-		return nil, err
-	}
-	local := node.Address == ""
-	if !local {
-		publicHost, domain = node.PublicHost, ""
-	}
-	ip, err := scan.ResolveIPv4(ctx, publicHost)
-	if err != nil {
+	// The panel's own domain is offered once it has its Let's Encrypt certificate.
+	selfSteal := h.d.Cert != nil && h.d.Cert().Kind == "acme"
+	found, err := h.targetDeps(node.ID).Scan(ctx, targets.ScanRequest{Node: node, SelfSteal: selfSteal})
+	var noIP *targets.NoIPError
+	if errors.As(err, &noIP) {
 		return nil, huma.Error422UnprocessableEntity("scan_no_ip")
+	} else if err != nil {
+		return nil, err
 	}
 	out := &scanTargetsOutput{}
-	out.Body.IP = ip
-	// Self-steal: the SNI is the server's own domain and matches its IP, the target is the
-	// panel with its Let's Encrypt certificate.
-	if local && domain != "" && h.d.Cert != nil && h.d.Cert().Kind == "letsencrypt" {
-		cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		r := scan.Check(cctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(h.panelPort(ctx))), domain, h.scanOptions(ctx))
-		cancel()
-		out.Body.SelfSteal = &r
-	}
-	// The node scans its own network, so RTTs are what REALITY will see. A node older than
-	// 0.3 cannot: then the panel scans for it.
-	var fromNode bool
-	if h.d.Nodes != nil {
-		if r, err := h.d.Nodes.ScanTargets(ctx, node.ID, nodeapi.TargetScanRequest{IP: ip, Limit: 12}); err == nil {
-			out.Body.Scanned, out.Body.Results, fromNode = r.Scanned, r.Results, true
-		}
-	}
-	if !fromNode {
-		sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		defer cancel()
-		if out.Body.Results, out.Body.Scanned, err = scan.Neighbors(sctx, ip, 12, scan.Options{}); err != nil && sctx.Err() == nil {
-			return nil, huma.Error422UnprocessableEntity("scan_no_ip")
-		}
-	}
-	if out.Body.Results == nil {
-		out.Body.Results = []scan.Result{}
-	}
+	out.Body.IP, out.Body.Scanned, out.Body.SelfSteal, out.Body.Results = found.IP, found.Scanned, found.SelfSteal, found.Results
 	return out, nil
 }

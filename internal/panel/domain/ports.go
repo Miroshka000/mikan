@@ -49,6 +49,38 @@ const sshPort = 22
 // firewall.
 var PortPool = []int{2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 11443, 12443}
 
+// SpareLo and SpareHi bound the ports an automatic pick may take past PortPool when the
+// admin allows any port (settings.AnyPort): high ones, and below Linux's ephemeral range,
+// so a listener never meets the local port of an outgoing connection. The installer does
+// not open them in the firewall.
+const (
+	SpareLo = 20000
+	SpareHi = 32767
+)
+
+// maxSpare bounds the spare ports one pick lists: enough to choose from at random.
+const maxSpare = 64
+
+// PickPorts lists the ports an automatic pick may take over network, leaving out skip:
+// the free ones of PortPool; when none is and anyPort is on, free ones of the spare range.
+func (m PortMap) PickPorts(network string, anyPort bool, skip map[string]bool) []string {
+	var out []string
+	for _, p := range PortPool {
+		if port := strconv.Itoa(p); !skip[port] && m.Free(p, network) {
+			out = append(out, port)
+		}
+	}
+	if len(out) > 0 || !anyPort {
+		return out
+	}
+	for p := SpareLo; p <= SpareHi && len(out) < maxSpare; p++ {
+		if port := strconv.Itoa(p); !skip[port] && m.Free(p, network) {
+			out = append(out, port)
+		}
+	}
+	return out
+}
+
 // PortHolder is what holds a port. Name and ID are an inbound's; the other kinds are one
 // per node.
 type PortHolder struct {

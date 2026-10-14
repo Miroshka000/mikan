@@ -7,10 +7,8 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"io/fs"
@@ -23,6 +21,7 @@ import (
 	"time"
 
 	"mikan/internal/fsutil"
+	"mikan/internal/nodetls"
 )
 
 // The admin's own certificate, instead of Let's Encrypt or the self-signed one (GitHub
@@ -251,8 +250,7 @@ func CustomPEM(c *tls.Certificate) (certPEM, keyPEM string, err error) {
 
 // Pin is the hex SHA-256 of the leaf, which clients pin when they cannot trust the chain.
 func Pin(c *tls.Certificate) string {
-	sum := sha256.Sum256(c.Certificate[0])
-	return hex.EncodeToString(sum[:])
+	return nodetls.PinOfDER(c.Certificate[0])
 }
 
 // NodeStore keeps the admin's own certificate of each node, for its protocols on the

@@ -20,30 +20,36 @@ net.core.wmem_max = 16777216
 
 pub fn tune() -> Result<()> {
     fs::write(SYSCTL, SYSCTL_CONF)?;
-    let ok = Command::new("sysctl").arg("--system").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success());
-    if !ok {
-        bail!("sysctl failed");
-    }
-    Ok(())
+    crate::system::run_quiet("sysctl", &["--system"])
 }
 
 /// HTTPS ports the panel moves a blocked inbound to on its own (internal/panel/autotune
 /// Pool): the node cannot open them in the firewall itself.
 pub const POOL: [u16; 15] = [2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 11443, 12443];
 
-/// The ufw rules of an install: the panel's port (or a node's API port), 80 for Let's
-/// Encrypt, 443 and the pool over TCP and UDP.
+/// The ufw rules of an install: the panel's port (or a node's API port), 80 for the
+/// certificate authority's HTTP-01 check, 443 and the pool over TCP and UDP. A node needs 80
+/// too: the panel orders its public certificate, and the CA comes to the node's port 80.
 pub fn rules(panel_port: Option<u16>, node_api: Option<u16>) -> Vec<String> {
     let mut r = Vec::new();
     if let Some(p) = panel_port {
         r.push(format!("{p}/tcp"));
-        r.push("80/tcp".into());
     }
     if let Some(p) = node_api {
         r.push(format!("{p}/tcp"));
     }
+    r.push(ACME_RULE.into());
     r.extend(pool_rules());
     r
+}
+
+/// Port 80, where the certificate authority checks the server (HTTP-01).
+pub const ACME_RULE: &str = "80/tcp";
+
+/// What `mikan update` opens again on a server with ufw on: port 80 (nodes installed before
+/// they got public certificates lack it) and the pool, which may have grown.
+pub fn update_rules() -> Vec<String> {
+    std::iter::once(ACME_RULE.to_string()).chain(pool_rules()).collect()
 }
 
 /// 443 and the pool over TCP and UDP: what the protocols and the panel's moves need open.
@@ -92,11 +98,7 @@ pub fn allow_from(ip: std::net::IpAddr, port: u16) -> Result<()> {
 }
 
 fn ufw(args: &[&str]) -> Result<()> {
-    let ok = Command::new("ufw").args(args).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success());
-    if !ok {
-        bail!("ufw {} failed", args.join(" "));
-    }
-    Ok(())
+    crate::system::run_quiet("ufw", args)
 }
 
 pub const BIN: &str = "/usr/local/bin/mikan";
@@ -182,8 +184,9 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 # A oneshot unit has no time limit by default: an update stuck on a dead connection
-# would keep the timer from ever starting it again.
-TimeoutStartSec=45min
+# would keep the timer from ever starting it again. Two hours: a database move alone may
+# take an hour (DATABASE_LIMIT), with the pull and the backups around it.
+TimeoutStartSec=2h
 ExecStart=/usr/local/bin/mikan update --auto
 "
             .into(),
@@ -211,7 +214,7 @@ After=docker.service
 
 [Service]
 Type=oneshot
-TimeoutStartSec=45min
+TimeoutStartSec=2h
 ExecStart=/usr/local/bin/mikan update --requested
 "
             .into(),
@@ -269,11 +272,7 @@ pub fn remove_units() {
 }
 
 fn systemctl(args: &[&str]) -> Result<()> {
-    let ok = Command::new("systemctl").args(args).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success());
-    if !ok {
-        bail!("systemctl {} failed", args.join(" "));
-    }
-    Ok(())
+    crate::system::run_quiet("systemctl", args)
 }
 
 #[cfg(test)]
@@ -425,5 +424,11 @@ mod tests {
         assert_eq!(&r[..4], ["21355/tcp", "80/tcp", "443/tcp", "443/udp"]);
         assert!(r.contains(&"9443/udp".to_string()));
         assert_eq!(rules(None, Some(25305))[0], "25305/tcp");
+        // A node gets 80 for its certificate, also when its API port opens for the panel alone.
+        assert!(rules(None, Some(25305)).contains(&"80/tcp".to_string()));
+        assert!(rules(None, None).contains(&"80/tcp".to_string()));
+        let u = update_rules();
+        assert_eq!(u[0], "80/tcp");
+        assert!(u.contains(&"12443/udp".to_string()) && u.iter().all(|r| valid_rule(r)));
     }
 }

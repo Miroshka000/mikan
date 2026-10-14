@@ -6,19 +6,19 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
-	"mikan/internal/hostname"
 	"mikan/internal/nodetls"
 	"mikan/internal/panel/audit"
+	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
-	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/subs"
 	"mikan/internal/release"
 )
 
@@ -30,6 +30,14 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 	}
 	panelCert := func() (nodetls.Pair, error) {
 		return nodetls.LoadOrCreate(filepath.Join(dataDir, "tls", "nodes"), time.Now())
+	}
+	// Where the node's hello goes (nodetls.Key.PanelURL).
+	panelURL := func() string {
+		ep, err := settings.New(st.Q).Endpoint(ctx)
+		if err != nil {
+			return ""
+		}
+		return ep.URL()
 	}
 	switch args[0] {
 	case "list":
@@ -67,14 +75,13 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 		if err != nil {
 			return err
 		}
-		n, key, err := domain.AddNode(ctx, st, panel, domain.NodeInput{Name: *name, Host: *host, Domain: *dom, APIPort: *port}, time.Now())
-		switch {
-		case errors.Is(err, domain.ErrBadHost):
-			return errors.New(badHost)
-		case errors.Is(err, domain.ErrBadDomain):
-			return errors.New(badDomain)
-		case err != nil:
+		rules, err := nodeRules(ctx, st)
+		if err != nil {
 			return err
+		}
+		n, key, err := domain.AddNode(ctx, st, panel, domain.NodeInput{Name: *name, Host: *host, Domain: *dom, APIPort: *port, PanelURL: panelURL(), Rules: rules}, time.Now())
+		if err != nil {
+			return nodeError(err)
 		}
 		_ = audit.Write(ctx, st.Q, time.Now(), audit.Entry{Action: "cli.node_create", TargetType: "node", TargetID: strconv.FormatInt(n.ID, 10),
 			Details: map[string]any{"name": n.Name, "address": n.Address}})
@@ -90,7 +97,7 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 		if err != nil {
 			return err
 		}
-		key, err := domain.RekeyNode(ctx, st, panel, id, time.Now())
+		key, err := domain.RekeyNode(ctx, st, panel, id, panelURL(), time.Now())
 		switch {
 		case errors.Is(err, domain.ErrUnknownNode):
 			return fmt.Errorf("no node %d", id)
@@ -120,31 +127,26 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
-		if n.Address == "" && (*host != n.PublicHost || *dom != n.Domain) {
-			return errors.New("the panel's own node has the panel's address: change it in the panel's settings")
+		// Only what the flags change is checked and written: the rules are the panel's own.
+		patch := domain.NodePatch{}
+		if v := strings.TrimSpace(*name); v != n.Name {
+			patch.Name = &v
 		}
-		*host, *dom = strings.TrimSpace(*host), strings.TrimSpace(*dom)
-		if n.Address != "" && !hostname.Valid(*host) {
-			return errors.New(badHost)
+		if v := strings.TrimSpace(*host); v != n.PublicHost {
+			patch.Host = &v
 		}
-		if *dom != "" && !hostname.Valid(*dom) {
-			return errors.New(badDomain)
+		if v := strings.TrimSpace(*dom); v != n.Domain {
+			patch.Domain = &v
 		}
-		if n.Address != "" && *host != n.PublicHost {
-			_, port, err := net.SplitHostPort(n.Address)
-			if err != nil {
-				return err
-			}
-			n.Address = net.JoinHostPort(*host, port)
+		if on := *enabled; on != (n.Enabled != 0) {
+			patch.Enabled = &on
 		}
-		on := int64(0)
-		if *enabled {
-			on = 1
-		}
-		n, err = st.Q.UpdateNode(ctx, db.UpdateNodeParams{Name: strings.TrimSpace(*name), Address: n.Address, PublicHost: *host,
-			Domain: *dom, PublicName: n.PublicName, Enabled: on, UpdatedAt: time.Now().Unix(), ID: n.ID})
-		if err != nil {
+		if patch.Rules, err = nodeRules(ctx, st); err != nil {
 			return err
+		}
+		n, err = domain.UpdateNode(ctx, st, n.ID, patch, time.Now())
+		if err != nil {
+			return nodeError(err)
 		}
 		_ = audit.Write(ctx, st.Q, time.Now(), audit.Entry{Action: "cli.node_update", TargetType: "node", TargetID: strconv.FormatInt(id, 10),
 			Details: map[string]any{"name": n.Name, "enabled": n.Enabled != 0}})
@@ -155,10 +157,76 @@ func nodeCmd(ctx context.Context, st *store.Store, dataDir string, args []string
 	}
 }
 
-const (
-	badHost   = "--host: want an IP address or a host name like vpn.example.com"
-	badDomain = "--domain: want a host name like vpn.example.com"
-)
+// nodeDNS checks a node's domain against public DNS, as the admin panel does; the tests
+// put a fake resolver here.
+var nodeDNS = dnscheck.New()
+
+// nodeRules are what a node's name and domain are checked against: the same as in the
+// admin panel, the subscription's groups and public DNS.
+func nodeRules(ctx context.Context, st *store.Store) (domain.NodeRules, error) {
+	g, err := subs.LoadGroups(ctx, settings.New(st.Q))
+	if err != nil {
+		return domain.NodeRules{}, err
+	}
+	return domain.NodeRules{Name: g.CheckName, DNS: nodeDNS}, nil
+}
+
+// nameText says in words what a node's name is refused for.
+var nameText = map[string]string{
+	"name_in_use":   "another node has this name",
+	"name_is_group": "this is the name of a group in the subscription",
+	"name_blank":    "the name is empty",
+	"name_too_long": "the name is longer than 48 characters",
+	"name_bad_char": "the name has a comma, a quote, a backslash or a control character",
+	"name_reserved": "the name is one of Clash's own policies",
+}
+
+// nodeError says in words what the rules of a node refused.
+func nodeError(err error) error {
+	var name *domain.NameError
+	var dom *domain.DomainError
+	var out []error
+	switch {
+	case errors.As(err, &name):
+		text := nameText[name.Code]
+		if text == "" {
+			text = name.Code
+		}
+		return errors.New("--name: " + text)
+	case errors.Is(err, domain.ErrUnknownNode):
+		return errors.New("no such node")
+	case errors.Is(err, domain.ErrLocalNode):
+		return errors.New("the panel's own node has the panel's address: change it in the panel's settings")
+	case errors.Is(err, domain.ErrChannelRequired):
+		return errors.New("the fair share needs the width of the node's channel")
+	}
+	if errors.Is(err, domain.ErrBadHost) {
+		out = append(out, errors.New("--host: want an IP address or a host name like vpn.example.com"))
+	}
+	if errors.Is(err, domain.ErrBadDomain) {
+		out = append(out, errors.New("--domain: want a host name like vpn.example.com"))
+	}
+	if errors.As(err, &dom) {
+		out = append(out, errors.New(domainText(dom)))
+	}
+	if len(out) == 0 {
+		return err
+	}
+	return errors.Join(out...)
+}
+
+// domainText says in words why a domain was refused.
+func domainText(e *domain.DomainError) string {
+	switch e.Code {
+	case "domain_elsewhere":
+		return fmt.Sprintf("--domain: %s does not lead to the node (%s)", e.Domain, e.Value)
+	case "domain_not_found":
+		return fmt.Sprintf("--domain: %s has no A or AAAA record in public DNS", e.Domain)
+	case "server_ip_unknown":
+		return "--domain: the node's address is not known, so the domain cannot be compared with it"
+	}
+	return fmt.Sprintf("--domain: %s could not be checked against public DNS: %v", e.Domain, e.Err)
+}
 
 func nodeID(args []string) (int64, error) {
 	if len(args) < 2 {

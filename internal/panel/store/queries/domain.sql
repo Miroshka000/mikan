@@ -8,14 +8,14 @@ SELECT * FROM tariffs WHERE id = $1;
 SELECT count(*) FROM tariffs;
 
 -- name: CreateTariff :one
-INSERT INTO tariffs (name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, created_at, billing_day, price_stars, price_rub, on_sale)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO tariffs (name, traffic_limit, duration_days, device_limit, reset_strategy, price_label, sort, created_at, billing_day, price_stars, price_rub, on_sale, speed_limit, description)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 RETURNING *;
 
 -- name: UpdateTariff :one
 UPDATE tariffs
 SET name = $1, traffic_limit = $2, duration_days = $3, device_limit = $4, reset_strategy = $5, price_label = $6, sort = $7, billing_day = $8,
-    price_stars = $9, price_rub = $10, on_sale = $11
+    price_stars = $9, price_rub = $10, on_sale = $11, speed_limit = $13, description = $14
 WHERE id = $12
 RETURNING *;
 
@@ -80,8 +80,8 @@ SELECT d.id AS device_id, s.name AS slot_name FROM bound_devices d JOIN slots s 
 
 -- name: CreateUser :one
 INSERT INTO users (name, contact, note, tags, status, tariff_id, traffic_limit, device_limit, reset_strategy,
-                   period_days, period_start, expires_at, inbounds, sub_token, slot_id, created_at, updated_at, billing_day, source)
-VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16, $17)
+                   period_days, period_start, expires_at, inbounds, sub_token, slot_id, created_at, updated_at, billing_day, source, speed_limit)
+VALUES ($1, $2, $3, $4, 'active', $5, $6, $7, $8, $9, $10, $11, NULL, $12, $13, $14, $15, $16, $17, $18)
 RETURNING *;
 
 -- name: GetUser :one
@@ -93,10 +93,18 @@ SELECT * FROM users WHERE sub_token = $1;
 -- name: ListUsers :many
 SELECT * FROM users ORDER BY id DESC;
 
+-- name: ListUsersToReset :many
+-- The users whose traffic period may be over: every monthly one (its day depends on the
+-- billing day, checked in Go), and the periodic ones whose period has run out.
+SELECT id, period_start, reset_strategy, billing_day, period_days FROM users
+WHERE reset_strategy = 'month_start'
+   OR reset_strategy = 'period' AND period_start + GREATEST(period_days, 1) * 86400 <= sqlc.arg(now)::bigint;
+
 -- name: UpdateUser :one
 UPDATE users
 SET name = $1, contact = $2, note = $3, tags = $4, status = $5, tariff_id = $6, traffic_limit = $7, device_limit = $8,
-    reset_strategy = $9, period_days = $10, period_start = $11, expires_at = $12, inbounds = $13, updated_at = $14, billing_day = $15
+    reset_strategy = $9, period_days = $10, period_start = $11, expires_at = $12, inbounds = $13, updated_at = $14, billing_day = $15,
+    speed_limit = $17
 WHERE id = $16
 RETURNING *;
 
@@ -188,3 +196,22 @@ ON CONFLICT (key) DO UPDATE SET value = excluded.value;
 
 -- name: DeleteNodeStateOf :exec
 DELETE FROM node_state WHERE key LIKE '%/' || CAST(sqlc.arg(node_id) AS TEXT);
+
+-- name: SetTariffDeviceMode :exec
+-- A statement of its own, beside CreateTariff and UpdateTariff, which stay as they are.
+UPDATE tariffs SET device_mode = $1 WHERE id = $2;
+
+-- name: SetUserDeviceMode :exec
+UPDATE users SET device_mode = $1, updated_at = $2 WHERE id = $3;
+
+-- name: ListUserNamesAfter :many
+-- A page of users by id with just what a search reads, for the Panel API's cursor: stable
+-- while users come and go. The rows of the page itself come from ListUsersByIDs.
+SELECT id, name FROM users WHERE id > sqlc.arg(after)::BIGINT ORDER BY id LIMIT sqlc.arg(lim)::INT;
+
+-- name: ListUsersByIDs :many
+SELECT * FROM users WHERE id = ANY(sqlc.arg(ids)::bigint[]) ORDER BY id;
+
+-- name: ListTgLinksOfUsers :many
+SELECT l.user_id, l.tg_id, COALESCE(c.username, '') AS username, COALESCE(c.first_name, '') AS first_name
+FROM tg_links l LEFT JOIN tg_chats c ON c.tg_id = l.tg_id WHERE l.user_id = ANY(sqlc.arg(ids)::bigint[]);

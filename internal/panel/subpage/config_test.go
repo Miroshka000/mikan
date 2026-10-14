@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -28,7 +29,7 @@ func TestZeroIsDefault(t *testing.T) {
 			order = append(order, b.ID)
 		}
 	}
-	if got := strings.Join(order, ","); got != "status,promo,shop,traffic,devices,apps,guide,instructions,link,telegram,support" {
+	if got := strings.Join(order, ","); got != "status,promo,shop,traffic,devices,apps,guide,instructions,link,reissue,telegram,support" {
 		t.Fatalf("default sections: %s", got)
 	}
 	if def := Default(); def.Look != (PageLook{Palette: "mikan", Mode: "light", Accent: "theme", Font: "default", Radius: "medium", Cards: "glass", Background: PageBackground{Kind: "theme", Angle: 160, Dim: 30}}) || !def.Apps.QR || def.Apps.Platform != "auto" || def.CSS != "" {
@@ -69,28 +70,28 @@ func TestNormalizeRefuses(t *testing.T) {
 		{"emoji logo without emoji", func(c *Page) { c.Brand.Logo = "emoji" }, "brand.emoji", "emoji_required"},
 		{"markup for an emoji", func(c *Page) { c.Brand.Logo, c.Brand.Emoji = "emoji", "<b>" }, "brand.emoji", "emoji_invalid"},
 		{"subtitle on two lines", func(c *Page) { c.Brand.Subtitle = "a\nb" }, "brand.subtitle", "one_line"},
-		{"unknown block", func(c *Page) { c.Blocks = append(c.Blocks, PageBlock{ID: "ads", Type: "ads", On: true}) }, "blocks[13].type", "block_unknown"},
-		{"built-in twice", func(c *Page) { c.Blocks = append(c.Blocks, PageBlock{ID: "status", Type: "status"}) }, "blocks[13].id", "block_duplicate"},
+		{"unknown block", func(c *Page) { c.Blocks = append(c.Blocks, PageBlock{ID: "ads", Type: "ads", On: true}) }, "blocks[14].type", "block_unknown"},
+		{"built-in twice", func(c *Page) { c.Blocks = append(c.Blocks, PageBlock{ID: "status", Type: "status"}) }, "blocks[14].id", "block_duplicate"},
 		{"built-in under another id", func(c *Page) { c.Blocks[0].ID = "news" }, "blocks[0].id", "block_id_invalid"},
-		{"own block without its prefix", func(c *Page) { c.Blocks = append(c.Blocks, PageBlock{ID: "links-1", Type: TypeText}) }, "blocks[13].id", "block_id_invalid"},
+		{"own block without its prefix", func(c *Page) { c.Blocks = append(c.Blocks, PageBlock{ID: "links-1", Type: TypeText}) }, "blocks[14].id", "block_id_invalid"},
 		{"own text too long", func(c *Page) {
 			c.Blocks = append(c.Blocks, PageBlock{ID: "text-a", Type: TypeText, Text: strings.Repeat("я", 8001)})
-		}, "blocks[13].text", "too_long"},
+		}, "blocks[14].text", "too_long"},
 		{"image over http", func(c *Page) {
 			c.Blocks = append(c.Blocks, PageBlock{ID: "text-a", Type: TypeText, Text: "see ![x](http://example.com/a.png)"})
-		}, "blocks[13].text", "image_https"},
+		}, "blocks[14].text", "image_https"},
 		{"javascript link", func(c *Page) {
 			c.Blocks = append(c.Blocks, PageBlock{ID: "links-a", Type: TypeLinks, Links: []PageLink{{Label: "Go", URL: "javascript:alert(1)"}}})
-		}, "blocks[13].links[0].url", "link_invalid"},
+		}, "blocks[14].links[0].url", "link_invalid"},
 		{"data link", func(c *Page) {
 			c.Blocks = append(c.Blocks, PageBlock{ID: "links-a", Type: TypeLinks, Links: []PageLink{{Label: "Go", URL: "data:text/html,x"}}})
-		}, "blocks[13].links[0].url", "link_invalid"},
+		}, "blocks[14].links[0].url", "link_invalid"},
 		{"link with credentials", func(c *Page) {
 			c.Blocks = append(c.Blocks, PageBlock{ID: "links-a", Type: TypeLinks, Links: []PageLink{{Label: "Go", URL: "https://user:pw@example.com"}}})
-		}, "blocks[13].links[0].url", "link_invalid"},
+		}, "blocks[14].links[0].url", "link_invalid"},
 		{"link without a label", func(c *Page) {
 			c.Blocks = append(c.Blocks, PageBlock{ID: "links-a", Type: TypeLinks, Links: []PageLink{{URL: "https://example.com"}}})
-		}, "blocks[13].links[0].label", "label_required"},
+		}, "blocks[14].links[0].label", "label_required"},
 		{"app name with markup", func(c *Page) { c.Apps.IOS.Order = []string{"<Happ>"} }, "apps.ios.order", "app_invalid"},
 		{"css too long", func(c *Page) { c.CSS = strings.Repeat("a", 20481) }, "css", "too_long"},
 	}
@@ -120,7 +121,7 @@ func TestNormalizeKeepsWhatIsRight(t *testing.T) {
 	if c.Look.Background.From != "#0F6272" || c.Blocks[0].Title != "Каналы" || len(c.Blocks[0].Links) != 3 || c.Blocks[1].Links != nil || c.Blocks[1].Text != "# Привет\n![](https://example.com/a.png)" {
 		t.Fatalf("cleaned wrong: %+v", c.Blocks[:2])
 	}
-	if len(c.Blocks) != 15 || c.Blocks[5].ID != "shop" || c.Blocks[14].ID != "support" || c.Blocks[12].On {
+	if len(c.Blocks) != 16 || c.Blocks[5].ID != "shop" || c.Blocks[15].ID != "support" || c.Blocks[13].On || c.Blocks[12].ID != "reissue" {
 		t.Fatalf("missing built-ins not put back in order: %+v", c.Blocks)
 	}
 	if strings.Join(c.Apps.Android.Order, ",") != "INCY,Happ" {
@@ -133,7 +134,7 @@ func TestTooManyOwnBlocks(t *testing.T) {
 	for i := range MaxCustom + 1 {
 		c.Blocks = append(c.Blocks, PageBlock{ID: "text-" + string(rune('a'+i)), Type: TypeText})
 	}
-	if got := codes(Normalize(&c)); got["blocks[25]"] != "too_many_blocks" {
+	if got := codes(Normalize(&c)); got["blocks[26]"] != "too_many_blocks" {
 		t.Fatalf("13 own blocks: %v", got)
 	}
 }
@@ -247,5 +248,27 @@ func TestHeadOfDefault(t *testing.T) {
 	p.Docs = []DocItem{{ID: 1, Title: "x"}}
 	if !p.RemoteImages() {
 		t.Fatal("instructions may show https images")
+	}
+}
+
+// A page saved before the "new link" block existed gets it right behind the link block,
+// wherever the admin put that; a page that has it keeps it where it is.
+func TestReissueFollowsLink(t *testing.T) {
+	index := func(c Page, id string) int {
+		return slices.IndexFunc(c.Blocks, func(b PageBlock) bool { return b.ID == id })
+	}
+	if c := Default(); index(c, "reissue") != index(c, "link")+1 || !c.Blocks[index(c, "reissue")].On {
+		t.Fatalf("default page: %+v", c.Blocks)
+	}
+	old := Page{Blocks: []PageBlock{{ID: "link", Type: "link", On: true}, {ID: "status", Type: "status", On: true}}}
+	if ps := Normalize(&old); len(ps) != 0 || index(old, "reissue") != 1 || !old.Blocks[1].On {
+		t.Fatalf("saved before the block: %v %+v", ps, old.Blocks)
+	}
+	moved := Page{Blocks: []PageBlock{{ID: "reissue", Type: "reissue"}, {ID: "status", Type: "status", On: true}, {ID: "link", Type: "link", On: true}}}
+	if ps := Normalize(&moved); len(ps) != 0 || index(moved, "reissue") != 0 || moved.Blocks[0].On {
+		t.Fatalf("the admin's place and choice kept: %v %+v", ps, moved.Blocks)
+	}
+	if index(moved, "reissue") == index(moved, "link")+1 {
+		t.Fatal("moved block must stay where it is")
 	}
 }

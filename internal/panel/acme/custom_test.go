@@ -105,7 +105,7 @@ func TestTrusted(t *testing.T) {
 		want bool
 	}{
 		{Status{Kind: "self-signed"}, false},
-		{Status{Kind: "letsencrypt"}, true},
+		{Status{Kind: "acme"}, true},
 		{Status{Kind: "custom"}, false},
 		{Status{Kind: "custom", Trusted: true}, true},
 		{Status{Kind: "custom", Trusted: true, Error: "custom_wrong_host"}, false},

@@ -12,6 +12,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/tgate"
 )
 
 // A stranger buys a subscription for Stars in the bot: welcome → plans → plan → invoice;
@@ -20,7 +21,7 @@ import (
 func TestShopStars(t *testing.T) {
 	var svc *billing.Service
 	var sale db.Tariff
-	e := setup(t, func(e *env, d *Deps) {
+	e := setup(t, func(e *env, d *wiring) {
 		ts, _ := e.st.Q.ListTariffs(e.ctx)
 		var err error
 		sale, err = e.st.Q.UpdateTariff(e.ctx, db.UpdateTariffParams{Name: "Месяц", TrafficLimit: ts[1].TrafficLimit, DurationDays: 30, DeviceLimit: ts[1].DeviceLimit,
@@ -30,10 +31,11 @@ func TestShopStars(t *testing.T) {
 		}
 		pool := domain.NewPool(e.st, e.clock)
 		svc = billing.New(billing.Deps{Store: e.st, Settings: e.set, Users: domain.NewUsers(e.st, pool, noChanges{}, e.clock),
-			Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: e.clock, MaxLinks: MaxLinks})
+			Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: e.clock, MaxLinks: tgate.MaxLinks})
 		d.Billing = svc
 	})
-	svc.SetTelegram(e.bot)
+	svc.SetTelegram(e.gate)
+	svc.SetNotifier(e.notifications())
 	const buyer = 777
 
 	// Selling is off on a panel that never turned it on: the welcome has no shop.
@@ -87,20 +89,20 @@ func TestShopStars(t *testing.T) {
 
 	// Telegram asks first: a wrong sum is refused, the right one goes ahead.
 	n = e.tg.count()
-	e.tg.push(Update{PreCheckoutQuery: &PreCheckoutQuery{ID: "pc1", From: User{ID: buyer}, Currency: "XTR", TotalAmount: 1, InvoicePayload: payload}})
+	e.tg.push(tgate.Update{PreCheckoutQuery: &tgate.PreCheckoutQuery{ID: "pc1", From: tgate.User{ID: buyer}, Currency: "XTR", TotalAmount: 1, InvoicePayload: payload}})
 	ans, _ := find(e.tg.wait(t, n, "answerPreCheckoutQuery"), "answerPreCheckoutQuery")
 	if ans.body["ok"] != false || ans.body["error_message"] == "" {
 		t.Fatalf("a wrong sum went ahead: %v", ans.body)
 	}
 	n = e.tg.count()
-	e.tg.push(Update{PreCheckoutQuery: &PreCheckoutQuery{ID: "pc2", From: User{ID: buyer}, Currency: "XTR", TotalAmount: 50, InvoicePayload: payload}})
+	e.tg.push(tgate.Update{PreCheckoutQuery: &tgate.PreCheckoutQuery{ID: "pc2", From: tgate.User{ID: buyer}, Currency: "XTR", TotalAmount: 50, InvoicePayload: payload}})
 	ans, _ = find(e.tg.wait(t, n, "answerPreCheckoutQuery"), "answerPreCheckoutQuery")
 	if ans.body["ok"] != true {
 		t.Fatalf("pre-checkout refused: %v", ans.body)
 	}
 
-	paid := Update{Message: &Message{MessageID: 99, From: &User{ID: buyer}, Chat: Chat{ID: buyer, Type: "private"},
-		SuccessfulPayment: &SuccessfulPayment{Currency: "XTR", TotalAmount: 50, InvoicePayload: payload, ChargeID: "tg-charge-1"}}}
+	paid := tgate.Update{Message: &tgate.Message{MessageID: 99, From: &tgate.User{ID: buyer}, Chat: tgate.Chat{ID: buyer, Type: "private"},
+		SuccessfulPayment: &tgate.SuccessfulPayment{Currency: "XTR", TotalAmount: 50, InvoicePayload: payload, ChargeID: "tg-charge-1"}}}
 	n = e.tg.count()
 	e.tg.push(paid)
 	got := e.tg.until(t, n, func(cs []call) bool {
@@ -133,8 +135,8 @@ func TestShopStars(t *testing.T) {
 
 	// Telegram refunds the payment (the buyer asked it): the subscription is turned off and
 	// the buyer is told, once, however often the update comes.
-	refunded := Update{Message: &Message{MessageID: 100, From: &User{ID: buyer}, Chat: Chat{ID: buyer, Type: "private"},
-		RefundedPayment: &RefundedPayment{Currency: "XTR", TotalAmount: 50, InvoicePayload: payload, ChargeID: "tg-charge-1"}}}
+	refunded := tgate.Update{Message: &tgate.Message{MessageID: 100, From: &tgate.User{ID: buyer}, Chat: tgate.Chat{ID: buyer, Type: "private"},
+		RefundedPayment: &tgate.RefundedPayment{Currency: "XTR", TotalAmount: 50, InvoicePayload: payload, ChargeID: "tg-charge-1"}}}
 	told = ""
 	n = e.tg.count()
 	e.tg.push(refunded)

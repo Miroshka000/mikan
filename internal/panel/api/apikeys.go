@@ -14,6 +14,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/panel/auth"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/store/db"
 )
@@ -116,7 +117,7 @@ func (h *handlers) listAPIKeys(ctx context.Context, _ *struct{}) (*apiKeysOutput
 func (h *handlers) createAPIKey(ctx context.Context, in *createAPIKeyInput) (*createAPIKeyOutput, error) {
 	name := strings.TrimSpace(in.Body.Name)
 	if name == "" {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.name", Message: "name_blank"})
+		return nil, fieldErr("body.name", "name_blank")
 	}
 	admin, err := h.d.Store.Q.GetAdmin(ctx, sessionOf(ctx).AdminID)
 	if err != nil {
@@ -164,7 +165,7 @@ func (h *handlers) deleteAPIKey(ctx context.Context, in *apiKeyIDInput) (*struct
 // bearer authenticates a request by API key; the caller has seen an Authorization header.
 func (h *handlers) bearer(ctx huma.Context, next func(huma.Context), mutating bool) {
 	c := clientOf(ctx.Context())
-	ipKey, now := "key:"+limitIP(c.IP), h.d.Now()
+	ipKey, now := "key:"+auth.ClientKey(c.IP), h.d.Now()
 	if ok, wait := h.d.IPLimit.Allowed(ipKey, now); !ok {
 		ctx.SetHeader("Retry-After", strconv.Itoa(max(1, int(wait.Round(time.Second)/time.Second))))
 		_ = huma.WriteErr(h.api, ctx, http.StatusTooManyRequests, "rate_limited")

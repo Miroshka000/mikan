@@ -134,6 +134,10 @@ DELETE FROM bound_devices WHERE user_id = ANY(sqlc.arg(ids)::bigint[]);
 -- name: DeleteUsers :exec
 DELETE FROM users WHERE id = ANY(sqlc.arg(ids)::bigint[]);
 
+-- name: SumUserTraffic :one
+-- Traffic of all users, all time.
+SELECT COALESCE(SUM(total_up), 0)::bigint AS up, COALESCE(SUM(total_down), 0)::bigint AS down FROM users;
+
 -- name: CountUserStates :one
 -- How many users are in each state as domain.State decides it (keep the two alike):
 -- disabled, expired, limited (past the base quota with no main grants left), expiring

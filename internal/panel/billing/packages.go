@@ -85,13 +85,8 @@ type PackageRequest struct {
 // PackageInvoice opens a payment for a package. Only the subscription's owner buys for it;
 // an open invoice for the same purchase made in the last minutes is returned again.
 func (s *Service) PackageInvoice(ctx context.Context, req PackageRequest) (db.Payment, error) {
-	if strings.TrimSpace(req.PromoCode) != "" && s.d.Promo == nil {
-		return db.Payment{}, promo.ErrUnavailable
-	}
-	if strings.TrimSpace(req.PromoCode) != "" {
-		if err := s.validatePromoProvider(ctx, req.Provider); err != nil {
-			return db.Payment{}, err
-		}
+	if err := s.promoGuard(ctx, req.Provider, req.PromoCode); err != nil {
+		return db.Payment{}, err
 	}
 	q := s.d.Store.Q
 	if link, err := q.GetTgLink(ctx, req.UserID); err != nil || link.TgID != req.TgID {
@@ -147,18 +142,12 @@ func (s *Service) PackageInvoice(ctx context.Context, req PackageRequest) (db.Pa
 			if err != nil {
 				return db.Payment{}, err
 			}
-			if s.d.Promo != nil && strings.TrimSpace(req.PromoCode) != "" {
-				if !user.TariffID.Valid {
-					return db.Payment{}, promo.ErrTariff
-				}
-				d, err := s.d.Promo.ReserveDiscount(ctx, q, req.TgID, req.UserID, user.TariffID.Int64, amount, currency, req.PromoCode, created.ID)
-				if err != nil {
-					return db.Payment{}, err
-				}
-				if _, err := q.SetPaymentAmount(ctx, db.SetPaymentAmountParams{Amount: d.Final, ID: created.ID}); err != nil {
-					return db.Payment{}, err
-				}
-				created.Amount = d.Final
+			// A code is tied to tariffs: a subscription without one takes none.
+			if s.d.Promo != nil && strings.TrimSpace(req.PromoCode) != "" && !user.TariffID.Valid {
+				return db.Payment{}, promo.ErrTariff
+			}
+			if err := s.discount(ctx, q, &created, req.UserID, user.TariffID.Int64, req.PromoCode); err != nil {
+				return db.Payment{}, err
 			}
 			return created, nil
 		})

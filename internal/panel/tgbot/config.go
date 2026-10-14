@@ -2,9 +2,12 @@ package tgbot
 
 import (
 	"errors"
-	"net/url"
+	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"mikan/internal/panel/tgate"
 )
 
 // Config is what the admin sets up in the panel: the menu, the texts and which
@@ -18,6 +21,12 @@ type Config struct {
 	CleanChat bool         `json:"clean_chat" doc:"Удалять сообщения пользователя, чтобы в чате было одно меню"`
 	// QuietNight: the automatic notices from 22:00 to 9:00 Moscow time come without a sound.
 	QuietNight bool `json:"quiet_night" doc:"Уведомления с 22:00 до 9:00 МСК приходят без звука"`
+	// PromoButton: «Промокоды» under the menu, opening the Mini App at the promo code field.
+	// It needs the Mini App. A bot saved before this option has it on.
+	PromoButton bool `json:"promo_button" doc:"Кнопка «Промокоды» в главном меню (нужен Mini App)"`
+	// Channel is the channel a subscriber must join before the bot shows its menu, and the
+	// one the free plan may ask for (billing.FreeChannel). Off by default.
+	Channel tgate.Channel `json:"channel"`
 }
 
 // MenuButton of the main menu. Built-in actions open screens; "url" opens a link, "page"
@@ -33,7 +42,7 @@ type MenuButton struct {
 }
 
 // Texts the admin writes. Variables: {name} {brand} {until} {days} {used} {left} {limit}
-// {devices} {reset}; an empty text is the built-in one.
+// {devices} {reset} {link} (the subscription link); an empty text is the built-in one.
 type Texts struct {
 	Welcome    string `json:"welcome" doc:"Для тех, у кого ещё нет подписки в боте"`
 	Main       string `json:"main" doc:"Шапка главного меню"`
@@ -42,6 +51,8 @@ type Texts struct {
 	Expired    string `json:"expired" doc:"Уведомление: подписка закончилась"`
 	Traffic90  string `json:"traffic_90" doc:"Уведомление: израсходовано 90% трафика"`
 	TrafficEnd string `json:"traffic_end" doc:"Уведомление: трафик закончился"`
+	Channel    string `json:"channel" doc:"Экран обязательной подписки на канал, вместо меню; {brand}: название сервиса"`
+	FreeButton string `json:"free_button" doc:"Надпись кнопки бесплатного тарифа, до 40 символов"`
 }
 
 type Notify struct {
@@ -77,10 +88,11 @@ func Default(lang string) Config {
 			{ID: "support", Action: "support", Label: l("💬 Поддержка", "💬 Support"), On: true, Row: true},
 			{ID: "app", Action: "app", Label: l("🌐 Открыть страницу подписки", "🌐 Open the subscription page"), On: true},
 		},
-		Notify:     Notify{Expire3d: true, Expire1d: true, Expired: true, Traffic90: true, Traffic100: true},
-		MiniApp:    true,
-		CleanChat:  true,
-		QuietNight: true,
+		Notify:      Notify{Expire3d: true, Expire1d: true, Expired: true, Traffic90: true, Traffic100: true},
+		MiniApp:     true,
+		CleanChat:   true,
+		QuietNight:  true,
+		PromoButton: true,
 	}
 }
 
@@ -118,7 +130,7 @@ func (c *Config) Validate() error {
 		}
 		switch b.Action {
 		case "url":
-			if !safeURL(b.URL) {
+			if !tgate.SafeURL(b.URL) {
 				return ErrButtonURL
 			}
 		case "page":
@@ -126,7 +138,7 @@ func (c *Config) Validate() error {
 				return ErrButtonText
 			}
 		default:
-			if !contains(builtins, b.Action) || seen[b.Action] {
+			if !slices.Contains(builtins, b.Action) || seen[b.Action] {
 				return ErrButtons
 			}
 			seen[b.Action] = true
@@ -134,8 +146,8 @@ func (c *Config) Validate() error {
 		}
 		if b.Action == "url" || b.Action == "page" {
 			// Custom buttons keep their id: the callback data points at it.
-			if b.ID == "" || contains(builtins, b.ID) || len(b.ID) > 16 || strings.ContainsAny(b.ID, ": ") || seen["id:"+b.ID] {
-				b.ID = "c" + itoa(i+1)
+			if b.ID == "" || slices.Contains(builtins, b.ID) || len(b.ID) > 16 || strings.ContainsAny(b.ID, ": ") || seen["id:"+b.ID] {
+				b.ID = "c" + strconv.Itoa(i+1)
 			}
 			seen["id:"+b.ID] = true
 			if b.Action == "url" {
@@ -145,36 +157,14 @@ func (c *Config) Validate() error {
 			}
 		}
 	}
-	for _, t := range []string{c.Texts.Welcome, c.Texts.Main, c.Texts.Renew, c.Texts.Expiring, c.Texts.Expired, c.Texts.Traffic90, c.Texts.TrafficEnd} {
+	for _, t := range []string{c.Texts.Welcome, c.Texts.Main, c.Texts.Renew, c.Texts.Expiring, c.Texts.Expired, c.Texts.Traffic90, c.Texts.TrafficEnd, c.Texts.Channel} {
 		if utf8.RuneCountInString(t) > maxText {
 			return ErrText
 		}
 	}
-	return nil
-}
-
-// safeURL: links the bot may show — web pages and Telegram links.
-func safeURL(s string) bool {
-	u, err := url.Parse(s)
-	return err == nil && (u.Scheme == "https" && u.Host != "" || u.Scheme == "tg" && u.Host != "") && u.User == nil
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
+	c.Texts.FreeButton = strings.TrimSpace(c.Texts.FreeButton)
+	if utf8.RuneCountInString(c.Texts.FreeButton) > maxLabel {
+		return ErrButtonLabel
 	}
-	return false
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for ; n > 0; n /= 10 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-	}
-	return string(b)
+	return c.Channel.Validate()
 }

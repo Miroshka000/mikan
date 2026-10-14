@@ -2,19 +2,20 @@
 // look and the admin's CSS stay inside it (they would restyle the panel otherwise), and the
 // frame is as wide as a phone or a laptop, scaled down to the column it sits in.
 import "../../../sub/look.css";
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Button } from "../../../components/ui";
-import { getLocale, t } from "../../../i18n";
+import { getLocale, t, useLocale } from "../../../i18n";
 import type { Platform } from "../../../sub/apps";
 import { cleanCSS, paintLook, titleOf, type DocItem, type DocView, type PageConfig } from "../../../sub/page";
+import { ReissueSection } from "../../../sub/reissue";
 import { Shop, type ShopData } from "../../../sub/shop";
 import type { Info } from "../../../sub/types";
 import { DocScreen, PageBackdrop, PageBlocks, PageShell } from "../../../sub/view";
 
 export type PreviewDevice = "phone" | "desktop";
 
-export type PreviewProps = {
+type PreviewProps = {
   config: PageConfig;
   brand: string;
   /** The brand's colour when the page takes it. */
@@ -42,6 +43,7 @@ export function PagePreview(props: PreviewProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const root = useRef<Root | null>(null);
   const [ready, setReady] = useState(false);
+  const locale = useLocale();
   const [width, setWidth] = useState(0);
   const [viewport, setViewport] = useState(() => window.innerHeight);
   const size = SIZE[props.device];
@@ -83,16 +85,33 @@ export function PagePreview(props: PreviewProps) {
     [],
   );
 
+  // Three effects, each on what it paints: a key typed into a text of the page redraws the
+  // page, not the look or the admin's CSS, which the frame would re-style for nothing.
+  const { look, css } = props.config;
   useEffect(() => {
     const doc = frame.current?.contentDocument;
-    const r = root.current;
-    if (!ready || !doc || !r) return;
-    paintLook(doc.documentElement, props.config.look, props.scheme, props.accent);
-    doc.documentElement.lang = getLocale();
-    const own = doc.getElementById("mikan-css");
-    if (own) own.textContent = cleanCSS(props.config.css);
-    r.render(<PreviewPage {...props} />);
-  });
+    if (!ready || !doc) return;
+    paintLook(doc.documentElement, look, props.scheme, props.accent);
+  }, [ready, look, props.scheme, props.accent]);
+
+  useEffect(() => {
+    const doc = frame.current?.contentDocument;
+    if (ready && doc) doc.documentElement.lang = locale;
+  }, [ready, locale]);
+
+  useEffect(() => {
+    const own = frame.current?.contentDocument?.getElementById("mikan-css");
+    if (!ready || !own) return;
+    // Setting the text restyles the whole frame, so only a change is written.
+    const text = cleanCSS(css);
+    if (own.textContent !== text) own.textContent = text;
+  }, [ready, css]);
+
+  // The page itself follows the editor a beat behind: typing stays ahead of the frame.
+  const shown = useDeferredValue(props);
+  useEffect(() => {
+    if (ready) root.current?.render(<PreviewPage {...shown} />);
+  }, [ready, shown, locale]);
 
   return (
     <div ref={stage} className="relative w-full overflow-hidden" style={{ height: scale ? h * scale + 2 : h }}>
@@ -168,6 +187,11 @@ function PreviewPage(p: PreviewProps) {
             openLink={() => undefined}
             onRefresh={() => undefined}
           />
+        </div>
+      }
+      reissue={
+        <div inert>
+          <ReissueSection info={{ ...p.info, reissue: true }} subURL="" title={titleOf(p.config, "reissue")} onDone={() => undefined} />
         </div>
       }
       reload={() => Promise.resolve()}

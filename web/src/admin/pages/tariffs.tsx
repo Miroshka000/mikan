@@ -2,9 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { Archive, Layers, Package, Pencil, Plus, Tag, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
-import { api, ApiError, errorText, unwrap, type Schemas, type Tariff } from "../../api/client";
+import { api, errorText, unwrap, type Schemas, type Tariff } from "../../api/client";
+import { onFormError } from "../../lib/fields";
 import { qk, usePaymentSettings, usePools, useTariffs } from "../../api/hooks";
-import { Confirm, Drawer } from "../../components/overlay";
+import { Confirm, Drawer, DrawerFooter } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
 import { Tabs } from "../../components/tabs";
 import { useToast } from "../../components/toast";
@@ -12,9 +13,15 @@ import { Button, EmptyState, Field, PageHeader, Pill, Segmented, Skeleton } from
 import { Switch } from "../../components/switch";
 import { t } from "../../i18n";
 import { bytes, days, GiB, months, rubles, termMonths } from "../../lib/format";
+import { isKopecks, isStars, parseDecimal, rubKopecks } from "../../lib/validate";
 import { TARIFF_TABS } from "../search";
 import { PackagesCard } from "./packages";
 import { PoolLimitsField, PoolsCard } from "./pools";
+import { DeviceModePicker, modeOf, type DeviceMode } from "./user/device-mode";
+
+/** What the server accepts of a description for buyers (domain.CleanDescription). */
+const DESCRIPTION_MAX = 300;
+const DESCRIPTION_LINES = 5;
 
 /** How long a term on the tariff runs: days, or months up to the billing day. */
 function tariffTerm(tr: Tariff): string {
@@ -32,7 +39,8 @@ export function tariffSummary(tr: Tariff): string {
   const parts = [
     tr.traffic_limit != null ? bytes(tr.traffic_limit) : t("users.unlimited"),
     tariffTerm(tr),
-    tr.device_limit != null ? t("userDrawer.devicesShort", { n: tr.device_limit }) : t("tariffs.devicesUnlimitedShort"),
+    tr.device_limit != null ? t(modeOf(tr) === "online" ? "deviceMode.shortOnline" : "userDrawer.devicesShort", { n: tr.device_limit }) : t("tariffs.devicesUnlimitedShort"),
+    ...(tr.speed_limit != null ? [t("tariffs.speedShort", { n: tr.speed_limit })] : []),
   ];
   return parts.join(" · ");
 }
@@ -56,6 +64,7 @@ export function TariffsPage() {
   const selling = usePaymentSettings().data?.enabled === true;
   const [edit, setEdit] = useState<Tariff | "new" | null>(null);
   const [archive, setArchive] = useState<Tariff | null>(null);
+  const [applying, setApplying] = useState<Tariff | null>(null);
   const [creating, setCreating] = useState<"pools" | "packages" | null>(null);
   const qc = useQueryClient();
   const toast = useToast();
@@ -66,6 +75,16 @@ export function TariffsPage() {
       void qc.invalidateQueries({ queryKey: qk.paymentSettings });
       toast.ok(t("tariffs.archived"));
       setArchive(null);
+    },
+    onError: (e) => toast.error(errorText(e)),
+  });
+  // A tariff's pool limits reach the subscriptions given out before they were set.
+  const applyPools = useMutation({
+    mutationFn: (id: number) => unwrap(api.POST("/api/v1/tariffs/{id}/apply-pools", { params: { path: { id } } })),
+    onSuccess: (r) => {
+      void qc.invalidateQueries({ queryKey: qk.users });
+      toast.ok(t("tariffs.applyPoolsDone", { n: r.applied }));
+      setApplying(null);
     },
     onError: (e) => toast.error(errorText(e)),
   });
@@ -123,6 +142,7 @@ export function TariffsPage() {
                         <div>
                           <h2 className="font-display text-xl font-medium tracking-tight">{tr.name}</h2>
                           {tr.price_label ? <div className="mt-1 text-[13px] font-medium text-[var(--mikan-700)]">{tr.price_label}</div> : null}
+                          {tr.description ? <p className="mt-2 whitespace-pre-line text-[13px] text-[var(--ink-700)]">{tr.description}</p> : null}
                           {selling && tr.on_sale ? (
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-600)]">
                               <Pill tone="ok">{t("tariffs.onSale")}</Pill>
@@ -136,6 +156,11 @@ export function TariffsPage() {
                           <button type="button" className="icon-btn" aria-label={t("tariffs.editLabel", { name: tr.name })} onClick={() => setEdit(tr)}>
                             <Pencil size={16} />
                           </button>
+                          {tr.pools.length > 0 ? (
+                            <button type="button" className="icon-btn" aria-label={t("tariffs.applyPoolsLabel", { name: tr.name })} title={t("tariffs.applyPools")} onClick={() => setApplying(tr)}>
+                              <Layers size={16} />
+                            </button>
+                          ) : null}
                           <button type="button" className="icon-btn" aria-label={t("tariffs.archiveLabel", { name: tr.name })} onClick={() => setArchive(tr)}>
                             <Archive size={16} />
                           </button>
@@ -144,7 +169,8 @@ export function TariffsPage() {
                       <dl className="mt-5 grid grid-cols-2 gap-3 text-xs text-[var(--ink-500)]">
                         <Item label={t("users.colTraffic")} value={tr.traffic_limit != null ? bytes(tr.traffic_limit) : t("users.unlimited")} />
                         <Item label={t("users.colExpiry")} value={tariffTerm(tr)} />
-                        <Item label={t("users.colDevices")} value={tr.device_limit != null ? String(tr.device_limit) : t("users.unlimited")} />
+                        <Item label={t("users.colDevices")} value={tr.device_limit != null ? (modeOf(tr) === "online" ? t("deviceMode.shortOnline", { n: tr.device_limit }) : String(tr.device_limit)) : t("users.unlimited")} />
+                        <Item label={t("tariffs.speed")} value={tr.speed_limit != null ? t("tariffs.speedShort", { n: tr.speed_limit }) : t("users.unlimited")} />
                         <Item label={t("tariffs.reset")} value={resetLabel(tr)} />
                         {poolLimitsText(tr, poolNames) ? (
                           <div className="col-span-2">
@@ -169,6 +195,15 @@ export function TariffsPage() {
         confirm={t("tariffs.archiveConfirm")}
         loading={remove.isPending}
         onConfirm={() => archive && remove.mutate(archive.id)}
+      />
+      <Confirm
+        open={!!applying}
+        onOpenChange={(v) => !v && setApplying(null)}
+        title={t("tariffs.applyPoolsTitle", { name: applying?.name ?? "" })}
+        text={applying ? t("tariffs.applyPoolsText", { limits: poolLimitsText(applying, poolNames) }) : ""}
+        confirm={t("tariffs.applyPoolsConfirm")}
+        loading={applyPools.isPending}
+        onConfirm={() => applying && applyPools.mutate(applying.id)}
       />
     </>
   );
@@ -195,8 +230,12 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
   const [billingDay, setBillingDay] = useState("1");
   const [devices, setDevices] = useState("3");
   const [devicesUnlimited, setDevicesUnlimited] = useState(false);
+  const [deviceMode, setDeviceMode] = useState<DeviceMode>("bound");
+  const [speed, setSpeed] = useState("100");
+  const [speedUnlimited, setSpeedUnlimited] = useState(true);
   const [reset, setReset] = useState<Tariff["reset_strategy"]>("period");
   const [price, setPrice] = useState("");
+  const [description, setDescription] = useState("");
   const [onSale, setOnSale] = useState(false);
   const allPools = usePools();
   // With selling off the sale block is hidden; its values stay as they were.
@@ -221,8 +260,12 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     setBillingDay(String(tr?.billing_day ?? new Date().getDate()));
     setDevicesUnlimited(tr ? tr.device_limit == null : false);
     setDevices(String(tr?.device_limit ?? 3));
+    setDeviceMode(tr ? modeOf(tr) : "bound");
+    setSpeedUnlimited(tr?.speed_limit == null);
+    setSpeed(String(tr?.speed_limit ?? 100));
     setReset(tr?.reset_strategy ?? "period");
     setPrice(tr?.price_label ?? "");
+    setDescription(tr?.description ?? "");
     setOnSale(tr?.on_sale ?? false);
     setPoolGB(Object.fromEntries((tr?.pools ?? []).map((p) => [p.pool_id, p.traffic_limit != null ? String(+(p.traffic_limit / GiB).toFixed(2)) : ""])));
     setPoolClosed(Object.fromEntries((tr?.pools ?? []).map((p) => [p.pool_id, !!p.excluded])));
@@ -249,8 +292,7 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
       onClose();
     },
     onError: (e) => {
-      if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields);
-      else toast.error(errorText(e));
+      onFormError(e, toast, setErrors);
     },
   });
 
@@ -262,23 +304,27 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
     const monN = Number(monthsN);
     const dayN = Number(billingDay);
     const devN = Number(devices);
+    const speedN = Number(speed);
     const poolLimits = (allPools.data ?? []).map((p) => {
       if (poolClosed[p.id]) return { pool_id: p.id, traffic_limit: null, excluded: true };
-      const v = (poolGB[p.id] ?? "").trim().replace(",", ".");
-      return { pool_id: p.id, traffic_limit: v ? Math.round(Number(v) * GiB) : null };
+      const v = (poolGB[p.id] ?? "").trim();
+      return { pool_id: p.id, traffic_limit: v ? Math.round(parseDecimal(v) * GiB) : null };
     });
     if (poolLimits.some((p) => p.traffic_limit !== null && (!Number.isFinite(p.traffic_limit) || p.traffic_limit <= 0))) errs.pools = t("pools.errLimit");
     const toDay = term === "day";
     if (!name.trim()) errs.name = t("tariffs.errName");
+    if ([...description.trim()].length > DESCRIPTION_MAX) errs.description = t("errors.api.description_too_long");
+    else if (description.trim().split("\n").length > DESCRIPTION_LINES) errs.description = t("errors.api.description_too_many_lines");
     if (!unlimited && (!Number.isFinite(gbN) || gbN <= 0)) errs.traffic_limit = t("tariffs.errTraffic");
     if (!toDay && (!Number.isInteger(durN) || durN < 0 || durN > 3650)) errs.duration_days = t("tariffs.errDuration");
     if (toDay && (!Number.isInteger(monN) || monN < 0 || monN > 120)) errs.duration_days = t("tariffs.errMonths");
     if (toDay && (!Number.isInteger(dayN) || dayN < 1 || dayN > 31)) errs.billing_day = t("tariffs.errBillingDay");
     if (!devicesUnlimited && (!Number.isInteger(devN) || devN < 1 || devN > 100)) errs.device_limit = t("tariffs.errDevices");
+    if (!speedUnlimited && (!Number.isInteger(speedN) || speedN < 1 || speedN > 100000)) errs.speed_limit = t("tariffs.errSpeed");
     const starsN = Number(stars);
-    const rubN = Math.round(Number(rub.replace(",", ".")) * 100);
-    if (stars.trim() && (!Number.isInteger(starsN) || starsN < 1 || starsN > 10000)) errs.price_stars = t("tariffs.errStars");
-    if (rub.trim() && (!Number.isFinite(rubN) || rubN < 100 || rubN > 100000000)) errs.price_rub = t("tariffs.errRub");
+    const rubN = rubKopecks(rub);
+    if (stars.trim() && !isStars(starsN)) errs.price_stars = t("tariffs.errStars");
+    if (rub.trim() && !isKopecks(rubN)) errs.price_rub = t("tariffs.errRub");
     if (onSale && !stars.trim() && !rub.trim()) errs.on_sale = t("errors.api.on_sale_no_price");
     const firstDays = toDay ? monN * 30 : durN;
     const seen = new Set([firstDays]);
@@ -292,9 +338,9 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
       else if (seen.has(d)) errs[`${at}.days`] = t("errors.api.term_days_repeat");
       seen.add(d);
       const s = Number(m.stars);
-      const r = Math.round(Number(m.rub.replace(",", ".")) * 100);
-      if (m.stars.trim() && (!Number.isInteger(s) || s < 1 || s > 10000)) errs[`${at}.price_stars`] = t("tariffs.errStars");
-      if (m.rub.trim() && (!Number.isFinite(r) || r < 100 || r > 100000000)) errs[`${at}.price_rub`] = t("tariffs.errRub");
+      const r = rubKopecks(m.rub);
+      if (m.stars.trim() && !isStars(s)) errs[`${at}.price_stars`] = t("tariffs.errStars");
+      if (m.rub.trim() && !isKopecks(r)) errs[`${at}.price_rub`] = t("tariffs.errRub");
       if (!m.stars.trim() && !m.rub.trim()) errs[`${at}.price_rub`] = t("errors.api.term_no_price");
       terms.push({ days: d, price_stars: m.stars.trim() ? s : undefined, price_rub: m.rub.trim() ? r : undefined });
     });
@@ -307,8 +353,11 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
       duration_days: toDay ? monN * 30 : durN,
       billing_day: toDay ? dayN : undefined,
       device_limit: devicesUnlimited ? undefined : devN,
+      device_mode: deviceMode,
+      speed_limit: speedUnlimited ? undefined : speedN,
       reset_strategy: unlimited ? "none" : reset,
       price_label: price.trim() || undefined,
+      description: description.trim() || undefined,
       price_stars: stars.trim() ? starsN : undefined,
       price_rub: rub.trim() ? rubN : undefined,
       terms,
@@ -326,19 +375,26 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
       title={tariff === "new" ? t("tariffs.new") : t("users.colTariff")}
       meta={t("tariffs.drawerMeta")}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="tariff-form" loading={save.isPending}>
-            {t("common.save")}
-          </Button>
-        </>
+        <DrawerFooter form="tariff-form" onCancel={onClose} loading={save.isPending}>
+          {t("common.save")}
+        </DrawerFooter>
       }
     >
       <form id="tariff-form" onSubmit={submit} className="pt-5" noValidate>
         <Field label={t("tariffs.name")} htmlFor="t-name" error={errors.name}>
           <input id="t-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder={t("tariffs.namePlaceholder")} autoFocus />
+        </Field>
+        <Field
+          label={t("tariffs.description")}
+          htmlFor="t-description"
+          hint={
+            <>
+              {t("tariffs.descriptionHint")} <span className="num">{[...description.trim()].length}/{DESCRIPTION_MAX}</span>
+            </>
+          }
+          error={errors.description}
+        >
+          <textarea id="t-description" className="input min-h-[96px]" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("tariffs.descriptionPlaceholder")} aria-invalid={!!errors.description} />
         </Field>
         <Field label={t("tariffs.trafficPerPeriod")} htmlFor="t-gb" error={errors.traffic_limit}>
           <div className="flex items-center gap-2">
@@ -392,6 +448,22 @@ function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | null; onCl
             <input id="t-dev" className="input max-w-[100px]" inputMode="numeric" value={devicesUnlimited ? "" : devices} disabled={devicesUnlimited} onChange={(e) => setDevices(e.target.value)} />
             <label className="ml-auto flex items-center gap-2 text-[13px]">
               <input type="checkbox" className="check" checked={devicesUnlimited} onChange={(e) => setDevicesUnlimited(e.target.checked)} /> {t("users.unlimited")}
+            </label>
+          </div>
+        </Field>
+        {devicesUnlimited ? null : (
+          <Field label={t("deviceMode.label")}>
+            <DeviceModePicker value={deviceMode} onChange={setDeviceMode} />
+          </Field>
+        )}
+        <Field label={t("tariffs.speed")} htmlFor="t-speed" hint={t("tariffs.speedHint")} error={errors.speed_limit}>
+          <div className="flex items-center gap-2">
+            <label className="input-unit max-w-[160px] flex-1">
+              <input id="t-speed" className="input" inputMode="numeric" value={speedUnlimited ? "" : speed} disabled={speedUnlimited} onChange={(e) => setSpeed(e.target.value)} aria-invalid={!!errors.speed_limit} />
+              <span>{t("tariffs.mbps")}</span>
+            </label>
+            <label className="ml-auto flex items-center gap-2 text-[13px]">
+              <input type="checkbox" className="check" checked={speedUnlimited} onChange={(e) => setSpeedUnlimited(e.target.checked)} /> {t("users.unlimited")}
             </label>
           </div>
         </Field>
@@ -476,7 +548,6 @@ function MoreTerms({ value, onChange, toDay, errors }: { value: ExtraTerm[]; onC
               <label className="input-unit min-w-0">
                 <input
                   className="input num"
-                  style={{ paddingRight: 48 }}
                   inputMode="numeric"
                   value={m.days}
                   onChange={(e) => set(i, "days", e.target.value)}

@@ -17,14 +17,50 @@ import (
 // with every call and the adapter keeps none of them.
 type Settings map[string]any
 
+// Field types. Any other is a type this panel does not know: the field cannot be filled
+// in or saved (billing.fieldValue), and the admin is told so.
+const (
+	FieldString = "string" // one line, up to 4096 characters, an optional pattern
+	FieldBool   = "bool"
+	FieldSelect = "select" // one of Options
+	FieldNumber = "number" // an integer, optionally within Min..Max
+	FieldText   = "text"   // several lines, up to 4096 characters
+	FieldCode   = "code"   // several lines of code, up to MaxCode bytes; set from a session only
+)
+
+// MaxCode is the longest value of a code field, in bytes.
+const MaxCode = 64 << 10
+
+// KnownField says whether the panel can render and validate a setting of this type.
+func KnownField(t string) bool {
+	switch t {
+	case FieldString, FieldBool, FieldSelect, FieldNumber, FieldText, FieldCode:
+		return true
+	}
+	return false
+}
+
+// Option is one choice of a select field.
+type Option struct {
+	Value string `json:"value"`
+	Label Text   `json:"label"`
+}
+
 // Field is one setting the adapter asks for.
 type Field struct {
-	Key      string `json:"key"`
-	Label    Text   `json:"label"`
-	Type     string `json:"type"` // string | bool
-	Secret   bool   `json:"secret"`
-	Required bool   `json:"required"`
-	Pattern  string `json:"pattern,omitempty"`
+	Key      string   `json:"key"`
+	Label    Text     `json:"label"`
+	Type     string   `json:"type"` // string | bool | select | number | text | code
+	Secret   bool     `json:"secret"`
+	Required bool     `json:"required"`
+	Pattern  string   `json:"pattern,omitempty"` // string only
+	Options  []Option `json:"options,omitempty"` // select only
+	Min      *int64   `json:"min,omitempty"`     // number only
+	Max      *int64   `json:"max,omitempty"`     // number only
+	// Default is shown as the placeholder. The panel does not store it: an addon applies
+	// it itself while the key is absent.
+	Default any  `json:"default,omitempty"`
+	Help    Text `json:"help,omitempty"`
 }
 
 // Info is an adapter's description of itself.
@@ -65,31 +101,54 @@ func NewClient(base, token string, hc *http.Client) *Client {
 	return &Client{base: strings.TrimRight(base, "/"), token: token, hc: hc}
 }
 
-func (c *Client) call(ctx context.Context, method, path string, in, out any) error {
+// maxAnswer is the longest answer the panel reads from an adapter.
+const maxAnswer = 1 << 20
+
+// doBearer sends one request to an addon with its token and reads the answer, up to limit
+// bytes: a longer one is ErrBadAnswer, a way that fails ErrUnreachable. in, when not nil,
+// goes as the JSON body; hdr is added to the request.
+func doBearer(ctx context.Context, hc *http.Client, token, method, url string, in []byte, hdr http.Header, limit int64) (*http.Response, []byte, error) {
 	var body io.Reader
 	if in != nil {
-		data, err := json.Marshal(in)
-		if err != nil {
-			return err
-		}
-		body = bytes.NewReader(data)
+		body = bytes.NewReader(in)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	for k, v := range hdr {
+		req.Header[k] = v
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := c.hc.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return nil, nil, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return nil, nil, fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	if int64(len(data)) > limit {
+		return nil, nil, ErrBadAnswer
+	}
+	return resp, data, nil
+}
+
+func (c *Client) call(ctx context.Context, method, path string, in, out any) error {
+	var payload []byte
+	if in != nil {
+		var err error
+		if payload, err = json.Marshal(in); err != nil {
+			return err
+		}
+	}
+	resp, data, err := doBearer(ctx, c.hc, c.token, method, c.base+path, payload, nil, maxAnswer)
+	if err != nil {
+		return err
 	}
 	if resp.StatusCode/100 != 2 {
 		e := &Error{Status: resp.StatusCode}

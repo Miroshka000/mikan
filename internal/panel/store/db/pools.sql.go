@@ -31,28 +31,6 @@ func (q *Queries) AddTariffPool(ctx context.Context, arg AddTariffPoolParams) er
 	return err
 }
 
-const addUserPoolTraffic = `-- name: AddUserPoolTraffic :exec
-INSERT INTO user_pools (user_id, pool_id, used_up, used_down) VALUES ($1, $2, $3, $4)
-ON CONFLICT (user_id, pool_id) DO UPDATE SET used_up = user_pools.used_up + excluded.used_up, used_down = user_pools.used_down + excluded.used_down
-`
-
-type AddUserPoolTrafficParams struct {
-	UserID   int64
-	PoolID   int64
-	UsedUp   int64
-	UsedDown int64
-}
-
-func (q *Queries) AddUserPoolTraffic(ctx context.Context, arg AddUserPoolTrafficParams) error {
-	_, err := q.db.ExecContext(ctx, addUserPoolTraffic,
-		arg.UserID,
-		arg.PoolID,
-		arg.UsedUp,
-		arg.UsedDown,
-	)
-	return err
-}
-
 const clearTariffPools = `-- name: ClearTariffPools :exec
 DELETE FROM tariff_pools WHERE tariff_id = $1
 `
@@ -225,6 +203,34 @@ func (q *Queries) ListTrafficPools(ctx context.Context) ([]TrafficPool, error) {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserIDsOfTariff = `-- name: ListUserIDsOfTariff :many
+SELECT id FROM users WHERE tariff_id = $1 ORDER BY id
+`
+
+// The users a tariff was given to, for bringing them up to the tariff's pool limits.
+func (q *Queries) ListUserIDsOfTariff(ctx context.Context, tariffID sql.NullInt64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listUserIDsOfTariff, tariffID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

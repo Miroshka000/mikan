@@ -33,7 +33,7 @@ import (
 	"github.com/metacubex/age"
 
 	"mikan/internal/panel/settings"
-	"mikan/internal/panel/tgbot"
+	"mikan/internal/panel/tgate"
 )
 
 const (
@@ -76,9 +76,10 @@ var (
 	ErrUnavailable = errors.New("backup_unavailable") // the panel has no data directory
 )
 
-// Bot is the part of the Telegram bot the backups use (tgbot.Bot).
+// Bot is the part of the Telegram gateway the backups use (tgate.Gateway): no screens of
+// the bot, only its token, route and the admin's chat.
 type Bot interface {
-	InfrastructureClient(ctx context.Context) (*tgbot.Client, error)
+	InfrastructureClient(ctx context.Context) (*tgate.Client, error)
 	InfrastructureAdminChat(ctx context.Context) (int64, bool, error)
 }
 
@@ -94,6 +95,12 @@ type Service struct {
 	now     func() time.Time
 	log     *slog.Logger
 	mu      sync.Mutex
+	// A backup Start began runs on Run's context and Run waits for it, so it never works
+	// on a database the panel has closed: life is that context, closed set once Run ended.
+	lifeMu  sync.Mutex
+	life    context.Context
+	closed  bool
+	started sync.WaitGroup
 }
 
 // New: dataDir is the panel's data directory, where the dump is made before it is sent;
@@ -128,6 +135,15 @@ func (s *Service) Cleanup() {
 // that day.
 func (s *Service) Run(ctx context.Context) {
 	s.Cleanup()
+	s.lifeMu.Lock()
+	s.life = ctx
+	s.lifeMu.Unlock()
+	defer func() {
+		s.lifeMu.Lock()
+		s.closed = true
+		s.lifeMu.Unlock()
+		s.started.Wait()
+	}()
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
 	for {
@@ -204,13 +220,22 @@ func (s *Service) Start() error {
 	if s.Busy() {
 		return ErrBusy
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), SendTimeout)
+	s.lifeMu.Lock()
+	defer s.lifeMu.Unlock()
+	if s.closed {
+		return ErrBusy
+	}
+	life := s.life
+	if life == nil { // Run not started: the CLI, tests
+		life = context.Background()
+	}
+	s.started.Go(func() {
+		ctx, cancel := context.WithTimeout(life, SendTimeout)
 		defer cancel()
 		if _, err := s.Send(ctx); err != nil && !errors.Is(err, ErrBusy) {
 			s.log.Warn("telegram backup", "err", err)
 		}
-	}()
+	})
 	return nil
 }
 
@@ -247,16 +272,16 @@ func (s *Service) Send(ctx context.Context) (State, error) {
 // Code is the error code State keeps for err: never pg_dump's or Telegram's own text, which
 // may name hosts, ports and databases.
 func Code(err error) string {
-	var ae *tgbot.APIError
+	var ae *tgate.APIError
 	for _, known := range []error{ErrNoChat, ErrNoPassword, ErrTooBig, ErrBusy, ErrDump, ErrUnavailable} {
 		if errors.Is(err, known) {
 			return known.Error()
 		}
 	}
 	switch {
-	case errors.Is(err, tgbot.ErrOff):
+	case errors.Is(err, tgate.ErrOff):
 		return "bot_off"
-	case errors.Is(err, tgbot.ErrUnreachable), errors.As(err, &ae), errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, tgate.ErrUnreachable), errors.As(err, &ae), errors.Is(err, context.DeadlineExceeded):
 		return "tg_unreachable"
 	}
 	return "backup_failed"
@@ -338,7 +363,7 @@ func Make(ctx context.Context, dump Dumper, dir, password string, now time.Time)
 	if err != nil {
 		return "", 0, err
 	}
-	if fi.Size() > tgbot.MaxDocument-packOverhead {
+	if fi.Size() > tgate.MaxDocument-packOverhead {
 		return "", 0, ErrTooBig
 	}
 	r, err := age.NewScryptRecipient(password)
@@ -377,7 +402,7 @@ func Make(ctx context.Context, dump Dumper, dir, password string, now time.Time)
 	if err != nil {
 		return "", 0, err
 	}
-	if st.Size() > tgbot.MaxDocument {
+	if st.Size() > tgate.MaxDocument {
 		os.Remove(path)
 		return "", 0, ErrTooBig
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/events"
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/store/db"
 )
@@ -323,6 +324,11 @@ func TestStarsRefundedBeforeItWasApplied(t *testing.T) {
 	e.s.Reconcile(ctx)
 	if e.payment(p.ID).Status != "refunded" || e.users() != 0 || len(e.tg.refundNotes()) != 0 {
 		t.Fatalf("payment %q, users %d", e.payment(p.ID).Status, e.users())
+	}
+	// The addons hear of the refund once, though nothing was applied.
+	must(t, e.s.StarsRefunded(ctx, 555, "ch-paid"))
+	if refunds := ofType(e.events(), events.PaymentRefunded); len(refunds) != 1 || refunds[0].TgID.Int64 != 555 {
+		t.Fatalf("refund events of an unapplied payment: %v", typesOf(e.events()))
 	}
 }
 

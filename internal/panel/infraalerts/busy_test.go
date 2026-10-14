@@ -11,6 +11,7 @@ import (
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/hysteresis"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -119,7 +120,7 @@ func TestRelayListenerAlerts(t *testing.T) {
 	m := New(st, nil, nil, nil, nil, nil, nil, slog.Default(), func() time.Time { return now })
 	node := db.Node{ID: 7, Name: "US"}
 	state := persistentState{Samples: map[string]sampleState{}}
-	round := func(l nodeapi.ListenerStatus, moves bool, lang string) Level {
+	round := func(l nodeapi.ListenerStatus, moves bool, lang string) hysteresis.Level {
 		now = now.Add(5 * time.Second)
 		l.Name = nodeapi.RelayListener
 		hv := nodesync.HealthView{OK: true, CheckedAt: now, Listeners: []nodeapi.ListenerStatus{{Name: "vless", OK: true}, l}}
@@ -130,11 +131,11 @@ func TestRelayListenerAlerts(t *testing.T) {
 
 	// A node without a relay says nothing.
 	hv := nodesync.HealthView{OK: true, CheckedAt: now, Listeners: []nodeapi.ListenerStatus{{Name: "vless", OK: true}}}
-	if lv := m.checkRelay(&state, Default(), node, hv, true, "en"); lv != Healthy || len(state.Pending) != 0 {
+	if lv := m.checkRelay(&state, Default(), node, hv, true, "en"); lv != hysteresis.Healthy || len(state.Pending) != 0 {
 		t.Fatalf("no relay: %v %+v", lv, state.Pending)
 	}
 	for range 2 {
-		if lv := round(failed, true, "en"); lv != Unavailable {
+		if lv := round(failed, true, "en"); lv != hysteresis.Unavailable {
 			t.Fatalf("level %v", lv)
 		}
 	}

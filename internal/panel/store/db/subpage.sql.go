@@ -122,27 +122,6 @@ func (q *Queries) GetSubAsset(ctx context.Context, name string) (SubAsset, error
 	return i, err
 }
 
-const getSubDoc = `-- name: GetSubDoc :one
-SELECT id, title, emoji, body, platform, position, published, created_at, updated_at FROM sub_docs WHERE id = $1
-`
-
-func (q *Queries) GetSubDoc(ctx context.Context, id int64) (SubDoc, error) {
-	row := q.db.QueryRowContext(ctx, getSubDoc, id)
-	var i SubDoc
-	err := row.Scan(
-		&i.ID,
-		&i.Title,
-		&i.Emoji,
-		&i.Body,
-		&i.Platform,
-		&i.Position,
-		&i.Published,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const listPublishedSubDocs = `-- name: ListPublishedSubDocs :many
 SELECT id, title, emoji, platform FROM sub_docs WHERE published = 1 ORDER BY position, id
 `

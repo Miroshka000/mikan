@@ -141,7 +141,7 @@ func TestSubPageEditorEndToEnd(t *testing.T) {
 	c.Look.Background = subpage.PageBackground{Kind: "image"}
 	c.Blocks = append(c.Blocks, subpage.PageBlock{ID: "links-a", Type: subpage.TypeLinks, On: true, Links: []subpage.PageLink{{Label: "x", URL: "javascript:alert(1)"}}})
 	resp, out = h.do(http.MethodPut, api+"/sub-page", map[string]any{"config": c}, csrf)
-	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(out), "background_missing") || !strings.Contains(string(out), "body.config.blocks[13].links[0].url") {
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(out), "background_missing") || !strings.Contains(string(out), "body.config.blocks[14].links[0].url") {
 		t.Fatalf("bad save: %d %s", resp.StatusCode, out)
 	}
 	resp, out = h.do(http.MethodPut, api+"/sub-page", map[string]any{"config": subpage.Page{Look: subpage.PageLook{Palette: "neon"}}}, csrf)

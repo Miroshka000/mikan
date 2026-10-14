@@ -9,6 +9,7 @@ import (
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/hysteresis"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -56,7 +57,7 @@ func TestWarpAlertNamesTheReason(t *testing.T) {
 			// Two failed rounds make the alert.
 			for i := 0; i < 2; i++ {
 				rt.status = nodeapi.WarpStatus{Configured: true, Error: "timeout", Detail: "ignored for a known code", CheckedAt: now.Add(time.Duration(i+1) * time.Minute)}
-				m.probeWarp(ctx, &state, cfg, nodes, nil, map[int64]Level{}, lang)
+				m.probeWarp(ctx, &state, cfg, nodes, nil, map[int64]hysteresis.Level{}, lang)
 			}
 			if len(state.Pending) != 1 {
 				t.Fatalf("pending: %+v", state.Pending)

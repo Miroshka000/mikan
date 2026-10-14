@@ -17,7 +17,7 @@ import (
 
 // Limits of POST /users, which an imported user meets too.
 const (
-	maxName        = 100
+	maxName        = domain.UserNameMax
 	maxContact     = 100
 	maxNote        = 2000
 	maxDevices     = 100
@@ -36,16 +36,19 @@ var (
 // notes as POST /users takes them, numbers in range. What cannot be taken is an error, and
 // the user is left out with it.
 func Normalize(u User) (User, error) {
-	u.Name = strings.TrimSpace(u.Name)
 	u.Contact = strings.TrimSpace(u.Contact)
-	switch n := utf8.RuneCountInString(u.Name); {
-	case n == 0:
-		return u, errors.New("no name")
-	case n > maxName:
-		return u, fmt.Errorf("the name is longer than %d characters", maxName)
-	case !utf8.ValidString(u.Name) || strings.ContainsFunc(u.Name, func(r rune) bool { return r < 0x20 || r == 0x7f }):
+	name, err := domain.CleanUserName(u.Name)
+	var fe *domain.FieldError
+	if errors.As(err, &fe) {
+		switch fe.Code {
+		case domain.CodeUserNameEmpty:
+			return u, errors.New("no name")
+		case domain.CodeUserNameLong:
+			return u, fmt.Errorf("the name is longer than %d characters", maxName)
+		}
 		return u, errors.New("the name has control characters")
 	}
+	u.Name = name
 	if utf8.RuneCountInString(u.Contact) > maxContact || !utf8.ValidString(u.Contact) {
 		return u, fmt.Errorf("the contact is longer than %d characters", maxContact)
 	}

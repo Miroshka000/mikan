@@ -4,7 +4,7 @@
 import type { User } from "../api/client";
 
 export const USER_STATES = ["all", "active", "expiring", "limited", "expired", "disabled"] as const;
-export const USER_SOURCES = ["all", "admin", "bot", "trial", "import"] as const;
+export const USER_SOURCES = ["all", "admin", "bot", "trial", "free", "import"] as const;
 /** Hidden users: left off the list, listed with the rest, or the only ones listed. */
 export const USER_HIDDEN = ["hide", "show", "only"] as const;
 /**
@@ -33,11 +33,16 @@ export const TARIFF_TABS = ["tariffs", "pools", "packages"] as const;
 export type TariffsSearch = { tab: (typeof TARIFF_TABS)[number] };
 
 /** Payments open on their history; without a way to take payments yet, on setting one up. */
-export const PAYMENT_TABS = ["history", "methods", "rules", "referrals", "campaigns"] as const;
-export type PaymentsSearch = { tab?: (typeof PAYMENT_TABS)[number] };
+export const PAYMENT_TABS = ["history", "methods", "rules", "referrals", "campaigns", "promocodes"] as const;
+export type PaymentsSearch = { tab?: (typeof PAYMENT_TABS)[number]; promo?: (typeof PROMO_TABS)[number] };
 
 export const PROMO_TABS = ["codes", "history"] as const;
-export type PromoSearch = { tab: (typeof PROMO_TABS)[number] };
 
 export const TELEGRAM_TABS = ["connect", "menu", "notify", "infra", "broadcast"] as const;
 export type TelegramSearch = { tab: (typeof TELEGRAM_TABS)[number] };
+
+/** The addons open on what is installed; the catalog keeps its search and its filter by kind. */
+export const ADDON_TABS = ["installed", "catalog"] as const;
+export const ADDON_KINDS = ["bot", "payment", "ui"] as const;
+export type AddonKind = (typeof ADDON_KINDS)[number];
+export type AddonsSearch = { tab?: (typeof ADDON_TABS)[number]; q?: string; kind?: AddonKind };

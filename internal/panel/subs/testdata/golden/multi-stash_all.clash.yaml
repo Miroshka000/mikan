@@ -1,0 +1,263 @@
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+dns:
+  enable: true
+  ipv6: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://dns.alidns.com/dns-query
+  nameserver-policy:
+    +.cn:
+      - 223.5.5.5
+proxies:
+  - name: "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+    type: vless
+    server: 203.0.113.7
+    port: 443
+    client-fingerprint: chrome
+    network: xhttp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: false
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+    xhttp-opts:
+      mode: stream-one
+      path: /golden-path
+      reuse-settings:
+        h-max-request-times: 600-900
+        h-max-reusable-secs: 1800-3000
+        max-concurrency: 16-32
+  - name: "\U0001F1F3\U0001F1F1 Hysteria2"
+    type: hysteria2
+    server: 203.0.113.7
+    port: 443
+    alpn:
+      - h3
+    fingerprint: aa11
+    obfs: salamander
+    obfs-password: golden-obfs-password
+    password: S3cr3t+/=
+    skip-cert-verify: false
+  - name: "\U0001F1F3\U0001F1F1 TUIC"
+    type: tuic
+    server: 203.0.113.7
+    port: 8443
+    alpn:
+      - h3
+    congestion-controller: bbr
+    fingerprint: aa11
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    udp-relay-mode: native
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: "\U0001F1F3\U0001F1F1 VLESS Vision"
+    type: vless
+    server: 203.0.113.7
+    port: 8443
+    client-fingerprint: chrome
+    flow: xtls-rprx-vision
+    network: tcp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: "\U0001F1F3\U0001F1F1 Trojan"
+    type: trojan
+    server: 203.0.113.7
+    port: 2087
+    client-fingerprint: chrome
+    network: tcp
+    password: S3cr3t+/=
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    sni: www.example.com
+    tls: true
+    udp: true
+  - name: "\U0001F1F3\U0001F1F1 AnyTLS"
+    type: anytls
+    server: 203.0.113.7
+    port: 2083
+    client-fingerprint: chrome
+    fingerprint: aa11
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    tls: true
+    udp: true
+  - name: "\U0001F1F3\U0001F1F1 VLESS gRPC"
+    type: vless
+    server: 203.0.113.7
+    port: 2053
+    client-fingerprint: chrome
+    grpc-opts:
+      grpc-service-name: goldengrpc
+    network: grpc
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: Особый
+    type: vless
+    server: usa.example.com
+    port: 443
+    client-fingerprint: chrome
+    network: xhttp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: false
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+    xhttp-opts:
+      mode: stream-one
+      path: /golden-path
+      reuse-settings:
+        h-max-request-times: 600-900
+        h-max-reusable-secs: 1800-3000
+        max-concurrency: 16-32
+  - name: "\U0001F1FA\U0001F1F8 Hysteria2"
+    type: hysteria2
+    server: usa.example.com
+    port: 443
+    alpn:
+      - h3
+    fingerprint: bb22
+    obfs: salamander
+    obfs-password: golden-obfs-password
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    sni: usa.example.com
+  - name: "\U0001F1FA\U0001F1F8 TUIC"
+    type: tuic
+    server: usa.example.com
+    port: 8443
+    alpn:
+      - h3
+    congestion-controller: bbr
+    fingerprint: bb22
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    sni: usa.example.com
+    udp-relay-mode: native
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: "\U0001F1FA\U0001F1F8 VLESS Vision"
+    type: vless
+    server: usa.example.com
+    port: 8443
+    client-fingerprint: chrome
+    flow: xtls-rprx-vision
+    network: tcp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies:
+      - Auto
+      - "\U0001F1F3\U0001F1F1 Нидерланды"
+      - "\U0001F1FA\U0001F1F8 США"
+      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+      - "\U0001F1F3\U0001F1F1 Hysteria2"
+      - "\U0001F1F3\U0001F1F1 TUIC"
+      - "\U0001F1F3\U0001F1F1 VLESS Vision"
+      - "\U0001F1F3\U0001F1F1 Trojan"
+      - "\U0001F1F3\U0001F1F1 AnyTLS"
+      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+      - Особый
+      - "\U0001F1FA\U0001F1F8 Hysteria2"
+      - "\U0001F1FA\U0001F1F8 TUIC"
+      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+  - name: Auto
+    type: fallback
+    proxies:
+      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+      - "\U0001F1F3\U0001F1F1 Hysteria2"
+      - "\U0001F1F3\U0001F1F1 TUIC"
+      - "\U0001F1F3\U0001F1F1 VLESS Vision"
+      - "\U0001F1F3\U0001F1F1 Trojan"
+      - "\U0001F1F3\U0001F1F1 AnyTLS"
+      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+      - Особый
+      - "\U0001F1FA\U0001F1F8 Hysteria2"
+      - "\U0001F1FA\U0001F1F8 TUIC"
+      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+    interval: 120
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1F3\U0001F1F1 Нидерланды"
+    type: url-test
+    proxies:
+      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+      - "\U0001F1F3\U0001F1F1 Hysteria2"
+      - "\U0001F1F3\U0001F1F1 TUIC"
+      - "\U0001F1F3\U0001F1F1 VLESS Vision"
+      - "\U0001F1F3\U0001F1F1 Trojan"
+      - "\U0001F1F3\U0001F1F1 AnyTLS"
+      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+    interval: 120
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1FA\U0001F1F8 США"
+    type: url-test
+    proxies:
+      - Особый
+      - "\U0001F1FA\U0001F1F8 Hysteria2"
+      - "\U0001F1FA\U0001F1F8 TUIC"
+      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+    interval: 120
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: PROXY
+    type: select
+    proxies:
+      - VPN
+    hidden: true
+rules:
+  - IP-CIDR,203.0.113.7/32,DIRECT,no-resolve
+  - DOMAIN,usa.example.com,DIRECT
+  - DOMAIN,vpn.example.com,DIRECT
+  - GEOIP,LAN,DIRECT,no-resolve
+  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+  - DOMAIN-SUFFIX,sber.ru,DIRECT
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - MATCH,VPN
+  - MATCH,REJECT
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+    QUIC:
+      ports:
+        - 443
+        - 8443
+    TLS:
+      ports:
+        - 443
+        - 8443

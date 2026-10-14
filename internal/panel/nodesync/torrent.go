@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
-	"strings"
 	"time"
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/torrent"
+	"mikan/internal/textutil"
 )
 
 // torrentPullEvery is how often a node is asked for its torrent blocker's hits. The node
@@ -130,9 +130,10 @@ func (s *Syncer) pullTorrents(ctx context.Context) {
 				}
 				banned = banned || until > 0
 			}
+			// What a node sent is cut to a sane length: a node is a server somebody else may run.
 			if _, err := q.AddTorrentHit(ctx, db.AddTorrentHitParams{
-				UserID: uid, NodeID: sql.NullInt64{Int64: s.id, Valid: true}, Ip: clip(h.IP, 64),
-				Inbound: clip(h.Inbound, 64), Network: clip(h.Network, 8), Kind: clip(h.Kind, 16), Dest: clip(h.Dest, 300),
+				UserID: uid, NodeID: sql.NullInt64{Int64: s.id, Valid: true}, Ip: textutil.Clip(h.IP, 64),
+				Inbound: textutil.Clip(h.Inbound, 64), Network: textutil.Clip(h.Network, 8), Kind: textutil.Clip(h.Kind, 16), Dest: textutil.Clip(h.Dest, 300),
 				Hits: int32(count), At: at, BannedUntil: until,
 			}); err != nil {
 				return err
@@ -143,6 +144,7 @@ func (s *Syncer) pullTorrents(ctx context.Context) {
 		}
 		return q.SetNodeState(ctx, db.SetNodeStateParams{Key: stateKeyOf("torrent_seq", s.id), Value: strconv.FormatInt(last, 10)})
 	})
+	s.torrentStored(got.Epoch, last, err)
 	if err != nil {
 		s.log.Error("store torrent hits", "err", err)
 		return
@@ -210,12 +212,22 @@ func (s *Syncer) skipTorrents(ctx context.Context, got nodeapi.TorrentHits) {
 		}
 		return q.SetNodeState(ctx, db.SetNodeStateParams{Key: stateKeyOf("torrent_seq", s.id), Value: strconv.FormatInt(last, 10)})
 	})
+	s.torrentStored(got.Epoch, last, err)
 	if err != nil {
 		s.log.Error("torrent position", "err", err)
 	}
 }
 
+// torrentStored keeps the position just written; after a failed write it is read again,
+// since the transaction may have committed after all.
+func (s *Syncer) torrentStored(epoch string, seq int64, err error) {
+	s.torrentAt, s.torrentKnown = counterPos{epoch: epoch, seq: seq}, err == nil
+}
+
 func (s *Syncer) torrentPos(ctx context.Context) (string, int64, error) {
+	if s.torrentKnown {
+		return s.torrentAt.epoch, s.torrentAt.seq, nil
+	}
 	epoch, err := s.m.st.Q.GetNodeState(ctx, stateKeyOf("torrent_epoch", s.id))
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", 0, err
@@ -225,13 +237,6 @@ func (s *Syncer) torrentPos(ctx context.Context) (string, int64, error) {
 		return "", 0, err
 	}
 	seq, _ := strconv.ParseInt(raw, 10, 64)
+	s.torrentAt, s.torrentKnown = counterPos{epoch: epoch, seq: seq}, true
 	return epoch, seq, nil
-}
-
-// clip cuts what a node sent to a sane length: a node is a server somebody else may run.
-func clip(s string, n int) string {
-	if len(s) > n {
-		s = s[:n]
-	}
-	return strings.ToValidUTF8(s, "")
 }

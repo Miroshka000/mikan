@@ -40,12 +40,6 @@ FROM traffic_grants
 WHERE remaining > 0 AND (expires_at IS NULL OR expires_at > CAST(sqlc.arg(now) AS BIGINT))
 GROUP BY user_id, COALESCE(pool_id, 0);
 
--- name: SumUserGrantsLeft :many
-SELECT user_id, CAST(COALESCE(pool_id, 0) AS BIGINT) AS pool_id, CAST(SUM(remaining) AS BIGINT) AS left_bytes
-FROM traffic_grants
-WHERE user_id = sqlc.arg(user_id) AND remaining > 0 AND (expires_at IS NULL OR expires_at > CAST(sqlc.arg(now) AS BIGINT))
-GROUP BY user_id, COALESCE(pool_id, 0);
-
 -- name: EndPeriodGrants :exec
 -- A new traffic period ends the grants that last one period.
 UPDATE traffic_grants SET expires_at = CAST(sqlc.arg(now) AS BIGINT)
@@ -60,12 +54,6 @@ INSERT INTO payments (provider, payload, tg_id, kind, user_id, package_id, tarif
 VALUES ($1, $2, $3, 'package', $4, $5, $6, $7, $8, 'pending', $9)
 RETURNING *;
 
--- name: FindOpenPackagePayment :one
-SELECT * FROM payments
-WHERE tg_id = $1 AND package_id = $2 AND provider = $3 AND kind = 'package' AND user_id = $4
-  AND status = 'pending' AND pay_url <> '' AND created_at > sqlc.arg(since)
-ORDER BY id DESC LIMIT 1;
-
 -- name: FindOpenPackagePayments :many
 SELECT * FROM payments
 WHERE tg_id = sqlc.arg(tg_id) AND package_id = sqlc.arg(package_id) AND provider = sqlc.arg(provider) AND kind = 'package' AND user_id = sqlc.arg(user_id)
@@ -74,3 +62,10 @@ ORDER BY id DESC;
 
 -- name: DeleteGrantByPayment :execrows
 DELETE FROM traffic_grants WHERE payment_id = $1;
+
+-- name: SumUsersGrantsLeft :many
+-- What is left of the active grants of the users in ids, per user and target.
+SELECT user_id, CAST(COALESCE(pool_id, 0) AS BIGINT) AS pool_id, CAST(SUM(remaining) AS BIGINT) AS left_bytes
+FROM traffic_grants
+WHERE user_id = ANY(sqlc.arg(ids)::bigint[]) AND remaining > 0 AND (expires_at IS NULL OR expires_at > CAST(sqlc.arg(now) AS BIGINT))
+GROUP BY user_id, COALESCE(pool_id, 0);

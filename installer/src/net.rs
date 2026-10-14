@@ -17,16 +17,58 @@ fn agent(timeout: Duration, v4_only: bool) -> ureq::Agent {
 }
 
 /// Downloads a URL whole; limit guards against a runaway body. None when it is not there.
+/// A failure that may pass (the connection, a timeout, the server's 5xx or 429) is tried
+/// again twice, after 2 and 5 s: a release asset served by a CDN fails now and then.
 pub fn get_opt(url: &str, limit: u64) -> Result<Option<Vec<u8>>> {
-    let mut resp = match agent(Duration::from_secs(120), false).get(url).call() {
-        Err(ureq::Error::StatusCode(404)) => return Ok(None),
-        r => r.with_context(|| format!("GET {url}"))?,
-    };
-    Ok(Some(resp.body_mut().with_config().limit(limit).read_to_vec().with_context(|| format!("GET {url}"))?))
+    // A binary of tens of megabytes needs longer than an index on a slow link.
+    let timeout = Duration::from_secs(if limit > 8 << 20 { 600 } else { 120 });
+    let agent = agent(timeout, false);
+    let mut last = None;
+    for pause in [0, 2, 5] {
+        std::thread::sleep(Duration::from_secs(pause));
+        let read = agent.get(url).call().and_then(|mut resp| resp.body_mut().with_config().limit(limit).read_to_vec());
+        match read {
+            Ok(body) => return Ok(Some(body)),
+            Err(ureq::Error::StatusCode(404)) => return Ok(None),
+            Err(e) if transient(&e) => last = Some(e),
+            Err(e) => return Err(e).with_context(|| format!("GET {url}")),
+        }
+    }
+    Err(last.expect("an attempt was made")).with_context(|| format!("GET {url}"))
+}
+
+/// Whether trying again may help: not for a refused request or a body over the limit.
+fn transient(e: &ureq::Error) -> bool {
+    match e {
+        ureq::Error::StatusCode(code) => *code >= 500 || *code == 429,
+        ureq::Error::BodyExceedsLimit(_) | ureq::Error::BadUri(_) | ureq::Error::Http(_) | ureq::Error::InvalidProxyUrl => false,
+        _ => true,
+    }
 }
 
 pub fn get(url: &str, limit: u64) -> Result<Vec<u8>> {
     get_opt(url, limit)?.with_context(|| format!("GET {url}: not found"))
+}
+
+/// What an address answers over HTTPS, whatever the status is.
+pub struct Probe {
+    pub status: u16,
+    /// The Date header: the other side's clock.
+    pub date: Option<String>,
+}
+
+/// Asks an address and says what it answered; an error when the connection fails. Any
+/// status counts as an answer (ghcr.io/v2/ says 401 to everyone).
+pub fn probe(url: &str, timeout: Duration) -> Result<Probe> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(timeout))
+        .http_status_as_error(false)
+        .user_agent(format!("mikan-installer/{}", crate::version()))
+        .build()
+        .into();
+    let resp = agent.get(url).call()?;
+    let date = resp.headers().get("date").and_then(|v| v.to_str().ok()).map(str::to_owned);
+    Ok(Probe { status: resp.status().as_u16(), date })
 }
 
 /// The address the world sees this server at; the route's source address when the
@@ -91,14 +133,22 @@ impl DomainCheck {
 }
 
 pub fn check_domain(domain: &str, server: Ipv4Addr) -> DomainCheck {
-    let mut answers = Vec::new();
-    for (who, base) in RESOLVERS {
-        match doh(base, domain, A) {
-            Ok(ips) => answers.push((who, v4(&ips))),
-            Err(e) => answers.push((who, Err(e.to_string()))),
-        }
-    }
-    let aaaa = doh(RESOLVERS[0].1, domain, AAAA).map(|ips| v6(&ips)).unwrap_or_default();
+    // The resolvers are asked at once: one by one, a bad network made the install wait out
+    // every timeout in turn.
+    let (answers, aaaa) = std::thread::scope(|s| {
+        let asks: Vec<_> = RESOLVERS
+            .iter()
+            .map(|(who, base)| {
+                s.spawn(move || match doh(base, domain, A) {
+                    Ok(ips) => (*who, v4(&ips)),
+                    Err(e) => (*who, Err(e.to_string())),
+                })
+            })
+            .collect();
+        let aaaa = s.spawn(|| doh(RESOLVERS[0].1, domain, AAAA).map(|ips| v6(&ips)).unwrap_or_default());
+        let answers: Vec<_> = asks.into_iter().map(|h| h.join().expect("a DNS lookup panicked")).collect();
+        (answers, aaaa.join().expect("a DNS lookup panicked"))
+    });
     judge(domain, server, &crate::system::global_ipv6(), &answers, &aaaa)
 }
 

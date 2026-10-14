@@ -85,9 +85,9 @@ func (h *handlers) updateFilters(ctx context.Context, in *patchFiltersInput) (*f
 		if err := c.Validate(); err != nil {
 			var p *filters.Problem
 			if errors.As(err, &p) {
-				return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body." + p.List + "[" + strconv.Itoa(p.Index) + "]", Message: "filters_entry", Value: p.Value})
+				return fieldErrValue("body."+p.List+"["+strconv.Itoa(p.Index)+"]", "filters_entry", p.Value)
 			}
-			return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body", Message: "filters_config"})
+			return fieldErr("body", "filters_config")
 		}
 		saved = c
 		return settings.Set(ctx, set, filters.KeyConfig, c)

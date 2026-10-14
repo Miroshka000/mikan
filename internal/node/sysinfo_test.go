@@ -20,3 +20,19 @@ func TestParseProcCPU(t *testing.T) {
 		}
 	}
 }
+
+// Steal (the hypervisor's neighbours) is not the server's load, and guest time is inside
+// user already.
+func TestParseCPULine(t *testing.T) {
+	// user nice system idle iowait irq softirq steal guest guest_nice
+	idle, total, ok := parseCPULine("cpu  10 0 10 60 5 0 5 10 7 0")
+	if !ok || total != 100 || idle != 75 {
+		t.Fatalf("idle %d, total %d, ok %v", idle, total, ok)
+	}
+	if _, total, ok := parseCPULine("cpu 1 2 3 4 5"); !ok || total != 15 {
+		t.Fatalf("an old kernel's short line: total %d, ok %v", total, ok)
+	}
+	if _, _, ok := parseCPULine("cpu0 1 2 3 4 5"); ok {
+		t.Fatal("a single core's line taken for the summary")
+	}
+}

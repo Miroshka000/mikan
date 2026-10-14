@@ -181,6 +181,12 @@ func (t Template) Network() string {
 	return rules[t.Type()].network
 }
 
+// NodeCert says whether the listener runs on the node's certificate: Hysteria2, TUIC,
+// AnyTLS, TrustTunnel, and VLESS with TLS on the node certificate.
+func (t Template) NodeCert() bool {
+	return rules[t.Type()].cert || t.Ext().TLS == "node"
+}
+
 func (t Template) Ext() Ext {
 	var e Ext
 	if raw, ok := t[extKey]; ok {

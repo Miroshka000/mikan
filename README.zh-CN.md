@@ -200,9 +200,24 @@ cd installer && cargo test                    # the installer (Rust)
 
 开发在 `dev` 分支进行；合并到 `main` 的拉取请求会被构建和测试，发布版本由标签生成。
 
+## ⛔ 分叉与第三方构建
+
+> [!CAUTION]
+> **官方 mikan 只在这里**：仓库 `Miroshka000/mikan`、镜像 `ghcr.io/miroshka000/mikan`，以及用 mikan 密钥签名的发布版本。插件只来自 `getmikan/marketplace` 目录。其他一切，无论叫什么名字，都不是 mikan。
+>
+> **mikan 项目认为，所有分叉以及所有来自其他来源的构建都存在潜在的安全风险。**
+>
+> **官方构建可以验证**。每个版本都由本仓库的开源代码自动构建并签名，面板和安装程序只接受带有此签名的更新。别人的构建由什么组成，只有其作者知道。
+>
+> **分叉收不到我们的更新**。分叉无法用 mikan 密钥签名其版本，因此错误和漏洞的修复不会到达它，除非其作者自行移植。
+>
+> **我们不支持分叉**。我们不审查它们，也不对其中的错误、漏洞或数据丢失负责。关于他人构建的问题在聊天和 issues 中不予处理。
+>
+> **名称不属于许可证**。GPL v3 涵盖代码，不涵盖 mikan 的名称和标志（GPL v3 第 7 条，见 [NOTICE.md](NOTICE.md) 和 [TRADEMARK.md](TRADEMARK.md)）。分叉必须使用其他名称，且不得冒充 mikan。
+
 ## 许可证
 
-mikan 是基于 [GNU GPL v3](LICENSE) 的自由软件，内嵌 [mihomo](https://github.com/MetaCubeX/mihomo)（GPL-3.0）。字体：Unbounded、Onest、JetBrains Mono（SIL OFL 1.1）。
+mikan 是基于 [GNU GPL v3](LICENSE) 的自由软件，并附有 [NOTICE.md](NOTICE.md) 中的附加条款：保留署名、不得将修改版冒充原版、不授予名称和标志的权利。Copyright (C) 2026 Miroshka and Mikan。内嵌 [mihomo](https://github.com/MetaCubeX/mihomo)（GPL-3.0），部分代码改编自 [3x-ui](https://github.com/MHSanaei/3x-ui)（GPL-3.0）。字体：Unbounded、Onest、JetBrains Mono（SIL OFL 1.1）。
 
 <div align="center">
 <sub>用 🍊 制作</sub>

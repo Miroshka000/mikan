@@ -43,6 +43,7 @@ type InboundView struct {
 	UpdatedAt   time.Time      `json:"updated_at"`
 	Apps        []string       `json:"apps" doc:"Приложения, которым подключение попадает в подписку: mihomo, xray, singbox, stash, other"`
 	Shared      bool           `json:"shared,omitempty" doc:"Один ключ на всех: учёт, лимиты и отключение по пользователям не работают"`
+	NodeCert    bool           `json:"node_cert,omitempty" doc:"Работает на сертификате ноды (Hysteria2, TUIC, AnyTLS, TrustTunnel, VLESS TLS): с самоподписанным в sing-box приложениях не появится"`
 	AutoPort    bool           `json:"auto_port" doc:"Панель сама переносит подключение на другой порт, если его блокируют (и включено в настройках)"`
 	AutoSNI     bool           `json:"auto_sni" doc:"Панель сама меняет сайт маскировки REALITY, если он перестал подходить (и включено в настройках)"`
 	Auto        AutoView       `json:"auto"`
@@ -90,7 +91,7 @@ type inboundOutput struct{ Body InboundView }
 
 type createInboundInput struct {
 	Body struct {
-		Preset string `json:"preset" enum:"vless_reality_xhttp,hysteria2,hysteria2_gecko,tuic_v5,vless_reality_vision,vless_reality_grpc,trojan_reality,vless_tls_xhttp,vless_tls_vision,anytls,vless_reality_xhttp_pq,trusttunnel,shadowquic,mieru,shadowsocks_2022,sudoku,snell,custom"`
+		Preset string `json:"preset" enum:"vless_reality_xhttp,hysteria2,hysteria2_gecko,tuic_v5,vless_reality_vision,vless_reality_grpc,trojan_reality,vless_tls_xhttp,vless_tls_vision,vless_tls_ws,anytls,vless_reality_xhttp_pq,trusttunnel,shadowquic,mieru,shadowsocks_2022,sudoku,snell,custom"`
 		NodeID int64  `json:"node_id,omitempty" minimum:"1" doc:"Нода; по умолчанию — своя нода панели"`
 		Port   string `json:"port,omitempty" pattern:"^[0-9]{1,5}(-[0-9]{1,5})?$"`
 		Dest   string `json:"dest,omitempty" maxLength:"255" doc:"host:port для REALITY"`
@@ -208,6 +209,7 @@ func (h *handlers) viewInbound(in db.Inbound, last map[int64]db.InboundEvent) In
 	if t, err := proto.Parse(in.Config); err == nil {
 		v.Type, v.Network = t.Type(), t.Network()
 		v.Shared = proto.Shared(t.Type())
+		v.NodeCert = t.NodeCert()
 		for _, f := range subs.AppsFor(proto.NeedsOf(t)) {
 			v.Apps = append(v.Apps, string(f))
 		}
@@ -376,7 +378,7 @@ func inboundError(err error, dest bool) error {
 	case errors.Is(err, domain.ErrInboundChanged):
 		return huma.Error409Conflict("inbound_changed")
 	case errors.Is(err, domain.ErrUnknownPool):
-		return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.pool_id", Message: "pool_not_found"})
+		return fieldErr("body.pool_id", "pool_not_found")
 	case errors.As(err, &name):
 		return huma.Error409Conflict("name_in_use", &huma.ErrorDetail{Location: "body.display_name", Message: "name_in_use", Value: name.Owner})
 	case errors.As(err, &edit):

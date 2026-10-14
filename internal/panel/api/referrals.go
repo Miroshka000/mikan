@@ -151,7 +151,7 @@ func (h *handlers) listReferralRewards(ctx context.Context, in *referralRewardsI
 	out.Body.Items = make([]ReferralRewardView, 0, len(rows))
 	for _, r := range rows {
 		v := ReferralRewardView{ID: r.ID, ReferrerTgID: r.ReferrerTgID, ReferralID: r.ReferralID, RuleID: r.RuleID, Kind: r.Kind,
-			Amount: r.Amount, Days: r.Days, EveryN: r.EveryN, CreatedAt: time.Unix(r.CreatedAt, 0).UTC(), RevertedAt: unixPtr(r.RevertedAt)}
+			Amount: r.Amount, Days: r.Days, EveryN: r.EveryN, CreatedAt: time.Unix(r.CreatedAt, 0).UTC(), RevertedAt: ts(r.RevertedAt)}
 		if r.ReferrerUsername != "" {
 			v.ReferrerName = "@" + r.ReferrerUsername
 		} else {
@@ -184,7 +184,7 @@ func (h *handlers) listReferralLinks(ctx context.Context, in *referralLinksInput
 	for _, r := range rows {
 		out.Body.Items = append(out.Body.Items, ReferralLinkView{ReferralID: r.ID, ReferrerTgID: r.ReferrerTgID, ReferrerCode: r.ReferrerCode,
 			RefereeTgID: r.RefereeTgID, RefereeName: r.RefereeUsername, Code: r.Code,
-			CreatedAt: time.Unix(r.CreatedAt, 0).UTC(), FirstPaidAt: unixPtr(r.FirstPaidAt)})
+			CreatedAt: time.Unix(r.CreatedAt, 0).UTC(), FirstPaidAt: ts(r.FirstPaidAt)})
 	}
 	return out, nil
 }

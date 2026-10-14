@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/torrent"
 )
@@ -124,7 +125,7 @@ func (h *handlers) updateTorrent(ctx context.Context, in *patchTorrentInput) (*t
 		if b.Exempt != nil {
 			for _, id := range b.Exempt {
 				if _, err := q.GetUser(ctx, id); errors.Is(err, sql.ErrNoRows) {
-					return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.exempt", Message: "user_not_found", Value: id})
+					return fieldErrValue("body.exempt", "user_not_found", id)
 				} else if err != nil {
 					return err
 				}
@@ -132,7 +133,7 @@ func (h *handlers) updateTorrent(ctx context.Context, in *patchTorrentInput) (*t
 			c.Exempt = b.Exempt
 		}
 		if err := c.Validate(); err != nil {
-			return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body", Message: "torrent_config"})
+			return fieldErr("body", "torrent_config")
 		}
 		return settings.Set(ctx, set, torrent.KeyConfig, c)
 	})
@@ -170,19 +171,17 @@ func (h *handlers) listTorrentHits(ctx context.Context, in *torrentHitsInput) (*
 	out := &torrentHitsOutput{Body: make([]TorrentHitView, 0, len(rows))}
 	for _, r := range rows {
 		out.Body = append(out.Body, TorrentHitView{
-			ID: r.ID, UserID: r.UserID, UserName: r.UserName, NodeID: ptrInt(r.NodeID.Int64, r.NodeID.Valid), NodeName: r.NodeName,
+			ID: r.ID, UserID: r.UserID, UserName: r.UserName, NodeID: store.Int64Ptr(r.NodeID), NodeName: r.NodeName,
 			IP: r.Ip, Inbound: r.Inbound, Network: r.Network, Kind: r.Kind, Dest: r.Dest, Hits: r.Hits,
-			At: time.Unix(r.At, 0).UTC(), BannedUntil: ptrTime(r.BannedUntil, r.BannedUntil > 0),
-			LiftedAt: ptrTime(r.LiftedAt.Int64, r.LiftedAt.Valid),
+			At: time.Unix(r.At, 0).UTC(), BannedUntil: store.TimePtr(sql.NullInt64{Int64: r.BannedUntil, Valid: r.BannedUntil > 0}),
+			LiftedAt: store.TimePtr(r.LiftedAt),
 		})
 	}
 	return out, nil
 }
 
 func (h *handlers) liftTorrentBan(ctx context.Context, in *userIDInput) (*liftTorrentOutput, error) {
-	if _, err := h.d.Store.Q.GetUser(ctx, in.ID); errors.Is(err, sql.ErrNoRows) {
-		return nil, huma.Error404NotFound("not_found")
-	} else if err != nil {
+	if err := requireUser(ctx, h.d.Store.Q, in.ID); err != nil {
 		return nil, err
 	}
 	n, err := h.d.Store.Q.LiftTorrentBans(ctx, db.LiftTorrentBansParams{UserID: in.ID, Now: h.d.Now().Unix()})

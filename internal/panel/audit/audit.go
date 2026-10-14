@@ -18,6 +18,17 @@ type Entry struct {
 	Details    any // must not contain secrets
 }
 
+// Actor is how a line names who acted when it was not an admin: Details["actor"]. An admin
+// is AdminID; the system and the console leave both empty.
+const (
+	ActorSubscriber = "subscriber"
+	actorAddon      = "addon:"
+)
+
+// AddonActor is the actor of a line written for an addon acting on a permission the admin
+// approved: "addon:<id>". It is what tells such a line from the admin's own.
+func AddonActor(id string) string { return actorAddon + id }
+
 func Write(ctx context.Context, q *db.Queries, now time.Time, e Entry) error {
 	var details sql.NullString
 	if e.Details != nil {

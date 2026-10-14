@@ -102,10 +102,10 @@ func (h *handlers) registerCampaigns() {
 // botLink is the deep link that carries a tag, made with the bot's username; "" while the
 // bot is off or has no username yet.
 func (h *handlers) botLink(tag string) string {
-	if h.d.Telegram == nil {
+	if h.d.Gateway == nil {
 		return ""
 	}
-	st := h.d.Telegram.Status()
+	st := h.d.Gateway.Status()
 	if !st.Running || st.Bot.Username == "" {
 		return ""
 	}

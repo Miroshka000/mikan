@@ -107,3 +107,8 @@ func TestUsersWithBillingDay(t *testing.T) {
 		t.Fatalf("one period without a billing day: %v %v", time.Unix(u.ExpiresAt.Int64, 0).UTC(), err)
 	}
 }
+
+// ExtendPeriod adds one paid period: a month up to the billing day, or 30 days without one.
+func (s *Users) ExtendPeriod(ctx context.Context, id int64) (db.User, error) {
+	return s.Update(ctx, id, Patch{Extend: &Extension{Period: true}})
+}

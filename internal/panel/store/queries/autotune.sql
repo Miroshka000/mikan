@@ -26,8 +26,14 @@ SELECT * FROM inbound_events WHERE created_at >= $1 ORDER BY id;
 -- name: PruneInboundEvents :exec
 DELETE FROM inbound_events WHERE created_at < $1;
 
--- name: UpsertInboundReach :exec
-INSERT INTO inbound_reach (slot, inbound_id, at) VALUES ($1, $2, $3)
+-- name: UpsertInboundReaches :exec
+-- When devices got through to inbounds, in one statement; each (slot, inbound) at most
+-- once. A reach only moves forward.
+INSERT INTO inbound_reach (slot, inbound_id, at)
+SELECT t.slot, t.inbound_id, t.at
+FROM (SELECT unnest(sqlc.arg(slots)::text[]) AS slot, unnest(sqlc.arg(inbound_ids)::bigint[]) AS inbound_id,
+             unnest(sqlc.arg(ats)::bigint[]) AS at) AS t
+ORDER BY t.slot, t.inbound_id
 ON CONFLICT (slot, inbound_id) DO UPDATE SET at = GREATEST(inbound_reach.at, excluded.at);
 
 -- name: ListInboundReachSince :many

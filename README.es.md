@@ -203,9 +203,24 @@ cd installer && cargo test                    # the installer (Rust)
 
 El desarrollo se hace en la rama `dev`; los pull requests hacia `main` se compilan y se prueban, y las versiones se publican a partir de etiquetas.
 
+## ⛔ Forks y compilaciones de terceros
+
+> [!CAUTION]
+> **El mikan oficial está solo aquí:** el repositorio `Miroshka000/mikan`, la imagen `ghcr.io/miroshka000/mikan` y las versiones firmadas con la clave de mikan. Los complementos solo vienen del catálogo `getmikan/marketplace`. Todo lo demás no es mikan, se llame como se llame.
+>
+> **El proyecto mikan considera potencialmente inseguro todo fork y toda compilación de otras fuentes.**
+>
+> **Las compilaciones oficiales se pueden comprobar.** Cada versión se compila automáticamente a partir del código abierto de este repositorio y se firma, y el panel y el instalador solo aceptan actualizaciones con esa firma. De qué está hecha una compilación ajena solo lo sabe su autor.
+>
+> **Un fork no recibe nuestras actualizaciones.** No puede firmar versiones con la clave de mikan, así que las correcciones de errores y vulnerabilidades no le llegan hasta que su autor las traslade, si es que lo hace.
+>
+> **No damos soporte a forks.** No los revisamos y no somos responsables de errores, vulnerabilidades ni pérdida de datos en ellos. Las preguntas sobre compilaciones ajenas no se atienden ni en el chat ni en los issues.
+>
+> **El nombre no forma parte de la licencia.** La GPL v3 cubre el código, no el nombre mikan ni su logotipo (sección 7 de la GPL v3, ver [NOTICE.md](NOTICE.md) y [TRADEMARK.md](TRADEMARK.md)). Un fork debe usar otro nombre y no hacerse pasar por mikan.
+
 ## Licencia
 
-mikan es software libre bajo la [GNU GPL v3](LICENSE). Incluye [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0). Fuentes: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
+mikan es software libre bajo la [GNU GPL v3](LICENSE) con los términos adicionales de [NOTICE.md](NOTICE.md): conservar la atribución, no hacer pasar una versión modificada por la original, sin derechos sobre el nombre y el logotipo. Copyright (C) 2026 Miroshka and Mikan. Incluye [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) y adapta partes de [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0). Fuentes: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
 
 <div align="center">
 <sub>Hecho con 🍊</sub>

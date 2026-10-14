@@ -202,9 +202,24 @@ cd installer && cargo test                    # the installer (Rust)
 
 Geliştirme `dev` dalında yapılır. `main` dalına açılan çekme istekleri derlenir ve test edilir, sürümler etiketlerden yayımlanır.
 
+## ⛔ Fork'lar ve üçüncü taraf derlemeler
+
+> [!CAUTION]
+> **Resmî mikan yalnızca burada:** `Miroshka000/mikan` deposu, `ghcr.io/miroshka000/mikan` imajı ve mikan anahtarıyla imzalanmış sürümler. Eklentiler yalnızca `getmikan/marketplace` kataloğundan gelir. Geri kalan her şey, adı ne olursa olsun, mikan değildir.
+>
+> **mikan projesi, her fork'u ve başka kaynaklardan gelen her derlemeyi potansiyel olarak güvensiz kabul eder.**
+>
+> **Resmî derlemeler doğrulanabilir.** Her sürüm bu deponun açık kodundan otomatik olarak derlenir ve imzalanır; panel ve kurulum aracı yalnızca bu imzayı taşıyan güncellemeleri kabul eder. Başkasının derlemesinin neyden yapıldığını yalnızca yazarı bilir.
+>
+> **Fork'lar güncellemelerimizi almaz.** Bir fork, sürümlerini mikan anahtarıyla imzalayamaz; bu yüzden hata ve güvenlik açığı düzeltmeleri, yazarı onları taşımadıkça ona ulaşmaz.
+>
+> **Fork'ları desteklemiyoruz.** Onları incelemiyoruz ve içlerindeki hatalardan, güvenlik açıklarından veya veri kaybından sorumlu değiliz. Başkalarının derlemeleriyle ilgili sorular sohbette ve issue'larda ele alınmaz.
+>
+> **Ad lisansın parçası değildir.** GPL v3 kodu kapsar, mikan adını ve logosunu değil (GPL v3 bölüm 7, bkz. [NOTICE.md](NOTICE.md) ve [TRADEMARK.md](TRADEMARK.md)). Bir fork başka bir ad kullanmalı ve kendini mikan olarak tanıtmamalıdır.
+
 ## Lisans
 
-mikan, [GNU GPL v3](LICENSE) altında özgür yazılımdır. İçine [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) gömülüdür. Yazı tipleri: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
+mikan, [GNU GPL v3](LICENSE) ve [NOTICE.md](NOTICE.md) dosyasındaki ek koşullar altında özgür yazılımdır: atıf korunur, değiştirilmiş bir sürüm orijinal gibi tanıtılmaz, ad ve logo üzerinde hak verilmez. Copyright (C) 2026 Miroshka and Mikan. İçine [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) gömülüdür ve [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) kodunun bazı bölümleri uyarlanmıştır. Yazı tipleri: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
 
 <div align="center">
 <sub>🍊 ile yapıldı</sub>

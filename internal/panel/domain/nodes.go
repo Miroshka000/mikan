@@ -33,17 +33,34 @@ type NodeInput struct {
 	Host    string // public IP or name: the panel reaches the Node API here, clients connect here
 	Domain  string // optional name for Hysteria2/TUIC certificates and links
 	APIPort int    // 0 picks a free random port
+	// PanelURL is where the node says hello (nodetls.Key.PanelURL); "" leaves it out.
+	PanelURL string
+	// Rules are what the name and the domain are checked against; the zero value asks
+	// nothing but that the name is not taken.
+	Rules NodeRules
 }
 
 // AddNode creates a remote node with the default inbounds and returns its join key.
-// The key carries the node's private key: it is shown once and never stored.
+// The key carries the node's private key: it is shown once and never stored. Errors, in
+// the order they are looked for: *NameError; ErrBadHost and ErrBadDomain (both, joined,
+// when both are wrong); *DomainError, the domain not leading to the host; ErrBadPort.
 func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeInput, now time.Time) (db.Node, string, error) {
-	host, dom := strings.TrimSpace(in.Host), strings.TrimSpace(in.Domain)
+	name, host, dom := strings.TrimSpace(in.Name), strings.TrimSpace(in.Host), strings.TrimSpace(in.Domain)
+	if err := checkNodeName(ctx, st.Q, in.Rules, name, 0); err != nil {
+		return db.Node{}, "", err
+	}
+	var bad error
 	if !hostname.Valid(host) {
-		return db.Node{}, "", ErrBadHost
+		bad = ErrBadHost
 	}
 	if dom != "" && !hostname.Valid(dom) {
-		return db.Node{}, "", ErrBadDomain
+		bad = errors.Join(bad, ErrBadDomain)
+	}
+	if bad != nil {
+		return db.Node{}, "", bad
+	}
+	if err := checkNodeDomain(ctx, in.Rules, dom, host); err != nil {
+		return db.Node{}, "", err
 	}
 	port := in.APIPort
 	if port == 0 {
@@ -60,12 +77,12 @@ func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeIn
 	var key string
 	err := st.Tx(ctx, func(q *db.Queries) error {
 		var err error
-		node, err = q.CreateNode(ctx, db.CreateNodeParams{Name: strings.TrimSpace(in.Name), Address: net.JoinHostPort(host, strconv.Itoa(port)),
+		node, err = q.CreateNode(ctx, db.CreateNodeParams{Name: name, Address: net.JoinHostPort(host, strconv.Itoa(port)),
 			PublicHost: host, Domain: dom, CreatedAt: now.Unix(), UpdatedAt: now.Unix()})
 		if err != nil {
 			return err
 		}
-		if key, err = issueKey(ctx, q, panel, node, now); err != nil {
+		if key, err = issueKey(ctx, q, panel, node, in.PanelURL, now); err != nil {
 			return err
 		}
 		for _, p := range presets.All {
@@ -88,8 +105,8 @@ func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeIn
 }
 
 // RekeyNode issues a new certificate for a remote node: the previous join key stops
-// working as soon as the panel reconnects.
-func RekeyNode(ctx context.Context, st *store.Store, panel nodetls.Pair, id int64, now time.Time) (string, error) {
+// working as soon as the panel reconnects. panelURL goes into the key as in NodeInput.
+func RekeyNode(ctx context.Context, st *store.Store, panel nodetls.Pair, id int64, panelURL string, now time.Time) (string, error) {
 	var key string
 	err := st.Tx(ctx, func(q *db.Queries) error {
 		n, err := q.GetNode(ctx, id)
@@ -102,13 +119,13 @@ func RekeyNode(ctx context.Context, st *store.Store, panel nodetls.Pair, id int6
 		if n.Address == "" {
 			return ErrLocalNode
 		}
-		key, err = issueKey(ctx, q, panel, n, now)
+		key, err = issueKey(ctx, q, panel, n, panelURL, now)
 		return err
 	})
 	return key, err
 }
 
-func issueKey(ctx context.Context, q *db.Queries, panel nodetls.Pair, n db.Node, now time.Time) (string, error) {
+func issueKey(ctx context.Context, q *db.Queries, panel nodetls.Pair, n db.Node, panelURL string, now time.Time) (string, error) {
 	_, portRaw, err := net.SplitHostPort(n.Address)
 	if err != nil {
 		return "", err
@@ -132,7 +149,10 @@ func issueKey(ctx context.Context, q *db.Queries, panel nodetls.Pair, n db.Node,
 	if err := q.SetNodeCert(ctx, db.SetNodeCertParams{CertSha256: pin, UpdatedAt: now.Unix(), ID: n.ID}); err != nil {
 		return "", err
 	}
-	return nodetls.Key{Port: port, PanelPin: panelPin, CertPEM: cert.CertPEM, KeyPEM: cert.KeyPEM, NodeLabel: n.Name}.Encode()
+	if !nodetls.ValidPanelURL(panelURL) {
+		panelURL = ""
+	}
+	return nodetls.Key{Port: port, PanelPin: panelPin, CertPEM: cert.CertPEM, KeyPEM: cert.KeyPEM, NodeLabel: n.Name, PanelURL: panelURL, Host: NodeHost(n)}.Encode()
 }
 
 // NodeInbounds keeps the inbounds of one node.

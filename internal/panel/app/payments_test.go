@@ -18,7 +18,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/tgbot"
+	"mikan/internal/panel/tgate"
 )
 
 const (
@@ -128,7 +128,7 @@ func TestPaymentsOverHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	set := settings.New(h.st.Q)
-	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355, tgbot.KeyToken: tgToken} {
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355, tgate.KeyToken: tgToken} {
 		if err := settings.Set(ctx, set, k, v); err != nil {
 			t.Fatal(err)
 		}
@@ -213,6 +213,26 @@ func TestPaymentsOverHTTP(t *testing.T) {
 	}
 	if resp, _ := h.do(http.MethodPost, shop, map[string]any{"init_data": initData("987654321:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw1", 555, h.now)}, same); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("another bot's signature: %d", resp.StatusCode)
+	}
+	// The admin's description of the plan reaches the offer as its note, beside the line
+	// built from the limits; a plan without one carries none.
+	if strings.Contains(string(body), `"note"`) {
+		t.Fatalf("a note without a description: %s", body)
+	}
+	if resp, raw := h.do(http.MethodPut, api+"/tariffs/"+strconv.FormatInt(sale.ID, 10), map[string]any{"name": "Месяц", "duration_days": 30, "reset_strategy": ts[1].ResetStrategy,
+		"traffic_limit": ts[1].TrafficLimit.Int64, "device_limit": ts[1].DeviceLimit.Int64, "price_rub": 19900, "on_sale": true, "description": "С белыми списками\nбез рекламы"}, csrf); resp.StatusCode != http.StatusOK {
+		t.Fatalf("describe the plan: %d %s", resp.StatusCode, raw)
+	}
+	resp, body = h.do(http.MethodPost, shop, map[string]any{"init_data": initData(tgToken, 555, h.now)}, same)
+	var noted struct {
+		Offers []struct {
+			Description string `json:"description"`
+			Note        string `json:"note"`
+		} `json:"offers"`
+	}
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &noted) != nil || len(noted.Offers) != 1 || noted.Offers[0].Note != "С белыми списками\nбез рекламы" ||
+		noted.Offers[0].Description == "" || strings.Contains(noted.Offers[0].Description, "белыми") {
+		t.Fatalf("the offer's note: %d %s", resp.StatusCode, body)
 	}
 	if resp, _ := h.do(http.MethodPost, pay, map[string]any{"init_data": initData(tgToken, 555, h.now), "tariff_id": sale.ID, "provider": "addon:yookassa"}, map[string]string{"Sec-Fetch-Site": "cross-site"}); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("from another site: %d", resp.StatusCode)

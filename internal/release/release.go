@@ -76,9 +76,8 @@ func Sign(data []byte, key ed25519.PrivateKey) string {
 // Parse checks the signature over the manifest's exact bytes, then decodes and checks it.
 func Parse(data []byte, sig string, pub ed25519.PublicKey) (Manifest, error) {
 	var m Manifest
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sig))
-	if err != nil || len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, data, raw) {
-		return m, ErrSignature
+	if err := Verify(data, sig, pub); err != nil {
+		return m, err
 	}
 	// Unknown fields are ignored: the signature already vouches for every byte, and a
 	// manifest that gains a field must still be read by the panels already out there.

@@ -69,9 +69,6 @@ const (
 	targetNode   = "node:"
 )
 
-// NodeTarget sends a service to one node.
-func NodeTarget(id int64) string { return targetNode + strconv.FormatInt(id, 10) }
-
 func nodeOf(target string) (int64, bool) {
 	s, ok := strings.CutPrefix(target, targetNode)
 	if !ok {

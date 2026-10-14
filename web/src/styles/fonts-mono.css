@@ -1,7 +1,25 @@
 /*
- * JetBrains Mono (hosts, keys, commands), Latin only, and only in the admin panel: the
- * subscription page and the Mini App show one link in it and use the system's monospace.
+ * JetBrains Mono (hosts, keys, commands, the Terminal theme's headings), Latin and Cyrillic,
+ * in the admin panel and on the subscription page and the Mini App. The subsets are split by
+ * unicode-range, so a file is fetched only when a glyph in its range is drawn: a Cyrillic
+ * heading in the Terminal theme must not fall to another monospace in the middle of a word.
  */
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("@fontsource-variable/jetbrains-mono/files/jetbrains-mono-cyrillic-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 800;
+  src: url("@fontsource-variable/jetbrains-mono/files/jetbrains-mono-cyrillic-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
 @font-face {
   font-family: "JetBrains Mono Variable";
   font-style: normal;

@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { RefreshCw } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { ChevronDown, RefreshCw } from "lucide-react";
+import { useId, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk, useUpdates } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
-import { StaleNotice } from "../../../components/query";
+import { QueryBoundary, StaleNotice } from "../../../components/query";
 import { useToast } from "../../../components/toast";
 import { Disclosure, FormActions } from "../../../components/layout";
-import { Button, ErrorState, Field, Pill, Skeleton } from "../../../components/ui";
+import { Button, Field, Pill, Skeleton } from "../../../components/ui";
 import { SwitchRow } from "../../../components/switch";
 import { getLocale, LOCALES, t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
@@ -112,6 +112,12 @@ export function AutoCard({ s }: { s: Schemas["SettingsView"] }) {
     { key: "auto_port", title: t("settings.autoPort"), sub: t("settings.autoPortSub"), on: s.auto_port },
     { key: "auto_sni", title: t("settings.autoSni"), sub: t("settings.autoSniSub"), on: s.auto_sni },
   ] as const;
+  // Switches with a cost the admin takes on: said before they go on, and kept in view while on.
+  const risky = [
+    { key: "any_port", on: s.any_port, text: "anyPort" },
+    { key: "wide_sni_scan", on: s.wide_sni_scan, text: "wideScan" },
+  ] as const;
+  const [warn, setWarn] = useState<(typeof risky)[number] | null>(null);
   return (
     <section className="card glass reveal" style={{ "--i": 3 } as React.CSSProperties}>
       <div className="card-head">
@@ -126,9 +132,64 @@ export function AutoCard({ s }: { s: Schemas["SettingsView"] }) {
             <SwitchRow label={r.title} sub={r.sub} checked={r.on} disabled={save.isPending} onChange={(v) => save.mutate({ [r.key]: v })} />
           </li>
         ))}
+        {risky.map((r) => (
+          <li key={r.key}>
+            <SwitchRow
+              label={t(`settings.${r.text}`)}
+              sub={t(`settings.${r.text}Sub`)}
+              checked={r.on}
+              disabled={save.isPending}
+              onChange={(v) => (v ? setWarn(r) : save.mutate({ [r.key]: false }))}
+            />
+            {r.on ? <p className="banner warn mb-3 text-xs">{t(`settings.${r.text}On`)}</p> : null}
+          </li>
+        ))}
       </ul>
       <p className="mt-3 text-xs text-[var(--ink-500)]">{t("settings.autoNote")}</p>
+      <Confirm
+        open={!!warn}
+        onOpenChange={(v) => !v && setWarn(null)}
+        title={warn ? t(`settings.${warn.text}ConfirmTitle`) : ""}
+        text={warn ? t(`settings.${warn.text}ConfirmText`) : ""}
+        confirm={warn ? t(`settings.${warn.text}Confirm`) : ""}
+        loading={save.isPending}
+        onConfirm={() => warn && save.mutate({ [warn.key]: true }, { onSuccess: () => setWarn(null) })}
+      />
     </section>
+  );
+}
+
+/**
+ * A release's notes, folded to a few lines that fade out, with a button to unfold them: a
+ * long list no longer pushes the update button and the switches off the screen.
+ */
+function NotesList({ lines }: { lines: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  const ref = useRef<HTMLUListElement>(null);
+  const id = useId();
+  // Folded only when it is taller than the fold: a short list shows as it is. Measured
+  // folded, never open (an open list fits itself), and again once it folds back; keyed by
+  // the text, as the polled card hands in a new array on every render.
+  const text = lines.join("\n");
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el && !open) setLong(el.scrollHeight > el.clientHeight + 4);
+  }, [text, open]);
+  return (
+    <>
+      <ul ref={ref} id={id} className={clsx("notes", !open && "notes-folded", !open && long && "notes-fade")}>
+        {lines.map((l, i) => (
+          <li key={i}>{inlineMarkdown(l.replace(/^[-*]\s*/, ""))}</li>
+        ))}
+      </ul>
+      {long || open ? (
+        <button type="button" className="notes-toggle" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)}>
+          {open ? t("settings.notesLess") : t("settings.notesMore", { n: lines.length })}
+          <ChevronDown size={16} aria-hidden className={clsx("transition-transform", open && "rotate-180")} />
+        </button>
+      ) : null}
+    </>
   );
 }
 
@@ -182,12 +243,13 @@ export function UpdatesCard() {
     onError: fail,
   });
   const v = u.data;
+  // Without data yet: the skeleton, or the error with a retry in a card. (With data the card below
+  // shows it, and a failed refresh adds the notice at its top.)
   if (!v) {
-    if (!u.isError) return <Skeleton style={{ height: 180, borderRadius: 20 }} />;
     return (
-      <section className="card glass">
-        <ErrorState text={errorText(u.error)} onRetry={() => void u.refetch()} />
-      </section>
+      <QueryBoundary query={u} pending={<Skeleton style={{ height: 180, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
+        {() => null}
+      </QueryBoundary>
     );
   }
   const notes = v.notes[getLocale()] || v.notes.en || "";
@@ -228,14 +290,7 @@ export function UpdatesCard() {
       {v.available && notes ? (
         <div className="panel-soft mt-4 p-3">
           <div className="mb-2 text-xs font-semibold text-[var(--ink-500)]">{t("settings.updatesChanges", { v: v.latest })}</div>
-          <ul className="notes">
-            {notes
-              .split("\n")
-              .filter((l) => l.trim())
-              .map((l, i) => (
-                <li key={i}>{inlineMarkdown(l.replace(/^[-*]\s*/, ""))}</li>
-              ))}
-          </ul>
+          <NotesList key={v.latest} lines={notes.split("\n").filter((l) => l.trim())} />
         </div>
       ) : null}
       {v.available || waiting ? (

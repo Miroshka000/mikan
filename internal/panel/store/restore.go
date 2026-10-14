@@ -15,25 +15,6 @@ import (
 // (pg_restore --clean drops only what the archive contains) or meet columns it never had.
 const restoreSuffix = "_pre_restore"
 
-// RestoreSQLite replaces the application data with a legacy SQLite backup. The backup is
-// imported at the SQLite baseline and then migrated, like a first upgrade.
-func RestoreSQLite(ctx context.Context, dsn, dir, source string) error {
-	return restoreSchema(ctx, dsn, func(ctx context.Context) error {
-		pg, err := connectPostgres(ctx, dsn, maintenanceSession)
-		if err != nil {
-			return err
-		}
-		defer pg.Close()
-		if err := migrateToImportBaseline(ctx, pg, postgresFS); err != nil {
-			return err
-		}
-		if _, err := ImportSQLiteRestore(ctx, pg, dir, source); err != nil {
-			return err
-		}
-		return migrateUp(ctx, pg, postgresFS)
-	})
-}
-
 // RestorePostgres replaces the application data with what pgRestore loads into an empty
 // schema, then migrates it to this binary's schema.
 func RestorePostgres(ctx context.Context, dsn, dir string, pgRestore func(context.Context) error) error {

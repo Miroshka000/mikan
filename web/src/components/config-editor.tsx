@@ -3,7 +3,8 @@
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { yaml } from "@codemirror/lang-yaml";
-import { defaultHighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, indentOnInput, syntaxHighlighting } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { EditorState } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { useEffect, useRef } from "react";
@@ -142,13 +143,30 @@ function complete(ctx: CompletionContext): CompletionResult | null {
   return { from: ctx.pos - key[2]!.length, options: [...new Set(keys)].map((k) => ({ label: k, type: "property", apply: `${k}: ` })) };
 }
 
+// YAML in the theme's own inks: CodeMirror's default colours are made for a white page and
+// sink into a dark one.
+const highlight = HighlightStyle.define([
+  { tag: [tags.propertyName, tags.definition(tags.propertyName)], color: "var(--mikan-700)" },
+  { tag: [tags.string, tags.special(tags.string)], color: "var(--leaf-700)" },
+  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: "var(--lagoon-600)" },
+  { tag: [tags.keyword, tags.typeName, tags.labelName], color: "var(--fc-purple)" },
+  { tag: tags.comment, color: "var(--ink-400)", fontStyle: "italic" },
+  { tag: [tags.punctuation, tags.separator, tags.bracket, tags.operator], color: "var(--ink-500)" },
+  { tag: tags.invalid, color: "var(--berry-600)" },
+]);
+
 const theme = EditorView.theme({
   "&": { fontSize: "13px", backgroundColor: "transparent" },
   ".cm-content": { fontFamily: "var(--font-mono-stack)", padding: "8px 0" },
+  ".cm-content, .cm-line": { color: "var(--ink-900)", caretColor: "var(--ink-900)" },
+  ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--ink-900)" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "color-mix(in srgb, var(--mikan-500) 24%, transparent)" },
   ".cm-gutters": { backgroundColor: "transparent", border: "none", color: "var(--ink-400)" },
-  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "rgba(22, 26, 36, 0.035)" },
+  ".cm-activeLine, .cm-activeLineGutter": { backgroundColor: "var(--hover)" },
   "&.cm-focused": { outline: "none" },
+  ".cm-tooltip": { backgroundColor: "var(--surface-solid)", color: "var(--ink-900)", border: "1px solid var(--hairline)", boxShadow: "var(--shadow-md)" },
   ".cm-tooltip-autocomplete": { borderRadius: "12px", overflow: "hidden" },
+  ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "var(--mikan-50)", color: "var(--ink-900)" },
 });
 
 export default function ConfigEditor({ value, onChange, label, invalid, kind = "inbound" }: { value: string; onChange: (v: string) => void; label: string; invalid?: boolean; kind?: "inbound" | "profile" }) {
@@ -172,7 +190,7 @@ export default function ConfigEditor({ value, onChange, label, invalid, kind = "
           history(),
           drawSelection(),
           indentOnInput(),
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          syntaxHighlighting(highlight),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           yaml(),
           autocompletion({ override: [kind === "profile" ? completeProfile : complete] }),

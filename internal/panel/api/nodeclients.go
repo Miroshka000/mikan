@@ -78,7 +78,7 @@ func (h *handlers) nodeOnline(id int64) map[string]nodeapi.Online {
 }
 
 // onlineUsers is who of a node's slots is live right now, by user id.
-func (h *handlers) onlineUsers(ctx context.Context, id int64) (map[int64]bool, error) {
+func (h *handlers) nodeOnlineUsers(ctx context.Context, id int64) (map[int64]bool, error) {
 	online := h.nodeOnline(id)
 	if len(online) == 0 {
 		return nil, nil
@@ -120,7 +120,7 @@ func (h *handlers) nodeClients(ctx context.Context, in *nodeClientsInput) (*node
 	if out.Body.Total, err = h.d.Store.Q.CountNodeClients(ctx, in.ID); err != nil {
 		return nil, err
 	}
-	live, err := h.onlineUsers(ctx, in.ID)
+	live, err := h.nodeOnlineUsers(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}

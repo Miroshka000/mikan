@@ -38,22 +38,3 @@ func OpenTest(ctx context.Context, _ string) (*Store, error) {
 		return exec(context.Background(), "DROP SCHEMA IF EXISTS "+quote(name)+" CASCADE")
 	})
 }
-
-// openImportTest is OpenTest rolled back to the SQLite import baseline: Migrate and
-// RestoreSQLite import into that schema and apply later migrations afterwards, so the
-// importer never sees tables from newer migrations.
-func openImportTest(ctx context.Context, dir string) (*Store, error) {
-	s, err := OpenTest(ctx, dir)
-	if err != nil {
-		return nil, err
-	}
-	p, err := postgresProvider(ctx, s.DB, postgresFS)
-	if err == nil {
-		_, err = p.DownTo(ctx, sqliteImportBaseline)
-	}
-	if err != nil {
-		s.Close()
-		return nil, err
-	}
-	return s, nil
-}

@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -49,13 +50,19 @@ func TestCreate(t *testing.T) {
 	if in.NodeID != 1 || in.Port != info.Port || in.Name != info.Name || in.Config == "" || in.Enabled == 0 || in.UpdatedAt != now.Unix() {
 		t.Fatalf("inbound: %+v", in)
 	}
+	// The preset's port is taken now: a port the admin names is refused, and with none
+	// named the next inbound takes the first free port of the pool.
 	var busy *PortInUseError
-	if _, err := s.Create(ctx, NewInbound{Preset: "trojan_reality"}); !errors.As(err, &busy) || busy.Name != info.Name {
+	if _, err := s.Create(ctx, NewInbound{Preset: "trojan_reality", Port: info.Port}); !errors.As(err, &busy) || busy.Name != info.Name {
 		t.Fatalf("the preset's port is taken now: %v", err)
 	}
+	moved, err := s.Create(ctx, NewInbound{Preset: "trojan_reality"})
+	if err != nil || moved.Port != strconv.Itoa(PortPool[0]) || moved.Name != info.Name+"-2" {
+		t.Fatalf("second inbound on the preset's port: %+v %v", moved, err)
+	}
 	second, err := s.Create(ctx, NewInbound{NodeID: 1, Preset: "trojan_reality", Port: "20000"})
-	if err != nil || second.Name != info.Name+"-2" {
-		t.Fatalf("second inbound: %+v %v", second, err)
+	if err != nil || second.Name != info.Name+"-3" {
+		t.Fatalf("third inbound: %+v %v", second, err)
 	}
 	// TCP and UDP listeners share a port number without conflict.
 	if _, err := s.Create(ctx, NewInbound{Preset: "tuic_v5", Port: "20000"}); err != nil {

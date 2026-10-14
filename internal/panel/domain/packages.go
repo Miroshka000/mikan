@@ -34,13 +34,7 @@ type PackageInput struct {
 	Sort       int64
 }
 
-// Prices a package may have, the same as a tariff's.
-const (
-	maxPackageName = 60
-	maxPriceStars  = 10000
-	minPriceRub    = 100
-	maxPriceRub    = 100_000_000
-)
+const maxPackageName = 60
 
 func (in *PackageInput) check() error {
 	in.Name = strings.TrimSpace(in.Name)
@@ -53,12 +47,11 @@ func (in *PackageInput) check() error {
 	if in.Lifetime != LifetimeDays {
 		in.Days = 0
 	}
-	switch {
-	case in.PriceStars.Valid && (in.PriceStars.Int64 < 1 || in.PriceStars.Int64 > maxPriceStars):
-		return fieldErr("price_stars", "bad_price")
-	case in.PriceRub.Valid && (in.PriceRub.Int64 < minPriceRub || in.PriceRub.Int64 > maxPriceRub):
-		return fieldErr("price_rub", "bad_price")
-	case in.OnSale && !in.PriceStars.Valid && !in.PriceRub.Valid:
+	// A package costs what a tariff may cost.
+	if err := CheckPrices(in.PriceStars, in.PriceRub); err != nil {
+		return err
+	}
+	if in.OnSale && !in.PriceStars.Valid && !in.PriceRub.Valid {
 		return fieldErr("on_sale", "on_sale_no_price")
 	}
 	return nil
@@ -72,7 +65,7 @@ func (s *Packages) Create(ctx context.Context, in PackageInput) (db.TrafficPacka
 	// No invariant across rows (a pool deleted after the check fails on its foreign key):
 	// READ COMMITTED.
 	err := s.st.TxRC(ctx, func(q *db.Queries) error {
-		if err := poolExists(ctx, q, in.PoolID); err != nil {
+		if err := PoolExists(ctx, q, in.PoolID); err != nil {
 			return err
 		}
 		var err error
@@ -91,7 +84,7 @@ func (s *Packages) Update(ctx context.Context, id int64, in PackageInput) (db.Tr
 	}
 	var p db.TrafficPackage
 	err := s.st.TxRC(ctx, func(q *db.Queries) error {
-		if err := poolExists(ctx, q, in.PoolID); err != nil {
+		if err := PoolExists(ctx, q, in.PoolID); err != nil {
 			return err
 		}
 		var err error
@@ -176,4 +169,12 @@ func Flag(b bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+// NullInt is an optional number as the database keeps it: NULL for nil.
+func NullInt(p *int64) sql.NullInt64 {
+	if p == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: *p, Valid: true}
 }

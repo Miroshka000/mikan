@@ -54,7 +54,7 @@ func TestPublic(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.ensure(ctx)
-	if c := m.Public(); c == nil || !tlscert.Covers(c.Leaf, "vpn.example.com") || m.Status().Kind != "letsencrypt" {
+	if c := m.Public(); c == nil || !tlscert.Covers(c.Leaf, "vpn.example.com") || m.Status().Kind != "acme" {
 		t.Fatalf("Let's Encrypt: %+v", m.Status())
 	}
 }

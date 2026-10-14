@@ -1,5 +1,5 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import clsx from "clsx";
 import { CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -95,6 +95,9 @@ export function UsersPage() {
   const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const narrow = useMediaQuery("(max-width: 767px)");
+  // With binding a place is a bound device, else an address online (see the drawer). Read
+  // once here: a row of its own would be one more subscriber to the settings per user.
+  const binding = !!useSettings().data?.device_binding;
 
   // A folder that is gone (deleted here, or elsewhere) is no filter any more: a link to it
   // would show an empty list that nothing explains.
@@ -283,7 +286,7 @@ export function UsersPage() {
                 {narrow ? (
                   <div className="flex flex-col gap-2">
                     {data.items.map((u) => (
-                      <UserCard key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} />
+                      <UserCard key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} onOpen={openUser} />
                     ))}
                   </div>
                 ) : (
@@ -306,7 +309,7 @@ export function UsersPage() {
                     </thead>
                     <tbody>
                       {data.items.map((u) => (
-                        <UserRow key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} selected={selected.has(u.id)} onToggle={toggle} onOpen={openUser} />
+                        <UserRow key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} selected={selected.has(u.id)} binding={binding} onToggle={toggle} onOpen={openUser} />
                       ))}
                     </tbody>
                   </table>
@@ -372,14 +375,32 @@ function Expiry({ u }: { u: User }) {
   );
 }
 
+/**
+ * Props of a plain link to a user that opens the drawer without a page load. The router's
+ * own Link works out an address per render from a search function, which adds up over 500
+ * rows; here the address is the bare query (it resolves against the current page, so the
+ * base path needs no care) and a plain click is taken over. A click with a modifier is left
+ * to the browser, so "open in a new tab" still works.
+ */
+function openLink(id: number, onOpen: (id: number) => void) {
+  return {
+    href: `?user=${id}`,
+    onClick: (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      onOpen(id);
+    },
+  };
+}
+
 // Rows are memoized: a poll hands back the same objects for users that did not change, and
 // a tick in one checkbox then redraws that one row. Text is read at render time, so a row
 // subscribes to the language itself.
-const UserRow = memo(function UserRow({ u, tariff, folder, selected, onToggle, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; selected: boolean; onToggle: (id: number) => void; onOpen: (id: number) => void }) {
+const UserRow = memo(function UserRow({ u, tariff, folder, selected, binding, onToggle, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; selected: boolean; binding: boolean; onToggle: (id: number) => void; onOpen: (id: number) => void }) {
   useLocale();
-  // With binding a place is a bound device, else an address online (see the drawer).
-  const binding = !!useSettings().data?.device_binding;
-  const devices = binding ? u.bound_devices : u.online_ips.length;
+  // The online mode counts the addresses online at once, not the places taken.
+  const devices = binding && u.device_mode !== "online" ? u.bound_devices : u.online_ips.length;
   // The row is clickable for the mouse; the keyboard and screen readers use the link in
   // the name cell and the checkbox, each a control of its own.
   return (
@@ -392,9 +413,9 @@ const UserRow = memo(function UserRow({ u, tariff, folder, selected, onToggle, o
           <Avatar name={u.name} seed={u.id} />
           <div className="min-w-0">
             <div className="truncate font-medium">
-              <Link from="/users" to="/users" search={(s) => ({ ...s, user: u.id, create: undefined })} className="row-link" onClick={(e) => e.stopPropagation()}>
+              <a className="row-link" {...openLink(u.id, onOpen)}>
                 {u.name}
-              </Link>
+              </a>
               {u.online ? <span className="online-dot" title={t("users.onlineNow")} role="img" aria-label={t("users.onlineNow")} /> : null}
             </div>
             <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--ink-500)]">
@@ -437,11 +458,11 @@ const UserRow = memo(function UserRow({ u, tariff, folder, selected, onToggle, o
   );
 });
 
-const UserCard = memo(function UserCard({ u, tariff, folder }: { u: User; tariff?: Tariff; folder?: Folder }) {
+const UserCard = memo(function UserCard({ u, tariff, folder, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; onOpen: (id: number) => void }) {
   useLocale();
   const e = expiryText(u.expires_at);
   return (
-    <Link from="/users" to="/users" search={(s) => ({ ...s, user: u.id, create: undefined })} className="panel-soft cv-auto grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-3 text-left">
+    <a {...openLink(u.id, onOpen)} className="panel-soft cv-auto grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 p-3 text-left">
       <Avatar name={u.name} seed={u.id} />
       <div className="min-w-0">
         <div className="truncate font-medium">
@@ -461,7 +482,7 @@ const UserCard = memo(function UserCard({ u, tariff, folder }: { u: User; tariff
       <div className="col-span-3">
         <Usage u={u} />
       </div>
-    </Link>
+    </a>
   );
 });
 

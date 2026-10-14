@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -300,6 +301,10 @@ func mihomoConfig(p Profile, g Groups, r Routing) (map[string]any, []proxy, erro
 	return mihomoConfigOf(p, g, r, ps), ps, nil
 }
 
+// defaultNameservers are the DNS-over-HTTPS servers a profile resolves with, and the ones that
+// resolve the proxy servers' own names.
+var defaultNameservers = []string{"https://1.1.1.1/dns-query", "https://dns.google/dns-query"}
+
 // mihomoConfigOf is the profile of ps.
 func mihomoConfigOf(p Profile, g Groups, r Routing, ps []proxy) map[string]any {
 	g = g.WithDefaults("")
@@ -349,7 +354,7 @@ func mihomoConfigOf(p Profile, g Groups, r Routing, ps []proxy) map[string]any {
 	dns := map[string]any{
 		"enable": true, "ipv6": false, "enhanced-mode": "fake-ip", "fake-ip-range": "198.18.0.1/16",
 		"default-nameserver": []string{"1.1.1.1", "8.8.8.8"},
-		"nameserver":         []string{"https://1.1.1.1/dns-query", "https://dns.google/dns-query"},
+		"nameserver":         slices.Clone(defaultNameservers),
 	}
 	// The panel and the nodes stay out of the tunnel whatever the admin's rules say.
 	rules := append(directRules(p.Direct), "GEOIP,LAN,DIRECT,no-resolve")
@@ -383,7 +388,7 @@ func mihomoConfigOf(p Profile, g Groups, r Routing, ps []proxy) map[string]any {
 		// a fixed name: "&" or "=" in a renamed group would break the "#group" suffix).
 		// Russian domains resolve with Yandex DNS directly and keep working without the VPN.
 		dns["nameserver"] = []string{"https://1.1.1.1/dns-query#" + AliasGroup, "https://8.8.8.8/dns-query#" + AliasGroup}
-		dns["proxy-server-nameserver"] = []string{"https://1.1.1.1/dns-query", "https://dns.google/dns-query"}
+		dns["proxy-server-nameserver"] = slices.Clone(defaultNameservers)
 		dns["nameserver-policy"] = map[string]any{"geosite:category-ru": []string{"77.88.8.8", "77.88.8.1"}}
 	}
 	p.Routes.DNS.apply(dns)

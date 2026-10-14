@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -39,8 +38,8 @@ func (h *handlers) registerMetrics() {
 	}, h.metrics)
 }
 
-// metricsTTL: scrapes closer together than this get the same text. A scrape reads every
-// user; at a 15 s interval on a big panel that is worth a few seconds of staleness.
+// metricsTTL: scrapes closer together than this get the same text: several Prometheus
+// servers scraping one panel make one set of queries.
 const metricsTTL = 5 * time.Second
 
 // metricsCache is the text of the last scrape and when it was made.
@@ -70,40 +69,31 @@ func (h *handlers) renderMetrics(ctx context.Context, now time.Time) ([]byte, er
 	var m promWriter
 	m.gauge("mikan_info", "The panel's version.", 1, "version", h.d.Version)
 
-	users, err := h.d.Store.Q.ListUsers(ctx)
+	// Counted by the database, as on the dashboard: a scrape does not load every user.
+	counts, err := domain.CountStates(ctx, h.d.Store.Q, now)
 	if err != nil {
 		return nil, err
-	}
-	grants, err := domain.LoadGrantsLeft(ctx, h.d.Store.Q, now)
-	if err != nil {
-		return nil, err
-	}
-	states := map[string]int{domain.StateActive: 0, domain.StateExpiring: 0, domain.StateLimited: 0, domain.StateExpired: 0, domain.StateDisabled: 0}
-	var up, down int64
-	for _, u := range users {
-		states[domain.State(u, grants.Main(u.ID), now)]++
-		up += u.TotalUp
-		down += u.TotalDown
 	}
 	m.help("mikan_users", "Users by state.", "gauge")
-	for _, s := range []string{domain.StateActive, domain.StateExpiring, domain.StateLimited, domain.StateExpired, domain.StateDisabled} {
-		m.sample("mikan_users", float64(states[s]), "state", s)
+	for _, s := range []struct {
+		state string
+		n     int64
+	}{{domain.StateActive, counts.Active}, {domain.StateExpiring, counts.Expiring}, {domain.StateLimited, counts.Limited},
+		{domain.StateExpired, counts.Expired}, {domain.StateDisabled, counts.Disabled}} {
+		m.sample("mikan_users", float64(s.n), "state", s.state)
+	}
+	traffic, err := h.d.Store.Q.SumUserTraffic(ctx)
+	if err != nil {
+		return nil, err
 	}
 	m.help("mikan_traffic_bytes_total", "Traffic of all users, all time. Drops when a user is deleted.", "counter")
-	m.sample("mikan_traffic_bytes_total", float64(up), "direction", "up")
-	m.sample("mikan_traffic_bytes_total", float64(down), "direction", "down")
+	m.sample("mikan_traffic_bytes_total", float64(traffic.Up), "direction", "up")
+	m.sample("mikan_traffic_bytes_total", float64(traffic.Down), "direction", "down")
 
 	if h.d.Online != nil {
-		slots, err := h.allUserSlots(ctx)
+		n, err := h.onlineUsers(ctx)
 		if err != nil {
 			return nil, err
-		}
-		online := h.d.Online()
-		n := 0
-		for _, names := range slots {
-			if slices.ContainsFunc(names, func(s string) bool { _, ok := online[s]; return ok }) {
-				n++
-			}
 		}
 		m.gauge("mikan_users_online", "Users with a connection now.", float64(n))
 	}

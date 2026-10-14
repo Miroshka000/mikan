@@ -12,6 +12,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/tgate"
 )
 
 // A plan sold for several terms in the bot: the list says "from", the plan shows a button
@@ -20,7 +21,7 @@ import (
 func TestShopTerms(t *testing.T) {
 	var sale db.Tariff
 	var svc *billing.Service
-	e := setup(t, func(e *env, d *Deps) {
+	e := setup(t, func(e *env, d *wiring) {
 		ts, _ := e.st.Q.ListTariffs(e.ctx)
 		var err error
 		sale, err = e.st.Q.UpdateTariff(e.ctx, db.UpdateTariffParams{Name: "Std", TrafficLimit: ts[1].TrafficLimit, DurationDays: 30, DeviceLimit: ts[1].DeviceLimit,
@@ -33,10 +34,11 @@ func TestShopTerms(t *testing.T) {
 			t.Fatal(err)
 		}
 		svc = billing.New(billing.Deps{Store: e.st, Settings: e.set, Users: domain.NewUsers(e.st, domain.NewPool(e.st, e.clock), noChanges{}, e.clock),
-			Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: e.clock, MaxLinks: MaxLinks})
+			Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: e.clock, MaxLinks: tgate.MaxLinks})
 		d.Billing = svc
 	})
-	svc.SetTelegram(e.bot)
+	svc.SetTelegram(e.gate)
+	svc.SetNotifier(e.notifications())
 	if err := settings.Set(e.ctx, e.set, billing.KeyConfig, billing.Config{Enabled: true, Stars: true, AllowNew: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +89,7 @@ func TestShopTerms(t *testing.T) {
 func TestShopOnlyALaterTerm(t *testing.T) {
 	var sale db.Tariff
 	var svc *billing.Service
-	e := setup(t, func(e *env, d *Deps) {
+	e := setup(t, func(e *env, d *wiring) {
 		ts, _ := e.st.Q.ListTariffs(e.ctx)
 		var err error
 		sale, err = e.st.Q.UpdateTariff(e.ctx, db.UpdateTariffParams{Name: "Std", TrafficLimit: ts[1].TrafficLimit, DurationDays: 30, DeviceLimit: ts[1].DeviceLimit,
@@ -100,10 +102,11 @@ func TestShopOnlyALaterTerm(t *testing.T) {
 			t.Fatal(err)
 		}
 		svc = billing.New(billing.Deps{Store: e.st, Settings: e.set, Users: domain.NewUsers(e.st, domain.NewPool(e.st, e.clock), noChanges{}, e.clock),
-			Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: e.clock, MaxLinks: MaxLinks})
+			Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: e.clock, MaxLinks: tgate.MaxLinks})
 		d.Billing = svc
 	})
-	svc.SetTelegram(e.bot)
+	svc.SetTelegram(e.gate)
+	svc.SetNotifier(e.notifications())
 	if err := settings.Set(e.ctx, e.set, billing.KeyConfig, billing.Config{Enabled: true, Stars: true, AllowNew: true}); err != nil {
 		t.Fatal(err)
 	}

@@ -38,7 +38,7 @@ func TestExcludedPoolOnTheNode(t *testing.T) {
 	if len(ups) != 1 || !ups[0].Excluded || ups[0].TrafficLimit.Valid {
 		t.Fatalf("closed by the tariff, without a limit: %+v", ups)
 	}
-	if shut, _ := domain.ExhaustedPools(ctx, q, cheap.ID, *now); !shut[pool.ID] {
+	if shut, _ := domain.ExhaustedPools(ctx, q, cheap.ID, mustLeft(t, ctx, q, cheap.ID, *now)); !shut[pool.ID] {
 		t.Fatal("a closed pool does not serve: the subscription leaves it out")
 	}
 	if domain.PackageFits(cheap, ups, db.TrafficPackage{PoolID: sql.NullInt64{Int64: pool.ID, Valid: true}}) {

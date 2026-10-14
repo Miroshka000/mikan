@@ -11,9 +11,10 @@ import (
 	"mikan/internal/panel/store/db"
 )
 
-// withReferral turns the programme on with these rules and hands the bot the service.
-func withReferral(rules ...referral.Rule) func(*env, *Deps) {
-	return func(e *env, d *Deps) {
+// withReferral turns the programme on with these rules and hands the panel's side the
+// service.
+func withReferral(rules ...referral.Rule) func(*env, *wiring) {
+	return func(e *env, d *wiring) {
 		cfg := referral.Program{Enabled: true, StarsRate: 100, Spend: true, Notify: true, Rules: rules}
 		if err := cfg.Validate(); err != nil {
 			e.t.Fatal(err)
@@ -21,7 +22,8 @@ func withReferral(rules ...referral.Rule) func(*env, *Deps) {
 		if err := settings.Set(e.ctx, e.set, referral.KeyConfig, cfg); err != nil {
 			e.t.Fatal(err)
 		}
-		d.Referral = referral.New(e.st, e.set, slog.New(slog.NewTextHandler(io.Discard, nil)), e.clock)
+		d.ReferralProgram = referral.New(e.st, e.set, slog.New(slog.NewTextHandler(io.Discard, nil)), e.clock)
+		e.refs = d.ReferralProgram
 	}
 }
 
@@ -86,7 +88,7 @@ func TestReferralLinkBindsOnce(t *testing.T) {
 	}
 
 	// A second inviter's link changes nothing.
-	otherCode, err := e.bot.d.Referral.Code(e.ctx, second)
+	otherCode, err := e.refs.Code(e.ctx, second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +137,7 @@ func TestReferralOff(t *testing.T) {
 	if _, ok := buttons(sent)["🤝 Пригласить друзей"]; ok {
 		t.Fatalf("the button is there with the programme off: %v", buttons(sent))
 	}
-	code, err := e.bot.d.Referral.Code(e.ctx, 555)
+	code, err := e.refs.Code(e.ctx, 555)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +154,7 @@ func TestReferralOff(t *testing.T) {
 func TestReferralRewardIsTold(t *testing.T) {
 	e := setup(t, withReferral(referral.Rule{ID: "p", Kind: referral.KindPercent, Value: 10, Enabled: true}))
 	n := e.tg.count()
-	e.bot.Reward(e.ctx, referral.Reward{Referrer: 777, Referee: 888, Kind: referral.KindPercent, Rub: 1990, EveryN: 1})
+	e.panel.Reward(e.ctx, referral.Reward{Referrer: 777, Referee: 888, Kind: referral.KindPercent, Rub: 1990, EveryN: 1})
 	calls := e.tg.wait(t, n, "sendMessage")
 	sent, _ := find(calls, "sendMessage")
 	if chat, _ := sent.body["chat_id"].(float64); int64(chat) != 777 {
@@ -167,7 +169,7 @@ func TestReferralRewardIsTold(t *testing.T) {
 // are switched off left out.
 func TestReferralScreenSaysTheRules(t *testing.T) {
 	var tariff string
-	setupWith := func(e *env, d *Deps) {
+	setupWith := func(e *env, d *wiring) {
 		ts, err := e.st.Q.ListTariffs(e.ctx)
 		if err != nil {
 			e.t.Fatal(err)

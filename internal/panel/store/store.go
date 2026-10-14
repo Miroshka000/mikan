@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"math/rand/v2"
 	"os"
-	"path/filepath"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -23,11 +22,6 @@ import (
 
 	"mikan/internal/panel/store/db"
 )
-
-// Legacy migrations are exclusively for normalizing a COPY during SQLite import.
-//
-//go:embed migrations/*.sql
-var migrations embed.FS
 
 //go:embed postgres/*.sql
 var postgresMigrations embed.FS
@@ -84,8 +78,8 @@ func Open(ctx context.Context, dataDir string) (*Store, error) {
 	return OpenPostgres(ctx, dataDir, dsn)
 }
 
-// OpenPostgres never falls back to SQLite. A legacy installation must first complete
-// database migrate while all its writers are stopped; an empty PG is not a new install.
+// OpenPostgres refuses data still in SQLite (checkLegacy): such a server goes through
+// 0.5.0.4 first, which moves them.
 func OpenPostgres(ctx context.Context, dataDir, dsn string) (*Store, error) {
 	if err := prepareSchema(ctx, dataDir, dsn); err != nil {
 		return nil, err
@@ -94,7 +88,7 @@ func OpenPostgres(ctx context.Context, dataDir, dsn string) (*Store, error) {
 }
 
 // OpenMigrated brings dsn's schema to this binary's version and opens it, without the
-// legacy SQLite checks of OpenPostgres: for test fixtures (storetest), each in a schema
+// SQLite check of OpenPostgres: for test fixtures (storetest), each in a schema
 // of its own. cleanup runs after the store closes.
 func OpenMigrated(ctx context.Context, dsn string, cleanup func() error) (*Store, error) {
 	conn, err := connectPostgres(ctx, dsn, maintenanceSession)
@@ -115,27 +109,13 @@ func OpenMigrated(ctx context.Context, dsn string, cleanup func() error) (*Store
 // prepareSchema checks and migrates on maintenance connections: a migration may run
 // longer than a runtime statement may.
 func prepareSchema(ctx context.Context, dataDir, dsn string) error {
-	conn, err := openAtImportBaseline(ctx, dsn)
+	conn, err := openMaintenance(ctx, dsn)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	_, legacyErr := os.Stat(filepath.Join(dataDir, "mikan.db"))
-	_, markerErr := os.Stat(filepath.Join(dataDir, MigrationMarker))
-	if legacyErr == nil || markerErr == nil {
-		var report string
-		if err := conn.QueryRowContext(ctx, "SELECT report FROM mikan_sqlite_import WHERE id = 1").Scan(&report); err != nil {
-			return errors.New("SQLite data have not been imported: stop the panel and run mikan database migrate")
-		}
-		// A crash after COMMIT but before writing the marker is recovered from PostgreSQL.
-		if err := writeMigrationMarker(dataDir, []byte(report)); err != nil {
-			return err
-		}
-	} else if !errors.Is(legacyErr, fs.ErrNotExist) {
-		return fmt.Errorf("legacy database: %w", legacyErr)
-	}
-	if markerErr != nil && !errors.Is(markerErr, fs.ErrNotExist) {
-		return markerErr
+	if err := checkLegacy(ctx, conn, dataDir); err != nil {
+		return err
 	}
 	if err := migrateUp(ctx, conn, postgresFS); err != nil {
 		return err
@@ -376,4 +356,10 @@ func (s *Store) txOnce(ctx context.Context, level sql.IsolationLevel, fn func(q 
 func IsUnique(err error) bool {
 	var pe *pgconn.PgError
 	return errors.As(err, &pe) && pe.Code == "23505"
+}
+
+// IsForeignKey: the row points at one that is not there (any more).
+func IsForeignKey(err error) bool {
+	var pe *pgconn.PgError
+	return errors.As(err, &pe) && pe.Code == "23503"
 }

@@ -7,13 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
-	"mikan/internal/nodeapi"
 	"mikan/internal/panel/app"
 	"mikan/internal/panel/audit"
 	"mikan/internal/panel/config"
@@ -22,6 +19,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/targets"
 	"mikan/internal/proto"
 	"mikan/internal/scan"
 )
@@ -93,7 +91,7 @@ func targetsCmd(ctx context.Context, st *store.Store, set *settings.Settings, cf
 		if err != nil {
 			return fmt.Errorf("no node %d", *node)
 		}
-		r := checkTarget(ctx, cfg, n, strings.TrimSpace(*dest), strings.TrimSpace(*sni), panelPort(ctx, set))
+		r := checkTarget(ctx, set, cfg, n, strings.TrimSpace(*dest), strings.TrimSpace(*sni))
 		if *asJSON {
 			return json.NewEncoder(stdout).Encode(r)
 		}
@@ -136,7 +134,7 @@ func targetsCmd(ctx context.Context, st *store.Store, set *settings.Settings, cf
 			}
 		}
 		if !*force {
-			r := checkTarget(ctx, cfg, n, *dest, *sni, panelPort(ctx, set))
+			r := checkTarget(ctx, set, cfg, n, *dest, *sni)
 			if !r.OK {
 				return fmt.Errorf("%s does not suit REALITY: %s; --force applies it anyway", *dest, targetProblem(r))
 			}
@@ -173,91 +171,47 @@ func targetsCmd(ctx context.Context, st *store.Store, set *settings.Settings, cf
 	}
 }
 
+// scanNeighbors is the panel's own scan of a /24, when the node cannot do it. The tests put
+// a fake here: the real one opens ~250 connections to public addresses.
+var scanNeighbors = scan.Neighbors
+
+// targetDeps is what the shared checks (targets) need: the node n does them from its own
+// network when it can be reached, otherwise the panel does.
+func targetDeps(set *settings.Settings, cfg config.Config, n db.Node) targets.Deps {
+	d := targets.Deps{Settings: set, Neighbors: scanNeighbors}
+	if c, err := app.NodeClient(cfg, n); err == nil {
+		d.CheckTarget, d.ScanTargets = c.CheckTarget, c.ScanTargets
+	}
+	return d
+}
+
 func scanTargets(ctx context.Context, st *store.Store, set *settings.Settings, cfg config.Config, n db.Node) (TargetScan, error) {
 	res := TargetScan{Node: n.ID, Results: []scan.Result{}}
 	var err error
 	if res.Current, err = realityTargets(ctx, st, n.ID); err != nil {
 		return res, err
 	}
-	host, domainName := n.PublicHost, ""
-	local := n.Address == ""
-	if local {
-		if host, err = set.String(ctx, settings.KeyPublicHost); err != nil {
-			return res, err
-		}
-		if domainName, err = set.String(ctx, settings.KeyDomain); err != nil {
-			return res, err
-		}
-		if host == "" {
-			host = domainName
-		}
-	}
-	if res.IP, err = ipv4(ctx, host); err != nil {
+	// The panel's own domain on its HTTPS is offered for the panel's own node with a domain.
+	found, err := targetDeps(set, cfg, n).Scan(ctx, targets.ScanRequest{Node: n, SelfSteal: true})
+	if err != nil {
 		return res, err
 	}
-	if local && domainName != "" {
-		port, _, err := settings.Get[int](ctx, set, settings.KeyPanelPort)
-		if err != nil {
-			return res, err
-		}
-		r := checkTarget(ctx, cfg, n, net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), domainName, port)
-		res.SelfSteal = &r
-	}
-	if c, err := app.NodeClient(cfg, n); err == nil {
-		if r, err := c.ScanTargets(ctx, nodeapi.TargetScanRequest{IP: res.IP, Limit: 12}); err == nil {
-			res.Scanned, res.FromNode = r.Scanned, true
-			if r.Results != nil {
-				res.Results = r.Results
-			}
-			return res, nil
-		}
-	}
-	// A node older than 0.3 or out of reach: the panel scans from its own network.
-	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	found, scanned, err := scan.Neighbors(sctx, res.IP, 12, scan.Options{Any: true})
-	if err != nil && sctx.Err() == nil {
-		return res, err
-	}
-	res.Scanned = scanned
-	if found != nil {
-		res.Results = found
-	}
+	res.IP, res.Scanned, res.FromNode, res.SelfSteal, res.Results = found.IP, found.Scanned, found.FromNode, found.SelfSteal, found.Results
 	return res, nil
 }
 
 // checkTarget tests a site from the node that would dial it, or from here when the node
-// cannot tell.
-func checkTarget(ctx context.Context, cfg config.Config, n db.Node, dest, sni string, selfPort int) scan.Result {
-	if c, err := app.NodeClient(cfg, n); err == nil {
-		if r, err := c.CheckTarget(ctx, nodeapi.TargetCheckRequest{Dest: dest, SNI: sni}); err == nil {
-			return r
-		}
-	}
-	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	return scan.Check(cctx, dest, sni, scan.Options{LoopbackPort: selfPort})
-}
-
-// panelPort is the panel's own port: the one loopback address a target check may use.
-func panelPort(ctx context.Context, set *settings.Settings) int {
-	p, _, _ := settings.Get[int](ctx, set, settings.KeyPanelPort)
-	return p
-}
-
-// ipv4 is the address whose /24 is scanned.
-func ipv4(ctx context.Context, host string) (string, error) {
-	if host == "" {
-		return "", errors.New("the server's address is not set: run `mikan admin bootstrap`")
-	}
-	ip, err := scan.ResolveIPv4(ctx, host)
+// cannot tell. A destination the panel must not dial is a result like any other, with the
+// check's own error code.
+func checkTarget(ctx context.Context, set *settings.Settings, cfg config.Config, n db.Node, dest, sni string) scan.Result {
+	r, err := targetDeps(set, cfg, n).Check(ctx, dest, sni)
 	switch {
-	case errors.Is(err, scan.ErrNotIPv4):
-		return "", fmt.Errorf("%s is not an IPv4 address", host)
-	case err != nil:
-		return "", fmt.Errorf("%s has no IPv4 address", host)
+	case errors.Is(err, targets.ErrBadDest):
+		return scan.Result{Dest: dest, SNI: sni, Error: "bad_dest"}
+	case errors.Is(err, targets.ErrPrivateDest):
+		return scan.Result{Dest: dest, SNI: sni, Error: "private"}
 	}
-	return ip, nil
+	return r
 }
 
 // realityTargets lists the node's inbounds that have a REALITY camouflage.

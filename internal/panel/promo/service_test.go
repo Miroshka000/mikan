@@ -4,7 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"math"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -453,3 +459,68 @@ func TestRedeemBonusRejectsDisabledUser(t *testing.T) {
 }
 
 const domainGiBForTest = int64(1) << 30
+
+// Every sentinel of the package must be a refusal: subs answers a refused code with the generic
+// "promo_unavailable", and an Err* left out of IsRefusal would be answered as the panel's fault.
+// The list below is checked against the source, so a new Err* that is not added here fails.
+func TestIsRefusalCoversEveryError(t *testing.T) {
+	all := map[string]error{
+		"ErrNotFound": ErrNotFound, "ErrInactive": ErrInactive, "ErrExpired": ErrExpired, "ErrLimit": ErrLimit,
+		"ErrUserLimit": ErrUserLimit, "ErrTariff": ErrTariff, "ErrMinimum": ErrMinimum, "ErrNewUser": ErrNewUser,
+		"ErrFirstPurchase": ErrFirstPurchase, "ErrCurrency": ErrCurrency, "ErrAlreadyApplied": ErrAlreadyApplied,
+		"ErrSubscription": ErrSubscription, "ErrNoExpiry": ErrNoExpiry, "ErrNotDiscount": ErrNotDiscount,
+		"ErrUnavailable": ErrUnavailable, "ErrInvalidValue": ErrInvalidValue, "ErrReservationExpired": ErrReservationExpired,
+		"ErrRefundUnsupported": ErrRefundUnsupported, "ErrNotBonus": ErrNotBonus,
+	}
+	fset := token.NewFileSet()
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := 0
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, entry.Name(), nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range f.Decls {
+			gd, ok := d.(*ast.GenDecl)
+			if !ok || gd.Tok != token.VAR {
+				continue
+			}
+			for _, spec := range gd.Specs {
+				for _, name := range spec.(*ast.ValueSpec).Names {
+					if !strings.HasPrefix(name.Name, "Err") || !name.IsExported() {
+						continue
+					}
+					declared++
+					if _, ok := all[name.Name]; !ok {
+						t.Errorf("%s is declared in the package but not listed in this test", name.Name)
+					}
+				}
+			}
+		}
+	}
+	if declared != len(all) {
+		t.Errorf("the package declares %d Err* variables, the test lists %d", declared, len(all))
+	}
+	for name, err := range all {
+		if !IsRefusal(err) {
+			t.Errorf("%s is not a refusal", name)
+		}
+		if !IsRefusal(fmt.Errorf("redeem: %w", err)) {
+			t.Errorf("%s is not a refusal once wrapped", name)
+		}
+		if !strings.HasPrefix(err.Error(), "promo_") {
+			t.Errorf("%s says %q, want the promo_ code", name, err.Error())
+		}
+	}
+	for _, err := range []error{nil, errors.New("promo_unavailable"), sql.ErrNoRows, fmt.Errorf("database is down: %w", errors.New("x"))} {
+		if IsRefusal(err) {
+			t.Errorf("%v is not one of the package's refusals", err)
+		}
+	}
+}

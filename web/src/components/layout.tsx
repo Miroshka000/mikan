@@ -9,7 +9,7 @@ import { Button } from "./ui";
 import type { LucideIcon } from "lucide-react";
 
 /** A section of a page in the side list; `parts` are its own sub-sections, listed under it while it is open. */
-export type NavSection<T extends string> = { id: T; label: string; icon?: LucideIcon; badge?: ReactNode; parts?: { id: string; label: string }[] };
+type NavSection<T extends string> = { id: T; label: string; icon?: LucideIcon; badge?: ReactNode; parts?: { id: string; label: string }[] };
 
 /**
  * A page with many sections: a list beside the content on wide screens (it stays in place
@@ -139,18 +139,28 @@ function useMasonry(ref: RefObject<HTMLElement | null>, on: boolean) {
       return;
     }
     el.classList.add("masonry");
-    const place = (c: HTMLElement) => {
-      c.style.gridRowEnd = `span ${Math.max(1, Math.ceil((c.getBoundingClientRect().height + GAP) / ROW))}`;
+    // Heights are all read first and the rows written after: a write between two reads
+    // would make the browser lay the page out again for every card.
+    const place = (cards: HTMLElement[], heights: number[]) => {
+      cards.forEach((c, i) => {
+        c.style.gridRowEnd = `span ${Math.max(1, Math.ceil((heights[i]! + GAP) / ROW))}`;
+      });
     };
     const sizes = new ResizeObserver((entries) => {
-      for (const e of entries) place(e.target as HTMLElement);
+      // The observer has the border box measured already, so it costs no layout.
+      place(
+        entries.map((e) => e.target as HTMLElement),
+        entries.map((e) => e.borderBoxSize?.[0]?.blockSize ?? e.target.getBoundingClientRect().height),
+      );
     });
     const watch = () => {
       sizes.disconnect();
-      for (const c of items()) {
-        place(c);
-        sizes.observe(c);
-      }
+      const cards = items();
+      place(
+        cards,
+        cards.map((c) => c.getBoundingClientRect().height),
+      );
+      for (const c of cards) sizes.observe(c);
     };
     watch();
     // Cards come and go with the section and with loading.
@@ -166,7 +176,7 @@ function useMasonry(ref: RefObject<HTMLElement | null>, on: boolean) {
 }
 
 /** The width of an element, followed as it changes; 0 before the first measure. */
-export function useWidth(ref: RefObject<HTMLElement | null>): number {
+function useWidth(ref: RefObject<HTMLElement | null>): number {
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;

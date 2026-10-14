@@ -25,13 +25,13 @@ unexpected() {
 case "$1" in
   pull)
     [ $# = 2 ] || unexpected "$@"
-    case "$2" in new-image | postgres:18-alpine@sha256:*) exit 0 ;; *) unexpected "$@" ;; esac ;;
+    case "$2" in new-image | next-image | postgres:18-alpine@sha256:*) exit 0 ;; *) unexpected "$@" ;; esac ;;
   run)
     # setup::image_version: the sandboxed `IMAGE version`, answered per image
     last='' image=''
     for a in "$@"; do image=$last; last=$a; done
     [ "$last" = version ] || unexpected "$@"
-    case "$image" in new-image) echo 0.5.0.1 ;; *) unexpected "$@" ;; esac
+    case "$image" in new-image) echo 0.5.0.1 ;; next-image) echo 0.5.1.0 ;; *) unexpected "$@" ;; esac
     exit 0 ;;
   image)
     # the database's image is never there yet: the update pulls it
@@ -111,6 +111,14 @@ pg_fixture() {
 # The line of the first trace entry that contains $1.
 at() { grep -n -- "$1" "$tmp/trace" | head -1 | cut -d: -f1; }
 last() { grep -n -- "$1" "$tmp/trace" | tail -1 | cut -d: -f1; }
+
+# 0.5.1.0 and later no longer move SQLite: named by hand, it is refused before anything stops.
+fixture
+if "$bin" update next-image >"$tmp/output" 2>&1; then echo 'a move by a release that cannot make it must fail' >&2; exit 1; fi
+grep -q 'update to mikan 0.5.0.4 first' "$tmp/output"
+grep -q 'MIKAN_IMAGE=old-image' /opt/mikan/.env
+grep -q 'original users' /opt/mikan/data/panel/mikan.db
+if grep -q 'stop\|admin backup' "$tmp/trace"; then echo 'unexpected: the refused move changed something' >&2; exit 1; fi
 
 fixture
 touch "$tmp/pg-fail"
@@ -271,4 +279,4 @@ grep -q 'MIKAN_POSTGRES_PASSWORD=kept' /opt/mikan/.env
 if grep -q 'database restore\|postgres' "$tmp/trace"; then echo 'unexpected: PostgreSQL on an SQLite restore' >&2; exit 1; fi
 [ -e "$tmp/healthy" ]
 strict
-echo 'host updater: strict docker, provisioning rollback, kept database password, PostgreSQL image pulled first, final dump after the stop, PostgreSQL rollback on a failed migration and on an unchanged schema, uncertain commit retry, preserved post-import writes and SQLite archive, startup failure and writer-stop order, restore without a dump left behind, restore without a database snapshot, database-only restore, SQLite restore passed'
+echo 'host updater: strict docker, provisioning rollback, kept database password, PostgreSQL image pulled first, final dump after the stop, PostgreSQL rollback on a failed migration and on an unchanged schema, uncertain commit retry, preserved post-import writes and SQLite archive, startup failure and writer-stop order, restore without a dump left behind, restore without a database snapshot, database-only restore, SQLite restore, no SQLite move by 0.5.1.0 passed'

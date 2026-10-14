@@ -7,20 +7,13 @@ import (
 	"io/fs"
 )
 
-// SQLite's final normalized schema matches PostgreSQL baseline 1. A user may skip
-// the first PostgreSQL release: importing must precede newer PostgreSQL-only schema
-// changes, otherwise required new columns/tables would make that import impossible.
-const sqliteImportBaseline int64 = 1
-
-// MigrateResult is what Migrate did: the schema versions before and after it, and the
-// SQLite import (nil without a legacy database).
+// MigrateResult is what Migrate did: the schema versions before and after it.
 type MigrateResult struct {
 	Before, After int64
-	Import        *ImportReport
 }
 
-// Migrate imports the legacy SQLite database, if any, and applies the PostgreSQL
-// migrations. It refuses to run beside a running panel.
+// Migrate applies the PostgreSQL migrations; it refuses to run beside a running panel, and
+// on data still in SQLite (checkLegacy).
 func Migrate(ctx context.Context, dsn, dataDir string) (MigrateResult, error) {
 	var res MigrateResult
 	conn, err := connectPostgres(ctx, dsn, maintenanceSession)
@@ -38,18 +31,15 @@ func Migrate(ctx context.Context, dsn, dataDir string) (MigrateResult, error) {
 		return res, err
 	}
 	defer unlock()
-	if err := prepareImport(ctx, conn); err != nil {
+	if err := recoverRestore(ctx, conn); err != nil {
+		return res, err
+	}
+	if err := checkLegacy(ctx, conn, dataDir); err != nil {
 		return res, err
 	}
 	if res.Before, err = schemaVersion(ctx, conn); err != nil {
 		return res, err
 	}
-	if res.Import, err = ImportSQLite(ctx, conn, dataDir); err != nil {
-		return res, err
-	}
-	// Migrations come only after the import commits and verifies. On a retry, ImportSQLite
-	// reads its committed proof instead of copying stale SQLite over new PostgreSQL data;
-	// pending migrations can then continue.
 	if err := migrateUp(ctx, conn, postgresFS); err != nil {
 		return res, err
 	}
@@ -57,39 +47,18 @@ func Migrate(ctx context.Context, dsn, dataDir string) (MigrateResult, error) {
 	return res, err
 }
 
-// openAtImportBaseline opens maintenance connections to a schema that has at least the
-// import baseline, after bringing back what an interrupted restore set aside.
-func openAtImportBaseline(ctx context.Context, dsn string) (*sql.DB, error) {
+// openMaintenance opens maintenance connections, after bringing back what an interrupted
+// restore set aside.
+func openMaintenance(ctx context.Context, dsn string) (*sql.DB, error) {
 	conn, err := connectPostgres(ctx, dsn, maintenanceSession)
 	if err != nil {
 		return nil, err
 	}
-	if err := prepareImport(ctx, conn); err != nil {
+	if err := recoverRestore(ctx, conn); err != nil {
 		conn.Close()
 		return nil, err
 	}
 	return conn, nil
-}
-
-func prepareImport(ctx context.Context, conn *sql.DB) error {
-	if err := recoverRestore(ctx, conn); err != nil {
-		return err
-	}
-	return migrateToImportBaseline(ctx, conn, postgresFS)
-}
-
-// migrateToImportBaseline creates only the import baseline on an empty destination.
-// Existing PostgreSQL installations retain their current schema: this never rolls
-// schema versions backwards, including on a repeated or interrupted migration.
-func migrateToImportBaseline(ctx context.Context, conn *sql.DB, fsys fs.FS) error {
-	p, err := postgresProvider(ctx, conn, fsys)
-	if err != nil {
-		return err
-	}
-	if _, err := p.UpTo(ctx, sqliteImportBaseline); err != nil {
-		return fmt.Errorf("PostgreSQL import baseline: %w", err)
-	}
-	return nil
 }
 
 // migrateUp applies every pending PostgreSQL migration.

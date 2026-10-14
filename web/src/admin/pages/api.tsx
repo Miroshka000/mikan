@@ -4,7 +4,7 @@ import { ChevronLeft, Copy, KeyRound, Plus, Trash2 } from "lucide-react";
 import { lazy, Suspense, useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../api/client";
 import { meQuery, qk } from "../../api/hooks";
-import { Confirm, Drawer } from "../../components/overlay";
+import { Confirm, Drawer, DrawerFooter } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
 import { Button, EmptyState, Field, PageHeader, Segmented, Skeleton } from "../../components/ui";
@@ -161,14 +161,9 @@ function NewKeyDrawer({ open, onOpenChange, onMade }: { open: boolean; onOpenCha
       }}
       title={t("apiPage.newKey")}
       footer={
-        <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="new-key" loading={create.isPending} disabled={!name.trim() || !password || (totp && code.length !== 6)}>
-            {t("apiPage.create")}
-          </Button>
-        </>
+        <DrawerFooter form="new-key" onCancel={() => onOpenChange(false)} loading={create.isPending} disabled={!name.trim() || !password || (totp && code.length !== 6)}>
+          {t("apiPage.create")}
+        </DrawerFooter>
       }
     >
       <form id="new-key" onSubmit={submit} className="pt-5" noValidate>

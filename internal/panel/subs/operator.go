@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"mikan/internal/panel/domain"
 	"mikan/internal/panel/store/db"
 )
 
@@ -56,7 +57,8 @@ func OperatorHeaders(h http.Header, u db.User, cfg Config, page, botURL string, 
 	name := cut(cfg.Brand, brandNameMax)
 	user := cut(u.Name, userNameMax)
 	limit := int64(0)
-	if cfg.Binding && u.DeviceLimit.Valid {
+	// Branding shows the limit as places taken; the online mode has no places.
+	if cfg.Binding && u.DeviceLimit.Valid && domain.BindsDevices(u.DeviceMode) {
 		limit = u.DeviceLimit.Int64
 	}
 	// ClashFest decodes "base64:" values; SlothClash takes UTF-8 as sent.

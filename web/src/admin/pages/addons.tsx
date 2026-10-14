@@ -1,195 +1,137 @@
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { ArrowLeft, Bot, ChevronRight, ListFilter, Plus, ShieldBan, Wallet, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { api, unwrap } from "../../api/client";
-import { qk, useFilters, useTorrent } from "../../api/hooks";
-import { QueryBoundary } from "../../components/query";
-import { PageHeader, Pill, Skeleton } from "../../components/ui";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { LayoutGrid, Link2, Puzzle, Wrench } from "lucide-react";
+import { useState } from "react";
+import { useAddons, useMarketplace } from "../../api/hooks";
+import { Tabs } from "../../components/tabs";
+import { Button, PageHeader, Spinner } from "../../components/ui";
 import { t } from "../../i18n";
-import { num } from "../../lib/format";
-import { addonName, useAddons } from "./payment-addons";
-import { TorrentCard, TorrentHitsCard } from "./settings/torrent";
+import { ADDON_TABS, type AddonsSearch } from "../search";
+import { CatalogTab } from "./addons-catalog";
+import { InstalledTab, type AddonActions } from "./addons-installed";
+import { ApproveDialog, MarketDetails, OwnDrawer } from "./market-dialogs";
+import { marketName, marketReady, serverQueue, type Market, type MarketEntry, type MarketInstalled } from "./market-common";
+import { PaymentDrawer, addonName } from "./payment-addons";
+import { SourcesDrawer } from "./sources-drawer";
+
+type Addons = ReturnType<typeof useAddons>["data"];
+type Tab = (typeof ADDON_TABS)[number];
 
 /**
- * The addons: the tools built into the panel (the Telegram bot, the torrent blocker) and
- * the marketplace's payment methods, each with its state and the way to its settings. The
- * main menu keeps the everyday sections; what is switched on once lives here.
+ * The addons: what is installed (the bot, the payment methods, pages and other addons of the
+ * marketplace, the tools built into the panel), each in one row with its state and its
+ * actions; and the catalog to install from, the signed one and the sources the admin added.
+ * The dialogs of both tabs live here.
  */
 export function AddonsPage() {
+  const search = useSearch({ from: "/_app/addons" });
+  const navigate = useNavigate({ from: "/addons" });
+  const tab: Tab = search.tab ?? "installed";
+  const market = useMarketplace();
+  const pay = useAddons();
+  const m = market.data;
+  const p = pay.data;
+  const ready = marketReady(m);
+  const [approve, setApprove] = useState<MarketEntry | null>(null);
+  const [details, setDetails] = useState<MarketInstalled | null>(null);
+  const [payment, setPayment] = useState<string | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  // The addon a new build is for stays through the drawer's closing animation.
+  const [ownOpen, setOwnOpen] = useState(false);
+  const [ownFor, setOwnFor] = useState<MarketInstalled | null>(null);
+  const go = (next: AddonsSearch) => void navigate({ search: next, replace: true });
+  const act: AddonActions = {
+    approve: setApprove,
+    details: setDetails,
+    payment: setPayment,
+    own: (a) => {
+      setOwnFor(a);
+      setOwnOpen(true);
+    },
+    catalog: (kind) => go({ tab: "catalog", kind }),
+  };
   return (
     <>
-      <PageHeader title={t("nav.addons")} sub={t("addons.subtitle")} />
-      <h2 className="section-title">{t("addons.tools")}</h2>
-      <div className="addon-grid">
-        <TelegramTile />
-        <TorrentTile />
-        <FiltersTile />
-      </div>
-      <h2 className="section-title mt-6">{t("addons.payments")}</h2>
-      <PaymentTiles />
+      <PageHeader
+        title={t("nav.addons")}
+        sub={t("addons.subtitle")}
+        actions={
+          <>
+            <Button onClick={() => setSourcesOpen(true)}>
+              <Link2 size={16} aria-hidden /> {t("sources.open")}
+            </Button>
+            <Button onClick={() => act.own(null)} disabled={!ready} title={!ready && m ? t("addons.ownUnavailable") : undefined}>
+              <Wrench size={16} aria-hidden /> {t("market.own")}
+            </Button>
+          </>
+        }
+      />
+      <ServerBanners m={m} p={p} />
+      <Tabs
+        id="addons"
+        label={t("addons.sections")}
+        tabs={[
+          { id: "installed", label: t("addons.tabs.installed"), icon: Puzzle },
+          { id: "catalog", label: t("addons.tabs.catalog"), icon: LayoutGrid },
+        ]}
+        value={tab}
+        onChange={(next) => go(next === "catalog" ? { tab: next, q: search.q, kind: search.kind } : {})}
+      >
+        {tab === "installed" ? (
+          <InstalledTab market={market} pay={pay} act={act} />
+        ) : (
+          <CatalogTab market={market} pay={pay} act={act} q={search.q ?? ""} kind={search.kind} onSearch={(next) => go({ tab: "catalog", q: search.q, kind: search.kind, ...next })} />
+        )}
+      </Tabs>
+      <ApproveDialog entry={approve} granted={approve ? (m?.installed.find((a) => a.id === approve.id)?.granted ?? []) : []} onClose={() => setApprove(null)} />
+      <MarketDetails a={details} name={details ? marketName(details.id, m) : ""} onClose={() => setDetails(null)} />
+      <SourcesDrawer open={sourcesOpen} onOpenChange={setSourcesOpen} />
+      <OwnDrawer open={ownOpen && ready} onOpenChange={setOwnOpen} update={ownFor} />
+      <PaymentDrawer a={(payment && p?.installed.find((a) => a.id === payment)) || null} onClose={() => setPayment(null)} />
     </>
   );
 }
 
-/** One addon: its icon and state on top, what it does, and the way to its settings at the foot. */
-function Tile({
-  to,
-  search,
-  icon: Icon,
-  title,
-  sub,
-  state,
-  facts,
-  action = t("addons.open"),
-  add = false,
-  i,
-}: {
-  to: string;
-  search?: Record<string, string>;
-  icon: LucideIcon;
-  title: string;
-  sub: string;
-  state: ReactNode;
-  /** What it is set to now, label and value; undefined while it loads. */
-  facts?: [string, string][];
-  action?: string;
-  add?: boolean;
-  i: number;
-}) {
+/** The name of an addon of either kind, for the server's requests that name it by id. */
+function anyName(id: string, m: Market | undefined, p: Addons): string {
+  return m && (m.installed.some((a) => a.id === id) || m.catalog.some((e) => e.id === id)) ? marketName(id, m) : addonName(id, p);
+}
+
+/**
+ * Why nothing can be installed, what the server is doing now, and how its last request went.
+ * Both lists read one queue of the server, so each request shows once.
+ */
+function ServerBanners({ m, p }: { m: Market | undefined; p: Addons }) {
+  const queue = serverQueue(m, p);
+  const pending = queue[0];
+  const queued = Math.max(queue.length - 1, 0);
+  const lastOf = m?.last ?? p?.last;
+  const last = lastOf && !pending && lastOf.state === "failed" ? lastOf : null;
   return (
-    <Link to={to} search={search} className={`card glass reveal addon-tile${add ? " add" : ""}`} style={{ "--i": i } as React.CSSProperties}>
-      <span className="flex items-start justify-between gap-3">
-        <span className="addon-icon" aria-hidden>
-          <Icon size={24} />
-        </span>
-        {state}
-      </span>
-      <span className="min-w-0">
-        <span className="addon-title">{title}</span>
-        <span className="mt-1 block text-[13px] leading-5 text-[var(--ink-500)]">{sub}</span>
-      </span>
-      {facts?.length ? (
-        <span className="addon-facts">
-          {facts.map(([label, value]) => (
-            <span key={label} className="min-w-0">
-              <span className="block text-xs text-[var(--ink-500)]">{label}</span>
-              <span className="block truncate text-[13px] font-semibold">{value}</span>
-            </span>
-          ))}
-        </span>
+    <>
+      {(m && !m.supported) || (p && !p.supported) ? (
+        <div className="banner warn" role="status">
+          {t("market.unsupported")}
+        </div>
+      ) : m && !m.host_ready ? (
+        <div className="banner warn flex-wrap" role="status">
+          <span className="min-w-0 flex-1">{t("market.hostOutdated")}</span>
+          <code className="mono">mikan update</code>
+        </div>
       ) : null}
-      <span className="addon-action">
-        {action}
-        <ChevronRight size={16} aria-hidden />
-      </span>
-    </Link>
-  );
-}
-
-function TelegramTile() {
-  const tg = useQuery({ queryKey: qk.telegram, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/telegram", { signal })) });
-  const v = tg.data;
-  const state = !v ? null : v.running ? <Pill tone="ok">{t("addons.on")}</Pill> : v.enabled ? <Pill tone="warn">{t("addons.stopped")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>;
-  const facts: [string, string][] | undefined = v && [
-    [t("addons.factBot"), v.bot ? `@${v.bot.username}` : t("addons.factNoBot")],
-    [t("addons.factLinked"), num(v.linked)],
-  ];
-  return <Tile to="/addons/telegram" icon={Bot} title={t("addons.telegram")} sub={t("addons.telegramSub")} state={state} facts={facts} i={1} />;
-}
-
-function TorrentTile() {
-  const q = useTorrent();
-  const state = !q.data ? null : q.data.enabled ? <Pill tone="ok">{t("addons.on")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>;
-  const d = q.data;
-  const facts: [string, string][] | undefined = d && [
-    [t("addons.factBan"), d.ban_minutes > 0 ? t("addons.factBanMinutes", { n: d.ban_minutes }) : t("addons.factBanReset")],
-    [t("addons.factExempt"), d.exempt.length ? num(d.exempt.length) : t("addons.factNone")],
-  ];
-  return <Tile to="/addons/torrent" icon={ShieldBan} title={t("settings.torrent.title")} sub={t("addons.torrentSub")} state={state} facts={facts} i={2} />;
-}
-
-function FiltersTile() {
-  const q = useFilters();
-  const on = q.data ? q.data.egress.enabled || q.data.ingress.enabled : undefined;
-  const state = on === undefined ? null : on ? <Pill tone="ok">{t("addons.on")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>;
-  const d = q.data;
-  // The mail ports are one switch, so one rule.
-  const out = d ? d.egress.ports.length + d.egress.networks.length + d.egress.domains.length + (d.egress.mail ? 1 : 0) : 0;
-  const nets = d?.ingress.networks.length ?? 0;
-  const facts: [string, string][] | undefined = d && [
-    [t("addons.factOut"), d.egress.enabled && out > 0 ? t("addons.factRules", { n: out }) : t("addons.factNone")],
-    [
-      t("addons.factIn"),
-      d.ingress.enabled && nets > 0 ? (d.ingress.allow ? t("addons.factInAllow", { n: nets }) : t("addons.factInDeny", { n: nets })) : t("addons.factInAny"),
-    ],
-  ];
-  return <Tile to="/addons/filters" icon={ListFilter} title={t("filters.title")} sub={t("addons.filtersSub")} state={state} facts={facts} i={3} />;
-}
-
-// The payment methods of the marketplace: installed ones with their state, and the way to
-// install and set them up, which stays in Payments.
-function PaymentTiles() {
-  const q = useAddons();
-  return (
-    <QueryBoundary
-      query={q}
-      pending={
-        <div className="addon-grid">
-          <Skeleton style={{ height: 200, borderRadius: 20 }} />
+      {pending ? (
+        <div className="banner info" role="status">
+          <Spinner />
+          <span className="min-w-0 flex-1">
+            {t(pending.action === "remove" ? "addons.removing" : "addons.installing", { name: anyName(pending.id, m, p) })}
+            {queued ? ` ${t("addons.queuedMore", { n: queued })}` : ""}
+          </span>
         </div>
-      }
-      wrap={(state) => <section className="card glass">{state}</section>}
-    >
-      {(d) => (
-        <div className="addon-grid">
-          {d.installed.map((a, i) => (
-            <Tile
-              key={a.id}
-              to="/payments"
-              search={{ tab: "methods" }}
-              icon={Wallet}
-              title={addonName(a.id, d)}
-              sub={t("addons.paymentSub")}
-              state={a.status === "failed" ? <Pill tone="bad">{t("addons.stateFailed")}</Pill> : a.enabled ? <Pill tone="ok">{t("addons.on")}</Pill> : <Pill tone="off">{t("addons.off")}</Pill>}
-              i={4 + i}
-            />
-          ))}
-          <Tile
-            to="/payments"
-            search={{ tab: "methods" }}
-            icon={Plus}
-            title={t("addons.paymentAdd")}
-            sub={t("addons.paymentAddSub", { n: d.catalog.length })}
-            state={null}
-            action={t("addons.openCatalog")}
-            add
-            i={4 + d.installed.length}
-          />
+      ) : null}
+      {last ? (
+        <div className="banner err" role="alert">
+          <span className="min-w-0 flex-1 break-words">{t(last.action === "remove" ? "addons.removeFailed" : "addons.installFailed", { name: anyName(last.id, m, p), error: last.error ?? "" })}</span>
         </div>
-      )}
-    </QueryBoundary>
-  );
-}
-
-/** The torrent blocker, an addon of its own: its switch and its catches. */
-export function TorrentPage() {
-  return (
-    <>
-      <PageHeader title={t("settings.torrent.title")} sub={t("addons.torrentSub")} actions={<BackToAddons />} />
-      <div className="flex max-w-4xl flex-col gap-4">
-        <TorrentCard />
-        <TorrentHitsCard />
-      </div>
+      ) : null}
     </>
-  );
-}
-
-export function BackToAddons() {
-  return (
-    <Link to="/addons" className="btn btn-glass">
-      <ArrowLeft size={16} aria-hidden />
-      {t("addons.back")}
-    </Link>
   );
 }

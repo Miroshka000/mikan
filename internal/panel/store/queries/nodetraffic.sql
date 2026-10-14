@@ -35,3 +35,7 @@ DELETE FROM node_traffic_hourly WHERE hour < $1;
 
 -- name: PruneNodeTrafficDaily :exec
 DELETE FROM node_traffic_daily WHERE day < $1;
+
+-- name: FirstNodeTrafficDay :one
+-- The day the per-node accounting has its first row: 0 when it has none yet.
+SELECT CAST(COALESCE(min(day), 0) AS BIGINT) FROM node_traffic_daily;

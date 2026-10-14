@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,26 +13,62 @@ import (
 	"mikan/internal/panel/store/db"
 )
 
+// refusal is the type of every error this package answers a buyer's code with. A caller that has
+// to tell "the code cannot be used" from "the panel failed" asks IsRefusal, so a new sentinel
+// cannot be left out of a list somewhere else: made with refuse, it is a refusal by its type.
+type refusal struct{ code string }
+
+func (r *refusal) Error() string { return r.code }
+
+func refuse(code string) error { return &refusal{code: code} }
+
+// IsRefusal reports whether err, or an error it wraps, is one of this package's refusals
+// (every Err* below): a code that is unknown, off, spent or not for this buyer. Any other error
+// is the panel's own trouble.
+func IsRefusal(err error) bool {
+	var r *refusal
+	return errors.As(err, &r)
+}
+
+// The statuses of a redemption (promo_redemptions.status): a discount is reserved for an
+// invoice and applied with its payment, or released when the invoice goes unpaid; a bonus
+// code is applied at once.
+const (
+	RedemptionReserved = "reserved"
+	RedemptionApplied  = "applied"
+	RedemptionReleased = "released"
+)
+
+// PaidLate says whether a payment made at paidAt came after its discount's reservation
+// ran out (or was released): the code no longer holds, and the money goes back instead of
+// buying anything at the discounted price.
+func PaidLate(r db.PromoRedemption, paidAt int64) bool {
+	if r.ExpiresAt.Valid && paidAt < r.ExpiresAt.Int64 {
+		return false
+	}
+	return r.Status == RedemptionReleased || r.Status == RedemptionReserved && r.ExpiresAt.Valid
+}
+
 var (
-	ErrNotFound           = errors.New("promo_not_found")
-	ErrInactive           = errors.New("promo_inactive")
-	ErrExpired            = errors.New("promo_expired")
-	ErrLimit              = errors.New("promo_limit")
-	ErrUserLimit          = errors.New("promo_user_limit")
-	ErrTariff             = errors.New("promo_tariff")
-	ErrMinimum            = errors.New("promo_minimum")
-	ErrNewUser            = errors.New("promo_new_user")
-	ErrFirstPurchase      = errors.New("promo_first_purchase")
-	ErrCurrency           = errors.New("promo_currency")
-	ErrAlreadyApplied     = errors.New("promo_already_applied")
-	ErrSubscription       = errors.New("promo_subscription_required")
-	ErrNoExpiry           = errors.New("promo_no_expiry")
-	ErrNotDiscount        = errors.New("promo_not_discount")
-	ErrUnavailable        = errors.New("promo_unavailable")
-	ErrInvalidValue       = errors.New("promo_invalid_value")
-	ErrReservationExpired = errors.New("promo_reservation_expired")
-	ErrRefundUnsupported  = errors.New("promo_refund_unsupported")
-	ErrNotBonus           = errors.New("promo_not_bonus")
+	ErrNotFound           = refuse("promo_not_found")
+	ErrInactive           = refuse("promo_inactive")
+	ErrExpired            = refuse("promo_expired")
+	ErrLimit              = refuse("promo_limit")
+	ErrUserLimit          = refuse("promo_user_limit")
+	ErrTariff             = refuse("promo_tariff")
+	ErrMinimum            = refuse("promo_minimum")
+	ErrNewUser            = refuse("promo_new_user")
+	ErrFirstPurchase      = refuse("promo_first_purchase")
+	ErrCurrency           = refuse("promo_currency")
+	ErrAlreadyApplied     = refuse("promo_already_applied")
+	ErrSubscription       = refuse("promo_subscription_required")
+	ErrNoExpiry           = refuse("promo_no_expiry")
+	ErrNotDiscount        = refuse("promo_not_discount")
+	ErrUnavailable        = refuse("promo_unavailable")
+	ErrInvalidValue       = refuse("promo_invalid_value")
+	ErrReservationExpired = refuse("promo_reservation_expired")
+	ErrRefundUnsupported  = refuse("promo_refund_unsupported")
+	ErrNotBonus           = refuse("promo_not_bonus")
 )
 
 const (
@@ -50,13 +84,11 @@ type Service struct {
 }
 
 type Discount struct {
-	PromoID      int64
-	RedemptionID int64
-	Code         string
-	Amount       int64
-	Original     int64
-	Final        int64
-	Currency     string
+	PromoID  int64
+	Code     string
+	Amount   int64
+	Final    int64
+	Currency string
 }
 
 func New(st *store.Store, now func() time.Time) *Service {
@@ -266,15 +298,15 @@ func (s *Service) ReserveDiscount(ctx context.Context, q *db.Queries, tgID, user
 		ttl = time.Duration(p.DiscountTtl) * time.Second
 	}
 	expires = sql.NullInt64{Int64: s.Now().Add(ttl).Unix(), Valid: true}
-	r, err := q.CreatePromoRedemption(ctx, db.CreatePromoRedemptionParams{
+	_, err = q.CreatePromoRedemption(ctx, db.CreatePromoRedemptionParams{
 		PromoID: p.ID, UserID: sql.NullInt64{Int64: userID, Valid: userID != 0}, TgID: tgID, PaymentID: sql.NullInt64{Int64: paymentID, Valid: paymentID != 0},
-		Status: "reserved", RedeemedAt: s.Now().Unix(), ExpiresAt: expires, DiscountAmount: d, OriginalAmount: amount, FinalAmount: amount - d, Currency: currency, Note: p.Description,
+		Status: RedemptionReserved, RedeemedAt: s.Now().Unix(), ExpiresAt: expires, DiscountAmount: d, OriginalAmount: amount, FinalAmount: amount - d, Currency: currency, Note: p.Description,
 	})
 	if err != nil {
 		_, _ = q.DecrementPromoUse(ctx, p.ID)
 		return Discount{}, err
 	}
-	return Discount{PromoID: p.ID, RedemptionID: r.ID, Code: p.Code, Amount: d, Original: amount, Final: amount - d, Currency: currency}, nil
+	return Discount{PromoID: p.ID, Code: p.Code, Amount: d, Final: amount - d, Currency: currency}, nil
 }
 
 // RedeemBonus applies a days or traffic reward atomically and writes its history.
@@ -326,7 +358,7 @@ func (s *Service) RedeemBonus(ctx context.Context, tgID, userID int64, code stri
 			}
 			next := base + p.Value*int64(24*time.Hour/time.Second)
 			_, err = q.UpdateUser(ctx, db.UpdateUserParams{
-				Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID, TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit,
+				Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: u.Tags, Status: u.Status, TariffID: u.TariffID, TrafficLimit: u.TrafficLimit, DeviceLimit: u.DeviceLimit, SpeedLimit: u.SpeedLimit,
 				ResetStrategy: u.ResetStrategy, PeriodDays: u.PeriodDays, PeriodStart: u.PeriodStart,
 				ExpiresAt: sql.NullInt64{Int64: next, Valid: true}, Inbounds: u.Inbounds, BillingDay: u.BillingDay, UpdatedAt: now.Unix(), ID: u.ID,
 			})
@@ -359,7 +391,7 @@ func (s *Service) RedeemBonus(ctx context.Context, tgID, userID int64, code stri
 		if p.Type == "days" {
 			bytes = 0
 		}
-		r, err := q.CreatePromoRedemption(ctx, db.CreatePromoRedemptionParams{PromoID: p.ID, UserID: sql.NullInt64{Int64: userID, Valid: true}, TgID: tgID, Status: "applied", RedeemedAt: now.Unix(), Days: days, Bytes: bytes, Note: p.Description})
+		r, err := q.CreatePromoRedemption(ctx, db.CreatePromoRedemptionParams{PromoID: p.ID, UserID: sql.NullInt64{Int64: userID, Valid: true}, TgID: tgID, Status: RedemptionApplied, RedeemedAt: now.Unix(), Days: days, Bytes: bytes, Note: p.Description})
 		out = r
 		return err
 	})
@@ -382,7 +414,7 @@ func (s *Service) ReleasePayment(ctx context.Context, paymentID int64) error {
 		if err != nil {
 			return err
 		}
-		if r.Status != "reserved" {
+		if r.Status != RedemptionReserved {
 			return nil
 		}
 		n, err := q.ReleasePromoRedemptionForClosedPayment(ctx, r.ID)
@@ -426,7 +458,7 @@ func (s *Service) ReleaseExpired(ctx context.Context, before int64) error {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
 			}
-			if err != nil || r.Status != "reserved" {
+			if err != nil || r.Status != RedemptionReserved {
 				return err
 			}
 			n, err := q.ReleaseExpiredPromoRedemption(ctx, db.ReleaseExpiredPromoRedemptionParams{ID: r.ID, Before: sql.NullInt64{Int64: before, Valid: true}})
@@ -454,7 +486,7 @@ func (s *Service) ApplyPayment(ctx context.Context, q *db.Queries, paymentID, us
 	if err != nil {
 		return err
 	}
-	if r.Status != "reserved" && r.Status != "released" {
+	if r.Status != RedemptionReserved && r.Status != RedemptionReleased {
 		return nil
 	}
 	paidAt := s.Now().Unix()
@@ -467,7 +499,7 @@ func (s *Service) ApplyPayment(ctx context.Context, q *db.Queries, paymentID, us
 	// A reservation released while its payment looked closed comes back when the payment
 	// turns out paid in time. The use is counted again even if the code filled up since:
 	// the buyer already paid the discounted price inside the window they were promised.
-	if r.Status == "released" {
+	if r.Status == RedemptionReleased {
 		if err := q.RestorePromoUse(ctx, r.PromoID); err != nil {
 			return err
 		}
@@ -481,18 +513,3 @@ func (s *Service) ApplyPayment(ctx context.Context, q *db.Queries, paymentID, us
 	}
 	return nil
 }
-
-func (s *Service) CodeForPayment(ctx context.Context, paymentID int64) (string, error) {
-	r, err := s.Store.Q.GetPromoRedemptionByPayment(ctx, sql.NullInt64{Int64: paymentID, Valid: paymentID != 0})
-	if err != nil {
-		return "", err
-	}
-	p, err := s.Store.Q.GetPromoCode(ctx, r.PromoID)
-	if err != nil {
-		return "", err
-	}
-	return p.Code, nil
-}
-
-func ParseInt(v string) (int64, error)   { return strconv.ParseInt(strings.TrimSpace(v), 10, 64) }
-func Field(name string, err error) error { return fmt.Errorf("%s: %w", name, err) }

@@ -105,7 +105,7 @@ func TestBusyMove(t *testing.T) {
 		{name: "the panel's port", in: with(xhttp, func(i *db.Inbound) { i.Port = "21355" }), failed: "21355", portOn: true, why: BusyMikan},
 		{name: "another inbound's port", in: with(xhttp, func(i *db.Inbound) { i.Port = "8443" }), failed: "8443", portOn: true, why: BusyMikan},
 	} {
-		port, why := BusyMove(ports, c.in, c.failed, c.portOn, c.left)
+		port, why := BusyMove(ports, c.in, c.failed, c.portOn, false, c.left)
 		if port != c.port || why != c.why {
 			t.Errorf("%s: got %q %q, want %q %q", c.name, port, why, c.port, c.why)
 		}
@@ -172,7 +172,7 @@ func TestBusyInboundMovesByItself(t *testing.T) {
 
 	// 2053 is held too: the next apply fails there and the inbound moves on, never back to
 	// a port it left. Once the pool runs out it stays with the error showing.
-	tcpFree := len(FreePorts(e.ports(t, 1), "tcp", nil)) + 1 // and the 2053 it is on
+	tcpFree := len(FreePorts(e.ports(t, 1), "tcp", nil, false)) + 1 // and the 2053 it is on
 	for range 2 * len(domain.PortPool) {
 		e.runs(t, 1, busyOn("vless-xhttp"))
 		e.tn.MoveBusy(e.ctx)

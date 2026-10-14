@@ -236,7 +236,7 @@ func (h *handlers) promoInput(in PromoBody, createdBy sql.NullInt64, usedCount i
 	if len(in.TariffIDs) == 0 {
 		ids = []byte("[]")
 	}
-	return db.CreatePromoCodeParams{Code: code, Name: strings.TrimSpace(in.Name), Description: strings.TrimSpace(in.Description), Type: in.Type, Value: in.Value, Currency: in.Currency, StartsAt: nullInt(in.StartsAt), EndsAt: nullInt(in.EndsAt), MaxUses: nullInt(in.MaxUses), PerUserLimit: in.PerUserLimit, DiscountTtl: in.DiscountTtl, MinOrder: in.MinOrder, MaxDiscount: in.MaxDiscount, TariffIds: string(ids), PoolID: nullInt(in.PoolID), FirstPurchaseOnly: boolInt(in.FirstPurchaseOnly), NewUsersOnly: boolInt(in.NewUsersOnly), Enabled: boolInt(in.Enabled), CreatedAt: h.d.Now().Unix(), CreatedBy: createdBy}, nil
+	return db.CreatePromoCodeParams{Code: code, Name: strings.TrimSpace(in.Name), Description: strings.TrimSpace(in.Description), Type: in.Type, Value: in.Value, Currency: in.Currency, StartsAt: domain.NullInt(in.StartsAt), EndsAt: domain.NullInt(in.EndsAt), MaxUses: domain.NullInt(in.MaxUses), PerUserLimit: in.PerUserLimit, DiscountTtl: in.DiscountTtl, MinOrder: in.MinOrder, MaxDiscount: in.MaxDiscount, TariffIds: string(ids), PoolID: domain.NullInt(in.PoolID), FirstPurchaseOnly: domain.Flag(in.FirstPurchaseOnly), NewUsersOnly: domain.Flag(in.NewUsersOnly), Enabled: domain.Flag(in.Enabled), CreatedAt: h.d.Now().Unix(), CreatedBy: createdBy}, nil
 }
 
 func (h *handlers) validatePromoReferences(ctx context.Context, in PromoBody) error {
@@ -255,18 +255,6 @@ func (h *handlers) validatePromoReferences(ctx context.Context, in PromoBody) er
 	}
 	return nil
 }
-func nullInt(v *int64) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: *v, Valid: true}
-}
-func boolInt(v bool) int64 {
-	if v {
-		return 1
-	}
-	return 0
-}
 func (h *handlers) listPromocodes(ctx context.Context, in *promoListInput) (*promoListOutput, error) {
 	xs, e := h.d.Store.Q.ListPromoCodes(ctx, db.ListPromoCodesParams{Lim: in.Limit, RowOffset: in.Offset})
 	if e != nil {
@@ -278,6 +266,8 @@ func (h *handlers) listPromocodes(ctx context.Context, in *promoListInput) (*pro
 	}
 	o := &promoListOutput{}
 	o.Body.Total = n
+	// An empty list is [], not null: the page reads its length.
+	o.Body.Items = make([]PromoCodeView, 0, len(xs))
 	for _, p := range xs {
 		o.Body.Items = append(o.Body.Items, promoView(p, h.d.Now()))
 	}
@@ -339,7 +329,7 @@ func (h *handlers) enablePromocode(ctx context.Context, in *struct {
 		Enabled bool `json:"enabled"`
 	}
 }) (*promoOneOutput, error) {
-	n, e := h.d.Store.Q.SetPromoEnabled(ctx, db.SetPromoEnabledParams{ID: in.ID, Enabled: boolInt(in.Body.Enabled)})
+	n, e := h.d.Store.Q.SetPromoEnabled(ctx, db.SetPromoEnabledParams{ID: in.ID, Enabled: domain.Flag(in.Body.Enabled)})
 	if e != nil {
 		return nil, e
 	}
@@ -377,6 +367,7 @@ func (h *handlers) listPromocodeRedemptions(ctx context.Context, in *promoRedemp
 	}
 	o := &promoRedemptionsOutput{}
 	o.Body.Total = n
+	o.Body.Items = make([]PromoRedemptionView, 0, len(xs))
 	for _, row := range xs {
 		r := row
 		o.Body.Items = append(o.Body.Items, PromoRedemptionView{ID: r.ID, PromoID: r.PromoID, UserID: func() *int64 {

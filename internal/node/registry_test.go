@@ -99,3 +99,9 @@ func TestSharedListeners(t *testing.T) {
 		t.Fatal("the shared listener is gone")
 	}
 }
+
+// admit is admitIn without the traffic pool the connection counts to.
+func (r *Registry) admit(user, inName, ip string, tcp bool) *slot {
+	s, _ := r.admitIn(user, inName, ip, tcp)
+	return s
+}

@@ -3,9 +3,9 @@ import { Check } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { ApiError, errorText } from "../../api/client";
 import { userActions, useTariffs, useUserMutation } from "../../api/hooks";
-import { Drawer } from "../../components/overlay";
+import { Drawer, DrawerFooter } from "../../components/overlay";
 import { useToast } from "../../components/toast";
-import { Button, Field, Skeleton } from "../../components/ui";
+import { Field, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
 import { tariffSummary } from "./tariffs";
 
@@ -71,14 +71,9 @@ export function CreateUserDrawer({ open, onOpenChange, onCreated }: { open: bool
       title={t("userCreate.title")}
       meta={t("userCreate.meta")}
       footer={
-        <>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="create-user" loading={create.isPending}>
-            <Check size={18} aria-hidden /> {t("userCreate.submit")}
-          </Button>
-        </>
+        <DrawerFooter form="create-user" onCancel={() => onOpenChange(false)} loading={create.isPending}>
+          <Check size={18} aria-hidden /> {t("userCreate.submit")}
+        </DrawerFooter>
       }
     >
       <form id="create-user" onSubmit={submit} className="pt-5" noValidate>

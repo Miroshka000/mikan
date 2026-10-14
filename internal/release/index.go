@@ -2,7 +2,6 @@ package release
 
 import (
 	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,9 +82,8 @@ func (e Entry) valid() bool {
 
 // ParseIndex checks the signature over the index's exact bytes, then decodes it.
 func ParseIndex(data []byte, sig string, pub ed25519.PublicKey) (Index, error) {
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(sig))
-	if err != nil || len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, data, raw) {
-		return Index{}, ErrSignature
+	if err := Verify(data, sig, pub); err != nil {
+		return Index{}, err
 	}
 	return DecodeIndex(data)
 }

@@ -106,6 +106,20 @@ func PublicHost(h string) bool {
 	return PublicAddr(ip)
 }
 
+// nat64 is the well-known NAT64 prefix.
+var nat64 = netip.MustParsePrefix("64:ff9b::/96")
+
+// Unwrap4 is the address a dial judges: an IPv4-mapped one as IPv4, and an IPv4 address inside
+// the NAT64 prefix as itself, so 64:ff9b::a9fe:a9fe does not reach 169.254.169.254.
+func Unwrap4(ip netip.Addr) netip.Addr {
+	ip = ip.Unmap()
+	if nat64.Contains(ip) {
+		b := ip.As16()
+		return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]})
+	}
+	return ip
+}
+
 // PublicAddr: an address on the internet, not one of this host's or its network's.
 func PublicAddr(ip netip.Addr) bool {
 	ip = ip.Unmap()

@@ -3,12 +3,14 @@
 //! with a valid signature of the release key.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 /// The public half of the release signing key, the same as internal/release.PublicKey.
 /// This fork signs its own releases with its own key; a manifest signed with the upstream
@@ -76,7 +78,13 @@ fn latest_with(key: &VerifyingKey, fetch: Fetch<'_>) -> Result<Manifest> {
     let url = latest_url();
     let data = fetch(&url, 1 << 20).context("download the release manifest")?.context("no release is published yet")?;
     let sig = fetch(&format!("{url}.sig"), 4096).context("download the manifest's signature")?.context("the manifest has no signature")?;
-    parse(&data, &String::from_utf8_lossy(&sig), key)
+    let manifest = parse(&data, &String::from_utf8_lossy(&sig), key)?;
+    // Its own record, not the index's: the index is published again with every beta, so
+    // the latest stable release is often older than the index seen.
+    if let Some(seen) = latest_seen() {
+        not_older(seen, &data, "published", "the latest release")?;
+    }
+    Ok(manifest)
 }
 
 /// Downloads a URL whole, at most limit bytes; None when it is not there (net::get_opt).
@@ -282,6 +290,9 @@ fn from_index(current: &str, channel: Channel, upto: Option<&str>, key: &Verifyi
     let sig =
         fetch(&format!("{url}.sig"), 4096).context("download the index's signature")?.context("the release index has no signature")?;
     let mut entries = parse_index(&data, &String::from_utf8_lossy(&sig), key)?;
+    if let Some(seen) = index_seen() {
+        not_older(seen, &data, "published", "the release index")?;
+    }
     let beta = channel == Channel::Beta;
     if let Some(upto) = upto {
         // Never a release the index does not list for the channel, and never past it.
@@ -311,6 +322,35 @@ fn from_index(current: &str, channel: Channel, upto: Option<&str>, key: &Verifyi
     Ok(Found { manifest, newest: later, unreachable, fallback: None })
 }
 
+/// The newest release index this server has accepted ("published"); tests keep none.
+fn index_seen() -> Option<&'static Path> {
+    if cfg!(test) { None } else { Some(Path::new("/opt/mikan/release/index-published")) }
+}
+
+/// The newest manifest of GitHub's latest release this server has accepted: a stale one
+/// handed in when the index fails must not take the place of a newer one.
+fn latest_seen() -> Option<&'static Path> {
+    if cfg!(test) { None } else { Some(Path::new("/opt/mikan/release/latest-published")) }
+}
+
+/// A signed document stays validly signed for ever: an old copy served again (a cache, a
+/// CDN, someone in the path) would hold a server on an old release, a security fix
+/// hidden, or offer a vulnerable build as the current one. Its timestamp field (RFC 3339
+/// in UTC) may only grow; the newest one seen is kept in seen, root's own file.
+pub fn not_older(seen: &Path, doc: &[u8], field: &str, what: &str) -> Result<()> {
+    let at = serde_json::from_slice::<serde_json::Value>(doc).ok().and_then(|v| v[field].as_str().map(str::to_owned));
+    let Some(at) = at.filter(|u| !u.is_empty()) else { return Ok(()) };
+    let before = std::fs::read_to_string(seen).unwrap_or_default();
+    // RFC 3339 in UTC, always the same shape: comparing the text compares the time.
+    if !before.is_empty() && at.as_str() < before.trim() {
+        bail!("{what} is from {at}, older than the one seen on {}: it is not accepted", before.trim());
+    }
+    if at.as_str() > before.trim() {
+        crate::panelfs::write_root(seen, at.as_bytes())?;
+    }
+    Ok(())
+}
+
 pub fn key() -> Result<VerifyingKey> {
     let raw: [u8; 32] = STANDARD.decode(PUBLIC_KEY)?.try_into().map_err(|_| anyhow::anyhow!("bad release key"))?;
     Ok(VerifyingKey::from_bytes(&raw)?)
@@ -337,17 +377,25 @@ pub fn parse(data: &[u8], sig: &str, key: &VerifyingKey) -> Result<Manifest> {
     if newer(&m.min_installer, &m.version) {
         bail!("the manifest requires an installer newer than its release");
     }
-    let hex = m.digest.strip_prefix("sha256:").unwrap_or("");
-    if hex.len() != 64 || !hex.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) || !valid_image(&m.image) {
+    if !is_sha256_hex(m.digest.strip_prefix("sha256:").unwrap_or("")) || !valid_image(&m.image) {
         bail!("the manifest names a bad image {}@{}", m.image, m.digest);
     }
     for (arch, asset) in &m.installer {
-        let sha = asset.sha256.as_str();
-        if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) || !asset.url.starts_with("https://") {
+        if !is_sha256_hex(&asset.sha256) || !asset.url.starts_with("https://") {
             bail!("the manifest has a bad installer for {arch}");
         }
     }
     Ok(m)
+}
+
+/// A SHA-256 as 64 lowercase hex digits, the way digests are written.
+pub fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// The SHA-256 of data as lowercase hex.
+pub fn sha256_hex(data: &[u8]) -> String {
+    Sha256::digest(data).iter().map(|x| format!("{x:02x}")).collect()
 }
 
 /// The release image lives in the project's own namespace on GitHub Packages; the value
@@ -391,6 +439,16 @@ fn semver(v: &str) -> Option<Version<'_>> {
 
 /// Whether version a is later than b, as internal/release.Newer: a pre-release comes
 /// before its release, and "dev" or anything unparsable is older than every release.
+/// The last release whose panel moves a database from SQLite to PostgreSQL.
+pub const LAST_SQLITE_MOVE: &str = "0.5.0.4";
+
+/// Whether the panel of version can take a database from SQLite (a server of 0.4, or a
+/// backup of one): 0.5.0.x can, 0.5.1.0 and later cannot. A version that is not a release's
+/// (a local build) is let through: its panel refuses SQLite data itself.
+pub fn moves_sqlite(version: &str) -> bool {
+    semver(version).is_none() || newer("0.5.1.0-0", version)
+}
+
 pub fn newer(a: &str, b: &str) -> bool {
     match (semver(a), semver(b)) {
         (None, _) => false,
@@ -439,6 +497,17 @@ fn compare_prerelease(a: &str, b: &str) -> std::cmp::Ordering {
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
+
+    // 0.5.0.x moves a database from SQLite, 0.5.1.0 and its pre-releases do not.
+    #[test]
+    fn which_releases_move_sqlite() {
+        for v in ["0.4.5", "0.5.0.0", "0.5.0.4", "0.5.0.5-rc.4", "dev"] {
+            assert!(moves_sqlite(v), "{v}");
+        }
+        for v in ["0.5.1.0", "0.5.1.0-rc.1", "0.5.1.1", "0.6.0"] {
+            assert!(!moves_sqlite(v), "{v}");
+        }
+    }
 
     fn manifest(version: &str, image: &str) -> Vec<u8> {
         format!(

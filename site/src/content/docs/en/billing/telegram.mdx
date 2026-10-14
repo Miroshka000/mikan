@@ -34,7 +34,8 @@ The route is checked before it is saved.
 ## What the subscriber sees
 
 - The subscription screen: term, traffic, devices, pools. If there are several subscriptions, you can switch between them, up to five per account.
-- Devices with unbinding, once a day.
+- Devices with unbinding under the rules of the subscription settings.
+- "🔄 New link" on the subscription screen: a confirmation, then the new link. The old one stops working at once; how often is up to the admin.
 - "Connect a device": the link and apps, plus a button for the subscription page in the Mini App.
 - Buying and renewing, "Buy more traffic", "Promo codes", "Try it for free".
 - "Remove from the bot": removes only the link to Telegram. The subscription keeps working in apps and comes back to the bot if you send it the link again.
@@ -45,16 +46,44 @@ A subscription is bound when a person sends the bot the link or taps "Open in Te
 
 The **Menu and texts** tab: main menu buttons (subscription, devices, connection, renewal, support, Mini App and your own: a link or a page with text), up to 20 buttons, ordered with arrows. Texts for the welcome, renewal and notifications, and the bot language. On the right is a preview with sample data.
 
+### Formatting
+
+The bot's texts, button pages and broadcasts take Markdown:
+
+| You write | In Telegram |
+| --- | --- |
+| `**bold**` | **bold** |
+| `*italic*` or `_italic_` | *italic* |
+| `__underline__` | underlined |
+| `~~strikethrough~~` | ~~strikethrough~~ |
+| `\|\|hidden\|\|` | a spoiler, revealed on tap |
+| `` `code` `` and a block between ` ``` ` | monospace |
+| `> quote` at the start of a line | a quote |
+| `# Heading` | a bold line |
+| `[text](https://…)` | a link: https, http or tg |
+
+Lists are written as plain text. A backslash keeps a mark as is: `\*`. Variables like `{name}` are filled in after the formatting, so a name with stars or tags stays text. Unpaired marks and links to other addresses stay as written, and if Telegram still refuses a message, the bot sends it without formatting. Older texts without markup look as before. Under the field you edit you see how the message arrives in Telegram.
+
 ## Notifications
 
 The **Notifications** tab: reminders 3 days and 1 day before the term ends, when it ends, at 90% of traffic and when traffic runs out. It also has the Mini App button next to the input field, "Keep one menu in the chat" and "Silent at night" (from 22:00 to 9:00 Moscow time).
 
 ## Broadcast
 
-The **Broadcast** tab sends a text to everyone whose subscription is bound to the bot. Messages go within Telegram's limits, and progress is shown in the panel.
+The **Broadcast** tab sends a text to everyone whose subscription is bound to the bot. It is formatted like the bot's texts, and `{brand}` is filled in. Messages go within Telegram's limits, and progress is shown in the panel.
 
 ## Free trial
 
 **Payments → Accepting payments → Free trial**: pick a plan with a term, and the bot offers it for free in the welcome message. A trial is given once to a Telegram account that has no subscription, no payments and no earlier trial. It works even if selling is off.
+
+The trial may have a price: the "Trial price" fields in Stars and in rubles next to the plan. Empty means free. With a price the bot's welcome says "Try it for 1 ₽", and the Mini App shows the trial first to an account without a subscription. It is bought once, on the same terms as the free one, and after it only the regular plans. A priced trial is sold with selling on, through any payment method that takes its price. The trial's plan itself need not be on sale, and “Sell to new people” may stay off: like the free trial, it is only for those with no subscription or payment yet. The payment history marks such a payment "trial", and a Stars refund turns off the subscription it gave. Before the payment goes through, the panel asks again that the trial is on and the account may still be given it; when that turns out only after the payment (the account took its trial, bought a subscription, or paid two invoices at once), the payment is refunded and marked refunded. If the refund does not go through, the payment stays paid with the reason in the history, and the panel tries again. If the payment method cannot refund (CryptoBot, RollyPay, for example), the panel does not try: the buyer gets a message in the bot that they have had the trial and the money comes back, and the payment gets a “Refunded by hand” button in the history. Refund the money in the provider's dashboard and press it: the payment becomes refunded, and the buyer gets a message.
+
+## Channel subscription
+
+**Telegram → Menu and texts → Channel subscription**: set the channel's public @username or numeric ID (a private channel also needs an invite link) and add the bot to the channel as an administrator: otherwise Telegram does not show it the subscribers. With "Mandatory subscription" on, the bot shows, instead of the welcome and the menu, a screen with your text, the channel button and a "Check" button. The bot asks Telegram and remembers a subscriber for a few minutes. The screen never stops paying, renewing or buying traffic, and invoices already opened are applied as usual. When the bot cannot check the channel (it is not an administrator, the channel is not found), the mandatory subscription stops nobody, and the Telegram page says what is wrong.
+
+## Free plan
+
+**Payments → Sales rules → Free plan**: pick a plan with a term, and the bot and the Mini App get a "🎁 Free plan" button (its label is set in Telegram → Menu and texts). Unlike the trial, an account can take it again once its previous free subscription has ended (or was deleted); it holds one at a time. The "A subscription to the bot's channel" condition gives it only to the subscribers of the channel above, even with the mandatory subscription off. Such subscriptions are marked "Free plan" in the client list, and the card shows how many were given. Turning the free plan off hides the button; the subscriptions given stay.
 
 Admin notifications and Telegram backups are described in [Alerts and monitoring](/mikanaddons/en/operations/alerts/).

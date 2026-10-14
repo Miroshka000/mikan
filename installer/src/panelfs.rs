@@ -121,6 +121,12 @@ impl Dir {
         check_name(name).is_ok() && rustix::fs::statat(&self.fd, name, AtFlags::SYMLINK_NOFOLLOW).is_ok()
     }
 
+    /// The names in this directory; one that is not UTF-8 is none the panel writes and is
+    /// left out.
+    pub fn names(&self) -> Result<Vec<String>> {
+        Ok(children(&self.fd)?.into_iter().filter_map(|n| n.into_string().ok()).collect())
+    }
+
     /// Writes name for the panel to read: a fresh file (never an existing one, never
     /// through a link) owned by the panel, then renamed over name, which replaces a link
     /// at name instead of following it.
@@ -383,6 +389,18 @@ mod tests {
         dir.discard("fifo").unwrap();
         assert!(!dir.exists("fifo"));
         dir.discard("never-there").unwrap();
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn names_of_a_directory() {
+        let d = tmpdir("names");
+        fs::write(d.join("b"), "").unwrap();
+        fs::create_dir(d.join("a")).unwrap();
+        symlink("/", d.join("c")).unwrap();
+        let mut names = open(&d, ".").names().unwrap();
+        names.sort();
+        assert_eq!(names, ["a", "b", "c"]);
         fs::remove_dir_all(&d).unwrap();
     }
 

@@ -2,6 +2,7 @@ package subs
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -10,6 +11,9 @@ import (
 	"mikan/internal/panel/presets"
 	"mikan/internal/panel/store/db"
 )
+
+// NodeTarget sends a service to one node, the way the admin panel writes the target.
+func NodeTarget(id int64) string { return targetNode + strconv.FormatInt(id, 10) }
 
 // twoNodes: the test profile's node 1 and a second node in the US.
 func twoNodes(t *testing.T) Profile {

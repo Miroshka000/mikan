@@ -6,8 +6,8 @@ import { Link } from "@tanstack/react-router";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
-import { qk, usePools, useTariffs } from "../../api/hooks";
-import { Confirm, Drawer } from "../../components/overlay";
+import { invalidatePoolRelated, usePools, useTariffs } from "../../api/hooks";
+import { Confirm, Drawer, DrawerFooter } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
 import { Switch } from "../../components/switch";
@@ -38,10 +38,7 @@ export function PoolsCard({ creating, onCreateClose }: { creating: boolean; onCr
     mutationFn: (id: number) => unwrap(api.DELETE("/api/v1/pools/{id}", { params: { path: { id } } })),
     onSuccess: () => {
       setRemoving(null);
-      void qc.invalidateQueries({ queryKey: qk.pools });
-      void qc.invalidateQueries({ queryKey: qk.tariffs });
-      void qc.invalidateQueries({ queryKey: qk.inbounds });
-      void qc.invalidateQueries({ queryKey: qk.packages });
+      invalidatePoolRelated(qc);
       toast.ok(t("pools.deleted"));
     },
     onError: (e) => toast.error(errorText(e)),
@@ -151,9 +148,7 @@ function PoolDrawer({ pool, onClose }: { pool: Pool | "new" | null; onClose: () 
         ? unwrap(api.POST("/api/v1/pools", { body: { name: name.trim() } }))
         : unwrap(api.PATCH("/api/v1/pools/{id}", { params: { path: { id: pool.id } }, body: { name: name.trim() } })),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.pools });
-      void qc.invalidateQueries({ queryKey: qk.tariffs });
-      void qc.invalidateQueries({ queryKey: qk.inbounds });
+      invalidatePoolRelated(qc);
       toast.ok(isNew ? t("pools.created") : t("pools.renamed"));
       onClose();
     },
@@ -175,14 +170,9 @@ function PoolDrawer({ pool, onClose }: { pool: Pool | "new" | null; onClose: () 
       title={isNew ? t("pools.new") : t("pools.edit")}
       meta={t("pools.drawerMeta")}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" loading={save.isPending} disabled={!name.trim()} type="submit" form="pool-form">
-            {isNew ? t("pools.add") : t("common.save")}
-          </Button>
-        </>
+        <DrawerFooter form="pool-form" onCancel={onClose} loading={save.isPending} disabled={!name.trim()}>
+          {isNew ? t("pools.add") : t("common.save")}
+        </DrawerFooter>
       }
     >
       <form id="pool-form" onSubmit={submit} noValidate>

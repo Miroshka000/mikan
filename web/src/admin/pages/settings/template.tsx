@@ -10,7 +10,7 @@ import { useSaveSettings } from "./shared";
 const ConfigEditor = lazy(() => import("../../../components/config-editor"));
 
 /** text with the top-level section key replaced by block, or block added at the end. */
-export function putSection(text: string, key: string, block: string): string {
+function putSection(text: string, key: string, block: string): string {
   const lines = text.replace(/\s*$/, "").split("\n");
   const start = lines.findIndex((l) => l.startsWith(`${key}:`));
   if (start < 0) return (text.trim() ? text.replace(/\s*$/, "\n\n") : "") + block.trim() + "\n";
@@ -20,7 +20,7 @@ export function putSection(text: string, key: string, block: string): string {
 }
 
 /** text with item lines added at the end (or, first, at the start) of the top-level list key. */
-export function addToList(text: string, key: string, item: string, first = false): string {
+function addToList(text: string, key: string, item: string, first = false): string {
   const lines = text.replace(/\s*$/, "").split("\n");
   const start = lines.findIndex((l) => l.startsWith(`${key}:`));
   if (start < 0) return (text.trim() ? text.replace(/\s*$/, "\n\n") : "") + `${key}:\n` + item.replace(/\s*$/, "") + "\n";

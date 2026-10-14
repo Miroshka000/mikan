@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
+import { api, unwrap, type Schemas } from "../../../api/client";
+import { onFormError } from "../../../lib/fields";
 import { qk } from "../../../api/hooks";
 import { useToast } from "../../../components/toast";
 import { t } from "../../../i18n";
@@ -16,7 +17,7 @@ export function useSaveSettings() {
       toast.ok(t("settings.saved"));
     },
     onError: (e) => {
-      if (!(e instanceof ApiError && Object.keys(e.fields).length)) toast.error(errorText(e));
+      onFormError(e, toast);
     },
   });
 }

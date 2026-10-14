@@ -11,6 +11,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
@@ -107,9 +108,7 @@ type orderSubDocsInput struct {
 
 func (h *handlers) registerSubPage() {
 	tags := []string{"sub-page"}
-	op := func(id, method, path, summary string, status int) huma.Operation {
-		return huma.Operation{OperationID: id, Method: method, Path: path, Summary: summary, Tags: tags, DefaultStatus: status, Metadata: sessionOnly, Extensions: sessionOnlyExt}
-	}
+	op := sessionOps("sub-page")
 	huma.Register(h.api, huma.Operation{OperationID: "get-sub-page", Method: http.MethodGet, Path: "/api/v1/sub-page", Summary: "Страница подписки: вид, блоки, приложения", Tags: tags}, h.getSubPage)
 	huma.Register(h.api, op("update-sub-page", http.MethodPut, "/api/v1/sub-page", "Сохранить страницу подписки", 0), h.putSubPage)
 	huma.Register(h.api, huma.Operation{OperationID: "get-sub-page-image", Method: http.MethodGet, Path: "/api/v1/sub-page/images/{name}", Summary: "Загруженная картинка страницы подписки", Tags: tags,
@@ -210,7 +209,7 @@ func (h *handlers) putSubPage(ctx context.Context, in *putSubPageInput) (*subPag
 		details = append(details, &huma.ErrorDetail{Location: "body.config.look.background.kind", Message: "background_missing"})
 	}
 	if len(details) > 0 {
-		return nil, huma.Error422UnprocessableEntity("validation", details...)
+		return nil, fieldErrs(details...)
 	}
 	err = h.d.Store.TxRC(ctx, func(q *db.Queries) error {
 		set := settings.New(q)
@@ -248,14 +247,14 @@ func (h *handlers) getSubImage(ctx context.Context, in *subImageInput) (*subImag
 func (h *handlers) putSubImage(ctx context.Context, in *putSubImageInput) (*subImageOutput, error) {
 	data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(in.Body.Data))
 	if err != nil {
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.data", Message: "image_type"})
+		return nil, fieldErr("body.data", "image_type")
 	}
 	ct, err := subpage.CheckImage(in.Name, data)
 	switch {
 	case errors.Is(err, subpage.ErrImageTooBig):
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.data", Message: "image_too_big", Value: subpage.AssetLimit(in.Name) >> 10})
+		return nil, fieldErrValue("body.data", "image_too_big", subpage.AssetLimit(in.Name)>>10)
 	case err != nil:
-		return nil, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.data", Message: "image_type"})
+		return nil, fieldErr("body.data", "image_type")
 	}
 	a := subpage.PageAsset{Name: in.Name, Type: ct, Hash: subpage.Hash(data), Size: int64(len(data)), UpdatedAt: h.d.Now().Unix()}
 	if err := h.d.Store.Q.PutSubAsset(ctx, db.PutSubAssetParams{Name: a.Name, ContentType: a.Type, Data: data, Hash: a.Hash, UpdatedAt: a.UpdatedAt}); err != nil {
@@ -301,16 +300,9 @@ func (h *handlers) listSubDocs(ctx context.Context, _ *struct{}) (*subDocsOutput
 func checkSubDoc(b *SubDocBody) (subpage.Doc, error) {
 	d := subpage.Doc{Title: b.Title, Emoji: b.Emoji, Body: b.Body, Platform: b.Platform}
 	if ps := subpage.NormalizeDoc(&d); len(ps) > 0 {
-		return d, huma.Error422UnprocessableEntity("validation", problems("body.", ps)...)
+		return d, fieldErrs(problems("body.", ps)...)
 	}
 	return d, nil
-}
-
-func flag(b bool) int64 {
-	if b {
-		return 1
-	}
-	return 0
 }
 
 func (h *handlers) createSubDoc(ctx context.Context, in *createSubDocInput) (*subDocOutput, error) {
@@ -327,7 +319,7 @@ func (h *handlers) createSubDoc(ctx context.Context, in *createSubDocInput) (*su
 		if n >= subpage.MaxDocs {
 			return huma.Error409Conflict("too_many_docs", &huma.ErrorDetail{Message: "too_many_docs", Value: subpage.MaxDocs})
 		}
-		row, err = q.CreateSubDoc(ctx, db.CreateSubDocParams{Title: d.Title, Emoji: d.Emoji, Body: d.Body, Platform: d.Platform, Published: flag(in.Body.Published), At: h.d.Now().Unix()})
+		row, err = q.CreateSubDoc(ctx, db.CreateSubDocParams{Title: d.Title, Emoji: d.Emoji, Body: d.Body, Platform: d.Platform, Published: domain.Flag(in.Body.Published), At: h.d.Now().Unix()})
 		return err
 	})
 	if err != nil {
@@ -342,7 +334,7 @@ func (h *handlers) updateSubDoc(ctx context.Context, in *updateSubDocInput) (*su
 	if err != nil {
 		return nil, err
 	}
-	row, err := h.d.Store.Q.UpdateSubDoc(ctx, db.UpdateSubDocParams{ID: in.ID, Title: d.Title, Emoji: d.Emoji, Body: d.Body, Platform: d.Platform, Published: flag(in.Body.Published), UpdatedAt: h.d.Now().Unix()})
+	row, err := h.d.Store.Q.UpdateSubDoc(ctx, db.UpdateSubDocParams{ID: in.ID, Title: d.Title, Emoji: d.Emoji, Body: d.Body, Platform: d.Platform, Published: domain.Flag(in.Body.Published), UpdatedAt: h.d.Now().Unix()})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, huma.Error404NotFound("not_found")
 	}
@@ -370,7 +362,7 @@ func (h *handlers) orderSubDocs(ctx context.Context, in *orderSubDocsInput) (*su
 		seen := map[int64]bool{}
 		for i, id := range in.Body.IDs {
 			if seen[id] {
-				return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body.ids", Message: "duplicate_id", Value: id})
+				return fieldErrValue("body.ids", "duplicate_id", id)
 			}
 			seen[id] = true
 			if _, err := q.SetSubDocPosition(ctx, db.SetSubDocPositionParams{ID: id, Position: int64(i + 1)}); err != nil {

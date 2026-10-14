@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -42,5 +43,22 @@ func TestCheckReportsWhatTheTargetSupports(t *testing.T) {
 func TestCheckNeedsNameForIP(t *testing.T) {
 	if r := Check(context.Background(), "192.0.2.1:443", "", Options{}); r.Error != "sni_required" {
 		t.Fatalf("an IP dest needs an explicit SNI: %+v", r)
+	}
+}
+
+// A wide scan goes through the other /24s of the /16, the nearest first, inside it.
+func TestWideBlocks(t *testing.T) {
+	got := wideBlocks(netip.MustParseAddr("203.0.1.7"))
+	if len(got) != 255 {
+		t.Fatalf("%d blocks", len(got))
+	}
+	want := []string{"203.0.2.0/24", "203.0.0.0/24", "203.0.3.0/24", "203.0.4.0/24"}
+	for i, w := range want {
+		if got[i].String() != w {
+			t.Fatalf("block %d: %s, want %s", i, got[i], w)
+		}
+	}
+	if got[254].String() != "203.0.255.0/24" {
+		t.Fatalf("last %s", got[254])
 	}
 }

@@ -2,4 +2,4 @@
 # the release index says so ("from", see internal/release/index.go). A server older than
 # this goes through the highest release it can reach first. Raise it when a release can no
 # longer take over from older versions in one step.
-0.4.5
+0.5.0.0

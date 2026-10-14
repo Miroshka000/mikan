@@ -1,23 +1,25 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Gift, History as HistoryIcon, ListChecks, Megaphone, TriangleAlert, Undo2, Wallet } from "lucide-react";
+import { Gift, HandCoins, History as HistoryIcon, ListChecks, Megaphone, Ticket, TriangleAlert, Undo2, Wallet } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { api, errorText, unwrap, type Schemas } from "../../api/client";
-import { qk, usePaymentSettings, useTariffs } from "../../api/hooks";
+import { api, apiCodeText, errorText, unwrap, type Schemas } from "../../api/client";
+import { qk, useAddons, usePaymentSettings, useTariffs, useTelegram } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { useToast } from "../../components/toast";
-import { QueryBoundary, StaleNotice } from "../../components/query";
+import { QueryBoundary } from "../../components/query";
 import { Switch, SwitchRow } from "../../components/switch";
 import { FormActions } from "../../components/layout";
 import { Tabs } from "../../components/tabs";
-import { Button, EmptyState, ErrorState, Field, PageHeader, Pill, Skeleton, Spinner } from "../../components/ui";
-import { t, tMaybe } from "../../i18n";
+import { Button, EmptyState, Field, PageHeader, Pill, Skeleton } from "../../components/ui";
+import { t } from "../../i18n";
 import { useDraft } from "../../lib/draft";
 import { dateShort, days, money, num, time } from "../../lib/format";
+import { isKopecks, isStars, rubKopecks } from "../../lib/validate";
 import { PAYMENT_TABS, type PaymentsSearch } from "../search";
-import { AddonsCard, addonName, useAddons } from "./payment-addons";
+import { addonName } from "./payment-addons";
 import { Referrals } from "./referrals";
 import { Campaigns } from "./campaigns";
+import { PromoSection } from "./promocodes";
 
 type Settings = Schemas["PaymentSettingsView"];
 type Payment = Schemas["PaymentView"];
@@ -35,13 +37,8 @@ const STATUS_TONE: Record<Status, "ok" | "warn" | "bad" | "off"> = {
 };
 const STATUSES: Status[] = ["applied", "paid", "pending", "failed", "expired", "refunded"];
 const BUILT_IN: Provider[] = ["stars"];
-const TAB_ICONS = { history: HistoryIcon, methods: Wallet, rules: ListChecks, referrals: Gift, campaigns: Megaphone } as const;
+const TAB_ICONS = { history: HistoryIcon, methods: Wallet, rules: ListChecks, referrals: Gift, campaigns: Megaphone, promocodes: Ticket } as const;
 type PaymentTab = NonNullable<PaymentsSearch["tab"]>;
-
-/** Why a payment failed or waits, in words when the code is known; a provider's own code as is. */
-function paymentError(code: string): string {
-  return tMaybe(`errors.api.${code}`) ?? code;
-}
 
 /** A payment's provider as the admin knows it; adapters by their own name. */
 function providerName(p: Provider, addons: Addons | undefined): string {
@@ -50,7 +47,7 @@ function providerName(p: Provider, addons: Addons | undefined): string {
 
 export function PaymentsPage() {
   const settings = usePaymentSettings();
-  const { tab } = useSearch({ from: "/_app/payments" });
+  const { tab, promo } = useSearch({ from: "/_app/payments" });
   const navigate = useNavigate({ from: "/payments" });
   const s = settings.data;
   // Until a way to take payments is on, setting one up is what the page is for.
@@ -59,7 +56,6 @@ export function PaymentsPage() {
   return (
     <>
       <PageHeader title={t("payments.title")} sub={t("payments.subtitle")} actions={<SellingSwitch s={s} />} />
-      {s?.moving.length ? <MovingBanner ids={s.moving} /> : null}
       {s && !s.enabled ? (
         <div className="banner warn" role="status">
           <TriangleAlert size={16} className="shrink-0" aria-hidden />
@@ -83,6 +79,8 @@ export function PaymentsPage() {
       >
         {shown === "history" ? (
           <History />
+        ) : shown === "promocodes" ? (
+          <PromoSection sub={promo ?? "codes"} onSub={(next) => void navigate({ search: { tab: "promocodes", promo: next }, replace: true })} />
         ) : shown === "referrals" ? (
           <Referrals />
         ) : shown === "campaigns" ? (
@@ -91,10 +89,10 @@ export function PaymentsPage() {
           <QueryBoundary query={settings} pending={<Skeleton style={{ height: 320, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
             {(v) =>
               shown === "methods" ? (
-                // The payment systems take the width, Stars sit beside them.
-                <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-start">
-                  <AddonsCard selling={v.enabled} />
+                // Stars are built in; the other payment methods are addons, set up in Addons.
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2 lg:items-start">
                   <StarsCard s={v} />
+                  <AddonMethodsCard />
                 </div>
               ) : (
                 <div className="flex max-w-[960px] flex-col gap-4">
@@ -130,31 +128,20 @@ function SellingSwitch({ s }: { s?: Settings }) {
   );
 }
 
-/** The built-in YooKassa and CryptoBot moved to the marketplace: their adapters install after the update. */
-function MovingBanner({ ids }: { ids: string[] }) {
-  const addons = useAddons().data;
-  const names = ids.map((id) => addonName(id, addons)).join(", ");
-  return (
-    <div className="banner info" role="status">
-      <Spinner />
-      <span className="min-w-0 flex-1">{t("payments.moving", { names })}</span>
-    </div>
-  );
-}
-
 function History() {
   const qc = useQueryClient();
   const toast = useToast();
   const [status, setStatus] = useState<Status | "">("");
   const [provider, setProvider] = useState<Provider | "">("");
   const [refund, setRefund] = useState<Payment | null>(null);
+  const [byHand, setByHand] = useState<Payment | null>(null);
   const addons = useAddons().data;
   const providers = [...BUILT_IN, ...(addons?.installed.map((a) => `addon:${a.id}`) ?? [])];
   const list = useInfiniteQuery({
     queryKey: [...qk.payments, status, provider],
     initialPageParam: 0,
-    queryFn: ({ pageParam }) =>
-      unwrap(api.GET("/api/v1/payments", { params: { query: { status: status || undefined, provider: provider || undefined, before: pageParam || undefined, limit: 50 } } })),
+    queryFn: ({ pageParam, signal }) =>
+      unwrap(api.GET("/api/v1/payments", { params: { query: { status: status || undefined, provider: provider || undefined, before: pageParam || undefined, limit: 50 } }, signal })),
     getNextPageParam: (last) => (last.items.length === 50 ? last.items[last.items.length - 1]!.id : undefined),
     placeholderData: keepPreviousData,
   });
@@ -164,6 +151,17 @@ function History() {
       void qc.invalidateQueries({ queryKey: qk.payments });
       setRefund(null);
       toast.ok(t("payments.refunded"));
+    },
+    onError: (e) => toast.error(errorText(e)),
+  });
+  // A payment paid through an adapter and never applied, refunded by the admin in the
+  // provider's dashboard: the panel only records it.
+  const doByHand = useMutation({
+    mutationFn: (id: number) => unwrap(api.POST("/api/v1/payments/{id}/refunded-by-hand", { params: { path: { id } } })),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.payments });
+      setByHand(null);
+      toast.ok(t("payments.byHandDone"));
     },
     onError: (e) => toast.error(errorText(e)),
   });
@@ -197,31 +195,35 @@ function History() {
           ))}
         </select>
       </div>
-      {list.isError && list.data ? <StaleNotice onRetry={() => void list.refetch()} retrying={list.isFetching} /> : null}
-      {list.isPending ? (
-        <div className="flex flex-col gap-2">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} style={{ height: 56 }} />
-          ))}
-        </div>
-      ) : !list.data ? (
-        <ErrorState text={errorText(list.error)} onRetry={() => void list.refetch()} />
-      ) : items.length === 0 ? (
-        <EmptyState title={t("payments.empty")} text={status || provider ? t("payments.emptyFiltered") : t("payments.emptyText")} search={!!(status || provider)} />
-      ) : (
-        <>
-          <ul className="row-list" aria-busy={list.isFetching}>
-            {items.map((p) => (
-              <PaymentRow key={p.id} p={p} provider={providerName(p.provider, addons)} onRefund={() => setRefund(p)} />
+      <QueryBoundary
+        query={list}
+        pending={
+          <div className="flex flex-col gap-2">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} style={{ height: 56 }} />
             ))}
-          </ul>
-          {list.hasNextPage ? (
-            <Button className="mt-3" size="sm" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
-              {t("payments.more")}
-            </Button>
-          ) : null}
-        </>
-      )}
+          </div>
+        }
+      >
+        {() =>
+          items.length === 0 ? (
+            <EmptyState title={t("payments.empty")} text={status || provider ? t("payments.emptyFiltered") : t("payments.emptyText")} search={!!(status || provider)} />
+          ) : (
+            <>
+              <ul className="row-list" aria-busy={list.isFetching}>
+                {items.map((p) => (
+                  <PaymentRow key={p.id} p={p} provider={providerName(p.provider, addons)} onRefund={() => setRefund(p)} onByHand={() => setByHand(p)} />
+                ))}
+              </ul>
+              {list.hasNextPage ? (
+                <Button className="mt-3" size="sm" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+                  {t("payments.more")}
+                </Button>
+              ) : null}
+            </>
+          )
+        }
+      </QueryBoundary>
       <Confirm
         open={!!refund}
         onOpenChange={(v) => !v && setRefund(null)}
@@ -232,11 +234,20 @@ function History() {
         loading={doRefund.isPending}
         onConfirm={() => refund && doRefund.mutate(refund.id)}
       />
+      <Confirm
+        open={!!byHand}
+        onOpenChange={(v) => !v && setByHand(null)}
+        title={t("payments.byHandTitle", { sum: byHand ? money(byHand.amount, byHand.currency) : "" })}
+        text={t("payments.byHandText")}
+        confirm={t("payments.byHand")}
+        loading={doByHand.isPending}
+        onConfirm={() => byHand && doByHand.mutate(byHand.id)}
+      />
     </section>
   );
 }
 
-function PaymentRow({ p, provider, onRefund }: { p: Payment; provider: string; onRefund: () => void }) {
+function PaymentRow({ p, provider, onRefund, onByHand }: { p: Payment; provider: string; onRefund: () => void; onByHand: () => void }) {
   const buyer = p.tg_username ? `@${p.tg_username}` : `tg ${p.tg_id}`;
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
@@ -247,7 +258,7 @@ function PaymentRow({ p, provider, onRefund }: { p: Payment; provider: string; o
           <Pill tone={STATUS_TONE[p.status]}>{t(`payments.statuses.${p.status}`)}</Pill>
         </div>
         <div className="mt-1 text-xs text-[var(--ink-500)]">
-          {dateShort(p.created_at)} {time(p.created_at)} · {provider} · {p.kind === "new" ? t("payments.kindNew") : p.kind === "package" ? t("payments.kindPackage") : t("payments.kindRenew")} · {buyer}
+          {dateShort(p.created_at)} {time(p.created_at)} · {provider} · {p.kind === "new" ? t("payments.kindNew") : p.kind === "package" ? t("payments.kindPackage") : p.kind === "trial" ? t("payments.kindTrial") : t("payments.kindRenew")} · {buyer}
           {p.user_id != null ? (
             <>
               {" → "}
@@ -258,12 +269,18 @@ function PaymentRow({ p, provider, onRefund }: { p: Payment; provider: string; o
           ) : null}
         </div>
         {p.error ? (
-          <div className="mt-1 text-xs text-[var(--berry-600)]">{t(p.status === "failed" ? "payments.invoiceFailed" : "payments.notApplied", { error: paymentError(p.error) })}</div>
+          <div className="mt-1 text-xs text-[var(--berry-600)]">
+            {t(p.status === "failed" ? "payments.invoiceFailed" : p.error === "trial_refund_manual" ? "payments.notAppliedByHand" : "payments.notApplied", { error: apiCodeText(p.error) })}
+          </div>
         ) : null}
       </div>
-      {p.provider === "stars" && p.status === "applied" ? (
+      {p.provider === "stars" && (p.status === "applied" || p.status === "paid") ? (
         <Button size="sm" variant="ghost" onClick={onRefund}>
           <Undo2 size={16} aria-hidden /> {t("payments.refund")}
+        </Button>
+      ) : p.provider !== "stars" && p.status === "paid" ? (
+        <Button size="sm" variant="ghost" onClick={onByHand}>
+          <HandCoins size={16} aria-hidden /> {t("payments.byHand")}
         </Button>
       ) : null}
     </li>
@@ -282,7 +299,7 @@ function useSavePayments() {
   });
 }
 
-/** Telegram Stars, the way to take payments built into the panel; the others come from the marketplace below. */
+/** Telegram Stars, the way to take payments built into the panel; the others are addons. */
 function StarsCard({ s }: { s: Settings }) {
   const save = useSavePayments();
   const { draft: stars, setDraft: setStars, dirty, reset } = useDraft(s.stars);
@@ -295,21 +312,83 @@ function StarsCard({ s }: { s: Settings }) {
       <form onSubmit={submit} noValidate>
         {save.error ? <div className="banner err mb-4">{errorText(save.error)}</div> : null}
         <Provider title={t("payments.providers.stars")} sub={t("payments.starsSub")} on={stars} onChange={setStars} live={s.available.stars} selling={s.enabled} offline={s.enabled && stars && !s.available.stars ? t("payments.starsBotOff") : ""} />
-        <p className="text-xs text-[var(--ink-500)]">{t("payments.rublesInMarketplace")}</p>
         <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
       </form>
     </section>
   );
 }
 
-/** Who may buy, what a renewal does to the traffic, and the free trial. */
+/** The payment methods of the marketplace are addons: what is installed, and the way to them. */
+function AddonMethodsCard() {
+  const addons = useAddons().data;
+  const installed = addons?.installed ?? [];
+  return (
+    <section className="card glass reveal">
+      <div className="card-head">
+        <div className="min-w-0">
+          <h2 className="card-title">{t("payments.addonMethods")}</h2>
+          <div className="card-sub">{t("payments.addonMethodsSub")}</div>
+        </div>
+      </div>
+      {!addons ? (
+        <Skeleton style={{ height: 20, width: "60%", borderRadius: 8 }} />
+      ) : installed.length ? (
+        <ul className="flex flex-wrap gap-2" aria-label={t("payments.addonMethods")}>
+          {installed.map((a) => (
+            <li key={a.id}>
+              <span className="tag">{addonName(a.id, addons)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[13px] text-[var(--ink-500)]">{t("payments.addonMethodsNone")}</p>
+      )}
+      <div className="mt-4 flex justify-end">
+        <Link to="/addons" className="btn btn-glass btn-sm">
+          {t("payments.openAddons")}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/** Who may buy, what a renewal does to the traffic, the free trial and the free plan. */
 function RulesCard({ s }: { s: Settings }) {
   const tariffs = useTariffs();
   const save = useSavePayments();
-  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({ allowNew: s.allow_new, resetTraffic: s.renew_resets_traffic, trial: s.trial_tariff_id ?? 0 });
+  // The free plan's channel condition needs the bot's channel (Telegram → Menu and texts).
+  const hasChannel = !!useTelegram().data?.config.channel.chat;
+  const { draft: form, setDraft: setForm, dirty, reset } = useDraft({
+    allowNew: s.allow_new,
+    resetTraffic: s.renew_resets_traffic,
+    trial: s.trial_tariff_id ?? 0,
+    trialStars: s.trial_stars ? String(s.trial_stars) : "",
+    trialRub: s.trial_rub ? String(s.trial_rub / 100) : "",
+    free: s.free_tariff_id ?? 0,
+    freeCondition: s.free_condition,
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate({ allow_new: form.allowNew, renew_resets_traffic: form.resetTraffic, trial_tariff_id: form.trial });
+    // The trial's price as a tariff's: empty is no price, both empty a free trial.
+    const errs: Record<string, string> = {};
+    const starsN = Number(form.trialStars);
+    const rubN = rubKopecks(form.trialRub);
+    if (form.trialStars.trim() && !isStars(starsN)) errs.trial_stars = t("tariffs.errStars");
+    if (form.trialRub.trim() && !isKopecks(rubN)) errs.trial_rub = t("tariffs.errRub");
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    save.mutate({
+      allow_new: form.allowNew,
+      renew_resets_traffic: form.resetTraffic,
+      trial_tariff_id: form.trial,
+      // No trial, no price: a price left in the hidden fields does not come back later.
+      trial_stars: form.trial && form.trialStars.trim() ? starsN : 0,
+      trial_rub: form.trial && form.trialRub.trim() ? rubN : 0,
+      free_tariff_id: form.free,
+      // Sent only when changed: a channel removed from the bot since does not block saving the rest.
+      ...(form.freeCondition !== s.free_condition ? { free_condition: form.freeCondition } : {}),
+    });
   };
   return (
     <section className="card glass reveal">
@@ -330,8 +409,11 @@ function RulesCard({ s }: { s: Settings }) {
             onChange={(v) => setForm((f) => ({ ...f, resetTraffic: v }))}
           />
           <div className="pt-4">
-            <Field label={t("payments.trial")} htmlFor="pay-trial" hint={s.trials ? `${t("payments.trialSub")} ${t("payments.trialsGiven", { n: s.trials })}` : t("payments.trialSub")}>
-              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => setForm((f) => ({ ...f, trial: Number(e.target.value) }))}>
+            <Field label={t("payments.trial")} htmlFor="pay-trial" hint={`${form.trialStars.trim() || form.trialRub.trim() ? t("payments.trialSubPaid") : t("payments.trialSub")}${s.trials ? ` ${t("payments.trialsGiven", { n: s.trials })}` : ""}`}>
+              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => {
+                  const trial = Number(e.target.value);
+                  setForm((f) => (trial ? { ...f, trial } : { ...f, trial, trialStars: "", trialRub: "" }));
+                }}>
                 <option value={0}>{t("payments.trialOff")}</option>
                 {(tariffs.data ?? []).map((tr) => (
                   <option key={tr.id} value={tr.id}>
@@ -340,9 +422,46 @@ function RulesCard({ s }: { s: Settings }) {
                 ))}
               </select>
             </Field>
+            {form.trial ? (
+              <div className="grid gap-x-3 sm:grid-cols-2" role="group" aria-label={t("payments.trialPrice")}>
+                <Field label={`${t("payments.trialPrice")}, ⭐`} htmlFor="pay-trial-stars" error={errors.trial_stars}>
+                  <input id="pay-trial-stars" className="input max-w-[140px]" inputMode="numeric" value={form.trialStars} onChange={(e) => setForm((f) => ({ ...f, trialStars: e.target.value }))} aria-invalid={!!errors.trial_stars} />
+                </Field>
+                <Field label={`${t("payments.trialPrice")}, ₽`} htmlFor="pay-trial-rub" error={errors.trial_rub}>
+                  <input id="pay-trial-rub" className="input max-w-[140px]" inputMode="decimal" value={form.trialRub} onChange={(e) => setForm((f) => ({ ...f, trialRub: e.target.value }))} aria-invalid={!!errors.trial_rub} />
+                </Field>
+                <p className="text-xs text-[var(--ink-500)] sm:col-span-2">{t("payments.trialPriceSub")}</p>
+              </div>
+            ) : null}
+          </div>
+          <div className="pt-4">
+            <Field label={t("payments.free")} htmlFor="pay-free" hint={`${t("payments.freeSub")}${s.free_plans ? ` ${t("payments.freeGiven", { n: s.free_plans })}` : ""}`}>
+              <select id="pay-free" className="input" value={form.free} onChange={(e) => setForm((f) => ({ ...f, free: Number(e.target.value) }))}>
+                <option value={0}>{t("payments.freeOff")}</option>
+                {(tariffs.data ?? []).map((tr) => (
+                  <option key={tr.id} value={tr.id}>
+                    {tr.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {form.free ? (
+              <Field
+                label={t("payments.freeCondition")}
+                htmlFor="pay-free-condition"
+                hint={form.freeCondition === "channel" ? t("payments.freeChannelHint") : !hasChannel ? t("payments.freeNoChannel") : undefined}
+              >
+                <select id="pay-free-condition" className="input" value={form.freeCondition} onChange={(e) => setForm((f) => ({ ...f, freeCondition: e.target.value as Settings["free_condition"] }))}>
+                  <option value="none">{t("payments.freeNone")}</option>
+                  <option value="channel" disabled={!hasChannel && form.freeCondition !== "channel"}>
+                    {t("payments.freeChannel")}
+                  </option>
+                </select>
+              </Field>
+            ) : null}
           </div>
         </div>
-        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
+        <FormActions dirty={dirty} saving={save.isPending} onReset={() => { reset(); setErrors({}); }} />
       </form>
     </section>
   );

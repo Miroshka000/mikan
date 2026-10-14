@@ -15,7 +15,7 @@ import { t } from "../../i18n";
 export type Folder = Schemas["FolderView"];
 
 /** The palette the API knows; the CSS gives each name its colour (styles/app.css, .fc-*). */
-export const FOLDER_COLORS = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"] as const;
+const FOLDER_COLORS = ["gray", "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"] as const;
 type FolderColor = (typeof FOLDER_COLORS)[number];
 
 const colorOf = (c: string): FolderColor => ((FOLDER_COLORS as readonly string[]).includes(c) ? (c as FolderColor) : "gray");

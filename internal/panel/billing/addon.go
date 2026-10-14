@@ -3,13 +3,16 @@ package billing
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"mikan/internal/panel/addons"
 	"mikan/internal/panel/promo"
@@ -76,6 +79,15 @@ func (s *Service) SetAddonConfig(ctx context.Context, id string, enabled bool, v
 	next := AddonConfig{Enabled: enabled, Values: addons.Settings{}}
 	for _, f := range info.Settings {
 		v, given := values[f.Key]
+		if !addons.KnownField(f.Type) {
+			// A type this panel cannot check is not saved. It is refused only if the
+			// request sets it, so the rest of the form still saves; switching on still
+			// needs it when it is required.
+			if v != nil {
+				return AddonConfig{}, &AddonSettingError{Key: f.Key}
+			}
+			continue
+		}
 		var ok bool
 		if !given || f.Secret && v == "" {
 			v = old.Values[f.Key]
@@ -108,10 +120,11 @@ func (s *Service) SetAddonConfig(ctx context.Context, id string, enabled bool, v
 	return next, settings.Set(ctx, s.d.Settings, addonKey(id), next)
 }
 
-// fieldValue checks one setting by the adapter's description; nil is "not set".
+// fieldValue checks one setting by the adapter's description; nil is "not set". A type the
+// panel does not know never passes: it could not say what the value may be.
 func fieldValue(f addons.Field, v any) (any, bool) {
 	switch f.Type {
-	case "bool":
+	case addons.FieldBool:
 		b, ok := v.(bool)
 		if v == nil {
 			return nil, true
@@ -120,7 +133,21 @@ func fieldValue(f addons.Field, v any) (any, bool) {
 			return nil, false
 		}
 		return b, true
-	default:
+	case addons.FieldSelect:
+		str, ok := v.(string)
+		if v != nil && !ok {
+			return nil, false
+		}
+		if str == "" {
+			return nil, true
+		}
+		if !slices.ContainsFunc(f.Options, func(o addons.Option) bool { return o.Value == str }) {
+			return nil, false
+		}
+		return str, true
+	case addons.FieldNumber:
+		return numberValue(f, v)
+	case addons.FieldString, addons.FieldText:
 		str, ok := v.(string)
 		if v != nil && !ok {
 			return nil, false
@@ -129,16 +156,70 @@ func fieldValue(f addons.Field, v any) (any, bool) {
 		switch {
 		case str == "":
 			return nil, true
-		case len(str) > 4096:
+		case utf8.RuneCountInString(str) > maxAddonText:
 			return nil, false
-		case f.Pattern != "":
+		case f.Type == addons.FieldString && f.Pattern != "":
 			re, err := regexp.Compile(f.Pattern)
 			if err != nil || !re.MatchString(str) {
 				return nil, false
 			}
 		}
 		return str, true
+	case addons.FieldCode:
+		// Not trimmed: the indentation of a script is part of it.
+		str, ok := v.(string)
+		if v != nil && !ok {
+			return nil, false
+		}
+		switch {
+		case strings.TrimSpace(str) == "":
+			return nil, true
+		case len(str) > addons.MaxCode, !utf8.ValidString(str):
+			return nil, false
+		}
+		return str, true
 	}
+	return nil, false
+}
+
+// maxAddonText is the longest value of a string or text setting, in characters.
+const maxAddonText = 4096
+
+// numberValue reads an integer setting: a JSON number without a fraction (or an empty
+// string for "not set"), within the field's Min and Max. Stored as int64.
+func numberValue(f addons.Field, v any) (any, bool) {
+	var n int64
+	switch x := v.(type) {
+	case nil:
+		return nil, true
+	case string:
+		if x == "" {
+			return nil, true
+		}
+		return nil, false
+	case float64:
+		// 2^53 is where a float stops holding every integer.
+		if x != math.Trunc(x) || math.Abs(x) > 1<<53 {
+			return nil, false
+		}
+		n = int64(x)
+	case int:
+		n = int64(x)
+	case int64:
+		n = x
+	case json.Number:
+		i, err := x.Int64()
+		if err != nil {
+			return nil, false
+		}
+		n = i
+	default:
+		return nil, false
+	}
+	if f.Min != nil && n < *f.Min || f.Max != nil && n > *f.Max {
+		return nil, false
+	}
+	return n, true
 }
 
 // availableAddons are the adapters that take rubles now: installed and running, switched
@@ -152,7 +233,7 @@ func (s *Service) availableAddons(ctx context.Context) []string {
 		return nil
 	}
 	var out []string
-	for id, a := range st.Adapters {
+	for id, a := range st.Of(addons.KindPayment) {
 		if a.Status != "running" {
 			continue
 		}
@@ -286,13 +367,25 @@ func (s *Service) addonWebhook(ctx context.Context, w http.ResponseWriter, r *ht
 	w.WriteHeader(http.StatusOK)
 }
 
-// checkAddon asks the adapter about an invoice and records what it says: the status, the
-// amount and the currency must match the payment.
+// checkAddon asks the adapter about an invoice and records what it says: the currency must
+// match the payment and the amount must cover it. More is the provider's fee charged to the
+// buyer on top (Platega adds it once a method is picked); the invoice is ours, so it is paid.
+// Only an invoice we do not have is ErrBadPayment: a database that failed to answer is
+// returned as it is, so the webhook answers 503 and the provider sends it again.
 func (s *Service) checkAddon(ctx context.Context, provider, ext string) error {
 	pay, err := s.d.Store.Q.GetPaymentByExternal(ctx, db.GetPaymentByExternalParams{Provider: provider, ExternalID: sql.NullString{String: ext, Valid: true}})
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
 		return ErrBadPayment
 	}
+	if err != nil {
+		return err
+	}
+	return s.checkAddonPayment(ctx, pay)
+}
+
+// checkAddonPayment is checkAddon for a payment already loaded.
+func (s *Service) checkAddonPayment(ctx context.Context, pay db.Payment) error {
+	provider, ext := pay.Provider, pay.ExternalID.String
 	cl, cfg, err := s.addonClient(ctx, AddonID(provider))
 	if err != nil {
 		return err
@@ -303,13 +396,16 @@ func (s *Service) checkAddon(ctx context.Context, provider, ext string) error {
 	}
 	switch st.Status {
 	case "paid":
-		if st.Amount != pay.Amount || st.Currency != pay.Currency {
+		if st.Amount < pay.Amount || st.Currency != pay.Currency {
 			s.d.Log.Error("billing: adapter amount differs", "payment", pay.ID, "provider", provider, "amount", st.Amount, "currency", st.Currency)
 			return ErrBadPayment
 		}
+		if st.Amount > pay.Amount {
+			s.d.Log.Info("billing: the buyer paid the provider's fee", "payment", pay.ID, "provider", provider, "amount", st.Amount, "invoice", pay.Amount)
+		}
 		if s.d.Promo != nil {
 			r, redemptionErr := s.d.Promo.GetPaymentRedemption(ctx, pay.ID)
-			late := redemptionErr == nil && latePromoPayment(r, paymentTime(pay, s.d.Now().Unix()))
+			late := redemptionErr == nil && promo.PaidLate(r, paymentTime(pay, s.d.Now().Unix()))
 			if late {
 				handled, err := s.refundLatePromoPayment(ctx, pay.ID, ext, func(current db.Payment) error {
 					// This invoice already contains the discounted amount. The stable key
@@ -329,11 +425,11 @@ func (s *Service) checkAddon(ctx context.Context, provider, ext string) error {
 		}
 		return s.paid(ctx, pay, ext)
 	case "canceled":
-		_, err := s.d.Store.Q.SetPaymentStatus(ctx, db.SetPaymentStatusParams{NewStatus: "failed", ID: pay.ID, OldStatus: "pending"})
+		_, err := s.d.Store.Q.SetPaymentStatus(ctx, db.SetPaymentStatusParams{NewStatus: PaymentFailed, ID: pay.ID, OldStatus: PaymentPending})
 		if err != nil {
 			return err
 		}
-		if s.d.Promo != nil && (pay.Status == "pending" || pay.Status == "expired" || pay.Status == "failed") {
+		if s.d.Promo != nil && (pay.Status == PaymentPending || pay.Status == PaymentExpired || pay.Status == PaymentFailed) {
 			return s.d.Promo.ReleasePayment(ctx, pay.ID)
 		}
 		return nil

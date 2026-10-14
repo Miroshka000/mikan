@@ -81,7 +81,7 @@ func TestSubscriptionDomainCertificate(t *testing.T) {
 	if m.ensure(ctx) {
 		t.Fatal("a certificate covering both names needs no order")
 	}
-	if s := m.Status(); s.Kind != "letsencrypt" || s.Error != "" {
+	if s := m.Status(); s.Kind != "acme" || s.Error != "" {
 		t.Fatalf("no subscription domain: %+v", s)
 	}
 	if err := settings.Set(ctx, set, settings.KeySubDomain, "sub.example.com"); err != nil {
@@ -90,7 +90,7 @@ func TestSubscriptionDomainCertificate(t *testing.T) {
 	if m.ensure(ctx) {
 		t.Fatal("a certificate covering the subscription domain needs no order")
 	}
-	if s := m.Status(); s.Kind != "letsencrypt" || s.Error != "" {
+	if s := m.Status(); s.Kind != "acme" || s.Error != "" {
 		t.Fatalf("with subscription domain: %+v", s)
 	}
 	// Another name: the order fails here, the panel's certificate is served meanwhile.
@@ -100,7 +100,7 @@ func TestSubscriptionDomainCertificate(t *testing.T) {
 	if !m.ensure(ctx) {
 		t.Fatal("a certificate without the new name needs an order")
 	}
-	if s := m.Status(); s.Kind != "letsencrypt" || s.Error == "" {
+	if s := m.Status(); s.Kind != "acme" || s.Error == "" {
 		t.Fatalf("ordering failed: %+v", s)
 	}
 	if got := served(); !tlscert.Covers(got, "vpn.example.com") {
@@ -133,7 +133,7 @@ func TestSubscriptionDomainCertificate(t *testing.T) {
 	if m.ensure(ctx) {
 		t.Fatal("the panel's certificate covers its domain again")
 	}
-	if s := m.Status(); s.Kind != "letsencrypt" || s.Error != "" {
+	if s := m.Status(); s.Kind != "acme" || s.Error != "" {
 		t.Fatalf("cleared: %+v", s)
 	}
 }

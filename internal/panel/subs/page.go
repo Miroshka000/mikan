@@ -63,7 +63,7 @@ func (h *Handler) image(w http.ResponseWriter, r *http.Request, name string) {
 	a, ok, err := h.pages.Image(r.Context(), name)
 	switch {
 	case err != nil:
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		internalError(w)
 		return
 	case !ok:
 		server.NotFound(w)
@@ -94,7 +94,7 @@ func (h *Handler) doc(w http.ResponseWriter, r *http.Request, rest string) {
 	d, ok, err := h.pages.Doc(r.Context(), id)
 	switch {
 	case err != nil:
-		http.Error(w, "internal error", http.StatusInternalServerError)
+		internalError(w)
 		return
 	case !ok:
 		server.NotFound(w)

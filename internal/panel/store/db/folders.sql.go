@@ -45,17 +45,6 @@ func (q *Queries) CountFolderUsers(ctx context.Context) ([]CountFolderUsersRow, 
 	return items, nil
 }
 
-const countFolders = `-- name: CountFolders :one
-SELECT count(*) FROM user_folders
-`
-
-func (q *Queries) CountFolders(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countFolders)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createFolder = `-- name: CreateFolder :one
 INSERT INTO user_folders (name, color, emoji, sort, created_at)
 VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort), 0) + 1 FROM user_folders), $4)

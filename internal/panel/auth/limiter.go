@@ -1,9 +1,25 @@
 package auth
 
 import (
+	"net/netip"
 	"sync"
 	"time"
 )
+
+// ClientKey is what the limiters count an address as: one client of IPv6 owns a whole
+// /64, so rotating through its addresses does not hand out fresh allowances.
+func ClientKey(ip string) string {
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ip
+	}
+	if a = a.Unmap(); a.Is6() {
+		if p, err := a.Prefix(64); err == nil {
+			return p.String()
+		}
+	}
+	return a.String()
+}
 
 // Limiter blocks a key (client IP or username) after too many failed logins.
 // Each repeated block doubles the block time, up to maxBlock.

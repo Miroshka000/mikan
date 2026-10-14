@@ -154,6 +154,7 @@ services:
       MIKAN_DATA_DIR: /data/node
       MIKAN_NODE_SOCKET: /run/mikan/node.sock
       MIKAN_NODE_JOIN: ${MIKAN_NODE_JOIN}
+      MIKAN_ACME_LISTEN: "${MIKAN_ACME_LISTEN:-:80}"
     volumes: ["./data/node:/data/node", "run:/run/mikan"]
     pids_limit: 1024
 
@@ -192,9 +193,25 @@ pub fn put_compose(root: &Path, text: &str) -> Result<()> {
     write_private(&root.join("compose.yaml"), text.as_bytes())
 }
 
+/// How long a question to the engine may take (a version, the containers, a health check):
+/// a wedged dockerd must not hang `mikan doctor`, the menu's status or a wait for the panel.
+const ASK_LIMIT: Duration = Duration::from_secs(20);
+
+/// Runs a short docker command for up to limit; None when it failed to start, failed, or
+/// ran out of time (then it is killed).
+fn ask(mut cmd: Command, limit: Duration) -> Option<Output> {
+    let child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().ok()?;
+    wait_within(child, limit).ok().flatten()
+}
+
 /// The Docker engine's version, None without Docker.
 pub fn version() -> Option<String> {
-    output("docker", &["version", "--format", "{{.Server.Version}}"]).map(|v| v.trim().to_owned()).filter(|v| !v.is_empty())
+    let mut cmd = Command::new("docker");
+    cmd.args(["version", "--format", "{{.Server.Version}}"]);
+    ask(cmd, ASK_LIMIT)
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+        .filter(|v| !v.is_empty())
 }
 
 pub fn compose_ok() -> bool {
@@ -369,13 +386,7 @@ pub fn pull(reference: &str, mut progress: impl FnMut(f64)) -> Result<()> {
 
 /// Whether the engine has the image already (a pulled one, or one loaded from an archive).
 pub fn image_present(reference: &str) -> bool {
-    Command::new("docker")
-        .args(["image", "inspect", reference])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+    crate::system::succeeds("docker", &["image", "inspect", reference])
 }
 
 /// Loads an image archive (docker save | gzip) and returns the image's name.
@@ -522,16 +533,18 @@ pub fn check(out: Output) -> Result<Output> {
 
 /// The panel answers on its port (the container's own health check).
 pub fn panel_healthy() -> bool {
-    compose(&["exec", "-T", "panel", "mikan", "health"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+    panel_healthy_within(ASK_LIMIT)
+}
+
+/// panel_healthy, given up after limit.
+pub fn panel_healthy_within(limit: Duration) -> bool {
+    ask(compose(&["exec", "-T", "panel", "mikan", "health"]), limit).is_some_and(|o| o.status.success())
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct Service {
+    #[serde(rename = "ID", default)]
+    pub id: String,
     #[serde(rename = "Service", default)]
     pub name: String,
     #[serde(rename = "State", default)]
@@ -542,7 +555,8 @@ pub struct Service {
 
 /// The containers of the compose project.
 pub fn services() -> Result<Vec<Service>> {
-    let out = compose_run(&["ps", "--all", "--format", "json"])?;
+    let out = ask(compose(&["ps", "--all", "--format", "json"]), ASK_LIMIT).context("docker compose ps did not answer")?;
+    let out = check(out)?;
     parse_services(&String::from_utf8_lossy(&out.stdout))
 }
 
@@ -565,18 +579,19 @@ pub struct Stats {
     pub mem: String,
 }
 
-/// CPU and memory of the running containers.
-pub fn stats() -> Vec<Stats> {
-    let Some(ids) = compose(&["ps", "-q"]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()) else {
-        return Vec::new();
-    };
-    let ids: Vec<&str> = ids.split_whitespace().collect();
+/// CPU and memory of the running ones of services (what services() listed: no second
+/// `compose ps`).
+pub fn stats(services: &[Service]) -> Vec<Stats> {
+    let ids: Vec<&str> = services.iter().filter(|s| s.state == "running" && !s.id.is_empty()).map(|s| s.id.as_str()).collect();
     if ids.is_empty() {
         return Vec::new();
     }
-    let mut args = vec!["stats", "--no-stream", "--format", "{{json .}}"];
-    args.extend(ids);
-    output("docker", &args).map(|o| o.lines().filter_map(|l| serde_json::from_str(l).ok()).collect()).unwrap_or_default()
+    let mut cmd = Command::new("docker");
+    cmd.args(["stats", "--no-stream", "--format", "{{json .}}"]).args(ids);
+    ask(cmd, ASK_LIMIT)
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().filter_map(|l| serde_json::from_str(l).ok()).collect())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -644,6 +659,8 @@ mod tests {
         // for it would drop every client, so it has none.
         assert!(panel.contains("mem_limit") && !node.contains("mem_limit") && !NODE_COMPOSE.contains("mem_limit"));
         assert!(NODE_COMPOSE.contains("./data/node:/data/node") && !NODE_COMPOSE.contains("data/panel"));
+        // The node answers the CA for its own certificate, past a web server when told to.
+        assert!(NODE_COMPOSE.contains("MIKAN_ACME_LISTEN: \"${MIKAN_ACME_LISTEN:-:80}\""));
     }
 
     fn tmpdir(name: &str) -> std::path::PathBuf {

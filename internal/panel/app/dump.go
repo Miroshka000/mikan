@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // selfDump makes a database backup the way the host's own backups do: by running this
@@ -16,7 +18,12 @@ func selfDump(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	out, err := exec.CommandContext(ctx, exe, "database", "backup", path).CombinedOutput()
+	cmd := exec.CommandContext(ctx, exe, "database", "backup", path)
+	// Stopped, the command is asked to end (it stops its pg_dump on SIGTERM) and only then
+	// killed: a plain kill would leave pg_dump running on after it.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 10 * time.Second
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, tail(strings.TrimSpace(string(out)), 500))
 	}

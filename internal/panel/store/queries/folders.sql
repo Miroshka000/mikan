@@ -4,9 +4,6 @@ SELECT * FROM user_folders ORDER BY sort, id;
 -- name: GetFolder :one
 SELECT * FROM user_folders WHERE id = $1;
 
--- name: CountFolders :one
-SELECT count(*) FROM user_folders;
-
 -- name: CreateFolder :one
 -- A new folder goes last.
 INSERT INTO user_folders (name, color, emoji, sort, created_at)

@@ -41,11 +41,6 @@ func databaseCmd(ctx context.Context, args []string) error {
 		}
 		// The installer reads this line: an unchanged schema lets a failed update go back.
 		fmt.Printf("PostgreSQL schema version: %d -> %d\n", res.Before, res.After)
-		if res.Import == nil {
-			fmt.Println("PostgreSQL schema is ready; no legacy SQLite database")
-		} else {
-			fmt.Printf("SQLite import verified: %d tables; original SQLite preserved\n", len(res.Import.Tables))
-		}
 		return nil
 	case "backup":
 		if len(args) != 2 {
@@ -73,7 +68,7 @@ func databaseCmd(ctx context.Context, args []string) error {
 			return readErr
 		}
 		if string(magic) == "SQLite format 3\x00" {
-			err = store.RestoreSQLite(ctx, dsn, cfg.DataDir, args[1])
+			return errors.New("this is a database of mikan 0.4 (SQLite): mikan 0.5.0.4 restores it and moves it to PostgreSQL; restore it there, then update")
 		} else if string(magic[:5]) == "PGDMP" {
 			if err := checkDump(ctx, args[1]); err != nil {
 				return err

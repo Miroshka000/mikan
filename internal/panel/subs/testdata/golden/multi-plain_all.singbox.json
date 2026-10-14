@@ -1,0 +1,223 @@
+{
+  "dns": {
+    "final": "remote",
+    "servers": [
+      {
+        "server": "1.1.1.1",
+        "tag": "remote",
+        "type": "https"
+      },
+      {
+        "server": "1.1.1.1",
+        "tag": "local",
+        "type": "udp"
+      }
+    ],
+    "strategy": "ipv4_only"
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true
+    }
+  },
+  "inbounds": [
+    {
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    }
+  ],
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "outbounds": [
+        "Авто",
+        "🇳🇱 Нидерланды",
+        "🇺🇸 США",
+        "🇳🇱 VLESS Vision",
+        "🇳🇱 Trojan",
+        "🇳🇱 VLESS gRPC",
+        "🇺🇸 VLESS Vision"
+      ],
+      "tag": "VPN",
+      "type": "selector"
+    },
+    {
+      "interval": "300s",
+      "outbounds": [
+        "🇳🇱 VLESS Vision",
+        "🇳🇱 Trojan",
+        "🇳🇱 VLESS gRPC",
+        "🇺🇸 VLESS Vision"
+      ],
+      "tag": "Авто",
+      "tolerance": 50,
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "interval": "300s",
+      "outbounds": [
+        "🇳🇱 VLESS Vision",
+        "🇳🇱 Trojan",
+        "🇳🇱 VLESS gRPC"
+      ],
+      "tag": "🇳🇱 Нидерланды",
+      "tolerance": 50,
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "interval": "300s",
+      "outbounds": [
+        "🇺🇸 VLESS Vision"
+      ],
+      "tag": "🇺🇸 США",
+      "tolerance": 50,
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "outbounds": [
+        "VPN"
+      ],
+      "tag": "PROXY",
+      "type": "selector"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "203.0.113.7",
+      "server_port": 8443,
+      "tag": "🇳🇱 VLESS Vision",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+          "short_id": "a1b2c3d4"
+        },
+        "server_name": "www.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+    },
+    {
+      "password": "S3cr3t+/=",
+      "server": "203.0.113.7",
+      "server_port": 2087,
+      "tag": "🇳🇱 Trojan",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+          "short_id": "a1b2c3d4"
+        },
+        "server_name": "www.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "trojan"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "203.0.113.7",
+      "server_port": 2053,
+      "tag": "🇳🇱 VLESS gRPC",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+          "short_id": "a1b2c3d4"
+        },
+        "server_name": "www.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "service_name": "goldengrpc",
+        "type": "grpc"
+      },
+      "type": "vless",
+      "uuid": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "usa.example.com",
+      "server_port": 8443,
+      "tag": "🇺🇸 VLESS Vision",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+          "short_id": "a1b2c3d4"
+        },
+        "server_name": "www.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": "local",
+    "final": "VPN",
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "ip_cidr": [
+          "203.0.113.7/32"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "domain": [
+          "usa.example.com"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "domain": [
+          "vpn.example.com"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      }
+    ]
+  }
+}

@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/lib/pq"
 )
 
 const addInboundEvent = `-- name: AddInboundEvent :exec
@@ -242,18 +244,24 @@ func (q *Queries) SetInboundListen(ctx context.Context, arg SetInboundListenPara
 	return err
 }
 
-const upsertInboundReach = `-- name: UpsertInboundReach :exec
-INSERT INTO inbound_reach (slot, inbound_id, at) VALUES ($1, $2, $3)
+const upsertInboundReaches = `-- name: UpsertInboundReaches :exec
+INSERT INTO inbound_reach (slot, inbound_id, at)
+SELECT t.slot, t.inbound_id, t.at
+FROM (SELECT unnest($1::text[]) AS slot, unnest($2::bigint[]) AS inbound_id,
+             unnest($3::bigint[]) AS at) AS t
+ORDER BY t.slot, t.inbound_id
 ON CONFLICT (slot, inbound_id) DO UPDATE SET at = GREATEST(inbound_reach.at, excluded.at)
 `
 
-type UpsertInboundReachParams struct {
-	Slot      string
-	InboundID int64
-	At        int64
+type UpsertInboundReachesParams struct {
+	Slots      []string
+	InboundIds []int64
+	Ats        []int64
 }
 
-func (q *Queries) UpsertInboundReach(ctx context.Context, arg UpsertInboundReachParams) error {
-	_, err := q.db.ExecContext(ctx, upsertInboundReach, arg.Slot, arg.InboundID, arg.At)
+// When devices got through to inbounds, in one statement; each (slot, inbound) at most
+// once. A reach only moves forward.
+func (q *Queries) UpsertInboundReaches(ctx context.Context, arg UpsertInboundReachesParams) error {
+	_, err := q.db.ExecContext(ctx, upsertInboundReaches, pq.Array(arg.Slots), pq.Array(arg.InboundIds), pq.Array(arg.Ats))
 	return err
 }

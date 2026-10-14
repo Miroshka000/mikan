@@ -3,12 +3,37 @@ package domain
 import (
 	"context"
 	"database/sql"
+	"strings"
+	"unicode/utf8"
 
 	"mikan/internal/panel/store/db"
 )
 
-// MaxTerms caps the terms one tariff is sold for.
-const MaxTerms = 12
+// What a term may cost. Traffic packages and the trial are sold on the same scale, so the
+// API, the admin pages and these checks all mean the same numbers.
+const (
+	MinPriceStars = 1
+	MaxPriceStars = 10_000
+	MinPriceRub   = 100 // kopecks: a ruble
+	MaxPriceRub   = 100_000_000
+)
+
+// PriceStarsOK, PriceRubOK: n is a price the panel sells at. No price at all (0: not sold
+// in that currency) is not one, and whether it is allowed is the caller's.
+func PriceStarsOK(n int64) bool { return n >= MinPriceStars && n <= MaxPriceStars }
+func PriceRubOK(n int64) bool   { return n >= MinPriceRub && n <= MaxPriceRub }
+
+// CheckPrices: a pair of prices as a tariff's; an unset price is not sold in that currency
+// and passes. The error names the price that is out of range.
+func CheckPrices(stars, rub sql.NullInt64) error {
+	switch {
+	case stars.Valid && !PriceStarsOK(stars.Int64):
+		return fieldErr("price_stars", "bad_price")
+	case rub.Valid && !PriceRubOK(rub.Int64):
+		return fieldErr("price_rub", "bad_price")
+	}
+	return nil
+}
 
 // Term is one way a tariff is sold: for so many days (0: no end date; with a billing day,
 // months of 30 days each) at these prices.
@@ -75,4 +100,25 @@ func termDays(t db.Tariff, term sql.NullInt64) int64 {
 		return term.Int64
 	}
 	return t.DurationDays
+}
+
+// What a tariff's description may hold: it goes under the tariff's name in the bot and in
+// the Mini App, so a screenful at most.
+const (
+	MaxDescriptionRunes = 300
+	MaxDescriptionLines = 5
+)
+
+// CleanDescription is the admin's text for buyers as it is stored: line breaks as \n, the
+// ends trimmed. A text over MaxDescriptionRunes characters or MaxDescriptionLines lines is
+// refused, and the error names the field as the API does; empty is allowed (nothing to add).
+func CleanDescription(s string) (string, error) {
+	s = strings.TrimSpace(strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(s))
+	if utf8.RuneCountInString(s) > MaxDescriptionRunes {
+		return "", fieldErr("description", "description_too_long")
+	}
+	if s != "" && strings.Count(s, "\n")+1 > MaxDescriptionLines {
+		return "", fieldErr("description", "description_too_many_lines")
+	}
+	return s, nil
 }

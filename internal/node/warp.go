@@ -19,6 +19,7 @@ import (
 	"github.com/metacubex/mihomo/tunnel"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/textutil"
 )
 
 // warpProxy is the WARP outbound's name in mihomo.
@@ -237,8 +238,8 @@ func isTimeout(err error) bool {
 // truncDetail keeps a detail on one short line.
 func truncDetail(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > 200 {
-		s = string(r[:200]) + "…"
+	if clipped := textutil.ClipRunes(s, 200); clipped != s {
+		s = clipped + "…"
 	}
 	return s
 }

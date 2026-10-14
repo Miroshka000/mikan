@@ -3,6 +3,9 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -35,8 +39,14 @@ func TestInboundAddPrintsPortForHostScript(t *testing.T) {
 	if out.String() != "2083/tcp\n" {
 		t.Fatalf("stdout must be port/network, got %q", out.String())
 	}
-	if err := inboundCmd(ctx, st, []string{"add", "anytls"}, &out, &errOut); err == nil || !strings.Contains(err.Error(), "anytls") {
-		t.Fatalf("a taken port must name the owner: %v", err)
+	if err := inboundCmd(ctx, st, []string{"add", "anytls", "--port", "2083"}, &out, &errOut); err == nil || !strings.Contains(err.Error(), "anytls") {
+		t.Fatalf("a taken port named by the admin must name the owner: %v", err)
+	}
+	// With no port named, the second one takes a free port of the pool, and the host
+	// script opens that one.
+	out.Reset()
+	if err := inboundCmd(ctx, st, []string{"add", "anytls"}, &out, &errOut); err != nil || out.String() == "2083/tcp\n" || !strings.HasSuffix(out.String(), "/tcp\n") {
+		t.Fatalf("the second anytls: %v %q", err, out.String())
 	}
 	out.Reset()
 	if err := inboundCmd(ctx, st, []string{"list"}, &out, &errOut); err != nil || !strings.Contains(out.String(), "2083/tcp") {
@@ -158,6 +168,22 @@ func TestHostsAreChecked(t *testing.T) {
 			t.Errorf("bootstrap %v: %v", c.args, err)
 		}
 	}
+	// The shell asks public DNS where a node's domain leads, as the panel does.
+	records := map[string]string{"b.example.com": "198.51.100.20", "other.example.com": "198.51.100.7"}
+	doh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ans := map[string]any{"Status": 3, "Answer": []any{}}
+		if ip, ok := records[r.URL.Query().Get("name")]; ok {
+			ans["Status"] = 0
+			if r.URL.Query().Get("type") == "A" {
+				ans["Answer"] = []any{map[string]any{"type": 1, "data": ip}}
+			}
+		}
+		_ = json.NewEncoder(w).Encode(ans)
+	}))
+	defer doh.Close()
+	prev := nodeDNS
+	nodeDNS = &dnscheck.Checker{Resolvers: []string{doh.URL}, HTTP: http.DefaultClient}
+	defer func() { nodeDNS = prev }()
 	data := t.TempDir()
 	for _, c := range []struct {
 		args []string
@@ -165,6 +191,8 @@ func TestHostsAreChecked(t *testing.T) {
 	}{
 		{[]string{"add", "--name", "B", "--host", "198.51.100.20/24"}, "--host"},
 		{[]string{"add", "--name", "B", "--host", "198.51.100.20", "--domain", "b"}, "--domain"},
+		{[]string{"add", "--name", "C", "--host", "198.51.100.30", "--domain", "other.example.com"}, "does not lead to the node"},
+		{[]string{"add", "--name", "proxy", "--host", "198.51.100.30"}, "--name: this is the name of a group"},
 	} {
 		if err := nodeCmd(ctx, st, data, c.args, &out, &errOut); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("node %v: %v", c.args, err)
@@ -172,6 +200,10 @@ func TestHostsAreChecked(t *testing.T) {
 	}
 	if err := nodeCmd(ctx, st, data, []string{"add", "--name", "B", "--host", "198.51.100.20", "--api-port", "40000", "--domain", "b.example.com"}, &out, &errOut); err != nil {
 		t.Fatal(err)
+	}
+	// A name is one node's: the panel compares them without regard to case.
+	if err := nodeCmd(ctx, st, data, []string{"add", "--name", "b", "--host", "198.51.100.30"}, &out, &errOut); err == nil || !strings.Contains(err.Error(), "--name: another node has this name") {
+		t.Errorf("a second B: %v", err)
 	}
 	nodes, err := st.Q.ListNodes(ctx)
 	if err != nil {
@@ -185,12 +217,16 @@ func TestHostsAreChecked(t *testing.T) {
 	}{
 		{[]string{"set", id, "--host", "b..example.com"}, "--host"},
 		{[]string{"set", id, "--domain", "b.example.123"}, "--domain"},
+		{[]string{"set", id, "--domain", "other.example.com"}, "does not lead to the node (198.51.100.7 → 198.51.100.20)"},
+		{[]string{"set", id, "--domain", "nowhere.example.com"}, "no A or AAAA record"},
+		{[]string{"set", id, "--name", "PROXY"}, "--name: this is the name of a group"},
+		{[]string{"set", id, "--host", "198.51.100.99"}, "does not lead to the node"},
 	} {
 		if err := nodeCmd(ctx, st, data, c.args, &out, &errOut); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("node %v: %v", c.args, err)
 		}
 	}
-	if err := nodeCmd(ctx, st, data, []string{"set", id, "--host", " 198.51.100.21 "}, &out, &errOut); err != nil {
+	if err := nodeCmd(ctx, st, data, []string{"set", id, "--host", " 198.51.100.21 ", "--domain", ""}, &out, &errOut); err != nil {
 		t.Fatal(err)
 	}
 	if n, err := st.Q.GetNode(ctx, b.ID); err != nil || n.PublicHost != "198.51.100.21" || n.Address != "198.51.100.21:40000" {
@@ -229,5 +265,18 @@ func TestBackupIsPrivateAndConsistent(t *testing.T) {
 	// A bad path leaves nothing behind.
 	if err := databaseBackup(ctx, dsn, filepath.Join(t.TempDir(), "no", "dir", "x.db")); err == nil {
 		t.Fatal("a path that cannot be written")
+	}
+}
+
+// The health check takes any answer of the panel but a server error: the root is a 404, or
+// the admin's own site with its 200, and a panel with a site was called unhealthy.
+func TestHealthProbeTakesTheOwnSite(t *testing.T) {
+	for status, ok := range map[int]bool{http.StatusNotFound: true, http.StatusOK: true, http.StatusBadGateway: false} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+		err := probe(srv.Client(), srv.URL+"/")
+		srv.Close()
+		if (err == nil) != ok {
+			t.Errorf("status %d: %v", status, err)
+		}
 	}
 }

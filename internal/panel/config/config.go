@@ -8,6 +8,16 @@ import (
 	"strconv"
 )
 
+const (
+	// DefaultDataDir is where the panel and the node keep their files in the containers;
+	// MIKAN_DATA_DIR moves it. The node binary shares it, which is why it lives in a
+	// package that imports nothing of the panel.
+	DefaultDataDir = "/data"
+	// DefaultNodeSocket is the unix socket the panel reaches its own node by;
+	// MIKAN_NODE_SOCKET moves it.
+	DefaultNodeSocket = "/run/mikan/node.sock"
+)
+
 type Config struct {
 	DataDir    string
 	Listen     string
@@ -24,9 +34,9 @@ type Config struct {
 
 func FromEnv() (Config, error) {
 	c := Config{
-		DataDir:    env("MIKAN_DATA_DIR", "/data"),
+		DataDir:    env("MIKAN_DATA_DIR", DefaultDataDir),
 		Listen:     env("MIKAN_PANEL_LISTEN", "0.0.0.0:2053"),
-		NodeSocket: env("MIKAN_NODE_SOCKET", "/run/mikan/node.sock"),
+		NodeSocket: env("MIKAN_NODE_SOCKET", DefaultNodeSocket),
 	}
 	if err := c.LogLevel.UnmarshalText([]byte(env("MIKAN_LOG_LEVEL", "info"))); err != nil {
 		return c, fmt.Errorf("MIKAN_LOG_LEVEL: %w", err)

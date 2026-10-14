@@ -1,0 +1,88 @@
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+geodata-mode: false
+geox-url:
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
+dns:
+  enable: true
+  ipv6: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://dns.alidns.com/dns-query
+  nameserver-policy:
+    +.cn:
+      - 223.5.5.5
+  proxy-server-nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies:
+      - Auto
+      - "\U0001F1F3\U0001F1F1 Нидерланды"
+      - "\U0001F1FA\U0001F1F8 США"
+    include-all-proxies: true
+  - name: Auto
+    type: fallback
+    include-all-proxies: true
+    interval: 120
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1F3\U0001F1F1 Нидерланды"
+    type: url-test
+    interval: 120
+    mikan:
+      nodes:
+        - "\U0001F1F3\U0001F1F1 Нидерланды"
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1FA\U0001F1F8 США"
+    type: url-test
+    interval: 120
+    mikan:
+      nodes:
+        - "\U0001F1FA\U0001F1F8 США"
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: PROXY
+    type: select
+    proxies:
+      - VPN
+    hidden: true
+rules:
+  - GEOIP,LAN,DIRECT,no-resolve
+  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+  - DOMAIN-SUFFIX,sber.ru,DIRECT
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - GEOSITE,category-ru,DIRECT
+  - GEOIP,ru,DIRECT
+  - MATCH,VPN
+  - MATCH,REJECT
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+    QUIC:
+      ports:
+        - 443
+        - 8443
+    TLS:
+      ports:
+        - 443
+        - 8443

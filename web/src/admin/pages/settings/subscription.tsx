@@ -8,7 +8,9 @@ import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
+import { ReissueRules } from "./reissue-rules";
 import { useSaveSettings } from "./shared";
+import { LimitPicker } from "../user/limit-picker";
 
 // Ports the installer opens in the firewall (443 and the HTTPS pool): a subscription
 // port among them needs nothing else on the server.
@@ -198,8 +200,8 @@ export function SubscriptionCard({ s }: { s: Schemas["SettingsView"] }) {
   );
 }
 
-// The variables the title and the announcement take (subs.TitleVars).
-const TITLE_VARS = ["brand", "name", "date", "days", "used", "left", "total"] as const;
+// The variables the title and the announcement take (subs.titleValues fills them).
+const TITLE_VARS = ["brand", "name", "date", "days", "used", "left", "total", "devices"] as const;
 
 // The {words} of a text that are no variable: they stay as text in the apps, so this only
 // warns (same case-sensitive match as the panel's substitution).
@@ -221,7 +223,7 @@ export function AppsCard({ s }: { s: Schemas["SettingsView"] }) {
     e.preventDefault();
     save.mutate({ sub_title: form.sub_title.trim(), sub_announce: form.sub_announce.trim(), sub_announce_url: form.sub_announce_url.trim(), brand_accent: form.brand_accent.trim(), brand_logo_url: form.brand_logo_url.trim() });
   };
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   // A variable chip goes into the field last typed in: the title until the announcement is.
   const [target, setTarget] = useState<"sub_title" | "sub_announce">("sub_title");
   const insert = (v: string) => setForm((f) => ({ ...f, [target]: (f[target] ? f[target].replace(/\s*$/, " ") : "") + `{${v}}` }));
@@ -258,13 +260,14 @@ export function AppsCard({ s }: { s: Schemas["SettingsView"] }) {
           />
         </Field>
         <Field label={t("settings.announce")} htmlFor="s-announce" hint={withUnknown(t("settings.announceHint"), unknownAnnounce)} error={errors.sub_announce}>
-          <input
+          <textarea
             id="s-announce"
-            className="input"
+            className="input py-2"
+            rows={3}
             value={form.sub_announce}
             onChange={set("sub_announce")}
             onFocus={() => setTarget("sub_announce")}
-            maxLength={200}
+            maxLength={1000}
             aria-invalid={!!errors.sub_announce}
           />
         </Field>
@@ -317,7 +320,96 @@ export function DevicesCard({ s }: { s: Schemas["SettingsView"] }) {
           <SwitchRow label={t("settings.requireHwid")} sub={t("settings.requireHwidSub")} checked={s.device_require_hwid} disabled={save.isPending || !s.device_binding} onChange={(v) => save.mutate({ device_require_hwid: v })} />
         </li>
       </ul>
+      {s.device_binding ? <UnbindRules s={s} /> : null}
+      <ReissueRules s={s} />
       <p className="mt-3 text-xs text-[var(--ink-500)]">{t("settings.devicesNote")}</p>
     </section>
+  );
+}
+
+/** A period of days in words: "a day", "a week", "30 days". */
+function periodLabel(days: number): string {
+  if (days === 1) return t("settings.unbindDay");
+  if (days === 7) return t("settings.unbindWeek");
+  if (days === 30) return t("settings.unbindMonth");
+  return t("settings.unbindDays", { n: days });
+}
+
+/** A pause in hours: "at once", "6 h", whole days as days, "never" (-1: until the admin lets it). */
+function pauseLabel(hours: number): string {
+  if (hours === 0) return t("settings.unbindAtOnce");
+  if (hours < 0) return t("settings.unbindNever");
+  if (hours % 24 === 0) return t("settings.unbindDays", { n: hours / 24 });
+  return t("settings.unbindHours", { n: hours });
+}
+
+/**
+ * How subscribers unbind devices themselves: how many a period, and how long an unbound
+ * device stays out, so that its app, still open, does not take the place back at once.
+ */
+function UnbindRules({ s }: { s: Schemas["SettingsView"] }) {
+  const save = useSaveSettings();
+  const r = s.device_unbind;
+  const set = (patch: Partial<Schemas["UnbindRules"]>, done: () => void) => save.mutate({ device_unbind: { ...r, ...patch } }, { onSuccess: done });
+  const off = !!r.off;
+  const summary = off
+    ? t("settings.unbindSummaryOff")
+    : r.limit === 0
+      ? t("settings.unbindSummaryFree")
+      : t("settings.unbindSummary", { n: r.limit, period: periodLabel(r.days).toLowerCase() });
+  const pause =
+    r.return_hours < 0
+      ? t("settings.unbindSummaryNever")
+      : r.return_hours > 0
+        ? t("settings.unbindSummaryPause", { pause: pauseLabel(r.return_hours) })
+        : t("settings.unbindSummaryNoPause");
+  return (
+    <div className="mt-4 border-t border-[var(--line)] pt-4">
+      <h3 className="text-[14px] font-medium">{t("settings.unbindTitle")}</h3>
+      <p className="mt-1 mb-3 text-xs text-[var(--ink-500)]">{t("settings.unbindSub")}</p>
+      <div className="flex flex-col gap-3">
+        <LimitPicker
+          label={t("settings.unbindLimit")}
+          value={off ? -1 : r.limit === 0 ? null : r.limit}
+          presets={[-1, 1, 2, 3, 5]}
+          format={(n) => (n < 0 ? t("settings.unbindOff") : String(n))}
+          min={1}
+          max={100}
+          busy={save.isPending}
+          onChange={(n, done) => set(n === -1 ? { off: true } : { off: false, limit: n ?? 0 }, done)}
+        />
+        {!off && r.limit > 0 ? (
+          <LimitPicker
+            label={t("settings.unbindPeriod")}
+            value={r.days}
+            presets={[1, 7, 30]}
+            min={1}
+            max={365}
+            unlimited={false}
+            format={periodLabel}
+            fieldUnit={t("settings.unbindDaysUnit")}
+            busy={save.isPending}
+            onChange={(n, done) => set({ days: n ?? 1 }, done)}
+          />
+        ) : null}
+        {off ? null : (
+        <LimitPicker
+          label={t("settings.unbindReturn")}
+          value={r.return_hours}
+          presets={[0, 6, 24, 72, -1]}
+          min={0}
+          max={720}
+          unlimited={false}
+          format={pauseLabel}
+          fieldUnit={t("settings.unbindHoursUnit")}
+          busy={save.isPending}
+          onChange={(n, done) => set({ return_hours: n ?? 0 }, done)}
+        />
+        )}
+      </div>
+      <p className="mt-3 text-xs text-[var(--ink-600)]" role="status">
+        {off ? summary : `${summary} ${pause}`}
+      </p>
+    </div>
   );
 }

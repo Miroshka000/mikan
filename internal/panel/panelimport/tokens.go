@@ -3,12 +3,13 @@ package panelimport
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"mikan/internal/panel/secure"
 )
 
 // Verifier checks a subscription token Marzban or PasarGuard signed, with the old panel's
@@ -42,16 +43,16 @@ func (v Verifier) Who(token string) (key string, issued int64, ok bool) {
 		data, sig := token[:i], token[i+1:]
 		mac := hmac.New(sha256.New, []byte(v.Secret))
 		mac.Write([]byte(data))
-		if !same(sig, base64.RawURLEncoding.EncodeToString(mac.Sum(nil))) {
+		if !secure.Equal(sig, base64.RawURLEncoding.EncodeToString(mac.Sum(nil))) {
 			return "", 0, false
 		}
 		return payloadKey(data, true)
 	}
 	data, sig := token[:len(token)-10], token[len(token)-10:]
 	sum := sha256.Sum256([]byte(data + v.Secret))
-	good := same(sig, base64.URLEncoding.EncodeToString(sum[:])[:10])
+	good := secure.Equal(sig, base64.URLEncoding.EncodeToString(sum[:])[:10])
 	if v.Kind == PasarGuard && !good {
-		good = same(sig, hex.EncodeToString(sum[:])[:10])
+		good = secure.Equal(sig, hex.EncodeToString(sum[:])[:10])
 	}
 	if !good {
 		return "", 0, false
@@ -94,7 +95,7 @@ func (v Verifier) jwt(token string) (string, int64, bool) {
 	}
 	mac := hmac.New(sha256.New, []byte(v.Secret))
 	mac.Write([]byte(parts[0] + "." + parts[1]))
-	if !same(strings.TrimRight(parts[2], "="), base64.RawURLEncoding.EncodeToString(mac.Sum(nil))) {
+	if !secure.Equal(strings.TrimRight(parts[2], "="), base64.RawURLEncoding.EncodeToString(mac.Sum(nil))) {
 		return "", 0, false
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
@@ -111,5 +112,3 @@ func (v Verifier) jwt(token string) (string, int64, bool) {
 	}
 	return "name:" + claims.Sub, int64(claims.Iat), true
 }
-
-func same(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }

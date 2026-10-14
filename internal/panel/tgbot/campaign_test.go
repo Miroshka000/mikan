@@ -7,9 +7,9 @@ import (
 	"mikan/internal/panel/campaigns"
 )
 
-// withCampaigns hands the bot the campaign service.
-func withCampaigns() func(*env, *Deps) {
-	return func(e *env, d *Deps) {
+// withCampaigns hands the panel's side the campaign service.
+func withCampaigns() func(*env, *wiring) {
+	return func(e *env, d *wiring) {
 		d.Campaigns = campaigns.New(e.st, d.Log, e.clock)
 	}
 }

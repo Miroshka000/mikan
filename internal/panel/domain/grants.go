@@ -86,7 +86,13 @@ func LoadGrantsLeft(ctx context.Context, q *db.Queries, now time.Time) (GrantsLe
 
 // UserGrantsLeft reads what is left of one user's active grants.
 func UserGrantsLeft(ctx context.Context, q *db.Queries, userID int64, now time.Time) (GrantsLeft, error) {
-	rows, err := q.SumUserGrantsLeft(ctx, db.SumUserGrantsLeftParams{UserID: userID, Now: now.Unix()})
+	return GrantsLeftOf(ctx, q, []int64{userID}, now)
+}
+
+// GrantsLeftOf reads what is left of the active grants of the users in ids: a page's worth
+// in one read.
+func GrantsLeftOf(ctx context.Context, q *db.Queries, ids []int64, now time.Time) (GrantsLeft, error) {
+	rows, err := q.SumUsersGrantsLeft(ctx, db.SumUsersGrantsLeftParams{Ids: ids, Now: now.Unix()})
 	if err != nil {
 		return nil, err
 	}
@@ -382,31 +388,21 @@ type GrantInput struct {
 	Lifetime string
 	Days     int64
 	Note     string
+	// By says who gives, when it is not the admin (an addon: "addon:<id>"): the grants list
+	// shows only the note, so the note starts with it, outside the note's own length limit.
+	By string
 }
 
 // Grant gives the user traffic from the admin. A user (or a pool) that ran out gets back
 // in at once: the nodes get the bigger quota.
 func (s *Users) Grant(ctx context.Context, userID int64, in GrantInput) (db.TrafficGrant, error) {
-	in.Note = strings.TrimSpace(in.Note)
-	if err := checkGrant(in.Bytes, in.Lifetime, in.Days); err != nil {
+	in, err := checkGrantInput(in)
+	if err != nil {
 		return db.TrafficGrant{}, err
 	}
-	if len([]rune(in.Note)) > maxGrantNoteLn {
-		return db.TrafficGrant{}, fieldErr("note", "note_too_long")
-	}
 	var g db.TrafficGrant
-	err := s.st.Tx(ctx, func(q *db.Queries) error {
-		u, err := q.GetUser(ctx, userID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		if err != nil {
-			return err
-		}
-		if err := poolExists(ctx, q, in.PoolID); err != nil {
-			return err
-		}
-		g, err = GrantTx(ctx, q, u, GrantSpec{PoolID: in.PoolID, Bytes: in.Bytes, Lifetime: in.Lifetime, Days: in.Days, Source: SourceAdmin, Note: in.Note}, s.now())
+	err = s.st.Tx(ctx, func(q *db.Queries) (err error) {
+		g, err = s.grantOn(ctx, q, userID, in)
 		return err
 	})
 	if err != nil {
@@ -416,8 +412,48 @@ func (s *Users) Grant(ctx context.Context, userID int64, in GrantInput) (db.Traf
 	return g, nil
 }
 
-// poolExists: id 0 (the main traffic) or a pool that exists.
-func poolExists(ctx context.Context, q *db.Queries, id int64) error {
+// GrantOn is Grant on q's transaction, for a caller that writes more in it (an addon's grant
+// with its key, its audit line and its event); the caller tells the nodes (Changed).
+func (s *Users) GrantOn(ctx context.Context, q *db.Queries, userID int64, in GrantInput) (db.TrafficGrant, error) {
+	in, err := checkGrantInput(in)
+	if err != nil {
+		return db.TrafficGrant{}, err
+	}
+	return s.grantOn(ctx, q, userID, in)
+}
+
+// checkGrantInput trims and checks what does not need the database.
+func checkGrantInput(in GrantInput) (GrantInput, error) {
+	in.Note = strings.TrimSpace(in.Note)
+	if err := checkGrant(in.Bytes, in.Lifetime, in.Days); err != nil {
+		return in, err
+	}
+	if len([]rune(in.Note)) > maxGrantNoteLn {
+		return in, fieldErr("note", "note_too_long")
+	}
+	return in, nil
+}
+
+func (s *Users) grantOn(ctx context.Context, q *db.Queries, userID int64, in GrantInput) (db.TrafficGrant, error) {
+	u, err := q.GetUser(ctx, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return db.TrafficGrant{}, ErrNotFound
+	}
+	if err != nil {
+		return db.TrafficGrant{}, err
+	}
+	if err := PoolExists(ctx, q, in.PoolID); err != nil {
+		return db.TrafficGrant{}, err
+	}
+	note := in.Note
+	if in.By != "" {
+		note = in.By + ": " + note
+	}
+	return GrantTx(ctx, q, u, GrantSpec{PoolID: in.PoolID, Bytes: in.Bytes, Lifetime: in.Lifetime, Days: in.Days, Source: SourceAdmin, Note: note}, s.now())
+}
+
+// PoolExists: id 0 (the main traffic) or a pool that exists.
+func PoolExists(ctx context.Context, q *db.Queries, id int64) error {
 	if id == 0 {
 		return nil
 	}

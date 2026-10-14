@@ -145,7 +145,9 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 	}
 	port := in.Port
 	if port == "" {
-		port = info.Port
+		if port, err = s.defaultPort(ctx, node, info.Port, info.Network); err != nil {
+			return db.Inbound{}, err
+		}
 	}
 	if !ValidPort(port) {
 		return db.Inbound{}, ErrBadPort
@@ -179,6 +181,34 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 		return err
 	})
 	return row, err
+}
+
+// defaultPort is the port of an inbound the admin named none for: the preset's own, or,
+// when something holds it already (another inbound of the preset, another program on the
+// server), the first port an automatic move would pick (PickPorts: PortPool, and past it
+// with settings.AnyPort on). With none free the preset's port stays and the usual check
+// names what holds it.
+func (s *Inbounds) defaultPort(ctx context.Context, node db.Node, port, network string) (string, error) {
+	lo, hi, ok := parsePort(port)
+	if !ok || lo != hi {
+		return port, nil
+	}
+	m, err := NodePorts(ctx, s.st.Q, node)
+	if err != nil {
+		return "", err
+	}
+	m = m.WithHost(s.host.of(node.ID))
+	if _, busy := m.Busy(port, network, PortHolder{}); !busy && !m.host.Listens(network, lo) {
+		return port, nil
+	}
+	anyPort, err := settings.New(s.st.Q).On(ctx, settings.AnyPort)
+	if err != nil {
+		return "", err
+	}
+	if free := m.PickPorts(network, anyPort, nil); len(free) > 0 {
+		return free[0], nil
+	}
+	return port, nil
 }
 
 // CopyInbound is an inbound to add from another one: its template — the same keys,

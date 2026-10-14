@@ -114,20 +114,32 @@ fn create(dir: &Path, kind: &str) -> Result<(File, PathBuf)> {
     bail!("no free name for a backup in {}", dir.display())
 }
 
+/// How hard an archive is compressed: an archive made while the panel is stopped is
+/// downtime, so it takes gzip's fastest level (a PostgreSQL dump is compressed already).
+#[derive(Clone, Copy, PartialEq)]
+enum Squeeze {
+    Normal,
+    Fast,
+}
+
 /// tar of members (paths below root) into a new private archive in dir.
-fn pack(root: &Path, dir: &Path, kind: &str, members: &[String]) -> Result<PathBuf> {
+fn pack(root: &Path, dir: &Path, kind: &str, members: &[String], squeeze: Squeeze) -> Result<PathBuf> {
     let (file, path) = create(dir, kind)?;
     // What the node's panel and the updater say to each other (data/node/update) is of the
     // moment: a restore must not bring back an old request, or a status that says an update
     // runs. The panel's own directory is not a member at all.
-    let out = Command::new("tar")
-        .args(["-czf", "-", "--exclude=data/node/update", "-C"])
-        .arg(root)
-        .args(members)
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(file))
-        .stderr(Stdio::piped())
-        .output();
+    let out = match squeeze {
+        Squeeze::Normal => Command::new("tar")
+            .args(["-czf", "-", "--exclude=data/node/update", "-C"])
+            .arg(root)
+            .args(members)
+            .stdin(Stdio::null())
+            .stdout(Stdio::from(file))
+            .stderr(Stdio::piped())
+            .output(),
+        // tar into gzip's fastest level: any tar (BusyBox's too) and any gzip take this.
+        Squeeze::Fast => fast_tar(root, members, file),
+    };
     match out {
         // GNU tar exits 1 when a file changed while it was read (a node's counters): the
         // archive is whole, that one file is as of a moment ago.
@@ -146,6 +158,27 @@ fn pack(root: &Path, dir: &Path, kind: &str, members: &[String]) -> Result<PathB
             Err(e).context("run tar")
         }
     }
+}
+
+/// `tar -c members | gzip -1 > file`: tar's own status and complaint, or gzip's when gzip
+/// failed.
+fn fast_tar(root: &Path, members: &[String], file: File) -> std::io::Result<std::process::Output> {
+    let mut tar = Command::new("tar")
+        .args(["-cf", "-", "--exclude=data/node/update", "-C"])
+        .arg(root)
+        .args(members)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let piped = tar.stdout.take().expect("tar's stdout is piped");
+    let gzip = Command::new("gzip").arg("-1").stdin(Stdio::from(piped)).stdout(Stdio::from(file)).stderr(Stdio::piped()).spawn();
+    let out = tar.wait_with_output()?;
+    let gz = gzip?.wait_with_output()?;
+    if !gz.status.success() {
+        return Ok(gz);
+    }
+    Ok(out)
 }
 
 /// Removes the oldest archives of a kind beyond what it keeps.
@@ -214,7 +247,7 @@ pub fn backup_as(kind: &str, say: &mut dyn FnMut(&str)) -> Result<PathBuf> {
     if exists(root, "data/panel/addons") {
         members.push("data/panel/addons".into());
     }
-    let packed = pack(root, &dir, kind, &members);
+    let packed = pack(root, &dir, kind, &members, Squeeze::Normal);
     if let Some(panel) = &panel {
         let _ = panel.discard(panel_name(SQLITE_COPY));
         let _ = panel.discard(panel_name(DUMP));
@@ -402,6 +435,30 @@ fn fit_to_panel(items: &mut Vec<(PathBuf, &'static str)>, archived: &mut EnvFile
     if !items.iter().any(|(_, r)| [SQLITE, RESTORE_DUMP].contains(r)) {
         bail!("the panel backup has no database");
     }
+    // A backup of 0.4 holds SQLite alone: only a panel that still moves it can take it.
+    let version = current.get("MIKAN_VERSION").unwrap_or_default();
+    if current.get("MIKAN_DATABASE_URL").is_some()
+        && !items.iter().any(|(_, r)| *r == RESTORE_DUMP)
+        && !crate::release::moves_sqlite(version)
+    {
+        bail!(
+            "this backup is of mikan 0.4 (SQLite), and mikan {version} no longer moves SQLite to PostgreSQL: restore it on a server of mikan {}",
+            crate::release::LAST_SQLITE_MOVE
+        );
+    }
+    Ok(())
+}
+
+/// Fits what a node's archive puts back to this server: the image stays the one this
+/// server runs. The archive may be somebody else's file, and its MIKAN_IMAGE would run
+/// whatever image it names, outside the signed releases.
+fn fit_to_node(archived: &mut EnvFile, current: &EnvFile) -> Result<()> {
+    for key in ["MIKAN_IMAGE", "MIKAN_VERSION"] {
+        match current.get(key) {
+            Some(v) => archived.set(key, v)?,
+            None => archived.remove(key),
+        }
+    }
     Ok(())
 }
 
@@ -488,7 +545,7 @@ pub fn archive_stopped(root: &Path, kind: &str, dump: bool) -> Result<PathBuf> {
     })
     .map(|m| (*m).to_owned())
     .collect();
-    let packed = pack(root, &dir, kind, &members);
+    let packed = pack(root, &dir, kind, &members, Squeeze::Fast);
     if pg && let Some(panel) = Dir::open(root, "data/panel", false)? {
         panel.discard(panel_name(DUMP))?;
     }
@@ -537,10 +594,12 @@ pub fn restore(file: &Path, no_db_snapshot: bool, say: &mut dyn FnMut(&str)) -> 
                 if install.node { "node" } else { "panel" }
             );
         }
-        if !install.node {
+        if install.node {
+            fit_to_node(&mut archived, &install.env)?;
+        } else {
             fit_to_panel(&mut items, &mut archived, &install.env)?;
-            archived.save()?;
         }
+        archived.save()?;
         items
     } else {
         if !postgres {
@@ -562,7 +621,7 @@ pub fn restore(file: &Path, no_db_snapshot: bool, say: &mut dyn FnMut(&str)) -> 
             say(&format!("mikan did not start again: {e:#}"));
         }
         if !install.node
-            && let Err(e) = crate::addon::resume()
+            && let Err(e) = crate::addon::resume(say)
         {
             say(&format!("Payment adapters did not start again: {e:#}"));
         }
@@ -632,7 +691,7 @@ pub fn restore(file: &Path, no_db_snapshot: bool, say: &mut dyn FnMut(&str)) -> 
         )));
     }
     if !install.node {
-        crate::addon::resume()?;
+        crate::addon::resume(say)?;
     }
     Ok(())
 }
@@ -690,16 +749,23 @@ mod tests {
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
         backups_dir(&root).unwrap();
         assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
-        let a =
-            pack(&root, &dir, "mikan", &[".env".into(), "compose.yaml".into(), "data/panel/backup.db".into(), "data/node".into()]).unwrap();
-        let b = pack(&root, &dir, "mikan", &[".env".into()]).unwrap();
+        let a = pack(
+            &root,
+            &dir,
+            "mikan",
+            &[".env".into(), "compose.yaml".into(), "data/panel/backup.db".into(), "data/node".into()],
+            Squeeze::Normal,
+        )
+        .unwrap();
+        let b = pack(&root, &dir, "mikan", &[".env".into()], Squeeze::Fast).unwrap();
         assert_ne!(a, b, "two backups of one second must not share a name");
         assert_eq!(fs::metadata(&a).unwrap().permissions().mode() & 0o777, 0o600);
-        // the archive is what restore accepts
+        // the archive is what restore accepts, the fast one too
         check_archive(&a).unwrap();
+        check_archive(&b).unwrap();
         // a failed tar leaves no file
         let before = fs::read_dir(&dir).unwrap().count();
-        assert!(pack(&root, &dir, "mikan", &["no-such-file".into()]).is_err());
+        assert!(pack(&root, &dir, "mikan", &["no-such-file".into()], Squeeze::Normal).is_err());
         assert_eq!(fs::read_dir(&dir).unwrap().count(), before, "a broken archive stayed");
         fs::remove_dir_all(&root).unwrap();
     }
@@ -714,7 +780,7 @@ mod tests {
         file(&root, "data/node/update/status.json", r#"{"state":"running"}"#);
         file(&root, "data/node/update/request", r#"{"version":"0.5.0.2"}"#);
         let dir = backups_dir(&root).unwrap();
-        let a = pack(&root, &dir, "mikan", &[".env".into(), "data/node".into()]).unwrap();
+        let a = pack(&root, &dir, "mikan", &[".env".into(), "data/node".into()], Squeeze::Normal).unwrap();
         let listing = Command::new("tar").arg("-tzf").arg(&a).output().unwrap();
         let names = String::from_utf8_lossy(&listing.stdout);
         assert!(names.contains("data/node/state.json"), "{names}");
@@ -752,6 +818,18 @@ mod tests {
         );
         assert!(dir.join("pre-postgres-20260105-000000.tar.gz").exists());
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // A node's archive keeps this server's image: one it names would run outside the
+    // signed releases.
+    #[test]
+    fn a_node_archive_keeps_the_image() {
+        let mut archived = EnvFile::from_text("x", "MIKAN_MODE=node\nMIKAN_IMAGE=evil.example/x\nMIKAN_VERSION=9.9.9\nNODE_PORT=1\n");
+        let current = EnvFile::from_text("x", "MIKAN_MODE=node\nMIKAN_IMAGE=ghcr.io/miroshka000/mikan@sha256:aa\nMIKAN_VERSION=0.5.0.5\n");
+        fit_to_node(&mut archived, &current).unwrap();
+        assert_eq!(archived.get("MIKAN_IMAGE"), current.get("MIKAN_IMAGE"));
+        assert_eq!(archived.get("MIKAN_VERSION"), current.get("MIKAN_VERSION"));
+        assert_eq!(archived.get("NODE_PORT"), Some("1"), "the settings are the archive's");
     }
 
     // A panel's archive keeps this server's database credentials and image; a server back
@@ -793,6 +871,16 @@ mod tests {
         assert_eq!(archived.get("MIKAN_IMAGE"), Some("old"));
         assert!(!items.iter().any(|(_, r)| *r == "compose.yaml"), "its own compose file stays");
         assert!(items.iter().any(|(_, r)| *r == SQLITE));
+        // the same SQLite backup on a panel of 0.5.0.x moves; on 0.5.1.0 it is refused
+        let mut archived = EnvFile::load(d.join(".env")).unwrap();
+        fit_to_panel(&mut plan(&d).unwrap(), &mut archived, &current).unwrap();
+        let newer = EnvFile::from_text(
+            "x",
+            "MIKAN_IMAGE=live\nMIKAN_VERSION=0.5.1.0\nMIKAN_POSTGRES_PASSWORD=live\nMIKAN_DATABASE_URL=postgresql://mikan:live@localhost/mikan?host=/run/postgresql\n",
+        );
+        let mut archived = EnvFile::load(d.join(".env")).unwrap();
+        let err = fit_to_panel(&mut plan(&d).unwrap(), &mut archived, &newer).unwrap_err();
+        assert!(format!("{err}").contains(crate::release::LAST_SQLITE_MOVE), "{err}");
         // no database at all
         fs::remove_file(d.join("data/panel/backup.db")).unwrap();
         assert!(fit_to_panel(&mut plan(&d).unwrap(), &mut EnvFile::load(d.join(".env")).unwrap(), &current).is_err());

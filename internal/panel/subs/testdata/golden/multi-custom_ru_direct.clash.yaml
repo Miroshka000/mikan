@@ -1,0 +1,407 @@
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+geodata-mode: false
+geox-url:
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
+dns:
+  enable: true
+  ipv6: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://dns.alidns.com/dns-query
+  nameserver-policy:
+    +.cn:
+      - 223.5.5.5
+  proxy-server-nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxies:
+  - name: "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+    type: vless
+    server: 203.0.113.7
+    port: 443
+    client-fingerprint: chrome
+    network: xhttp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: false
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+    xhttp-opts:
+      mode: stream-one
+      path: /golden-path
+      reuse-settings:
+        h-max-request-times: 600-900
+        h-max-reusable-secs: 1800-3000
+        max-concurrency: 16-32
+  - name: "\U0001F1F3\U0001F1F1 Hysteria2"
+    type: hysteria2
+    server: 203.0.113.7
+    port: 443
+    alpn:
+      - h3
+    fingerprint: aa11
+    obfs: salamander
+    obfs-password: golden-obfs-password
+    password: S3cr3t+/=
+    skip-cert-verify: false
+  - name: "\U0001F1F3\U0001F1F1 TUIC"
+    type: tuic
+    server: 203.0.113.7
+    port: 8443
+    alpn:
+      - h3
+    congestion-controller: bbr
+    fingerprint: aa11
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    udp-relay-mode: native
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: "\U0001F1F3\U0001F1F1 VLESS Vision"
+    type: vless
+    server: 203.0.113.7
+    port: 8443
+    client-fingerprint: chrome
+    flow: xtls-rprx-vision
+    network: tcp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: "\U0001F1F3\U0001F1F1 Trojan"
+    type: trojan
+    server: 203.0.113.7
+    port: 2087
+    client-fingerprint: chrome
+    network: tcp
+    password: S3cr3t+/=
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    sni: www.example.com
+    tls: true
+    udp: true
+  - name: "\U0001F1F3\U0001F1F1 AnyTLS"
+    type: anytls
+    server: 203.0.113.7
+    port: 2083
+    client-fingerprint: chrome
+    fingerprint: aa11
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    tls: true
+    udp: true
+  - name: "\U0001F1F3\U0001F1F1 VLESS gRPC"
+    type: vless
+    server: 203.0.113.7
+    port: 2053
+    client-fingerprint: chrome
+    grpc-opts:
+      grpc-service-name: goldengrpc
+    network: grpc
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: Особый
+    type: vless
+    server: usa.example.com
+    port: 443
+    client-fingerprint: chrome
+    network: xhttp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: false
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+    xhttp-opts:
+      mode: stream-one
+      path: /golden-path
+      reuse-settings:
+        h-max-request-times: 600-900
+        h-max-reusable-secs: 1800-3000
+        max-concurrency: 16-32
+  - name: "\U0001F1FA\U0001F1F8 Hysteria2"
+    type: hysteria2
+    server: usa.example.com
+    port: 443
+    alpn:
+      - h3
+    fingerprint: bb22
+    obfs: salamander
+    obfs-password: golden-obfs-password
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    sni: usa.example.com
+  - name: "\U0001F1FA\U0001F1F8 TUIC"
+    type: tuic
+    server: usa.example.com
+    port: 8443
+    alpn:
+      - h3
+    congestion-controller: bbr
+    fingerprint: bb22
+    password: S3cr3t+/=
+    skip-cert-verify: false
+    sni: usa.example.com
+    udp-relay-mode: native
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: "\U0001F1FA\U0001F1F8 VLESS Vision"
+    type: vless
+    server: usa.example.com
+    port: 8443
+    client-fingerprint: chrome
+    flow: xtls-rprx-vision
+    network: tcp
+    reality-opts:
+      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+      short-id: a1b2c3d4
+    servername: www.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+proxy-groups:
+  - name: Прокси
+    type: select
+    proxies:
+      - Fast
+      - "\U0001F1F3\U0001F1F1 Нидерланды"
+      - "\U0001F1FA\U0001F1F8 США"
+      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+      - "\U0001F1F3\U0001F1F1 Hysteria2"
+      - "\U0001F1F3\U0001F1F1 TUIC"
+      - "\U0001F1F3\U0001F1F1 VLESS Vision"
+      - "\U0001F1F3\U0001F1F1 Trojan"
+      - "\U0001F1F3\U0001F1F1 AnyTLS"
+      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+      - Особый
+      - "\U0001F1FA\U0001F1F8 Hysteria2"
+      - "\U0001F1FA\U0001F1F8 TUIC"
+      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+  - name: Fast
+    type: fallback
+    proxies:
+      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+      - "\U0001F1F3\U0001F1F1 Hysteria2"
+      - "\U0001F1F3\U0001F1F1 TUIC"
+      - "\U0001F1F3\U0001F1F1 VLESS Vision"
+      - "\U0001F1F3\U0001F1F1 Trojan"
+      - "\U0001F1F3\U0001F1F1 AnyTLS"
+      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+      - Особый
+      - "\U0001F1FA\U0001F1F8 Hysteria2"
+      - "\U0001F1FA\U0001F1F8 TUIC"
+      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+    interval: 120
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1F3\U0001F1F1 Нидерланды"
+    type: url-test
+    proxies:
+      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+      - "\U0001F1F3\U0001F1F1 Hysteria2"
+      - "\U0001F1F3\U0001F1F1 TUIC"
+      - "\U0001F1F3\U0001F1F1 VLESS Vision"
+      - "\U0001F1F3\U0001F1F1 Trojan"
+      - "\U0001F1F3\U0001F1F1 AnyTLS"
+      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+    interval: 120
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1FA\U0001F1F8 США"
+    type: url-test
+    proxies:
+      - Особый
+      - "\U0001F1FA\U0001F1F8 Hysteria2"
+      - "\U0001F1FA\U0001F1F8 TUIC"
+      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+    interval: 120
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F916 ChatGPT · Claude · Gemini"
+    type: select
+    proxies:
+      - Особый
+      - "\U0001F1FA\U0001F1F8 Hysteria2"
+      - "\U0001F1FA\U0001F1F8 TUIC"
+      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+      - Прокси
+  - name: PROXY
+    type: select
+    proxies:
+      - Прокси
+    hidden: true
+rules:
+  - IP-CIDR,203.0.113.7/32,DIRECT,no-resolve
+  - DOMAIN,usa.example.com,DIRECT
+  - DOMAIN,vpn.example.com,DIRECT
+  - GEOIP,LAN,DIRECT,no-resolve
+  - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
+  - DOMAIN-SUFFIX,sber.ru,DIRECT
+  - DOMAIN-WILDCARD,*.tinkoff.ru,DIRECT
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - GEOSITE,category-ads-all,REJECT
+  - GEOSITE,youtube,Прокси
+  - GEOSITE,telegram,Прокси
+  - GEOIP,telegram,Прокси,no-resolve
+  - RULE-SET,mikan-telegram-ip,Прокси,no-resolve
+  - "GEOSITE,category-ai-!cn,\U0001F916 ChatGPT · Claude · Gemini"
+  - "RULE-SET,mikan-ai,\U0001F916 ChatGPT · Claude · Gemini"
+  - "RULE-SET,mikan-gemini,\U0001F916 ChatGPT · Claude · Gemini"
+  - RULE-SET,mikan-torrent-apps,DIRECT
+  - GEOSITE,category-public-tracker,DIRECT
+  - RULE-SET,own-wl,Прокси
+  - RULE-SET,own-ru-ip,DIRECT,no-resolve
+  - RULE-SET,own-ads,REJECT
+  - RULE-SET,mikan-ru-apps,DIRECT
+  - RULE-SET,mikan-ru-apps-wildcard,DIRECT
+  - RULE-SET,mikan-ru-pc,DIRECT
+  - RULE-SET,mikan-ru-sites,DIRECT
+  - RULE-SET,mikan-ru-keywords,DIRECT
+  - RULE-SET,mikan-ru-core,DIRECT
+  - GEOSITE,category-ru,DIRECT
+  - GEOIP,ru,DIRECT
+  - MATCH,Прокси
+  - MATCH,REJECT
+rule-providers:
+  mikan-ai:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-ai.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/routing/ai.yaml
+  mikan-gemini:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-gemini.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/routing/gemini.yaml
+  mikan-ru-apps:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-ru-apps.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ru/process-direct-apk.yaml
+  mikan-ru-apps-wildcard:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-ru-apps-wildcard.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ru/process-direct-apk-wildcard.yaml
+  mikan-ru-core:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-ru-core.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ru/ru-core.yaml
+  mikan-ru-keywords:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-ru-keywords.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ru/domain-direct-keyword.yaml
+  mikan-ru-pc:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-ru-pc.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ru/process-direct-pc.yaml
+  mikan-ru-sites:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-ru-sites.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ru/domain-direct-suffix.yaml
+  mikan-telegram-ip:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-telegram-ip.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/tgprx.yaml
+  mikan-torrent-apps:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-torrent-apps.yaml
+    proxy: Прокси
+    url: https://raw.githubusercontent.com/legiz-ru/mihomo-rule-sets/a80b3c1d7a70ce83b1d1a45ff113a2fe5b312154/other/torrent-clients.yaml
+  own-ads:
+    type: http
+    behavior: domain
+    format: mrs
+    interval: 86400
+    path: ./ruleset/own-ads.mrs
+    proxy: Прокси
+    url: https://example.com/ads.mrs
+  own-ru-ip:
+    type: http
+    behavior: ipcidr
+    format: text
+    interval: 86400
+    path: ./ruleset/own-ru-ip.text
+    proxy: Прокси
+    url: https://example.com/ru.txt
+  own-wl:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/own-wl.yaml
+    proxy: Прокси
+    url: https://example.com/wl.yaml
+sniffer:
+  enable: true
+  parse-pure-ip: true
+  sniff:
+    HTTP:
+      ports:
+        - 80
+        - 8080-8880
+    QUIC:
+      ports:
+        - 443
+        - 8443
+    TLS:
+      ports:
+        - 443
+        - 8443

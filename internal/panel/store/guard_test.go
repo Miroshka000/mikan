@@ -42,7 +42,6 @@ func TestMigrateAndRestoreRefuseALivePanel(t *testing.T) {
 	}
 	_, err = Migrate(ctx, dsn, dir)
 	refused("migrate", err)
-	refused("SQLite restore", RestoreSQLite(ctx, dsn, dir, filepath.Join(dir, "missing.db")))
 	refused("PostgreSQL restore", RestorePostgres(ctx, dsn, dir, func(context.Context) error {
 		t.Fatal("pg_restore ran beside a live panel")
 		return nil

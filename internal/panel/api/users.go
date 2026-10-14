@@ -14,6 +14,7 @@ import (
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/torrent"
 )
@@ -42,6 +43,8 @@ type UserView struct {
 	TotalUp       int64         `json:"total_up"`
 	TotalDown     int64         `json:"total_down"`
 	DeviceLimit   *int64        `json:"device_limit"`
+	DeviceMode    string        `json:"device_mode" enum:"bound,online" doc:"Как считается лимит устройств: bound: привязанные устройства, online: любое число устройств, считаются только одновременно онлайн"`
+	SpeedLimit    *int64        `json:"speed_limit" doc:"Мбит/с в каждую сторону; null — без ограничения"`
 	ResetStrategy string        `json:"reset_strategy" enum:"none,month_start,period" doc:"month_start — раз в месяц: в день оплаты, без него 1-го числа"`
 	ResetsAt      *time.Time    `json:"resets_at"`
 	ExpiresAt     *time.Time    `json:"expires_at"`
@@ -53,25 +56,10 @@ type UserView struct {
 	BoundDevices  int64         `json:"bound_devices" doc:"Привязанные устройства: с привязкой это занятые места"`
 	OnlineAt      *time.Time    `json:"online_at"`
 	TorrentBan    *time.Time    `json:"torrent_ban" doc:"До какого времени действует бан блокировщика торрентов; null — бана нет"`
-	Source        string        `json:"source" enum:"admin,bot,trial,import" doc:"Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, import — перенесён из другой панели. Заполняется при создании, не меняется"`
+	Source        string        `json:"source" enum:"admin,bot,trial,free,import" doc:"Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется"`
 	FolderID      *int64        `json:"folder_id" doc:"Папка пользователя; null — вне папок"`
 	Hidden        bool          `json:"hidden" doc:"Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются"`
 	CreatedAt     time.Time     `json:"created_at"`
-}
-
-func ptrInt(v int64, ok bool) *int64 {
-	if !ok {
-		return nil
-	}
-	return &v
-}
-
-func ptrTime(v int64, ok bool) *time.Time {
-	if !ok {
-		return nil
-	}
-	t := time.Unix(v, 0).UTC()
-	return &t
 }
 
 // userEnv is what every user of one response shares, read once for the whole response: a
@@ -117,14 +105,14 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 	now := h.d.Now()
 	v := UserView{
 		ID: u.ID, Name: u.Name, Contact: u.Contact, Note: u.Note, Tags: domain.DecodeTags(u.Tags),
-		State: domain.State(u, grants.Main(u.ID), now), TariffID: ptrInt(u.TariffID.Int64, u.TariffID.Valid),
-		TrafficLimit: ptrInt(u.TrafficLimit.Int64, u.TrafficLimit.Valid), TrafficExtra: grants.Main(u.ID), UsedUp: u.UsedUp, UsedDown: u.UsedDown,
-		TotalUp: u.TotalUp, TotalDown: u.TotalDown, DeviceLimit: ptrInt(u.DeviceLimit.Int64, u.DeviceLimit.Valid),
-		ResetStrategy: u.ResetStrategy, ExpiresAt: ptrTime(u.ExpiresAt.Int64, u.ExpiresAt.Valid),
-		BillingDay: ptrInt(u.BillingDay.Int64, u.BillingDay.Valid),
-		Inbounds:   domain.DecodeInbounds(u.Inbounds), OnlineAt: ptrTime(u.OnlineAt.Int64, u.OnlineAt.Valid),
+		State: domain.State(u, grants.Main(u.ID), now), TariffID: store.Int64Ptr(u.TariffID),
+		TrafficLimit: store.Int64Ptr(u.TrafficLimit), TrafficExtra: grants.Main(u.ID), UsedUp: u.UsedUp, UsedDown: u.UsedDown,
+		TotalUp: u.TotalUp, TotalDown: u.TotalDown, DeviceLimit: store.Int64Ptr(u.DeviceLimit), DeviceMode: u.DeviceMode,
+		SpeedLimit: store.Int64Ptr(u.SpeedLimit), ResetStrategy: u.ResetStrategy, ExpiresAt: store.TimePtr(u.ExpiresAt),
+		BillingDay: store.Int64Ptr(u.BillingDay),
+		Inbounds:   domain.DecodeInbounds(u.Inbounds), OnlineAt: store.TimePtr(u.OnlineAt),
 		CreatedAt: time.Unix(u.CreatedAt, 0).UTC(), OnlineIPs: []string{}, BoundDevices: bound,
-		Source: u.Source, FolderID: ptrInt(u.FolderID.Int64, u.FolderID.Valid), Hidden: u.Hidden != 0,
+		Source: u.Source, FolderID: store.Int64Ptr(u.FolderID), Hidden: u.Hidden != 0,
 	}
 	if v.Inbounds == nil {
 		v.Inbounds = []int64{}
@@ -136,7 +124,7 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 		v.SubURL = env.subBase + "/" + u.SubToken
 	}
 	if until, ok := env.bans[u.ID]; ok {
-		v.TorrentBan = ptrTime(until, true)
+		v.TorrentBan = store.TimePtr(sql.NullInt64{Int64: until, Valid: true})
 	}
 	v.OnlineIPs = env.liveIPs(slots)
 	v.Online = len(v.OnlineIPs) > 0
@@ -157,19 +145,6 @@ func (e userEnv) liveIPs(slots []string) []string {
 	return out
 }
 
-// allUserSlots maps every user to the names of all their slots.
-func (h *handlers) allUserSlots(ctx context.Context) (map[int64][]string, error) {
-	rows, err := h.d.Store.Q.ListSlotUsers(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m := map[int64][]string{}
-	for _, r := range rows {
-		m[r.UserID] = append(m[r.UserID], r.SlotName)
-	}
-	return m, nil
-}
-
 // userSlots maps the users of ids to the names of all their slots: for a list's page.
 func (h *handlers) userSlots(ctx context.Context, ids []int64) (map[int64][]string, error) {
 	rows, err := h.d.Store.Q.UserSlotsOf(ctx, ids)
@@ -187,7 +162,7 @@ type listUsersInput struct {
 	State  string `query:"state" enum:"all,active,expiring,limited,expired,disabled,attention" default:"all" doc:"attention — исчерпан лимит, истекают и истекли, в этом порядке: одним запросом для обзора"`
 	Query  string `query:"q" maxLength:"100"`
 	Folder string `query:"folder" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
-	Source string `query:"source" enum:"all,admin,bot,trial,import" default:"all" doc:"Откуда пользователь, см. source у пользователя"`
+	Source string `query:"source" enum:"all,admin,bot,trial,free,import" default:"all" doc:"Откуда пользователь, см. source у пользователя"`
 	Hidden string `query:"hidden" enum:"hide,show,only" default:"show" doc:"show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые"`
 	Limit  int    `query:"limit" minimum:"1" maximum:"500" default:"100"`
 	Offset int    `query:"offset" minimum:"0" default:"0"`
@@ -244,6 +219,9 @@ type patchUserInput struct {
 		TrafficUnlimited bool       `json:"traffic_unlimited,omitempty"`
 		DeviceLimit      *int64     `json:"device_limit,omitempty" minimum:"1" maximum:"100"`
 		DevicesUnlimited bool       `json:"devices_unlimited,omitempty"`
+		DeviceMode       *string    `json:"device_mode,omitempty" enum:"bound,online" doc:"Как считается лимит устройств: bound: привязанные устройства, online: любое число, считаются только одновременно онлайн"`
+		SpeedLimit       *int64     `json:"speed_limit,omitempty" minimum:"1" maximum:"100000" doc:"Скорость, Мбит/с в каждую сторону"`
+		SpeedUnlimited   bool       `json:"speed_unlimited,omitempty" doc:"Снять ограничение скорости"`
 		ExpiresAt        *time.Time `json:"expires_at,omitempty"`
 		NeverExpires     bool       `json:"never_expires,omitempty"`
 		BillingDay       *int64     `json:"billing_day,omitempty" minimum:"0" maximum:"31" doc:"День оплаты 1–31; 0 — убрать"`
@@ -318,6 +296,10 @@ func (h *handlers) registerUsers() {
 	huma.Register(h.api, huma.Operation{OperationID: "user-devices", Method: http.MethodGet, Path: "/api/v1/users/{id}/devices", Summary: "Адреса, с которых заходил пользователь", Tags: tags}, h.userDevices)
 	huma.Register(h.api, huma.Operation{OperationID: "user-bound-devices", Method: http.MethodGet, Path: "/api/v1/users/{id}/bound-devices", Summary: "Устройства, привязанные к подписке", Tags: tags}, h.boundDevices)
 	huma.Register(h.api, huma.Operation{OperationID: "unbind-device", Method: http.MethodDelete, Path: "/api/v1/users/{id}/bound-devices/{device}", Summary: "Отвязать устройство: его ключи сгорают", Tags: tags, DefaultStatus: http.StatusNoContent}, h.unbindDevice)
+	huma.Register(h.api, huma.Operation{OperationID: "rename-device", Method: http.MethodPatch, Path: "/api/v1/users/{id}/bound-devices/{device}", Summary: "Переименовать привязанное устройство", Tags: tags}, h.renameDevice)
+	huma.Register(h.api, huma.Operation{OperationID: "ban-device", Method: http.MethodPost, Path: "/api/v1/users/{id}/bound-devices/{device}/ban", Summary: "Заблокировать устройство: отвязать и не давать привязаться снова по его ID", Tags: tags, DefaultStatus: http.StatusCreated}, h.banDevice)
+	huma.Register(h.api, huma.Operation{OperationID: "device-bans", Method: http.MethodGet, Path: "/api/v1/users/{id}/device-bans", Summary: "Заблокированные устройства пользователя", Tags: tags}, h.deviceBans)
+	huma.Register(h.api, huma.Operation{OperationID: "unban-device", Method: http.MethodDelete, Path: "/api/v1/users/{id}/device-bans/{ban}", Summary: "Разблокировать устройство: оно снова сможет привязаться", Tags: tags, DefaultStatus: http.StatusNoContent}, h.unbanDevice)
 }
 
 func mapDomainErr(err error) error {
@@ -328,10 +310,14 @@ func mapDomainErr(err error) error {
 		return huma.Error503ServiceUnavailable("no_free_slots")
 	case errors.Is(err, domain.ErrBadBillingDay):
 		return huma.Error422UnprocessableEntity("bad_billing_day", &huma.ErrorDetail{Location: "body.billing_day", Message: "bad_billing_day"})
+	case errors.Is(err, domain.ErrBadSpeedLimit):
+		return huma.Error422UnprocessableEntity("bad_speed_limit", &huma.ErrorDetail{Location: "body.speed_limit", Message: "bad_speed_limit"})
+	case errors.Is(err, domain.ErrBanShared):
+		return huma.Error422UnprocessableEntity("device_no_hwid")
 	}
 	var fe *domain.FieldError
 	if errors.As(err, &fe) {
-		return huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "body." + fe.Field, Message: fe.Code})
+		return fieldErr("body."+fe.Field, fe.Code)
 	}
 	return err
 }
@@ -351,7 +337,7 @@ func parseFolderFilter(s string) (folderFilter, error) {
 	}
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || id < 1 {
-		return folderFilter{}, huma.Error422UnprocessableEntity("validation", &huma.ErrorDetail{Location: "query.folder", Message: "bad_folder", Value: s})
+		return folderFilter{}, fieldErrValue("query.folder", "bad_folder", s)
 	}
 	return folderFilter{id: sql.NullInt64{Int64: id, Valid: true}}, nil
 }
@@ -556,7 +542,8 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 	p := domain.Patch{
 		Name: b.Name, Contact: b.Contact, Note: b.Note, Tags: b.Tags, Disabled: b.Disabled,
 		TrafficLimit: b.TrafficLimit, ClearTrafficLimit: b.TrafficUnlimited,
-		DeviceLimit: b.DeviceLimit, ClearDeviceLimit: b.DevicesUnlimited,
+		DeviceLimit: b.DeviceLimit, ClearDeviceLimit: b.DevicesUnlimited, DeviceMode: b.DeviceMode,
+		SpeedLimit: b.SpeedLimit, ClearSpeedLimit: b.SpeedUnlimited,
 		ExpiresAt: b.ExpiresAt, ClearExpiry: b.NeverExpires, Inbounds: b.Inbounds, TariffID: b.TariffID, Hidden: b.Hidden,
 	}
 	if b.FolderID != nil {
@@ -573,9 +560,21 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 			p.BillingDay = b.BillingDay
 		}
 	}
+	// A rename is written down with the old name: the journal is where the admin finds who
+	// a user was called before.
+	var before string
+	if b.Name != nil {
+		if old, err := h.d.Users.Get(ctx, in.ID); err == nil {
+			before = old.Name
+		}
+	}
 	u, err := h.d.Users.Update(ctx, in.ID, p)
 	if err == nil {
-		h.audit(ctx, sessionOf(ctx).AdminID, "user.update", "user", strconv.FormatInt(in.ID, 10), nil)
+		var details any
+		if b.Name != nil && u.Name != before {
+			details = map[string]any{"name": u.Name, "name_was": before}
+		}
+		h.audit(ctx, sessionOf(ctx).AdminID, "user.update", "user", strconv.FormatInt(in.ID, 10), details)
 	}
 	return h.userResult(ctx, u, err)
 }
@@ -608,16 +607,19 @@ func (h *handlers) extendUser(ctx context.Context, in *extendInput) (*userOutput
 
 // BoundDeviceView is a device bound to a subscription, as the admin sees it.
 type BoundDeviceView struct {
-	ID        int64     `json:"id"`
-	HWID      string    `json:"hwid" doc:"ID устройства от приложения; пусто — общее место приложений без ID"`
-	OS        string    `json:"os"`
-	OSVersion string    `json:"os_version"`
-	Model     string    `json:"model"`
-	App       string    `json:"app"`
-	LastIP    string    `json:"last_ip"`
-	Online    bool      `json:"online"`
-	CreatedAt time.Time `json:"created_at"`
-	LastSeen  time.Time `json:"last_seen"`
+	ID          int64     `json:"id"`
+	Name        string    `json:"name" doc:"Своё имя устройства от админа или подписчика; пусто — имя от приложения (модель, система)"`
+	HWID        string    `json:"hwid" doc:"ID устройства от приложения; пусто — общее место приложений без ID"`
+	OS          string    `json:"os"`
+	OSVersion   string    `json:"os_version"`
+	Model       string    `json:"model"`
+	App         string    `json:"app"`
+	LastIP      string    `json:"last_ip"`
+	Online      bool      `json:"online"`
+	CreatedAt   time.Time `json:"created_at"`
+	LastSeen    time.Time `json:"last_seen"`
+	TrafficUp   int64     `json:"traffic_up" doc:"Байты от устройства с тех пор, как оно привязано (до 0.5.0.5 не считались)"`
+	TrafficDown int64     `json:"traffic_down" doc:"Байты к устройству с тех пор, как оно привязано"`
 }
 
 type boundDevicesOutput struct{ Body []BoundDeviceView }
@@ -643,11 +645,20 @@ func (h *handlers) boundDevices(ctx context.Context, in *userIDInput) (*boundDev
 	for _, r := range rows {
 		name[r.DeviceID] = r.SlotName
 	}
+	used, err := h.d.Store.Q.ListBoundDeviceTraffic(ctx, in.ID)
+	if err != nil {
+		return nil, err
+	}
+	traffic := make(map[int64]db.ListBoundDeviceTrafficRow, len(used))
+	for _, t := range used {
+		traffic[t.DeviceID] = t
+	}
 	env := userEnv{online: h.online()}
 	out := &boundDevicesOutput{Body: []BoundDeviceView{}}
 	for _, d := range devs {
-		out.Body = append(out.Body, BoundDeviceView{ID: d.ID, HWID: d.Hwid, OS: d.Os, OSVersion: d.OsVersion, Model: d.Model, App: d.App, LastIP: d.LastIp,
-			Online: len(env.liveIPs([]string{name[d.ID]})) > 0, CreatedAt: time.Unix(d.CreatedAt, 0).UTC(), LastSeen: time.Unix(d.LastSeen, 0).UTC()})
+		out.Body = append(out.Body, BoundDeviceView{ID: d.ID, Name: d.Name, HWID: d.Hwid, OS: d.Os, OSVersion: d.OsVersion, Model: d.Model, App: d.App, LastIP: d.LastIp,
+			Online: len(env.liveIPs([]string{name[d.ID]})) > 0, CreatedAt: time.Unix(d.CreatedAt, 0).UTC(), LastSeen: time.Unix(d.LastSeen, 0).UTC(),
+			TrafficUp: traffic[d.ID].Up, TrafficDown: traffic[d.ID].Down})
 	}
 	return out, nil
 }
@@ -657,6 +668,102 @@ func (h *handlers) unbindDevice(ctx context.Context, in *unbindInput) (*struct{}
 		return nil, mapDomainErr(err)
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "user.unbind_device", "user", strconv.FormatInt(in.ID, 10), map[string]any{"device": in.Device})
+	return nil, nil
+}
+
+type renameDeviceInput struct {
+	ID     int64 `path:"id" minimum:"1"`
+	Device int64 `path:"device" minimum:"1"`
+	Body   struct {
+		Name string `json:"name" maxLength:"40" doc:"Своё имя устройства, до 40 символов одной строкой; пустое — вернуть имя от приложения"`
+	}
+}
+
+type renameDeviceOutput struct {
+	Body struct {
+		Name string `json:"name" doc:"Имя, как оно сохранено: без пробелов по краям"`
+	}
+}
+
+func (h *handlers) renameDevice(ctx context.Context, in *renameDeviceInput) (*renameDeviceOutput, error) {
+	name, err := h.d.Devices.Rename(ctx, in.ID, in.Device, in.Body.Name)
+	if err != nil {
+		return nil, mapDomainErr(err)
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, "user.rename_device", "user", strconv.FormatInt(in.ID, 10), map[string]any{"device": in.Device, "name": name})
+	out := &renameDeviceOutput{}
+	out.Body.Name = name
+	return out, nil
+}
+
+// DeviceBanView is a device banned from a subscription.
+type DeviceBanView struct {
+	ID       int64     `json:"id"`
+	HWID     string    `json:"hwid" doc:"ID устройства, которому закрыта привязка"`
+	Label    string    `json:"label" doc:"Как устройство называлось, когда его заблокировали; пусто — приложение ничего о себе не сообщило"`
+	Admin    string    `json:"admin" doc:"Кто заблокировал; пусто — ключ API или удалённый админ"`
+	BannedAt time.Time `json:"banned_at"`
+	// Until is set for a device the subscriber unbound: it may bind again from then.
+	Until *time.Time `json:"until,omitempty" doc:"Подписчик сам отвязал устройство: оно сможет привязаться снова с этого момента; пусто — заблокировано админом навсегда"`
+	// Forever: the subscriber unbound it, and it comes back only when the admin lets it.
+	Forever bool `json:"forever,omitempty" doc:"Подписчик отвязал устройство, а вернуть его может только админ (until не показывается)"`
+}
+
+type deviceBanOutput struct{ Body DeviceBanView }
+
+type deviceBansOutput struct{ Body []DeviceBanView }
+
+type unbanInput struct {
+	ID  int64 `path:"id" minimum:"1"`
+	Ban int64 `path:"ban" minimum:"1"`
+}
+
+func (h *handlers) banDevice(ctx context.Context, in *unbindInput) (*deviceBanOutput, error) {
+	admin := sessionOf(ctx).AdminID
+	b, err := h.d.Devices.Ban(ctx, in.ID, in.Device, admin)
+	if err != nil {
+		return nil, mapDomainErr(err)
+	}
+	h.audit(ctx, admin, "user.ban_device", "user", strconv.FormatInt(in.ID, 10), map[string]any{"device": in.Device, "ban": b.ID, "label": b.Label})
+	v := DeviceBanView{ID: b.ID, HWID: b.Hwid, Label: b.Label, BannedAt: time.Unix(b.BannedAt, 0).UTC()}
+	if b.AdminID.Valid {
+		if a, err := h.d.Store.Q.GetAdmin(ctx, b.AdminID.Int64); err == nil {
+			v.Admin = a.Username
+		}
+	}
+	return &deviceBanOutput{Body: v}, nil
+}
+
+func (h *handlers) deviceBans(ctx context.Context, in *userIDInput) (*deviceBansOutput, error) {
+	if _, err := h.d.Users.Get(ctx, in.ID); err != nil {
+		return nil, mapDomainErr(err)
+	}
+	rows, err := h.d.Store.Q.ListDeviceBans(ctx, db.ListDeviceBansParams{UserID: in.ID, Until: sql.NullInt64{Int64: h.d.Now().Unix(), Valid: true}})
+	if err != nil {
+		return nil, err
+	}
+	out := &deviceBansOutput{Body: make([]DeviceBanView, 0, len(rows))}
+	for _, r := range rows {
+		v := DeviceBanView{ID: r.ID, HWID: r.Hwid, Label: r.Label, Admin: r.AdminName, BannedAt: time.Unix(r.BannedAt, 0).UTC()}
+		if r.Until.Valid {
+			t := time.Unix(r.Until.Int64, 0).UTC()
+			if domain.Forever(t) {
+				v.Forever = true
+			} else {
+				v.Until = &t
+			}
+		}
+		out.Body = append(out.Body, v)
+	}
+	return out, nil
+}
+
+func (h *handlers) unbanDevice(ctx context.Context, in *unbanInput) (*struct{}, error) {
+	b, err := h.d.Devices.Unban(ctx, in.ID, in.Ban)
+	if err != nil {
+		return nil, mapDomainErr(err)
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, "user.unban_device", "user", strconv.FormatInt(in.ID, 10), map[string]any{"ban": b.ID, "label": b.Label})
 	return nil, nil
 }
 
@@ -740,4 +847,15 @@ func (h *handlers) userDevices(ctx context.Context, in *userIDInput) (*devicesOu
 		out.Body = append(out.Body, DeviceView{IP: d.Ip, FirstSeen: time.Unix(d.FirstSeen, 0).UTC(), LastSeen: time.Unix(d.LastSeen, 0).UTC(), Online: slices.Contains(live, d.Ip)})
 	}
 	return out, nil
+}
+
+// requireUser is nil when the user exists and a 404 not_found when it does not: the check
+// the per-user endpoints (pools, grants, torrent bans) make before they touch anything.
+func requireUser(ctx context.Context, q *db.Queries, id int64) error {
+	if _, err := q.GetUser(ctx, id); errors.Is(err, sql.ErrNoRows) {
+		return huma.Error404NotFound("not_found")
+	} else if err != nil {
+		return err
+	}
+	return nil
 }

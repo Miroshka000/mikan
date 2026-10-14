@@ -4,11 +4,9 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -21,6 +19,7 @@ import (
 	"time"
 
 	"mikan/internal/fsutil"
+	"mikan/internal/nodetls"
 )
 
 // Holder lets the certificate be swapped (ACME renewal, host change) without a restart.
@@ -115,6 +114,5 @@ func PEM(dir string) (certPEM, keyPEM, pin string, err error) {
 	if block == nil {
 		return "", "", "", errors.New("self.crt: no PEM block")
 	}
-	sum := sha256.Sum256(block.Bytes)
-	return string(c), string(k), hex.EncodeToString(sum[:]), nil
+	return string(c), string(k), nodetls.PinOfDER(block.Bytes), nil
 }

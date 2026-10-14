@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -68,7 +69,7 @@ func TestDeletePoolKeepsPaidTraffic(t *testing.T) {
 			t.Fatalf("%s: %d %s, want 409 pool_in_use", step, resp.StatusCode, body)
 		}
 		for _, w := range []string{"pool_has_grants", "pool_has_packages", "pool_has_payments"} {
-			if has := strings.Contains(string(body), w); has != contains(want, w) {
+			if has := strings.Contains(string(body), w); has != slices.Contains(want, w) {
 				t.Fatalf("%s: %s present=%v in %s", step, w, has, body)
 			}
 		}
@@ -107,13 +108,4 @@ func TestDeletePoolKeepsPaidTraffic(t *testing.T) {
 	if resp, _ := remove(); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("deleting it again: %d", resp.StatusCode)
 	}
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }

@@ -1,17 +1,18 @@
-import { useNavigate, useSearch } from "@tanstack/react-router";
-import { History, Pencil, Plus, Search, Ticket, Trash2 } from "lucide-react";
+import { Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { errorText } from "../../api/client";
 import { usePools, usePromoMutations, usePromoRedemptions, usePromocodes, useTariffs, type PromoCode, type PromoRedemption } from "../../api/hooks";
 import { Disclosure } from "../../components/layout";
-import { Confirm, Drawer } from "../../components/overlay";
+import { Confirm, Drawer, DrawerFooter } from "../../components/overlay";
+import { QueryBoundary } from "../../components/query";
 import { Switch, SwitchRow } from "../../components/switch";
-import { Tabs } from "../../components/tabs";
 import { useToast } from "../../components/toast";
-import { Button, EmptyState, ErrorState, Field, PageHeader, Pill, Skeleton } from "../../components/ui";
+import { Button, EmptyState, Field, Pill, Segmented, Skeleton } from "../../components/ui";
 import { t, tMaybe } from "../../i18n";
-import { dateShort, money, time } from "../../lib/format";
+import { dateShort, GiB, money, time } from "../../lib/format";
 import { PROMO_TABS } from "../search";
+
+type PromoTab = (typeof PROMO_TABS)[number];
 
 const empty: PromoCode = {
   id: 0, code: "", name: "", description: "", type: "days", value: 30, currency: "", used_count: 0,
@@ -22,9 +23,6 @@ const empty: PromoCode = {
 type Draft = Omit<PromoCode, "created_at" | "created_by" | "min_order" | "max_discount"> & {
   starts_at: string; ends_at: string; max_uses: string | number | undefined; value: string | number; min_order: string | number; max_discount: string | number;
 };
-
-const GB = 1073741824;
-const TAB_ICONS = { codes: Ticket, history: History } as const;
 
 // Sums are kept in the payment's smallest unit (kopecks, Stars); the form shows rubles.
 function fromUnits(n: number, currency: string) {
@@ -80,16 +78,18 @@ function redemptionStatusText(status: string) {
 }
 
 function valueText(p: PromoCode) {
-  if (p.type === "traffic") return `${(p.value / GB).toFixed(1)} ${t("promocodes.trafficUnit")}`;
+  if (p.type === "traffic") return `${(p.value / GiB).toFixed(1)} ${t("promocodes.trafficUnit")}`;
   if (p.type === "days") return `${p.value} ${t("promocodes.daysUnit")}`;
   return p.type === "percent" ? `${p.value}%` : money(p.value, p.currency);
 }
 
 /** Promo codes: the codes with their switches, and the history of what they gave. */
-export function PromocodesPage() {
+/**
+ * Promo codes, a tab of Payments: the codes and their activations, and the editor. sub is
+ * which of the two shows (the address keeps it), onSub switches it.
+ */
+export function PromoSection({ sub, onSub }: { sub: PromoTab; onSub: (next: PromoTab) => void }) {
   const toast = useToast();
-  const { tab } = useSearch({ from: "/_app/promocodes" });
-  const navigate = useNavigate({ from: "/promocodes" });
   const { create, update } = usePromoMutations();
   const [edit, setEdit] = useState<PromoCode | null>(null);
 
@@ -110,28 +110,17 @@ export function PromocodesPage() {
   };
 
   return (
-    <>
-      <PageHeader
-        title={t("promocodes.title")}
-        sub={t("promocodes.subtitle")}
-        actions={
-          <Button variant="primary" onClick={() => setEdit({ ...empty })}>
-            <Plus size={18} aria-hidden />
-            <span className="max-[760px]:hidden">{t("promocodes.create")}</span>
-          </Button>
-        }
-      />
-      <Tabs
-        id="promocodes"
-        label={t("promocodes.sections")}
-        tabs={PROMO_TABS.map((id) => ({ id, label: t(`promocodes.${id}`), icon: TAB_ICONS[id] }))}
-        value={tab}
-        onChange={(next) => void navigate({ search: { tab: next }, replace: true })}
-      >
-        {tab === "codes" ? <Codes onEdit={setEdit} onCreate={() => setEdit({ ...empty })} /> : <Redemptions />}
-      </Tabs>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmented label={t("promocodes.sections")} value={sub} onChange={onSub} options={PROMO_TABS.map((id) => ({ value: id, label: t(`promocodes.${id}`) }))} />
+        <Button variant="primary" size="sm" onClick={() => setEdit({ ...empty })}>
+          <Plus size={16} aria-hidden />
+          {t("promocodes.create")}
+        </Button>
+      </div>
+      {sub === "codes" ? <Codes onEdit={setEdit} onCreate={() => setEdit({ ...empty })} /> : <Redemptions />}
       <PromoEditor value={edit} onClose={() => setEdit(null)} onSave={save} />
-    </>
+    </div>
   );
 }
 
@@ -140,55 +129,59 @@ function Codes({ onEdit, onCreate }: { onEdit: (p: PromoCode) => void; onCreate:
   const codes = usePromocodes();
   const { toggle, remove } = usePromoMutations();
   const [removing, setRemoving] = useState<PromoCode | null>(null);
-  const items = codes.data?.items ?? [];
   return (
     <section className="card glass reveal" aria-busy={codes.isFetching}>
-      {codes.isError && !codes.data ? (
-        <ErrorState text={errorText(codes.error)} onRetry={() => void codes.refetch()} />
-      ) : codes.isPending ? (
-        <div className="flex flex-col gap-2" role="status" aria-busy aria-label={t("common.loading")}>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} style={{ height: 56 }} />
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <EmptyState title={t("promocodes.empty")} text={t("promocodes.emptyText")}>
-          <Button variant="primary" onClick={onCreate}>
-            <Plus size={18} aria-hidden /> {t("promocodes.create")}
-          </Button>
-        </EmptyState>
-      ) : (
-        <ul className="row-list">
-          {items.map((p) => (
-            <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <b className="mono text-[13px]">{p.code}</b>
-                  <Pill tone={statusTone(p.status)}>{statusText(p.status)}</Pill>
-                  <span className="text-[13px] font-medium">{valueText(p)}</span>
-                </div>
-                <div className="mt-1 truncate text-xs text-[var(--ink-500)]">
-                  {[p.name || p.description, t("promocodes.usedOf", { n: p.used_count, max: p.max_uses ? String(p.max_uses) : "∞" })].filter(Boolean).join(" · ")}
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <Switch
-                  checked={p.enabled}
-                  label={t("promocodes.toggleLabel", { code: p.code })}
-                  disabled={toggle.isPending && toggle.variables?.id === p.id}
-                  onChange={(enabled) => toggle.mutate({ id: p.id, enabled }, { onError: (e) => toast.error(errorText(e)) })}
-                />
-                <button type="button" className="icon-btn ml-2" aria-label={t("promocodes.editLabel", { code: p.code })} title={t("promocodes.edit")} onClick={() => onEdit(p)}>
-                  <Pencil size={16} aria-hidden />
-                </button>
-                <button type="button" className="icon-btn" aria-label={t("promocodes.deleteLabel", { code: p.code })} title={t("common.delete")} onClick={() => setRemoving(p)}>
-                  <Trash2 size={16} aria-hidden />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <QueryBoundary
+        query={codes}
+        pending={
+          <div className="flex flex-col gap-2" role="status" aria-busy aria-label={t("common.loading")}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} style={{ height: 56 }} />
+            ))}
+          </div>
+        }
+      >
+        {(data) =>
+          data.items.length === 0 ? (
+            <EmptyState title={t("promocodes.empty")} text={t("promocodes.emptyText")}>
+              <Button variant="primary" onClick={onCreate}>
+                <Plus size={18} aria-hidden /> {t("promocodes.create")}
+              </Button>
+            </EmptyState>
+          ) : (
+            <ul className="row-list">
+              {data.items.map((p) => (
+                <li key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <b className="mono text-[13px]">{p.code}</b>
+                      <Pill tone={statusTone(p.status)}>{statusText(p.status)}</Pill>
+                      <span className="text-[13px] font-medium">{valueText(p)}</span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-[var(--ink-500)]">
+                      {[p.name || p.description, t("promocodes.usedOf", { n: p.used_count, max: p.max_uses ? String(p.max_uses) : "∞" })].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Switch
+                      checked={p.enabled}
+                      label={t("promocodes.toggleLabel", { code: p.code })}
+                      disabled={toggle.isPending && toggle.variables?.id === p.id}
+                      onChange={(enabled) => toggle.mutate({ id: p.id, enabled }, { onError: (e) => toast.error(errorText(e)) })}
+                    />
+                    <button type="button" className="icon-btn ml-2" aria-label={t("promocodes.editLabel", { code: p.code })} title={t("promocodes.edit")} onClick={() => onEdit(p)}>
+                      <Pencil size={16} aria-hidden />
+                    </button>
+                    <button type="button" className="icon-btn" aria-label={t("promocodes.deleteLabel", { code: p.code })} title={t("common.delete")} onClick={() => setRemoving(p)}>
+                      <Trash2 size={16} aria-hidden />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </QueryBoundary>
       <Confirm
         open={!!removing}
         onOpenChange={(v) => !v && setRemoving(null)}
@@ -222,38 +215,43 @@ function Redemptions() {
         <Search size={16} aria-hidden />
         <input type="search" placeholder={t("promocodes.historySearch")} value={search} onChange={(e) => setSearch(e.target.value)} aria-label={t("promocodes.historySearch")} />
       </label>
-      {history.isError && !history.data ? (
-        <ErrorState text={errorText(history.error)} onRetry={() => void history.refetch()} />
-      ) : history.isPending ? (
-        <div className="flex flex-col gap-2" role="status" aria-busy aria-label={t("common.loading")}>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} style={{ height: 48 }} />
-          ))}
-        </div>
-      ) : list.length === 0 ? (
-        <EmptyState search={!!search.trim()} title={t("promocodes.noHistory")} text={search.trim() ? t("promocodes.noHistoryFound") : t("promocodes.noHistoryText")} />
-      ) : (
-        <ul className="row-list">
-          {list.map((r) => (
-            <li key={r.id} className="py-3">
-              <div className="flex flex-wrap items-center gap-2 text-[13px]">
-                <b className="mono">{r.code}</b>
-                <span className="text-[var(--ink-500)]">{redemptionStatusText(r.status)}</span>
-                {r.days ? <span>+{r.days} {t("promocodes.daysUnit")}</span> : null}
-                {r.bytes ? (
-                  <span>
-                    +{(r.bytes / GB).toFixed(1)} {t("promocodes.trafficUnit")}
-                  </span>
-                ) : null}
-                {r.discount_amount ? <span>−{money(r.discount_amount, r.currency)}</span> : null}
-              </div>
-              <div className="mt-1 text-xs text-[var(--ink-500)]">
-                {dateShort(r.redeemed_at)} {time(r.redeemed_at)} · {r.user_id != null ? `${t("promocodes.user")} #${r.user_id}` : t("promocodes.noUser")} · {t("promocodes.telegramId")} {r.tg_id}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <QueryBoundary
+        query={history}
+        pending={
+          <div className="flex flex-col gap-2" role="status" aria-busy aria-label={t("common.loading")}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} style={{ height: 48 }} />
+            ))}
+          </div>
+        }
+      >
+        {() =>
+          list.length === 0 ? (
+            <EmptyState search={!!search.trim()} title={t("promocodes.noHistory")} text={search.trim() ? t("promocodes.noHistoryFound") : t("promocodes.noHistoryText")} />
+          ) : (
+            <ul className="row-list">
+              {list.map((r) => (
+                <li key={r.id} className="py-3">
+                  <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                    <b className="mono">{r.code}</b>
+                    <span className="text-[var(--ink-500)]">{redemptionStatusText(r.status)}</span>
+                    {r.days ? <span>+{r.days} {t("promocodes.daysUnit")}</span> : null}
+                    {r.bytes ? (
+                      <span>
+                        +{(r.bytes / GiB).toFixed(1)} {t("promocodes.trafficUnit")}
+                      </span>
+                    ) : null}
+                    {r.discount_amount ? <span>−{money(r.discount_amount, r.currency)}</span> : null}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--ink-500)]">
+                    {dateShort(r.redeemed_at)} {time(r.redeemed_at)} · {r.user_id != null ? `${t("promocodes.user")} #${r.user_id}` : t("promocodes.noUser")} · {t("promocodes.telegramId")} {r.tg_id}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </QueryBoundary>
     </section>
   );
 }
@@ -268,14 +266,9 @@ function PromoEditor({ value, onClose, onSave }: { value: PromoCode | null; onCl
       onOpenChange={(v) => !v && onClose()}
       title={value?.id ? t("promocodes.edit") : t("promocodes.new")}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button variant="primary" type="submit" form="promo-form" loading={saving} disabled={blocked}>
-            {t("common.save")}
-          </Button>
-        </>
+        <DrawerFooter form="promo-form" onCancel={onClose} loading={saving} disabled={blocked}>
+          {t("common.save")}
+        </DrawerFooter>
       }
     >
       {value ? <PromoForm key={value.id || "new"} value={value} onSave={onSave} onSaving={setSaving} onBlocked={setBlocked} /> : null}
@@ -288,7 +281,7 @@ function PromoForm({ value, onSave, onSaving, onBlocked }: { value: PromoCode; o
   const tariffs = useTariffs();
   const [p, setP] = useState<Draft>(() => ({
     ...value,
-    value: value.type === "traffic" ? value.value / GB : value.type === "fixed" ? fromUnits(value.value, value.currency) : value.value,
+    value: value.type === "traffic" ? value.value / GiB : value.type === "fixed" ? fromUnits(value.value, value.currency) : value.value,
     min_order: fromUnits(value.min_order, value.currency),
     max_discount: fromUnits(value.max_discount, value.currency),
     starts_at: dateInput(value.starts_at),
@@ -316,7 +309,7 @@ function PromoForm({ value, onSave, onSaving, onBlocked }: { value: PromoCode; o
     try {
       await onSave({
         ...p,
-        value: p.type === "traffic" ? Math.round(Number(p.value) * GB) : p.type === "fixed" ? toUnits(p.value, p.currency) : Number(p.value),
+        value: p.type === "traffic" ? Math.round(Number(p.value) * GiB) : p.type === "fixed" ? toUnits(p.value, p.currency) : Number(p.value),
         per_user_limit: Number(p.per_user_limit),
         discount_ttl: Number(p.discount_ttl),
         // Sums mean nothing without a currency: a code for any currency has none.

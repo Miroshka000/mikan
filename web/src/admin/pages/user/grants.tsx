@@ -3,13 +3,15 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { api, ApiError, errorText, unwrap, type Schemas, type User } from "../../../api/client";
+import { api, unwrap, type Schemas, type User } from "../../../api/client";
+import { onFormError } from "../../../lib/fields";
 import { qk, usePools, useUserGrants } from "../../../api/hooks";
 import { QueryBoundary } from "../../../components/query";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Pill, Segmented, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { bytes, dateShort, days as daysText, GiB } from "../../../lib/format";
+import { isLifetimeDays, isTrafficGB, LIFETIME_DAYS_PRESETS, parseDecimal } from "../../../lib/validate";
 import { targetName, type Lifetime } from "../packages";
 
 type Grant = Schemas["GrantView"];
@@ -90,17 +92,16 @@ function GrantForm({ u, pools, onDone }: { u: User; pools: Schemas["PoolView"][]
       onDone();
     },
     onError: (e) => {
-      if (e instanceof ApiError && Object.keys(e.fields).length) setErrors(e.fields);
-      else toast.error(errorText(e));
+      onFormError(e, toast, setErrors);
     },
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const errs: Record<string, string> = {};
-    const gbN = Number(gb.replace(",", "."));
+    const gbN = parseDecimal(gb);
     const daysN = Number(days);
-    if (!Number.isFinite(gbN) || gbN < 1 || gbN > 102400) errs.bytes = t("errors.api.bad_bytes");
-    if (lifetime === "days" && (!Number.isInteger(daysN) || daysN < 1 || daysN > 3650)) errs.days = t("errors.api.bad_days");
+    if (!isTrafficGB(gbN)) errs.bytes = t("errors.api.bad_bytes");
+    if (lifetime === "days" && !isLifetimeDays(daysN)) errs.days = t("errors.api.bad_days");
     setErrors(errs);
     if (Object.keys(errs).length) return;
     grant.mutate({ bytes: Math.round(gbN * GiB), pool_id: pool || undefined, lifetime, days: lifetime === "days" ? daysN : undefined, note: note.trim() || undefined });
@@ -139,7 +140,7 @@ function GrantForm({ u, pools, onDone }: { u: User; pools: Schemas["PoolView"][]
         {lifetime === "days" ? (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input id="gr-days" className="input max-w-[100px]" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} aria-invalid={!!errors.days} />
-            {[7, 30].map((n) => (
+            {LIFETIME_DAYS_PRESETS.map((n) => (
               <button key={n} type="button" className="chip-btn" onClick={() => setDays(String(n))}>
                 {daysText(n)}
               </button>

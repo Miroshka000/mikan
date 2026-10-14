@@ -7,7 +7,9 @@ mod addon;
 mod backup;
 mod clock;
 mod docker;
+mod doctor;
 mod envfile;
+mod hello;
 mod host;
 mod lock;
 mod net;
@@ -54,6 +56,8 @@ enum Cmd {
     Install(setup::Options),
     /// Containers, version, health and whether an update is out
     Status,
+    /// Check this server: Docker, containers, ports, firewall, clock, DNS, access to GitHub and GHCR, disk and memory
+    Doctor,
     /// Follow the logs (Ctrl+C stops)
     Logs {
         #[arg(value_parser = ["panel", "node"])]
@@ -137,6 +141,14 @@ enum AddonCmd {
     Install { id: String },
     /// Stop and remove an adapter; the panel keeps its settings and payments
     Remove { id: String },
+    /// Load an addon's image from an archive (docker save image@digest), for a server
+    /// that cannot reach the registry; only the build the marketplace pins is taken
+    Load {
+        tar: PathBuf,
+        /// The addon the archive must hold; without it, the one pinned to its digest
+        #[arg(long)]
+        id: Option<String>,
+    },
     /// Do what the panel asked for (the update request unit runs this)
     Apply,
 }
@@ -166,6 +178,15 @@ enum CertCmd {
         #[arg(long)]
         node: Option<u32>,
     },
+    /// nginx or Caddy holds port 80: pass Let's Encrypt's checks for the domain through it
+    /// to this panel or node (the rule is backed up, tested and reloaded)
+    Proxy {
+        /// The address clients reach this server by: its domain, or its IP
+        domain: String,
+        /// Do not ask
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -174,6 +195,7 @@ fn main() -> ExitCode {
         None => tui::start(),
         Some(Cmd::Install(o)) => setup::install(o),
         Some(Cmd::Status) => ops::status(),
+        Some(Cmd::Doctor) => doctor::run(),
         Some(Cmd::Logs { service }) => ops::logs(service.as_deref()),
         Some(Cmd::Url) => ops::admin(&["url"]),
         Some(Cmd::ResetPassword) => ops::admin(&["reset-password"]),
@@ -185,6 +207,7 @@ fn main() -> ExitCode {
             CertCmd::Set { cert, key, node } => ops::cert_set(&cert, &key, node),
             CertCmd::Clear { node } => ops::cert(&["clear"], node),
             CertCmd::Show { node } => ops::cert(&["show"], node),
+            CertCmd::Proxy { domain, yes } => ops::cert_proxy(&domain, yes),
         },
         Some(Cmd::Inbound { args }) => ops::inbound(&args),
         Some(Cmd::Backup) => backup::backup(&mut out).map(|f| out(&format!("Backup: {}", f.display()))),
@@ -239,14 +262,13 @@ pub fn out(l: &str) {
 }
 
 fn addon_cmd(c: AddonCmd) -> anyhow::Result<()> {
-    let install = ops::Install::load()?;
-    install.panel_only()?;
-    let panel = install.version();
+    let panel = addon::panel_version()?;
     let mut say = out;
     match c {
         AddonCmd::List => addon::list(&panel),
         AddonCmd::Install { id } => addon::install(&id, &panel, &mut say),
         AddonCmd::Remove { id } => addon::remove(&id, &mut say),
+        AddonCmd::Load { tar, id } => addon::load(&tar, id.as_deref(), &panel, &mut say),
         AddonCmd::Apply => addon::apply(&panel, &mut say),
     }
 }

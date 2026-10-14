@@ -139,7 +139,10 @@ export function maskIP(ip: string): string {
 
 /** Kopecks as rubles: 19900 → "199 ₽", 19950 → "199,50 ₽". */
 export function rubles(kopecks: number): string {
-  const f = new Intl.NumberFormat(getLocale(), { minimumFractionDigits: kopecks % 100 ? 2 : 0, maximumFractionDigits: 2 });
+  const min = kopecks % 100 ? 2 : 0;
+  const key = `r${getLocale()}${min}`;
+  let f = cache.get(key) as Intl.NumberFormat | undefined;
+  if (!f) cache.set(key, (f = new Intl.NumberFormat(getLocale(), { minimumFractionDigits: min, maximumFractionDigits: 2 })));
   return `${f.format(kopecks / 100)} ₽`;
 }
 

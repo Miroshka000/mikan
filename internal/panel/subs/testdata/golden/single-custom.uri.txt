@@ -1,0 +1,4 @@
+vless://0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1@203.0.113.7:443?encryption=none&fp=chrome&mode=stream-one&path=%2Fgolden-path&pbk=B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw&security=reality&sid=a1b2c3d4&sni=www.example.com&type=xhttp#VLESS%20XHTTP
+hysteria2://S3cr3t+%2F=@203.0.113.7:443/?insecure=1&obfs=salamander&obfs-password=golden-obfs-password&pinSHA256=ab12#Hysteria2
+tuic://0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1:S3cr3t+%2F=@203.0.113.7:8443?allow_insecure=1&alpn=h3&congestion_control=bbr&udp_relay_mode=native#TUIC
+vless://0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1@203.0.113.7:8443?encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw&security=reality&sid=a1b2c3d4&sni=www.example.com&type=tcp#VLESS%20Vision

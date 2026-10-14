@@ -72,15 +72,16 @@ export async function setLocale(l: Locale): Promise<void> {
   listeners.forEach((f) => f());
 }
 
+// At module level so React keeps one subscription per component: a function made inside the
+// hook is new on every render, and the store would be left and joined again each time.
+function subscribe(f: () => void): () => void {
+  listeners.add(f);
+  return () => listeners.delete(f);
+}
+
 /** Re-renders on a language switch: a component that reads texts follows the language itself. */
 export function useLocale(): Locale {
-  return useSyncExternalStore(
-    (f) => {
-      listeners.add(f);
-      return () => listeners.delete(f);
-    },
-    () => locale,
-  );
+  return useSyncExternalStore(subscribe, getLocale);
 }
 
 export function t(key: Key, params?: Params): string {

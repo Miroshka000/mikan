@@ -21,6 +21,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/turn"
+	"unicode/utf8"
 )
 
 type TurnView struct {
@@ -134,7 +135,7 @@ func (h *handlers) turnView(ctx context.Context, n db.Node, withStatus bool) (Tu
 		switch {
 		case err != nil:
 			// A node that predates the server answers 404; one that is silent says nothing.
-			code, detail := "node_unreachable", clipText(err.Error(), 200)
+			code, detail := "node_unreachable", clip(err.Error(), 200)
 			var se *nodeapi.StatusError
 			if errors.As(err, &se) && se.Status == http.StatusNotFound {
 				code, detail = "node_too_old", ""
@@ -264,4 +265,16 @@ func (h *handlers) deleteTurn(ctx context.Context, in *nodeIDInput) (*struct{}, 
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.turn.delete", "node", strconv.FormatInt(in.ID, 10), nil)
 	return nil, nil
+}
+
+// clip cuts s to n bytes, on a rune boundary: a node's error goes into the status detail,
+// which the drawer shows in one line.
+func clip(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + "…"
 }

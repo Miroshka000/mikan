@@ -34,6 +34,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"mikan/internal/proto"
 )
 
 // Kind is the panel users come from.
@@ -152,20 +154,12 @@ func dialControl(network, address string, _ syscall.RawConn) error {
 // imdsV6 is the cloud metadata service's IPv6 address (AWS), outside the link-local range.
 var imdsV6 = netip.MustParseAddr("fd00:ec2::254")
 
-// nat64 is the well-known NAT64 prefix: an IPv4 address inside it is judged as itself, so
-// 64:ff9b::a9fe:a9fe does not reach 169.254.169.254.
-var nat64 = netip.MustParsePrefix("64:ff9b::/96")
-
 // AddressOK says whether the import may connect to a. Loopback, private and CGNAT
 // (100.64.0.0/10, where Tailscale and similar overlays put their peers) are allowed: the
 // old panel often runs on this server or next to it. Link-local (the metadata service),
 // the AWS IPv6 metadata address, unspecified, multicast and broadcast are not.
 func AddressOK(a netip.Addr) bool {
-	a = a.Unmap()
-	if nat64.Contains(a) {
-		b := a.As16()
-		return AddressOK(netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}))
-	}
+	a = proto.Unwrap4(a)
 	return !(a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() || a.IsUnspecified() || a.IsMulticast() ||
 		a == netip.AddrFrom4([4]byte{255, 255, 255, 255}) || a == imdsV6)
 }

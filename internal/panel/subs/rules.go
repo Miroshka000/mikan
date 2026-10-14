@@ -43,10 +43,6 @@ const (
 	kindProcess
 )
 
-// RuleTypes are the rule types the profile may carry, in the order the admin panel lists them.
-var RuleTypes = []string{"DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "DOMAIN-WILDCARD", "DOMAIN-REGEX", "GEOSITE", "GEOIP",
-	"IP-CIDR", "IP-CIDR6", "IP-SUFFIX", "IP-ASN", "SRC-IP-CIDR", "SRC-GEOIP", "DST-PORT", "SRC-PORT", "NETWORK", "PROCESS-NAME", "PROCESS-PATH"}
-
 var ruleKinds = map[string]ruleKind{
 	"DOMAIN": kindDomain, "DOMAIN-SUFFIX": kindDomain, "DOMAIN-KEYWORD": kindKeyword, "DOMAIN-WILDCARD": kindWildcard, "DOMAIN-REGEX": kindRegex,
 	"GEOSITE": kindGeo, "GEOIP": kindGeo, "SRC-GEOIP": kindGeo,
@@ -232,9 +228,6 @@ func ServedRules(text string, g Groups) []string {
 
 // ruleSince is the first mihomo with a rule type younger than the cores still around.
 var ruleSince = map[string]Version{"DOMAIN-REGEX": {1, 18, 2}, "IP-ASN": {1, 18, 2}, "SRC-GEOIP": {1, 18, 4}, "DOMAIN-WILDCARD": {1, 19, 12}}
-
-// RuleSince is the core a rule type needs, for the admin panel; zero for the old ones.
-func RuleSince(typ string) Version { return ruleSince[typ] }
 
 // RulesFor are the rules an app's core parses. A rule it does not know fails the whole
 // profile, so a younger type goes only to a mihomo app that names a core with it.

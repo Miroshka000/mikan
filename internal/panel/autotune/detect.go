@@ -8,7 +8,6 @@ package autotune
 import (
 	"net/netip"
 	"slices"
-	"strconv"
 	"time"
 
 	"mikan/internal/nodeapi"
@@ -152,14 +151,9 @@ func netOf(ip string) string {
 	return p.String()
 }
 
-// FreePorts returns the ports of domain.PortPool a blocked inbound of the node may move
-// to on network: free on the node's port map and not given up lately.
-func FreePorts(ports domain.PortMap, network string, abandoned map[string]bool) []string {
-	var out []string
-	for _, p := range domain.PortPool {
-		if port := strconv.Itoa(p); !abandoned[port] && ports.Free(p, network) {
-			out = append(out, port)
-		}
-	}
-	return out
+// FreePorts returns the ports a blocked inbound of the node may move to on network: free
+// on the node's port map and not given up lately, of domain.PortPool, and past it when
+// anyPort (settings.AnyPort) is on and the pool is full.
+func FreePorts(ports domain.PortMap, network string, abandoned map[string]bool, anyPort bool) []string {
+	return ports.PickPorts(network, anyPort, abandoned)
 }

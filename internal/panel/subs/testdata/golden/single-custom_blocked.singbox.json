@@ -1,0 +1,529 @@
+{
+  "dns": {
+    "final": "remote",
+    "rules": [
+      {
+        "domain_suffix": [
+          "cn"
+        ],
+        "server": "policy-0"
+      }
+    ],
+    "servers": [
+      {
+        "server": "dns.alidns.com",
+        "tag": "remote",
+        "type": "https"
+      },
+      {
+        "server": "1.1.1.1",
+        "tag": "local",
+        "type": "https"
+      },
+      {
+        "server": "223.5.5.5",
+        "tag": "policy-0",
+        "type": "udp"
+      }
+    ],
+    "strategy": "ipv4_only"
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true
+    }
+  },
+  "inbounds": [
+    {
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    }
+  ],
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "outbounds": [
+        "Fast",
+        "VLESS Vision"
+      ],
+      "tag": "Прокси",
+      "type": "selector"
+    },
+    {
+      "interval": "120s",
+      "outbounds": [
+        "VLESS Vision"
+      ],
+      "tag": "Fast",
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "outbounds": [
+        "Прокси"
+      ],
+      "tag": "PROXY",
+      "type": "selector"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "203.0.113.7",
+      "server_port": 8443,
+      "tag": "VLESS Vision",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+          "short_id": "a1b2c3d4"
+        },
+        "server_name": "www.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": "local",
+    "final": "direct",
+    "rule_set": [
+      {
+        "download_detour": "Прокси",
+        "format": "binary",
+        "tag": "geosite-category-ads-all",
+        "type": "remote",
+        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ads-all.srs"
+      },
+      {
+        "download_detour": "Прокси",
+        "format": "binary",
+        "tag": "geosite-youtube",
+        "type": "remote",
+        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/youtube.srs"
+      },
+      {
+        "download_detour": "Прокси",
+        "format": "binary",
+        "tag": "geosite-telegram",
+        "type": "remote",
+        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/telegram.srs"
+      },
+      {
+        "download_detour": "Прокси",
+        "format": "binary",
+        "tag": "geoip-telegram",
+        "type": "remote",
+        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/telegram.srs"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-telegram-ip",
+        "type": "inline"
+      },
+      {
+        "download_detour": "Прокси",
+        "format": "binary",
+        "tag": "geosite-category-ai-!cn",
+        "type": "remote",
+        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ai-%21cn.srs"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-ai",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-gemini",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-torrent-apps",
+        "type": "inline"
+      },
+      {
+        "download_detour": "Прокси",
+        "format": "binary",
+        "tag": "geosite-category-public-tracker",
+        "type": "remote",
+        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-public-tracker.srs"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-own-wl",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "ip_cidr": [
+              "DOMAIN-KEYWORD,example"
+            ]
+          }
+        ],
+        "tag": "list-own-ru-ip",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "package_name": [
+              "ru.sberbankmobile",
+              "ru.gosuslugi.app"
+            ]
+          }
+        ],
+        "tag": "list-mikan-ru-apps",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "process_name": [
+              "qbittorrent.exe"
+            ]
+          }
+        ],
+        "tag": "list-mikan-ru-pc",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_suffix": [
+              "gosuslugi.ru",
+              "sberbank.ru"
+            ]
+          }
+        ],
+        "tag": "list-mikan-ru-sites",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-ru-keywords",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-ru-core",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_suffix": [
+              "instagram.com"
+            ]
+          },
+          {
+            "ip_cidr": [
+              "149.154.160.0/20"
+            ]
+          }
+        ],
+        "tag": "list-mikan-blocked",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-blocked-apps",
+        "type": "inline"
+      }
+    ],
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "ip_cidr": [
+          "203.0.113.7/32"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "domain": [
+          "vpn.example.com"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "action": "reject",
+        "mode": "and",
+        "rules": [
+          {
+            "network": [
+              "udp"
+            ]
+          },
+          {
+            "port": [
+              443
+            ]
+          }
+        ],
+        "type": "logical"
+      },
+      {
+        "domain_suffix": [
+          "sber.ru"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_cidr": [
+          "10.0.0.0/8"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "geosite-category-ads-all"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "geosite-youtube"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "geosite-youtube"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "geosite-telegram"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "geosite-telegram"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "geoip-telegram"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "geoip-telegram"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "list-mikan-telegram-ip"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-mikan-telegram-ip"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "geosite-category-ai-!cn"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "geosite-category-ai-!cn"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "list-mikan-ai"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-mikan-ai"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "list-mikan-gemini"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-mikan-gemini"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "list-mikan-torrent-apps"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "geosite-category-public-tracker"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "list-own-wl"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-own-wl"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "list-own-ru-ip"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "list-mikan-ru-apps"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "list-mikan-ru-pc"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "list-mikan-ru-sites"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "list-mikan-ru-keywords"
+        ]
+      },
+      {
+        "outbound": "direct",
+        "rule_set": [
+          "list-mikan-ru-core"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "list-mikan-blocked"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-mikan-blocked"
+        ]
+      },
+      {
+        "outbound": "Прокси",
+        "rule_set": [
+          "list-mikan-blocked-apps"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-mikan-blocked-apps"
+        ]
+      }
+    ]
+  }
+}

@@ -17,6 +17,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbot"
 )
 
@@ -68,7 +69,7 @@ func TestTelegramOverHTTP(t *testing.T) {
 		t.Fatalf("on without a token: %d %s", resp.StatusCode, body)
 	}
 	set := settings.New(h.st.Q)
-	if err := settings.Set(ctx, set, tgbot.KeyToken, tgToken); err != nil {
+	if err := settings.Set(ctx, set, tgate.KeyToken, tgToken); err != nil {
 		t.Fatal(err)
 	}
 	resp, body := h.do(http.MethodGet, api, nil, nil)

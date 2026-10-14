@@ -5,17 +5,18 @@ import { ArrowDown, ArrowUp, FileText, Pencil, Plus, Trash2 } from "lucide-react
 import { useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk } from "../../../api/hooks";
-import { Confirm, Drawer } from "../../../components/overlay";
+import { Confirm, Drawer, DrawerFooter } from "../../../components/overlay";
+import { QueryBoundary } from "../../../components/query";
 import { Switch } from "../../../components/switch";
 import { useToast } from "../../../components/toast";
-import { Button, ErrorState, Field, Pill, Segmented, Skeleton } from "../../../components/ui";
+import { Button, Field, Pill, Segmented, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { same } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
 import { Markdown } from "../../../lib/markdown";
 import { PLATFORMS } from "../../../sub/page";
 
-export type SubDoc = Schemas["SubDocView"];
+type SubDoc = Schemas["SubDocView"];
 type Body = Schemas["SubDocBody"];
 
 export const PLATFORM_NAMES: Record<string, string> = { ios: "iPhone", android: "Android", windows: "Windows", macos: "Mac", linux: "Linux" };
@@ -76,56 +77,59 @@ export function DocsSection({ announce }: { announce: (text: string) => void }) 
           </Button>
         ) : null}
       </div>
-      {docs.data === undefined ? (
-        docs.isError ? (
-          <ErrorState text={errorText(docs.error)} onRetry={() => void docs.refetch()} />
-        ) : (
+      <QueryBoundary
+        query={docs}
+        pending={
           <div className="flex flex-col gap-2" aria-busy>
             <Skeleton style={{ height: 56, borderRadius: 16 }} />
             <Skeleton style={{ height: 56, borderRadius: 16 }} />
           </div>
-        )
-      ) : items.length === 0 ? (
-        <div className="panel-soft flex flex-col items-center gap-3 px-6 py-8 text-center">
-          <FileText size={22} className="text-[var(--ink-400)]" aria-hidden />
-          <div>
-            <div className="text-[13px] font-semibold">{t("settings.page.docsEmpty")}</div>
-            <p className="mt-1 max-w-[360px] text-xs text-[var(--ink-500)]">{t("settings.page.docsEmptyText")}</p>
-          </div>
-          <Button size="sm" variant="primary" onClick={() => setEditing("new")}>
-            <Plus size={16} aria-hidden /> {t("settings.page.docNew")}
-          </Button>
-        </div>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {items.map((d, i) => (
-            <li key={d.id} className="panel-soft flex items-center gap-3 p-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-[var(--hover)] text-base leading-none" aria-hidden>
-                {d.emoji || <FileText size={16} className="text-[var(--ink-500)]" />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] font-semibold">{d.title}</div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-500)]">
-                  <Pill tone={d.published ? "ok" : "off"}>{d.published ? t("settings.page.docPublished") : t("settings.page.docDraft")}</Pill>
-                  <span>{d.platform ? PLATFORM_NAMES[d.platform] : t("settings.page.docAll")}</span>
-                </div>
+        }
+      >
+        {() =>
+          items.length === 0 ? (
+            <div className="panel-soft flex flex-col items-center gap-3 px-6 py-8 text-center">
+              <FileText size={22} className="text-[var(--ink-400)]" aria-hidden />
+              <div>
+                <div className="text-[13px] font-semibold">{t("settings.page.docsEmpty")}</div>
+                <p className="mt-1 max-w-[360px] text-xs text-[var(--ink-500)]">{t("settings.page.docsEmptyText")}</p>
               </div>
-              <button type="button" id={`doc-up-${d.id}`} className="icon-btn" disabled={i === 0 || order.isPending} onClick={() => move(i, -1)} aria-label={t("settings.page.moveUp", { name: d.title })}>
-                <ArrowUp size={16} />
-              </button>
-              <button type="button" id={`doc-down-${d.id}`} className="icon-btn" disabled={i === items.length - 1 || order.isPending} onClick={() => move(i, 1)} aria-label={t("settings.page.moveDown", { name: d.title })}>
-                <ArrowDown size={16} />
-              </button>
-              <button type="button" className="icon-btn" onClick={() => setEditing(d)} aria-label={t("settings.page.docEdit", { name: d.title })}>
-                <Pencil size={16} />
-              </button>
-              <button type="button" className="icon-btn" onClick={() => setRemoving(d)} aria-label={t("settings.page.docDelete", { name: d.title })}>
-                <Trash2 size={16} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+              <Button size="sm" variant="primary" onClick={() => setEditing("new")}>
+                <Plus size={16} aria-hidden /> {t("settings.page.docNew")}
+              </Button>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {items.map((d, i) => (
+                <li key={d.id} className="panel-soft flex items-center gap-3 p-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] bg-[var(--hover)] text-base leading-none" aria-hidden>
+                    {d.emoji || <FileText size={16} className="text-[var(--ink-500)]" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold">{d.title}</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-500)]">
+                      <Pill tone={d.published ? "ok" : "off"}>{d.published ? t("settings.page.docPublished") : t("settings.page.docDraft")}</Pill>
+                      <span>{d.platform ? PLATFORM_NAMES[d.platform] : t("settings.page.docAll")}</span>
+                    </div>
+                  </div>
+                  <button type="button" id={`doc-up-${d.id}`} className="icon-btn" disabled={i === 0 || order.isPending} onClick={() => move(i, -1)} aria-label={t("settings.page.moveUp", { name: d.title })}>
+                    <ArrowUp size={16} />
+                  </button>
+                  <button type="button" id={`doc-down-${d.id}`} className="icon-btn" disabled={i === items.length - 1 || order.isPending} onClick={() => move(i, 1)} aria-label={t("settings.page.moveDown", { name: d.title })}>
+                    <ArrowDown size={16} />
+                  </button>
+                  <button type="button" className="icon-btn" onClick={() => setEditing(d)} aria-label={t("settings.page.docEdit", { name: d.title })}>
+                    <Pencil size={16} />
+                  </button>
+                  <button type="button" className="icon-btn" onClick={() => setRemoving(d)} aria-label={t("settings.page.docDelete", { name: d.title })}>
+                    <Trash2 size={16} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </QueryBoundary>
       {items.length >= MAX_DOCS ? <p className="mt-3 text-xs text-[var(--ink-500)]">{t("errors.api.too_many_docs", { value: MAX_DOCS })}</p> : null}
       {editing !== null ? <DocEditor key={editing === "new" ? "new" : editing.id} doc={editing === "new" ? null : editing} onClose={() => setEditing(null)} /> : null}
       <Confirm
@@ -178,14 +182,9 @@ function DocEditor({ doc, onClose }: { doc: SubDoc | null; onClose: () => void }
         onOpenChange={(open) => !open && close()}
         title={doc ? t("settings.page.docEditTitle") : t("settings.page.docNew")}
         footer={
-          <>
-            <Button variant="ghost" onClick={close}>
-              {t("common.cancel")}
-            </Button>
-            <Button type="submit" form="sub-doc-form" variant="primary" loading={save.isPending} disabled={missing}>
-              {t("common.save")}
-            </Button>
-          </>
+          <DrawerFooter form="sub-doc-form" onCancel={close} loading={save.isPending} disabled={missing}>
+            {t("common.save")}
+          </DrawerFooter>
         }
       >
         <form id="sub-doc-form" onSubmit={submit} noValidate className="pt-4">

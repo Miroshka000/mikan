@@ -237,14 +237,14 @@ func TestFreePorts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := FreePorts(ports, "tcp", map[string]bool{"2443": true})
+	got := FreePorts(ports, "tcp", map[string]bool{"2443": true}, false)
 	want := []string{"2083", "3443", "4443", "5443", "6443", "7443", "9443", "10443", "11443", "12443"} // 2053 gRPC, 2087 a disabled inbound, 2096 subscriptions, 8443 Vision
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("tcp: got %v, want %v", got, want)
 	}
 	// UDP: TUIC's 8443 and the hopping range's 5443 and 6443 are taken there.
 	want = []string{"2053", "2083", "2087", "2096", "2443", "3443", "4443", "7443", "9443", "10443", "11443", "12443"}
-	if got := FreePorts(ports, "udp", nil); !reflect.DeepEqual(got, want) {
+	if got := FreePorts(ports, "udp", nil, false); !reflect.DeepEqual(got, want) {
 		t.Fatalf("udp: got %v, want %v", got, want)
 	}
 }

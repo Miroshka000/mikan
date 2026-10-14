@@ -274,3 +274,22 @@ func TestPresetsLeaveThePoolAPort(t *testing.T) {
 		t.Fatalf("the presets' default TCP ports fill the whole pool %v", PortPool)
 	}
 }
+
+// Picks stay in PortPool; past it only with any port allowed and the pool full, and then
+// on the spare range.
+func TestPickPorts(t *testing.T) {
+	var m PortMap
+	for _, p := range PortPool {
+		m.add(PortHolder{Kind: PortInbound, Name: strconv.Itoa(p), ID: int64(p)}, strconv.Itoa(p), "tcp", false)
+	}
+	if got := m.PickPorts("tcp", false, nil); len(got) != 0 {
+		t.Fatalf("a full pool without any port: %v", got)
+	}
+	got := m.PickPorts("tcp", true, map[string]bool{strconv.Itoa(SpareLo): true})
+	if len(got) != maxSpare || got[0] != strconv.Itoa(SpareLo+1) {
+		t.Fatalf("spare ports: %d, first %v", len(got), got[:1])
+	}
+	if got := m.PickPorts("udp", true, nil); len(got) != len(PortPool) || got[0] != strconv.Itoa(PortPool[0]) {
+		t.Fatalf("the pool comes first while it has room: %v", got)
+	}
+}

@@ -9,7 +9,7 @@ import (
 	"mikan/internal/proto"
 )
 
-// VLESS on the node certificate, over XHTTP and with Vision, becomes a listener mihomo
+// VLESS on the node certificate, over XHTTP, WebSocket and with Vision, becomes a listener mihomo
 // itself accepts; without a certificate the node refuses it instead of serving plain VLESS.
 func TestVLESSTLSListener(t *testing.T) {
 	slots := []nodeapi.Slot{{Name: "s1", UUID: "00000000-0000-4000-8000-000000000001", Secret: "x"}}
@@ -17,6 +17,7 @@ func TestVLESSTLSListener(t *testing.T) {
 	for name, config := range map[string]string{
 		"xhttp":  `{"type":"vless","xhttp-config":{"path":"/p","mode":"stream-one"},"mikan":{"tls":"node"}}`,
 		"vision": `{"type":"vless","mikan":{"flow":"xtls-rprx-vision","tls":"node"}}`,
+		"ws":     `{"type":"vless","ws-path":"/w","mikan":{"tls":"node"}}`,
 	} {
 		in := nodeapi.Inbound{Name: "vless-tls-" + name, Port: "2443", Config: []byte(config)}
 		l, err := listenerFor(in, slots, cert, proto.Options{})

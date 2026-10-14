@@ -27,7 +27,7 @@ const queryClient = new QueryClient({
 const router = createAppRouter(queryClient);
 
 // Apply the saved theme before the first render so navigation never resets it.
-setTheme(getTheme());
+setTheme(getTheme(), { keep: false });
 
 window.addEventListener("mikan:unauthorized", () => {
   if (router.state.location.pathname === "/login") return;

@@ -8,7 +8,6 @@ export type Tariff = Schemas["TariffView"];
 export type Inbound = Schemas["InboundView"];
 export type Preset = Schemas["Info"];
 export type Overview = Schemas["OverviewOutputBody"];
-export type SettingsView = Schemas["SettingsView"];
 export type TrafficPoint = Schemas["TrafficPoint"];
 export type UserState = User["state"];
 
@@ -52,6 +51,11 @@ export class ApiError extends Error {
   }
 }
 
+/** What a code the server sends (a failed payment, import, backup or source read) says, in words; a code with no text as is. */
+export function apiCodeText(code: string): string {
+  return tMaybe(`errors.api.${code}`) ?? code;
+}
+
 function apiMessage(code: string, value: unknown): string {
   return tMaybe(`errors.api.${code}`, { value: typeof value === "string" || typeof value === "number" ? value : "" }) ?? code;
 }
@@ -74,6 +78,9 @@ const session: Middleware = {
 export const api = createClient<paths>({ baseUrl: base.origin + basePath });
 api.use(session);
 
+/** rawApi is fetch with the panel's own headers and errors: for the fork's endpoints that
+ * have no place in the generated client (the campaign tags' raw JSON), like api is for the
+ * rest. */
 export async function rawApi(path: string, init: RequestInit = {}): Promise<any> {
   const headers = new Headers(init.headers);
   if (init.method && init.method !== "GET" && init.method !== "HEAD" && csrfToken) headers.set("X-CSRF-Token", csrfToken);

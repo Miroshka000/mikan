@@ -1,4 +1,5 @@
 import "../styles/app.css";
+import "../styles/fonts-mono.css";
 import "./look.css";
 import { StrictMode, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -8,15 +9,31 @@ import { Button, Skeleton } from "../components/ui";
 import { initI18n, t, useLocale } from "../i18n";
 import { subDicts } from "../i18n/sub";
 import { APPS } from "./apps";
-import { hashParams, initData, json, openOutside, pageURL, request, subRoot, tgEvent, tgMode, tokenOf } from "./net";
+import { hashParams, initData, json, okData, openOutside, pageURL, postJSON, request, subRoot, tgEvent, tgMode, tokenOf } from "./net";
 import { applyLook, readPage, titleOf, type DocView } from "./page";
-import { loadShop, Shop, type ShopData } from "./shop";
+import { FreePlan, loadShop, Shop, type ShopData } from "./shop";
 import { PromoSection } from "./promo";
+import { ReissueSection } from "./reissue";
 import type { Info, TgSub } from "./types";
 import { DocScreen, PageBackdrop, PageBlocks, PageShell } from "./view";
 
 /** Pauses between the reloads after a payment: the panel applies a paid one within seconds. */
 const AFTER_PAYMENT_MS = [2_000, 5_000, 10_000];
+
+type Insets = { top?: number; bottom?: number; left?: number; right?: number };
+
+/**
+ * Telegram's two safe areas: the device's (notch, home bar) and, in full screen, the room
+ * its own buttons take on top of it. Their sums go to --tg-top and --tg-bottom on <html>,
+ * which the page's padding takes when they exceed the browser's own safe area.
+ */
+const insets: { safe?: Insets; content?: Insets } = {};
+function applyInsets() {
+  const root = document.documentElement.style;
+  const sum = (side: "top" | "bottom") => (insets.safe?.[side] ?? 0) + (insets.content?.[side] ?? 0);
+  root.setProperty("--tg-top", `${sum("top")}px`);
+  root.setProperty("--tg-bottom", `${sum("bottom")}px`);
+}
 
 // What the admin made of the page, in its HTML: the look goes on before the first paint.
 const page = readPage();
@@ -60,8 +77,8 @@ function SubPage() {
   // The Mini App signs in with the launch data Telegram puts after the #.
   const session = useCallback(
     () =>
-      request(subRoot + "/tg/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ init_data: initData }) })
-        .then((r) => json<{ subs: TgSub[] }>(r))
+      postJSON<{ subs: TgSub[] }>(subRoot + "/tg/session", { init_data: initData })
+        .then(okData)
         .then((d) => {
           if (d.subs.length === 0) {
             setTg({ state: "none", subs: [] });
@@ -99,6 +116,10 @@ function SubPage() {
     if (!tgMode) return;
     tgEvent("web_app_ready");
     tgEvent("web_app_expand");
+    // In full screen Telegram draws its own buttons over the top of the page: it tells how
+    // much room they take when asked, and again whenever that changes.
+    tgEvent("web_app_request_safe_area");
+    tgEvent("web_app_request_content_safe_area");
     void session();
     loadShop(subRoot, initData)
       .then(setShop)
@@ -111,6 +132,16 @@ function SubPage() {
     if (!tgMode) return;
     let timers: number[] = [];
     const onEvent = (type: string, data: unknown) => {
+      if (type === "safe_area_changed" || type === "content_safe_area_changed") {
+        insets[type === "safe_area_changed" ? "safe" : "content"] = data as Insets;
+        applyInsets();
+        return;
+      }
+      if (type === "fullscreen_changed") {
+        tgEvent("web_app_request_safe_area");
+        tgEvent("web_app_request_content_safe_area");
+        return;
+      }
       if (type === "back_button_pressed") {
         history.back();
         return;
@@ -243,15 +274,41 @@ function SubPage() {
       />
     ) : null;
 
-  if (tg.state === "none" && shop?.allow_new && shop.offers.length > 0) {
+  // The priced trial comes first for an account without a subscription; plans after it.
+  const trialShop = shop?.trial ? (
+    <Shop
+      data={shop}
+      offers={[shop.trial]}
+      field="trial"
+      pick={t("sub.trialPick")}
+      subRoot={subRoot}
+      initData={initData}
+      token=""
+      title={t("sub.trialTitle")}
+      openInvoice={(slug) => tgEvent("web_app_open_invoice", { slug })}
+      openLink={openOutside}
+      onRefresh={refresh}
+    />
+  ) : null;
+  // The free plan, for an account without a subscription and for one whose free
+  // subscription has ended: the subscription it gives shows once the session reloads.
+  const freePlan = shop?.free ? <FreePlan offer={shop.free} subRoot={subRoot} initData={initData} openLink={openOutside} onTaken={refresh} /> : null;
+  const plansForNew = !!shop?.allow_new && !!shop.offers.length;
+  if (tg.state === "none" && (plansForNew || trialShop || freePlan)) {
     return (
       <Shell>
         <section className="glass sub-card p-6 text-center">
           <h1 className="font-display text-xl font-medium">{t("sub.tgNoSubTitle")}</h1>
           <p className="mt-2 text-[13px] text-[var(--ink-500)]">{t("sub.tgNoSubText")}</p>
         </section>
-        <PromoSection token="" activeCode={promoCode} onApplied={(c) => setPromoCode(c)} onBonusApplied={refresh} title={titleOf(config, "promo")} />
-        {shopFor("", t("sub.shopNew"))}
+        {trialShop}
+        {freePlan}
+        {plansForNew ? (
+          <>
+            <PromoSection token="" activeCode={promoCode} onApplied={(c) => setPromoCode(c)} onBonusApplied={refresh} title={titleOf(config, "promo")} />
+            {shopFor("", t("sub.shopNew"))}
+          </>
+        ) : null}
       </Shell>
     );
   }
@@ -349,7 +406,24 @@ function SubPage() {
             <>
               {shopFor(token, titleOf(config, "shop") || t("sub.shop"))}
               {packagesShop}
+              {freePlan}
             </>
+          ) : null
+        }
+        reissue={
+          tgMode ? (
+            <ReissueSection
+              key={token}
+              info={current}
+              subURL={subURL}
+              title={titleOf(config, "reissue")}
+              onDone={(newToken) => {
+                // The page opens at the new address; the sign-in's list is told afterwards, so that
+                // it finds the new link among the account's and keeps it on screen.
+                setSubURL(subRoot + "/" + newToken);
+                void session();
+              }}
+            />
           ) : null
         }
         reload={() => loadInfo(subURL).catch(() => undefined)}

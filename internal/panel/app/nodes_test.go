@@ -14,7 +14,7 @@ import (
 	"mikan/internal/nodetls"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
-	"mikan/internal/panel/tgbot"
+	"mikan/internal/panel/tgate"
 )
 
 // A node something still goes through is not deleted: the API names the inbounds and
@@ -58,7 +58,7 @@ func TestDeleteNodeInUse(t *testing.T) {
 	if resp, body := h.do(http.MethodPatch, api+"/nodes/"+id(c.ID)+"/cascade", map[string]any{"outbound": "node", "exit_node_id": b.ID}, csrf); resp.StatusCode != http.StatusOK {
 		t.Fatalf("C → B: %d %s", resp.StatusCode, body)
 	}
-	if err := settings.Set(ctx, set, tgbot.KeyRoute, tgbot.Route{Mode: tgbot.RouteNode, NodeID: b.ID}); err != nil {
+	if err := settings.Set(ctx, set, tgate.KeyRoute, tgate.Route{Mode: tgate.RouteNode, NodeID: b.ID}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,7 +91,7 @@ func TestDeleteNodeInUse(t *testing.T) {
 	if resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "node_in_use_telegram") || strings.Contains(string(body), "node_in_use_inbounds") {
 		t.Fatalf("only the bot left: %d %s", resp.StatusCode, body)
 	}
-	if err := settings.Set(ctx, set, tgbot.KeyRoute, tgbot.Route{Mode: tgbot.RouteDirect}); err != nil {
+	if err := settings.Set(ctx, set, tgate.KeyRoute, tgate.Route{Mode: tgate.RouteDirect}); err != nil {
 		t.Fatal(err)
 	}
 	if resp, body := h.do(http.MethodDelete, api+"/nodes/"+id(b.ID), nil, csrf); resp.StatusCode != http.StatusNoContent {

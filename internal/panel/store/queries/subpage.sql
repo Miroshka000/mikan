@@ -5,9 +5,6 @@ SELECT * FROM sub_docs ORDER BY position, id;
 -- What the subscription page lists: the published pages without their text.
 SELECT id, title, emoji, platform FROM sub_docs WHERE published = 1 ORDER BY position, id;
 
--- name: GetSubDoc :one
-SELECT * FROM sub_docs WHERE id = $1;
-
 -- name: GetPublishedSubDoc :one
 SELECT * FROM sub_docs WHERE id = $1 AND published = 1;
 

@@ -69,20 +69,31 @@ func cpuTimes() (idle, total uint64, err error) {
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		fields := strings.Fields(sc.Text())
-		if len(fields) < 5 || fields[0] != "cpu" {
-			continue
+		if idle, total, ok := parseCPULine(sc.Text()); ok {
+			return idle, total, nil
 		}
-		for i, v := range fields[1:] {
-			n, _ := strconv.ParseUint(v, 10, 64)
-			total += n
-			if i == 3 || i == 4 { // idle, iowait
-				idle += n
-			}
-		}
-		return idle, total, nil
 	}
 	return 0, 0, sc.Err()
+}
+
+// parseCPULine reads the summary "cpu" line of /proc/stat: user nice system idle iowait
+// irq softirq steal guest guest_nice. Idle, iowait and steal are not this server's work:
+// steal is time the hypervisor gave its neighbours, and on a busy host it looked like load
+// the server never had. guest and guest_nice are already inside user and nice, so they are
+// not added again.
+func parseCPULine(line string) (idle, total uint64, ok bool) {
+	fields := strings.Fields(line)
+	if len(fields) < 5 || fields[0] != "cpu" {
+		return 0, 0, false
+	}
+	for i, v := range fields[1:min(len(fields), 9)] {
+		n, _ := strconv.ParseUint(v, 10, 64)
+		total += n
+		if i == 3 || i == 4 || i == 7 { // idle, iowait, steal
+			idle += n
+		}
+	}
+	return idle, total, true
 }
 
 func memInfo() (total, used uint64) {

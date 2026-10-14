@@ -1,0 +1,90 @@
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+geodata-mode: false
+geox-url:
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
+dns:
+  enable: true
+  ipv6: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://1.1.1.1/dns-query#PROXY
+    - https://8.8.8.8/dns-query#PROXY
+  nameserver-policy:
+    geosite:category-ru:
+      - 77.88.8.8
+      - 77.88.8.1
+  proxy-server-nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies:
+      - Авто
+      - "\U0001F1F3\U0001F1F1 Нидерланды"
+      - "\U0001F1FA\U0001F1F8 США"
+    include-all-proxies: true
+  - name: Авто
+    type: url-test
+    include-all-proxies: true
+    interval: 300
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1F3\U0001F1F1 Нидерланды"
+    type: url-test
+    interval: 300
+    mikan:
+      nodes:
+        - "\U0001F1F3\U0001F1F1 Нидерланды"
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: "\U0001F1FA\U0001F1F8 США"
+    type: url-test
+    interval: 300
+    mikan:
+      nodes:
+        - "\U0001F1FA\U0001F1F8 США"
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: PROXY
+    type: select
+    proxies:
+      - VPN
+    hidden: true
+rules:
+  - GEOIP,LAN,DIRECT,no-resolve
+  - RULE-SET,mikan-blocked,VPN
+  - RULE-SET,mikan-blocked,REJECT
+  - RULE-SET,mikan-blocked-apps,VPN
+  - RULE-SET,mikan-blocked-apps,REJECT
+  - MATCH,DIRECT
+rule-providers:
+  mikan-blocked:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-blocked.yaml
+    proxy: VPN
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/clV2_provider.yaml
+  mikan-blocked-apps:
+    type: http
+    behavior: classical
+    format: yaml
+    interval: 86400
+    path: ./ruleset/mikan-blocked-apps.yaml
+    proxy: VPN
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/process-core.yaml

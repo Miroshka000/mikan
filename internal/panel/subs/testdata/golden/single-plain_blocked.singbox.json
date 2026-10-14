@@ -1,0 +1,194 @@
+{
+  "dns": {
+    "final": "remote",
+    "rules": [
+      {
+        "rule_set": [
+          "geosite-category-ru"
+        ],
+        "server": "policy-0"
+      }
+    ],
+    "servers": [
+      {
+        "detour": "PROXY",
+        "server": "1.1.1.1",
+        "tag": "remote",
+        "type": "https"
+      },
+      {
+        "server": "1.1.1.1",
+        "tag": "local",
+        "type": "https"
+      },
+      {
+        "server": "77.88.8.8",
+        "tag": "policy-0",
+        "type": "udp"
+      }
+    ],
+    "strategy": "ipv4_only"
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true
+    }
+  },
+  "inbounds": [
+    {
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    }
+  ],
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "outbounds": [
+        "Авто",
+        "VLESS Vision"
+      ],
+      "tag": "VPN",
+      "type": "selector"
+    },
+    {
+      "interval": "300s",
+      "outbounds": [
+        "VLESS Vision"
+      ],
+      "tag": "Авто",
+      "tolerance": 50,
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "outbounds": [
+        "VPN"
+      ],
+      "tag": "PROXY",
+      "type": "selector"
+    },
+    {
+      "flow": "xtls-rprx-vision",
+      "packet_encoding": "xudp",
+      "server": "203.0.113.7",
+      "server_port": 8443,
+      "tag": "VLESS Vision",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "public_key": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+          "short_id": "a1b2c3d4"
+        },
+        "server_name": "www.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": "local",
+    "final": "direct",
+    "rule_set": [
+      {
+        "rules": [
+          {
+            "domain_suffix": [
+              "instagram.com"
+            ]
+          },
+          {
+            "ip_cidr": [
+              "149.154.160.0/20"
+            ]
+          }
+        ],
+        "tag": "list-mikan-blocked",
+        "type": "inline"
+      },
+      {
+        "rules": [
+          {
+            "domain_keyword": [
+              "example"
+            ]
+          }
+        ],
+        "tag": "list-mikan-blocked-apps",
+        "type": "inline"
+      },
+      {
+        "download_detour": "VPN",
+        "format": "binary",
+        "tag": "geosite-category-ru",
+        "type": "remote",
+        "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ru.srs"
+      }
+    ],
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "ip_cidr": [
+          "203.0.113.7/32"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "domain": [
+          "vpn.example.com"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "outbound": "VPN",
+        "rule_set": [
+          "list-mikan-blocked"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-mikan-blocked"
+        ]
+      },
+      {
+        "outbound": "VPN",
+        "rule_set": [
+          "list-mikan-blocked-apps"
+        ]
+      },
+      {
+        "action": "reject",
+        "rule_set": [
+          "list-mikan-blocked-apps"
+        ]
+      }
+    ]
+  }
+}
