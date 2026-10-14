@@ -9,12 +9,10 @@
 
 **Un panel VPN rápido y bonito sobre el núcleo [mihomo](https://github.com/MetaCubeX/mihomo): se instala con un solo comando y no hay que vigilarlo.**
 
-[![Versión](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=versión&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
-[![Imagen](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
+[![Versión](https://img.shields.io/github/v/release/o0hhs/mikanaddons?color=f07a2e&label=versión&style=flat-square)](https://github.com/o0hhs/mikanaddons/releases)
+[![Imagen](https://img.shields.io/badge/ghcr.io-o0hhs%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/o0hhs/mikanaddons/pkgs/container/mikan)
 [![Licencia](https://img.shields.io/badge/licencia-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
 [![mihomo](https://img.shields.io/badge/núcleo-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
-[![Telegram](https://img.shields.io/badge/Telegram-canal-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/mikanvpn)
-[![Telegram](https://img.shields.io/badge/Telegram-foro-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/+I2JFR7DbPow1ZmQy)
 
 [English](README.md) · [Русский](README.ru.md) · [简体中文](README.zh-CN.md) · [فارسی](README.fa.md) · [Türkçe](README.tr.md) · **Español**
 
@@ -27,7 +25,7 @@
 En un servidor nuevo con Ubuntu 22.04+ o Debian 12+ (amd64 o arm64):
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash
 ```
 
 El instalador pregunta el idioma del panel y un dominio opcional, comprueba que el dominio apunte al servidor, instala Docker si hace falta, elige sitios de camuflaje REALITY cerca de tu servidor e imprime tu enlace de administrador. Ejecuta `mikan` de nuevo en cualquier momento para abrir el menú de gestión.
@@ -35,7 +33,7 @@ El instalador pregunta el idioma del panel y un dominio opcional, comprueba que 
 Para añadir un nodo a un panel existente: la página **Nodos** del panel (o `mikan node add`) te da el comando con su clave:
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash -s -- --join KEY
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash -s -- --join KEY
 ```
 
 Sin preguntas, para scripts: `… | sudo bash -s -- --yes --lang en --domain vpn.example.com --email you@example.com` (todos los parámetros: `mikan install --help`).

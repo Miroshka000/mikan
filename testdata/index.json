@@ -3,7 +3,7 @@
   "decode": [
     {
       "name": "unknown fields and a future rollout are ignored",
-      "doc": "{\"schema\":1,\"published\":\"2026-10-04T10:00:00Z\",\"mirror\":{\"x\":1},\"releases\":[{\"version\":\"0.5.0.0\",\"channel\":\"stable\",\"manifest\":\"https://github.com/Miroshka000/mikan/releases/download/v0.5.0.0/manifest.json\",\"from\":\"0.4.5\"},{\"version\":\"0.5.0.1\",\"channel\":\"stable\",\"manifest\":\"https://github.com/Miroshka000/mikan/releases/download/v0.5.0.1/manifest.json\",\"from\":\"0.4.5\",\"rollout\":25,\"size\":{\"x86_64\":1}}]}",
+      "doc": "{\"schema\":1,\"published\":\"2026-10-04T10:00:00Z\",\"mirror\":{\"x\":1},\"releases\":[{\"version\":\"0.5.0.0\",\"channel\":\"stable\",\"manifest\":\"https://github.com/o0hhs/mikanaddons/releases/download/v0.5.0.0/manifest.json\",\"from\":\"0.4.5\"},{\"version\":\"0.5.0.1\",\"channel\":\"stable\",\"manifest\":\"https://github.com/o0hhs/mikanaddons/releases/download/v0.5.0.1/manifest.json\",\"from\":\"0.4.5\",\"rollout\":25,\"size\":{\"x86_64\":1}}]}",
       "versions": ["0.5.0.0", "0.5.0.1"]
     },
     {
@@ -32,11 +32,11 @@
   "choose": [
     {
       "releases": [
-        {"version": "0.4.5", "channel": "stable", "manifest": "https://github.com/Miroshka000/mikan/releases/download/v0.4.5/manifest.json", "from": "0.4.0"},
-        {"version": "0.5.0.0", "channel": "stable", "manifest": "https://github.com/Miroshka000/mikan/releases/download/v0.5.0.0/manifest.json", "from": "0.4.5"},
-        {"version": "0.5.0.1", "channel": "stable", "manifest": "https://github.com/Miroshka000/mikan/releases/download/v0.5.0.1/manifest.json", "from": "0.4.5"},
-        {"version": "0.5.0.2-rc.1", "channel": "beta", "manifest": "https://github.com/Miroshka000/mikan/releases/download/v0.5.0.2-rc.1/manifest.json", "from": "0.5.0.0"},
-        {"version": "0.6.0.0", "channel": "stable", "manifest": "https://github.com/Miroshka000/mikan/releases/download/v0.6.0.0/manifest.json", "from": "0.5.0.1"}
+        {"version": "0.4.5", "channel": "stable", "manifest": "https://github.com/o0hhs/mikanaddons/releases/download/v0.4.5/manifest.json", "from": "0.4.0"},
+        {"version": "0.5.0.0", "channel": "stable", "manifest": "https://github.com/o0hhs/mikanaddons/releases/download/v0.5.0.0/manifest.json", "from": "0.4.5"},
+        {"version": "0.5.0.1", "channel": "stable", "manifest": "https://github.com/o0hhs/mikanaddons/releases/download/v0.5.0.1/manifest.json", "from": "0.4.5"},
+        {"version": "0.5.0.2-rc.1", "channel": "beta", "manifest": "https://github.com/o0hhs/mikanaddons/releases/download/v0.5.0.2-rc.1/manifest.json", "from": "0.5.0.0"},
+        {"version": "0.6.0.0", "channel": "stable", "manifest": "https://github.com/o0hhs/mikanaddons/releases/download/v0.6.0.0/manifest.json", "from": "0.5.0.1"}
       ],
       "cases": [
         {"current": "0.4.4", "beta": false, "target": "0.4.5", "newest": "0.6.0.0"},

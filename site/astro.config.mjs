@@ -4,11 +4,11 @@ import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
 import changelog from './integrations/changelog.mjs';
 
-// GitHub Pages serves the project at miroshka000.github.io/mikan/. Links inside the docs are
-// written with the base (/mikan/...), and the link validator checks them on every build.
+// GitHub Pages serves the fork at o0hhs.github.io/mikanaddons/. Links inside the docs are
+// written with the base (/mikanaddons/...), and the link validator checks them on every build.
 export default defineConfig({
-	site: 'https://miroshka000.github.io',
-	base: '/mikan',
+	site: 'https://o0hhs.github.io',
+	base: '/mikanaddons',
 	trailingSlash: 'always',
 	integrations: [
 		changelog(),
@@ -23,7 +23,7 @@ export default defineConfig({
 				root: { label: 'Русский', lang: 'ru' },
 				en: { label: 'English', lang: 'en' },
 			},
-			editLink: { baseUrl: 'https://github.com/Miroshka000/mikan/edit/dev/site/' },
+			editLink: { baseUrl: 'https://github.com/o0hhs/mikanaddons/edit/main/site/' },
 			lastUpdated: false,
 			credits: false,
 			customCss: [
@@ -76,7 +76,7 @@ export default defineConfig({
 				{
 					label: 'Ноды',
 					translations: { en: 'Nodes' },
-					items: [{ slug: 'nodes/nodes' }, { slug: 'nodes/cascades' }, { slug: 'nodes/warp' }],
+					items: [{ slug: 'nodes/nodes' }, { slug: 'nodes/cascades' }, { slug: 'nodes/warp' }, { slug: 'nodes/turn' }],
 				},
 				{
 					label: 'Протоколы',

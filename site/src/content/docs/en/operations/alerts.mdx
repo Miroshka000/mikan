@@ -16,7 +16,7 @@ description: Admin alerts in Telegram, a public status in a channel, and Prometh
 - an update failed or rolled back;
 - a torrent was caught.
 
-For failure events a recovery message arrives too. You can also receive [daily database backups](/mikan/en/operations/backups/#backups-to-telegram) here.
+For failure events a recovery message arrives too. You can also receive [daily database backups](/mikanaddons/en/operations/backups/#backups-to-telegram) here.
 
 ## Public status in a channel
 
@@ -30,7 +30,7 @@ The status shows only nodes that have **Name in status channel** filled in their
 
 ## Prometheus
 
-The panel serves metrics at `/api/v1/metrics` on the API address, and you need a [key](/mikan/en/api/) with "Read" access. Metrics are split by node and connection, but never by user: the number of users by state, online, traffic, node and connection availability, node load.
+The panel serves metrics at `/api/v1/metrics` on the API address, and you need a [key](/mikanaddons/en/api/) with "Read" access. Metrics are split by node and connection, but never by user: the number of users by state, online, traffic, node and connection availability, node load.
 
 The API page (**Settings → Security → API**) shows a ready block for `prometheus.yml`, roughly like this:
 

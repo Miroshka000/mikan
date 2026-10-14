@@ -16,12 +16,12 @@ A node accepts client connections, and mihomo runs inside it. One node always ru
    - **Server IP**.
    - **Domain**, optional: used instead of the IP in Hysteria2 and TUIC links.
    - **API port**, random by default.
-   - **Name in status channel**, optional: see [Notifications](/mikan/en/operations/alerts/).
+   - **Name in status channel**, optional: see [Notifications](/mikanaddons/en/operations/alerts/).
 
 2. Click "Add and get the key". The panel shows a command with the connection key:
 
    ```bash
-   curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash -s -- --join KEY
+   curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash -s -- --join KEY
    ```
 
 3. Run it as root on the node's server. The installer sets up Docker and the node and opens the ports.
@@ -43,10 +43,10 @@ You can also add a node from the panel's server: `mikan node add --name NAME --h
 The card shows the state, address, how many protocols are running, connections, CPU and memory load, version and certificate. Since 0.5.0.3 it also shows the node's traffic, which is in a chart and on the overview too. Buttons:
 
 - **Configure**: name, address, domain, and the "Serves clients" switch. A node that is turned off does not accept connections and disappears from subscriptions.
-- **WARP**: exit to the internet through Cloudflare, see [WARP](/mikan/en/nodes/warp/).
-- **Cascade**: where the node sends other nodes' traffic, see [Cascades](/mikan/en/nodes/cascades/).
+- **WARP**: exit to the internet through Cloudflare, see [WARP](/mikanaddons/en/nodes/warp/).
+- **Cascade**: where the node sends other nodes' traffic, see [Cascades](/mikanaddons/en/nodes/cascades/).
 - **Speed**: a check of the node's connection.
-- **Certificate**: your own TLS certificate for Hysteria2, TUIC, AnyTLS and TrustTunnel, see [Domain and certificates](/mikan/en/start/domain/#node-certificate).
+- **Certificate**: your own TLS certificate for Hysteria2, TUIC, AnyTLS and TrustTunnel, see [Domain and certificates](/mikanaddons/en/start/domain/#node-certificate).
 - **Delete**: removes the node from the panel. The server itself is cleaned with `mikan uninstall` on it. A node that carries a cascade or the bot's connection to Telegram cannot be deleted while it is in use.
 
 ## Server order

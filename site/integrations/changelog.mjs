@@ -13,14 +13,14 @@ const pages = {
 		title: 'Список изменений',
 		description: 'Что менялось в mikan от версии к версии.',
 		intro:
-			'Тот же список, что панель показывает в «Настройки → Основное → Обновления». Образы и установщик каждой версии лежат в [релизах на GitHub](https://github.com/Miroshka000/mikan/releases).',
+			'Тот же список, что панель показывает в «Настройки → Основное → Обновления». Образы и установщик каждой версии лежат в [релизах на GitHub](https://github.com/o0hhs/mikanaddons/releases).',
 	},
 	en: {
 		file: new URL('en/changelog.md', docs),
 		title: 'Changelog',
 		description: 'What changed in mikan from release to release.',
 		intro:
-			'The same list the panel shows in Settings → General → Updates. Images and the installer of every version are in the [GitHub releases](https://github.com/Miroshka000/mikan/releases).',
+			'The same list the panel shows in Settings → General → Updates. Images and the installer of every version are in the [GitHub releases](https://github.com/o0hhs/mikanaddons/releases).',
 	},
 };
 

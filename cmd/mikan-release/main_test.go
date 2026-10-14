@@ -51,7 +51,7 @@ func (f *fixture) write(name, content string) string {
 
 // args are a complete manifest command for version; extra flags go after them.
 func (f *fixture) args(version string, extra ...string) []string {
-	return append([]string{"-version", version, "-image", "ghcr.io/miroshka000/mikan", "-digest", "sha256:" + strings.Repeat("a", 64),
+	return append([]string{"-version", version, "-image", "ghcr.io/o0hhs/mikan", "-digest", "sha256:" + strings.Repeat("a", 64),
 		"-changelog", filepath.Join(f.dir, "CHANGELOG.md"), "-out", filepath.Join(f.dir, "release"),
 		"-asset", "x86_64=" + filepath.Join(f.dir, "mikan-x86_64"), "-asset", "aarch64=" + filepath.Join(f.dir, "mikan-aarch64")}, extra...)
 }
@@ -184,16 +184,16 @@ func TestManifestInstallerURLFollowsTheTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := m.Installer["x86_64"].URL; got != "https://github.com/Miroshka000/mikan/releases/download/v0.4.4/mikan-x86_64" {
+	if got := m.Installer["x86_64"].URL; got != "https://github.com/o0hhs/mikanaddons/releases/download/v0.4.4/mikan-x86_64" {
 		t.Fatal(got)
 	}
-	if got := m.Installer["aarch64"].URL; got != "https://github.com/Miroshka000/mikan/releases/download/v0.4.4/mikan-aarch64" {
+	if got := m.Installer["aarch64"].URL; got != "https://github.com/o0hhs/mikanaddons/releases/download/v0.4.4/mikan-aarch64" {
 		t.Fatal(got)
 	}
 	if m, err = f.manifest(f.args("0.4.4", "-tag", "v-bridge-0.5.0.0")); err != nil {
 		t.Fatal(err)
 	}
-	if got := m.Installer["x86_64"].URL; got != "https://github.com/Miroshka000/mikan/releases/download/v-bridge-0.5.0.0/mikan-x86_64" {
+	if got := m.Installer["x86_64"].URL; got != "https://github.com/o0hhs/mikanaddons/releases/download/v-bridge-0.5.0.0/mikan-x86_64" {
 		t.Fatal(got)
 	}
 }

@@ -2,27 +2,31 @@
 #
 # mikan-форк: одна команда вместо прежней, переход с обычного mikan на форк без потерь.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<твой-репозиторий>/<ветка>/scripts/install-fork.sh \
-#     | sudo bash -s -- --image ghcr.io/<твой-репозиторий>/mikan:0.5.99.99
+#   curl -fsSL https://raw.githubusercontent.com/o0hhs/mikanaddons/main/scripts/install-fork.sh \
+#     | sudo bash -s -- --image ghcr.io/o0hhs/mikan:0.5.99.99
 #
 # Что он делает и почему так:
 #
-#   * Переносить данные не нужно. Форк добавляет одну миграцию — 0016_referrals.sql, пять
-#     ПУСТЫХ таблиц; ни одна существующая строка не переписывается. Панель на старте сама
-#     применяет недостающие миграции (serve.go → store.OpenPostgres → migrateUp). Поэтому
-#     здесь нет «переливки данных»: есть безопасное переключение образа с резервной копией.
+#   * Переносить данные не нужно. Форк добавляет две миграции — 0016_referrals.sql (пять
+#     таблиц) и 0017_campaigns.sql (три таблицы, метки рекламных кампаний). Все ПУСТЫЕ:
+#     ни одна существующая строка не переписывается. Панель на старте сама применяет
+#     недостающие миграции (serve.go → store.OpenPostgres → migrateUp). Поэтому здесь нет
+#     «переливки данных»: есть безопасное переключение образа с резервной копией.
 #
 #   * Порядок отката противоречит интуиции: образ переключается на обычный mikan ПЕРЕД
 #     возвратом базы. «database restore» после загрузки копии поднимает схему до версии
 #     бинаря, который её выполняет (store/restore.go, RestorePostgres → migrateUp). Вернуть
-#     базу бинарём форка — значит тут же накатить 0016 обратно, и обычный mikan откажется
-#     стартовать («schema 16 is newer than this binary supports»).
+#     базу бинарём форка — значит тут же накатить 0016/0017 обратно, и обычный mikan откажется
+#     стартовать («schema 17 is newer than this binary supports»).
 #
-#   * Главная опасность форка — не миграция, а автообновление: адрес релизов зашит в коде
-#     и указывает на апстрим (internal/release/release.go, Repo). Панель форка сравнивает
-#     свою версию с ЕГО релизами и, если её версия не новее, заменит себя обычным образом.
-#     То же сделает с удалёнными нодами при включённом nodes_follow_panel. Скрипт сравнивает
-#     версии, предупреждает и выключает оба переключателя.
+#   * Автообновление больше не опасно: адрес релизов этого форка (internal/release/release.go,
+#     Repo = o0hhs/mikanaddons) и его ключ подписи свои, поэтому панель ищет обновления у нас,
+#     а не у апстрима, и сама себя на обычный mikan не заменит. Скрипт, напротив, оставляет
+#     обновления включёнными; версию форка он всё равно сверяет и предупреждает, если она не
+#     новее стоящей.
+#     Раньше (когда Repo указывал на апстрим) оба переключателя — auto_update и
+#     nodes_follow_panel — приходилось выключать; ключ --disable-auto-update остался для тех,
+#     у кого образ форка всё ещё старой сборки, с апстримным адресом релизов.
 #
 #   * Отдельный установщик с нуля не переписывается: для чистой установки сначала пройди
 #     штатный install.sh (он ставит Docker, файрвол, compose и саму панель), потом запусти
@@ -73,7 +77,7 @@ FORK_IMAGE=${FORK_IMAGE:-}
 STOCK_IMAGE=${STOCK_IMAGE:-ghcr.io/miroshka000/mikan:latest}
 BACKUP=${BACKUP:-}
 DRY_RUN=0
-KEEP_AUTO_UPDATE=0
+DISABLE_AUTO_UPDATE=0
 ASSUME_YES=0
 WAIT_SECONDS=${WAIT_SECONDS:-180}
 
@@ -99,7 +103,8 @@ usage() {
   --rollback АРХИВ        вернуться на обычный mikan из копии базы
   --dry-run              ничего не менять, только показать
   --trace                показать каждую команду (когда нужно понять, где оно встало)
-  --keep-auto-update     не выключать автообновление (обычно не надо)
+  --disable-auto-update  выключить автообновление (нужно только для образа со старым
+                         апстримным адресом релизов; в актуальной сборке оно своё и не опасно)
   --yes                  не спрашивать подтверждения
 Примеры:
   curl -fsSL <url> | sudo bash -s -- --image ghcr.io/o0hhs/mikan:0.5.99.99
@@ -119,7 +124,7 @@ while [ $# -gt 0 ]; do
     --rollback=*) BACKUP=${1#*=}; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --trace) TRACE=1; shift ;;
-    --keep-auto-update) KEEP_AUTO_UPDATE=1; shift ;;
+    --disable-auto-update) DISABLE_AUTO_UPDATE=1; shift ;;
     --yes|-y) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "неизвестный ключ: $1 (--help)" ;;
@@ -193,7 +198,7 @@ if [ -n "$BACKUP" ]; then
 
   printf 'Сейчас образ: %s\nВозврат к:   %s\nБаза из:    %s\n' "$(env_get MIKAN_IMAGE)" "$STOCK_IMAGE" "$BASE"
   printf 'Все платежи, клиенты и тарифы вернутся к состоянию на момент копии.\n'
-  printf 'Реферальная программа (таблицы referral_*) исчезнет: её создаёт форк.\n'
+  printf 'Реферальная программа (referral_*) и метки кампаний (campaign_*) исчезнут: их создаёт форк.\n'
   if [ "$ASSUME_YES" = 0 ] && [ "$DRY_RUN" = 0 ]; then
     read -r -p 'Продолжить? (yes/no) ' answer </dev/tty || answer=no
     [ "$answer" = "yes" ] || die "отменено"
@@ -346,19 +351,21 @@ TARIFFS=$(sql "SELECT count(*) FROM tariffs")
 PAYMENTS=$(sql "SELECT count(*) FROM payments")
 ok "схема PostgreSQL $BEFORE_SCHEMA · $USERS клиентов · $TARIFFS тарифов · $PAYMENTS платежей"
 
-step "3/7. Защита от тихого отката на обычный mikan"
+step "3/7. Обновления"
 STOCK_VERSION=$(dc exec -T panel mikan version 2>/dev/null | tr -d '[:space:]' || true)
 FORK_VERSION=$(docker run --rm --entrypoint mikan "$FORK_IMAGE" version 2>/dev/null | tr -d '[:space:]' || true)
 ok "сейчас ${STOCK_VERSION:-?}, в форке ${FORK_VERSION:-?}"
 if [ -n "$STOCK_VERSION" ] && [ -n "$FORK_VERSION" ] && ! newer_than "$FORK_VERSION" "$STOCK_VERSION"; then
-  warn "версия форка не новее стоящей — форк сочтёт обычный mikan обновлением и вернётся на него"
+  warn "версия форка не новее стоящей — такую сборку панель не предложит обновить себе"
   warn "пересобери образ: docker buildx build --build-arg VERSION=0.5.99.99 -t <образ> . && docker push <образ>"
 fi
-if [ "$KEEP_AUTO_UPDATE" = 1 ]; then
-  warn "автообновление оставлено как есть (--keep-auto-update)"
-else
+if [ "$DISABLE_AUTO_UPDATE" = 1 ]; then
+  # Нужно только для образа старой сборки, где Repo ещё указывает на апстрим: там панель
+  # сравнивает себя с ЕГО релизами и может заменить себя обычным mikan.
   switch_off auto_update || ok "автообновление выключено"
   switch_off nodes_follow_panel || ok "автообновление нод выключено"
+else
+  info "автообновление оставлено включённым: у этой сборки адрес релизов и ключ свои (o0hhs/mikanaddons)"
 fi
 
 step "4/7. Резервная копия"
@@ -397,9 +404,11 @@ else
   dc exec -T panel mikan health >/dev/null 2>&1 ||
     { warn "health не проходит, панель ещё поднимается"; sleep 20; dc exec -T panel mikan health >/dev/null 2>&1 || FAILED=1; }
   AFTER=$(sql "SELECT COALESCE(max(version_id),0) FROM goose_db_version WHERE is_applied" 2>/dev/null)
-  if [ -n "$AFTER" ] && [ "$AFTER" -ge 16 ] 2>/dev/null; then ok "схема $BEFORE_SCHEMA → $AFTER"; else warn "схема ${AFTER:-?}, ожидалось ≥ 16"; FAILED=1; fi
+  if [ -n "$AFTER" ] && [ "$AFTER" -ge 17 ] 2>/dev/null; then ok "схема $BEFORE_SCHEMA → $AFTER"; else warn "схема ${AFTER:-?}, ожидалось ≥ 17"; FAILED=1; fi
   T=$(sql "SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE 'referral%'")
   [ "$T" = "5" ] && ok "пять таблиц referral_* созданы" || { warn "таблиц referral_*: ${T:-0}"; FAILED=1; }
+  C=$(sql "SELECT count(*) FROM information_schema.tables WHERE table_schema=current_schema() AND table_name LIKE 'campaign%'")
+  [ "$C" = "3" ] && ok "три таблицы campaign_* созданы" || { warn "таблиц campaign_*: ${C:-0}"; FAILED=1; }
   for pair in "users:$USERS" "tariffs:$TARIFFS"; do
     table=${pair%%:*}; want=${pair##*:}
     got=$(sql "SELECT count(*) FROM $table")
@@ -424,7 +433,8 @@ step "7/7. Готово"
 cat <<EOF
 
   Включить программу: Панель → Платежи → Рефералы (тумблер, правила, тарифы).
-  Обновлять форк вручную: та же команда с новым --image (автообновление выключено намеренно).
+  Метки кампаний: ссылка вида t.me/<бот>?start=camp_<метка>; статистика на той же странице.
+  Обновления: панель сама смотрит релизы o0hhs/mikanaddons; обновить можно кнопкой или `mikan update`.
   Откат: та же команда с --rollback $BACKUP_NAME
 
   Образ прежней версии  $OLD_IMAGE

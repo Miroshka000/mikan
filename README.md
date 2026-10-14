@@ -9,15 +9,14 @@
 
 **A fast, beautiful VPN panel on the [mihomo](https://github.com/MetaCubeX/mihomo) core — one command to install, nothing to babysit.**
 
-[![Docs](https://img.shields.io/badge/docs-miroshka000.github.io%2Fmikan-f07a2e?style=flat-square)](https://miroshka000.github.io/mikan/)
-[![Release](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=release&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
-[![Image](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
+[![Release](https://img.shields.io/github/v/release/o0hhs/mikanaddons?color=f07a2e&label=release&style=flat-square)](https://github.com/o0hhs/mikanaddons/releases)
+[![Image](https://img.shields.io/badge/ghcr.io-o0hhs%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/o0hhs/mikanaddons/pkgs/container/mikan)
 [![License](https://img.shields.io/badge/license-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
 [![mihomo](https://img.shields.io/badge/core-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
-[![Telegram](https://img.shields.io/badge/Telegram-channel-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/mikanvpn)
-[![Telegram](https://img.shields.io/badge/Telegram-forum-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/+I2JFR7DbPow1ZmQy)
 
 **English** · [Русский](README.ru.md) · [简体中文](README.zh-CN.md) · [فارسی](README.fa.md) · [Türkçe](README.tr.md) · [Español](README.es.md)
+
+<sub>A fork of [mikan](https://github.com/Miroshka000/mikan) with a built-in referral programme and ad campaign tags.</sub>
 
 </div>
 
@@ -28,7 +27,7 @@
 On a fresh Ubuntu 22.04+ or Debian 12+ server (amd64 or arm64):
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash
 ```
 
 The installer asks for the panel language and an optional domain, checks that the domain points to the server, installs Docker if needed, picks REALITY camouflage sites next to your server and prints your admin link. Run `mikan` again at any time for the management menu.
@@ -36,10 +35,18 @@ The installer asks for the panel language and an optional domain, checks that th
 A node for an existing panel: the panel's **Nodes** page (or `mikan node add`) gives the command with its key:
 
 ```bash
-curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash -s -- --join KEY
+curl -fsSL https://github.com/o0hhs/mikanaddons/releases/latest/download/install.sh | sudo bash -s -- --join KEY
 ```
 
 Without questions, for scripts: `… | sudo bash -s -- --yes --lang en --domain vpn.example.com --email you@example.com` (all flags: `mikan install --help`).
+
+### Moving from stock mikan
+
+Already running the upstream panel? `scripts/install-fork.sh` switches the running server to this fork's image with a backup and a rollback path — no data is rewritten (the fork adds only empty tables). Point it at the fork image:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/o0hhs/mikanaddons/main/scripts/install-fork.sh | sudo bash -s -- --image ghcr.io/o0hhs/mikan:<tag>
+```
 
 ## Why mikan
 
@@ -110,6 +117,23 @@ can go to the main balance or a selected pool. Discounted invoices are available
 through payment methods that support refunds: Telegram Stars and adapters that advertise
 refund support. Mikan can then return a payment if its promo reservation expires before
 the provider confirms it.
+
+## Referral programme
+
+Subscribers invite others with their own link (`t.me/<bot>?start=ref_<code>`). A Telegram
+account belongs to one referrer for good, so an invitee is never counted twice. What a
+referrer earns is set by rules the admin writes per tariff: a percentage into an internal
+balance, bonus days onto their own subscription, or both, with a threshold rule that pays
+on every N-th payment. The balance can pay for part of an invoice on its own. The admin
+turns the programme on, writes the rules and picks the tariffs on the panel's **Payments →
+Referrals** page.
+
+## Ad campaign tags
+
+Give each ad its own link (`t.me/<bot>?start=camp_<tag>`) and the panel counts, per
+campaign, how many people arrived, how many bought and how many renewed. The stats live on
+the same **Payments** page, so a campaign's payback is visible from the panel and not only
+from the ad network.
 
 ## Screenshots
 
@@ -203,7 +227,7 @@ MIKAN_TEST_DATABASE_URL=postgres://… go test ./...   # Go 1.27, a test Postgre
 cd installer && cargo test                    # the installer (Rust)
 ```
 
-Development happens on the `dev` branch; pull requests into `main` are built and tested, releases are published from tags.
+Development happens on the `main` branch; pull requests are built and tested, releases are published from tags.
 
 ## License
 

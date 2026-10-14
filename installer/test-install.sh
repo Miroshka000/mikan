@@ -43,7 +43,7 @@ pub=$(openssl pkey -in "$tmp/key.pem" -pubout | sed -n 2p)
 sed "s|^MCowBQYDK2VwAyEAZ3wSIPBSaJxh5CsGO8eINI0aM0kyrQ46EcJSNeH85W8=\$|$pub|" "$here/install.sh" >"$tmp/install.sh"
 grep -q "^$pub\$" "$tmp/install.sh"
 
-releases="$tmp/www/github.com/Miroshka000/mikan/releases"
+releases="$tmp/www/github.com/o0hhs/mikanaddons/releases"
 sign() { openssl pkeyutl -sign -inkey "$tmp/key.pem" -rawin -in "$1" | base64 | tr -d '\n' >"$1.sig"; }
 # release VERSION [MANIFEST-VERSION]: the installer and its signed manifest under vVERSION.
 release() {
@@ -51,7 +51,7 @@ release() {
   mkdir -p "$d"
   printf '#!/bin/sh\necho "mikan %s $*" >"$TEST_STATE/ran"\n' "$1" >"$d/mikan-$arch"
   sum=$(sha256sum "$d/mikan-$arch" | cut -d' ' -f1)
-  printf '{\n  "version": "%s",\n  "installer": {\n    "%s": {\n      "url": "https://github.com/Miroshka000/mikan/releases/download/v%s/mikan-%s",\n      "sha256": "%s"\n    }\n  }\n}\n' \
+  printf '{\n  "version": "%s",\n  "installer": {\n    "%s": {\n      "url": "https://github.com/o0hhs/mikanaddons/releases/download/v%s/mikan-%s",\n      "sha256": "%s"\n    }\n  }\n}\n' \
     "${2:-$1}" "$arch" "$1" "$arch" "$sum" >"$d/manifest.json"
   sign "$d/manifest.json"
 }

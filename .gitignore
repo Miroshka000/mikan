@@ -15,6 +15,7 @@ release-signing*
 .env
 .env.*
 !.env.example
+/keys
 
 # local documentation
 /docs/
