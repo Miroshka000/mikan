@@ -25,6 +25,7 @@ import (
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/nodeupdate"
 	"mikan/internal/panel/panelimport"
+	"mikan/internal/panel/referral"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
@@ -82,6 +83,8 @@ type Deps struct {
 	Importer *panelimport.Importer
 	// Billing sells tariffs; SubBase is https://host:port/<sub path> ("" without an address).
 	Billing *billing.Service
+	// Referral is the Telegram bot's referral programme; nil in tests.
+	Referral *referral.Service
 	// Warp registers WARP accounts with Cloudflare.
 	Warp    warp.Client
 	SubBase func(ctx context.Context) string
@@ -240,6 +243,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerAPIKeys()
 	h.registerPayments()
 	h.registerPromocodes()
+	h.registerReferrals()
 	h.registerAddons()
 	h.registerWarp()
 	h.registerCascade()

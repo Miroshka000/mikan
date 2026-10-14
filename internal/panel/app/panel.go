@@ -30,6 +30,7 @@ import (
 	"mikan/internal/panel/nodeupdate"
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/promo"
+	"mikan/internal/panel/referral"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -198,18 +199,25 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.DNS = o.DNS
 	promos := promo.New(st, o.Now)
 	promos.Changed = deps.Users.Changed
+	// The referral programme: what an invitee's payment brings the account that invited
+	// them, and what a balance pays of an invoice.
+	refs := referral.New(st, set, o.Log, o.Now)
+	refs.Changed = deps.Users.Changed
 	p.Billing = billing.New(billing.Deps{Store: st, Settings: set, Users: deps.Users, Log: o.Log, Now: o.Now, TrustProxy: o.TrustProxy,
 		MaxLinks: tgbot.MaxLinks,
-		Addons:   deps.Addons, SubBase: subBase, Promo: promos})
+		Addons:   deps.Addons, SubBase: subBase, Promo: promos, Referral: refs})
 	deps.Billing, deps.SubBase = p.Billing, subBase
+	deps.Referral = refs
 	// The bot may reach Telegram through a node when the panel's server cannot.
 	var tunnel func(ctx context.Context, nodeID int64, addr string) (net.Conn, error)
 	if p.Nodes != nil {
 		tunnel = p.Nodes.Tunnel
 	}
 	p.Telegram = tgbot.New(tgbot.Deps{Store: st, Settings: set, Devices: deps.Devices, SubBase: subBase, API: o.TelegramAPI, Log: o.Log, Now: o.Now, Billing: p.Billing,
+		Referral: refs,
 		// Telegram apps refuse a Mini App on a self-signed certificate.
 		MiniApp: func() bool { return o.Certs != nil && o.Certs.Status().Kind == "letsencrypt" }, Tunnel: tunnel})
+	refs.Reward = p.Telegram.Reward
 	deps.Telegram = p.Telegram
 	p.Billing.SetTelegram(p.Telegram)
 	p.Updates = updates.New(o.DataDir, o.Version, o.Releases, o.Log, o.Now)

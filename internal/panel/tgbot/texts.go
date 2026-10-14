@@ -41,6 +41,13 @@ type words struct {
 	// Traffic packages.
 	buyTraffic, trafficTitle, payPackage, packageGone, paidPackage, plusPackages string
 
+	// The referral programme: the invite link, what it has brought, and the rewards.
+	refReferral, refTitle, refYourLink, refShare, refStats, refBalanceSpend, refRulesTitle string
+	refAnyTariff, refRulePercent, refRulePercentEvery, refRuleDaysEach, refRuleDaysEvery   string
+	refRuleProgress, refDays, refHistory, refHistoryTitle, refHistoryNone, refShareText    string
+	refOff, refSelf, refAlready, refJoined, refJoinedPlain, refCodeInvalid                 string
+	refLinkUnavailable, refEarnedRub, refEarnedDays, refEarnedDaysEvery                    string
+
 	// A refund takes back what the payment gave.
 	refundedNew, refundedRenew, refundedPackage, refundedGone string
 }
@@ -118,6 +125,35 @@ var ru = words{
 	packageGone:  "Этот пакет больше не продаётся.",
 	paidPackage:  "✅ Оплата получена — пакет «%s» начислен на подписку «%s».",
 	plusPackages: "%s + пакеты %s",
+
+	refReferral:         "🤝 Пригласить друзей",
+	refTitle:            "Реферальная программа",
+	refYourLink:         "Ваша ссылка для приглашения:",
+	refShare:            "🔗 Поделиться",
+	refShareText:        "Подключайтесь к %s по моей ссылке — я получу бонус на баланс.",
+	refStats:            "👥 Пригласили: %d\n💳 Из них оплатили: %d\n💰 Баланс: %s",
+	refBalanceSpend:     "Баланс списывается сам при оплате подписки.",
+	refRulesTitle:       "Что приносит приглашённый",
+	refAnyTariff:        "любого тарифа",
+	refRulePercent:      "%s — %d%% на баланс",
+	refRulePercentEvery: "%s — %d%% на баланс с каждой %d-й оплаты",
+	refRuleDaysEach:     "%s — %d дн. подписки за каждую оплату",
+	refRuleDaysEvery:    "%s — %d дн. подписки за каждые %d оплат",
+	refRuleProgress:     "%s (%d/%d)",
+	refDays:             "подписка на %d дн.",
+	refHistory:          "📜 Начисления",
+	refHistoryTitle:     "Начисления по вашей ссылке",
+	refHistoryNone:      "Пока ничего не начислено.",
+	refOff:              "Реферальная программа сейчас выключена.",
+	refSelf:             "Это ваша собственная ссылка — пригласить по ней можно только других.",
+	refAlready:          "Вы уже участвуете в программе по приглашению %s.",
+	refJoined:           "✅ Ссылка принята: вас пригласил %s. Теперь ваши покупки приносят ему бонус.",
+	refJoinedPlain:      "✅ Ссылка принята: вас пригласили в программу. Теперь ваши покупки приносят пригласившему бонус.",
+	refCodeInvalid:      "Ссылка не подошла. Попросите пригласившего прислать её заново.",
+	refLinkUnavailable:  "Ссылка сейчас недоступна. Напишите в поддержку.",
+	refEarnedRub:        "💰 Приглашённый оплатил подписку: на ваш баланс начислено %s.",
+	refEarnedDays:       "🎁 По вашей ссылке оплатили подписку: подписка продлена на %s.",
+	refEarnedDaysEvery:  "🎁 По вашей ссылке набралось %d оплат: подписка продлена на %s.",
 
 	refundedNew:     "↩️ Платёж за тариф «%s» возвращён. Подписка «%s» отключена.",
 	refundedRenew:   "↩️ Платёж за продление «%s» возвращён. Срок подписки «%s» уменьшен. Окончание: %s.",
@@ -198,6 +234,35 @@ var en = words{
 	packageGone:  "This package is no longer sold.",
 	paidPackage:  "✅ Payment received — package “%s” is added to subscription “%s”.",
 	plusPackages: "%s + packages %s",
+
+	refReferral:         "🤝 Invite friends",
+	refTitle:            "Referral programme",
+	refYourLink:         "Your invite link:",
+	refShare:            "🔗 Share",
+	refShareText:        "Join %s with my link — I get a bonus for it.",
+	refStats:            "👥 Invited: %d\n💳 Of them, paid: %d\n💰 Balance: %s",
+	refBalanceSpend:     "Your balance is spent by itself when you pay for a subscription.",
+	refRulesTitle:       "What an invitee brings",
+	refAnyTariff:        "any plan",
+	refRulePercent:      "%s — %d%% to your balance",
+	refRulePercentEvery: "%s — %d%% to your balance on every %d-th payment",
+	refRuleDaysEach:     "%s — %d days of subscription per payment",
+	refRuleDaysEvery:    "%s — %d days of subscription for every %d payments",
+	refRuleProgress:     "%s (%d/%d)",
+	refDays:             "%d days of subscription",
+	refHistory:          "📜 Rewards",
+	refHistoryTitle:     "Rewards from your link",
+	refHistoryNone:      "Nothing has been earned yet.",
+	refOff:              "The referral programme is switched off right now.",
+	refSelf:             "That is your own link — only other people can follow it.",
+	refAlready:          "You are already in the programme, invited by %s.",
+	refJoined:           "✅ Link accepted: %s invited you. Your purchases now earn them a bonus.",
+	refJoinedPlain:      "✅ Link accepted: you were invited to the programme. Your purchases now earn your inviter a bonus.",
+	refCodeInvalid:      "That link did not work. Ask your inviter to send it again.",
+	refLinkUnavailable:  "The link is not available right now. Message support.",
+	refEarnedRub:        "💰 An invitee paid for a subscription: %s was added to your balance.",
+	refEarnedDays:       "🎁 Somebody paid through your link: your subscription is extended by %s.",
+	refEarnedDaysEvery:  "🎁 Your link has brought %d payments: your subscription is extended by %s.",
 
 	refundedNew:     "↩️ The payment for plan “%s” is refunded. Subscription “%s” is turned off.",
 	refundedRenew:   "↩️ The payment for the renewal “%s” is refunded. The term of subscription “%s” is shortened. Ends: %s.",

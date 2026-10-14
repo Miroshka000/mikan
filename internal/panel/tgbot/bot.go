@@ -23,6 +23,7 @@ import (
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/panelimport"
+	"mikan/internal/panel/referral"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
@@ -61,6 +62,9 @@ type Deps struct {
 	Limits  Limits // zero: DefaultLimits
 	// Billing sells tariffs in the menu; nil: no shop.
 	Billing *billing.Service
+	// Referral is the referral programme: the account's invite link and what its invitees
+	// bring it. nil: none.
+	Referral *referral.Service
 	// Tunnel reaches addr through node id, for RouteNode; nil: the panel has no nodes.
 	Tunnel func(ctx context.Context, nodeID int64, addr string) (net.Conn, error)
 
@@ -569,6 +573,8 @@ func (b *Bot) onMessage(ctx context.Context, out *Outbox, m *Message) {
 	var notice string
 	text := strings.TrimSpace(m.Text)
 	switch {
+	case strings.HasPrefix(text, "/start "+refPrefix):
+		notice = b.Referral(ctx, w, chat, strings.TrimSpace(strings.TrimPrefix(text, "/start "+refPrefix)))
 	case strings.HasPrefix(text, "/start "):
 		notice = b.linkByCode(ctx, out, w, chat, who(m.From), strings.TrimSpace(strings.TrimPrefix(text, "/start ")))
 	default:
