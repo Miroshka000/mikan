@@ -43,6 +43,8 @@ export const qk = {
   folders: ["folders"] as const,
   nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
   nodeShares: (range: string) => ["node-shares", range] as const,
+  nodeClients: (node: number) => ["node-clients", node] as const,
+  userNodes: (id: number) => ["users", "nodes", id] as const,
 };
 
 export const meQuery = {
@@ -93,6 +95,16 @@ export function useUserTraffic(id: number) {
   return useQuery({
     queryKey: qk.userTraffic(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/traffic", { params: { path: { id }, query: { range: "30d" } }, signal })),
+  });
+}
+
+/** The nodes a user went through, with what they carried over each and when they were last
+ * seen there. */
+export function useUserNodes(id: number) {
+  return useQuery({
+    queryKey: qk.userNodes(id),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/nodes", { params: { path: { id } }, signal })),
+    refetchInterval: 30_000,
   });
 }
 
@@ -265,6 +277,17 @@ export function useNodeTraffic(id: number | undefined, range: "24h" | "7d" | "30
     // shows the previous one's.
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === (id ?? 0) ? prev : undefined),
     refetchInterval: 60_000,
+  });
+}
+
+/** Who went through a node: each client with what they carried over it and when they were
+ * last seen there. */
+export function useNodeClients(id: number | undefined) {
+  return useQuery({
+    queryKey: qk.nodeClients(id ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/clients", { params: { path: { id: id! } }, signal })),
+    enabled: !!id,
+    refetchInterval: 30_000,
   });
 }
 

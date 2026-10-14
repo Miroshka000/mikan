@@ -675,6 +675,16 @@
     "empty": "The node carried nothing in this period.",
     "note": "Counting by node began with the version that brought it: what a node carried before cannot be recovered."
   },
+  "nodeClients": {
+    "title": "Node clients",
+    "button": "Clients",
+    "empty": "Nobody has gone through this node yet.",
+    "online": "online",
+    "lastSeen": "seen {ago}",
+    "never": "never",
+    "shown": "Showing {shown} of {total}: the list is sorted by traffic.",
+    "note": "Counting a node's clients began with the version that brought it: what went through before cannot be recovered."
+  },
   "userCreate": {
     "title": "New client",
     "meta": "The subscription link appears right after creation",
@@ -779,6 +789,12 @@
     "boundNoteStrict": "Each device has keys of its own, and the device limit is the number of places. Apps without a device ID get no subscription. An unbound device is cut off at once.",
     "sharedPlace": "Apps without a device ID",
     "addresses": "Connection addresses",
+    "nodes": "Nodes",
+    "nodesCount": "{n} total",
+    "nodesEmpty": "The client has not connected anywhere yet.",
+    "nodeSeen": "seen {ago}",
+    "nodeNever": "never",
+    "nodesNote": "Counting by node began with the version that brought it: what went through before cannot be recovered.",
     "unbind": "Unbind",
     "unbindLabel": "Unbind {name}",
     "unbindTitle": "Unbind “{name}”?",

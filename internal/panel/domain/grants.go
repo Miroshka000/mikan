@@ -240,6 +240,13 @@ func CountTraffic(ctx context.Context, q *db.Queries, b TrafficBatch, now time.T
 	if up == 0 && down == 0 {
 		return nil
 	}
+	// By whom: one row per user and node with what they carried over it, on the same
+	// transaction and from the same survivors, so a node's clients add up to what it carried.
+	if err := q.AddNodeClientsTraffic(ctx, db.AddNodeClientsTrafficParams{
+		NodeID: b.Node, Now: now.Unix(), UserIds: stats.UserIds, Up: stats.Up, Down: stats.Down,
+	}); err != nil {
+		return err
+	}
 	return q.AddNodeTraffic(ctx, db.AddNodeTrafficParams{NodeID: b.Node, Hour: now.Unix() / 3600, Day: now.Unix() / 86400, Up: up, Down: down})
 }
 

@@ -180,6 +180,16 @@ func (m *Manager) Online() map[string]nodeapi.Online {
 	return out
 }
 
+// OnlineOf is the live view of one node, keyed by slot name (nil for a node that is not
+// running): the per-node half of Online, for what goes through that node alone.
+func (m *Manager) OnlineOf(id int64) map[string]nodeapi.Online {
+	s, ok := m.Syncer(id)
+	if !ok {
+		return nil
+	}
+	return s.Online()
+}
+
 // otherIPs returns, per slot of node id, the user's devices online anywhere else: on the
 // other nodes, and under the user's other slots (bound devices) on any node. owner maps
 // every slot to its user.
@@ -556,6 +566,10 @@ func (m *Manager) recordDevices(ctx context.Context, now time.Time) (err error) 
 	if err != nil {
 		return err
 	}
+	owner := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		owner[r.SlotName] = r.UserID
+	}
 	// A user's slots (the own one, bound devices) may report the same address.
 	type device struct {
 		user int64
@@ -573,8 +587,23 @@ func (m *Manager) recordDevices(ctx context.Context, now time.Time) (err error) 
 			devices = append(devices, device{r.UserID, ip})
 		}
 	}
-	// "Seen" needs minutes, not the upkeep's 30 s: a user or a device written lately is left
-	// alone, and with nobody to write there is no transaction and no row lock at all.
+	// Who is online on which node: the live views are per node, so a user connected to two
+	// of them is seen on both (the merged view above counts the two as one).
+	type spot struct {
+		node int64
+		user int64
+	}
+	var seenOn []spot
+	for _, s := range m.Syncers() {
+		for slot := range s.Online() {
+			if uid, ok := owner[slot]; ok {
+				seenOn = append(seenOn, spot{s.ID(), uid})
+			}
+		}
+	}
+	// "Seen" needs minutes, not the upkeep's 30 s: a user, a device or a node's client
+	// written lately is left alone, and with nobody to write there is no transaction and no
+	// row lock at all.
 	at := now.Unix()
 	if m.touched == nil {
 		m.touched = map[string]int64{}
@@ -584,21 +613,36 @@ func (m *Manager) recordDevices(ctx context.Context, now time.Time) (err error) 
 	}
 	users = slices.DeleteFunc(users, func(u int64) bool { return fresh("u" + strconv.FormatInt(u, 10)) })
 	devices = slices.DeleteFunc(devices, func(d device) bool { return fresh("d" + strconv.FormatInt(d.user, 10) + "/" + d.ip) })
-	if len(users) == 0 && len(devices) == 0 {
+	seenOn = slices.DeleteFunc(seenOn, func(p spot) bool {
+		return fresh("n" + strconv.FormatInt(p.node, 10) + "/" + strconv.FormatInt(p.user, 10))
+	})
+	if len(users) == 0 && len(devices) == 0 && len(seenOn) == 0 {
 		return nil
 	}
-	// A device is upserted under its user's lock: its user is written then too.
+	// A device and a node's client are written under their user's lock: the user is written
+	// then too.
 	for _, d := range devices {
 		if !slices.Contains(users, d.user) {
 			users = append(users, d.user)
 		}
 	}
+	for _, p := range seenOn {
+		if !slices.Contains(users, p.user) {
+			users = append(users, p.user)
+		}
+	}
 	slices.Sort(users)
 	slices.SortFunc(devices, func(a, b device) int { return cmp.Or(cmp.Compare(a.user, b.user), strings.Compare(a.ip, b.ip)) })
 	devices = slices.Compact(devices)
+	slices.SortFunc(seenOn, func(a, b spot) int { return cmp.Or(cmp.Compare(a.node, b.node), cmp.Compare(a.user, b.user)) })
+	seenOn = slices.Compact(seenOn)
 	dp := db.UpsertDevicesParams{Now: at}
 	for _, d := range devices {
 		dp.UserIds, dp.Ips = append(dp.UserIds, d.user), append(dp.Ips, d.ip)
+	}
+	np := db.TouchNodeClientsParams{Now: at}
+	for _, p := range seenOn {
+		np.NodeIds, np.UserIds = append(np.NodeIds, p.node), append(np.UserIds, p.user)
 	}
 	defer func() {
 		if err == nil {
@@ -607,6 +651,9 @@ func (m *Manager) recordDevices(ctx context.Context, now time.Time) (err error) 
 			}
 			for _, d := range devices {
 				m.touched["d"+strconv.FormatInt(d.user, 10)+"/"+d.ip] = at
+			}
+			for _, p := range seenOn {
+				m.touched["n"+strconv.FormatInt(p.node, 10)+"/"+strconv.FormatInt(p.user, 10)] = at
 			}
 			// What has not been written for a while is gone from the live view: forgotten.
 			maps.DeleteFunc(m.touched, func(_ string, t int64) bool { return at-t > int64(time.Hour/time.Second) })
@@ -622,10 +669,15 @@ func (m *Manager) recordDevices(ctx context.Context, now time.Time) (err error) 
 		if err := q.SetUsersOnline(ctx, db.SetUsersOnlineParams{OnlineAt: sql.NullInt64{Int64: now.Unix(), Valid: true}, Ids: locked}); err != nil {
 			return err
 		}
-		if len(dp.UserIds) == 0 {
+		if len(dp.UserIds) > 0 {
+			if err := q.UpsertDevices(ctx, dp); err != nil {
+				return err
+			}
+		}
+		if len(np.UserIds) == 0 {
 			return nil
 		}
-		return q.UpsertDevices(ctx, dp)
+		return q.TouchNodeClients(ctx, np)
 	})
 }
 

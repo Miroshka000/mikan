@@ -127,6 +127,9 @@ func (s *Syncer) Health() HealthView { return *s.health.Load() }
 // Online returns the node's live connection view keyed by slot name.
 func (s *Syncer) Online() map[string]nodeapi.Online { return *s.online.Load() }
 
+// ID is the node this syncer keeps in line.
+func (s *Syncer) ID() int64 { return s.id }
+
 // run keeps the node in line until ctx ends. State and policies go in one loop, one at a
 // time; the counters and the health check have their own, so a node that is slow to
 // apply a state does not freeze the traffic accounting or the health the admin sees.

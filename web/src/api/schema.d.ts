@@ -730,6 +730,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Клиенты ноды
+         * @description Кто ходил через ноду, когда его видели в последний раз и сколько он через неё унёс. Считается с версии, где это появилось: прошлое не восстанавливается.
+         */
+        get: operations["node-clients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/key": {
         parameters: {
             query?: never;
@@ -1768,6 +1788,26 @@ export interface paths {
         };
         /** Шифрованная ссылка Happ на подписку пользователя */
         get: operations["user-happ-link"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ноды пользователя
+         * @description Через какие ноды ходил пользователь, сколько унёс через каждую и когда его там видели в последний раз.
+         */
+        get: operations["user-nodes"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2845,6 +2885,41 @@ export interface components {
             not_after: string;
             /** @description Публично доверенный для адреса: приложения принимают его без пина */
             trusted: boolean;
+        };
+        NodeClientView: {
+            /**
+             * Format: int64
+             * @description up + down
+             */
+            bytes: number;
+            /** Format: int64 */
+            down: number;
+            /**
+             * Format: date-time
+             * @description Когда пользователя впервые увидели на ноде; null — время неизвестно
+             */
+            first_seen: string | null;
+            /**
+             * Format: date-time
+             * @description Когда его в последний раз видели на ноде; null — время неизвестно
+             */
+            last_seen: string | null;
+            name: string;
+            /** @description Подключён к этой ноде прямо сейчас */
+            online: boolean;
+            /** Format: int64 */
+            up: number;
+            /** Format: int64 */
+            user_id: number;
+        };
+        NodeClientsOutputBody: {
+            /** @description Клиенты ноды, больше всех трафика сверху */
+            items: components["schemas"]["NodeClientView"][];
+            /**
+             * Format: int64
+             * @description Сколько всего клиентов у ноды; items может быть короче
+             */
+            total: number;
         };
         NodeInfo: {
             /** @description host:port API ноды; пусто у своей ноды */
@@ -4467,6 +4542,38 @@ export interface components {
             expiring: number;
             /** Format: int64 */
             limited: number;
+        };
+        UserNodeView: {
+            /**
+             * Format: int64
+             * @description up + down
+             */
+            bytes: number;
+            /** Format: int64 */
+            down: number;
+            /**
+             * Format: date-time
+             * @description Когда пользователя впервые увидели на ноде; null — время неизвестно
+             */
+            first_seen: string | null;
+            /**
+             * Format: date-time
+             * @description Когда его в последний раз видели на ноде; null — время неизвестно
+             */
+            last_seen: string | null;
+            name: string;
+            /** Format: int64 */
+            node_id: number;
+            /** @description Пользователь подключён к этой ноде прямо сейчас */
+            online: boolean;
+            /** @description Имя ноды в подписке; пусто — берётся name */
+            public_name: string;
+            /** Format: int64 */
+            up: number;
+        };
+        UserNodesOutputBody: {
+            /** @description Ноды пользователя, больше всех трафика сверху */
+            items: components["schemas"]["UserNodeView"][];
         };
         UserPoolView: {
             /** @description Пул закрыт для пользователя: его подключений нет в подписке, ноды их не пускают */
@@ -6395,6 +6502,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "node-clients": {
+        parameters: {
+            query?: {
+                /** @description Сколько показать; всего клиентов в total */
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NodeClientsOutputBody"];
+                };
             };
             /** @description Error */
             default: {
@@ -9145,6 +9286,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HappLinkOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNodesOutputBody"];
                 };
             };
             /** @description Error */
