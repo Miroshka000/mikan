@@ -20,6 +20,7 @@ import (
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/autotune"
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/campaigns"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/nodesync"
@@ -85,6 +86,8 @@ type Deps struct {
 	Billing *billing.Service
 	// Referral is the Telegram bot's referral programme; nil in tests.
 	Referral *referral.Service
+	// Campaigns are the ad campaign tags; nil in tests.
+	Campaigns *campaigns.Service
 	// Warp registers WARP accounts with Cloudflare.
 	Warp    warp.Client
 	SubBase func(ctx context.Context) string
@@ -244,6 +247,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerPayments()
 	h.registerPromocodes()
 	h.registerReferrals()
+	h.registerCampaigns()
 	h.registerAddons()
 	h.registerWarp()
 	h.registerCascade()

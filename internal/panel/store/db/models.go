@@ -56,6 +56,37 @@ type BoundDevice struct {
 	LastSeen  int64
 }
 
+type CampaignEvent struct {
+	ID         int64
+	CampaignID int64
+	ChatID     int64
+	PaymentID  sql.NullInt64
+	Kind       string
+	Amount     int64
+	Currency   string
+	CreatedAt  int64
+	RevertedAt sql.NullInt64
+}
+
+type CampaignTag struct {
+	ID        int64
+	Tag       string
+	Name      string
+	Note      string
+	Enabled   int32
+	Deleted   int32
+	CreatedAt int64
+	UpdatedAt int64
+}
+
+type CampaignVisit struct {
+	ID         int64
+	CampaignID int64
+	ChatID     int64
+	Tag        string
+	FirstSeen  int64
+}
+
 type Device struct {
 	UserID    int64
 	Ip        string

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"mikan/internal/panel/billing"
+	"mikan/internal/panel/campaigns"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/referral"
@@ -65,6 +66,9 @@ type Deps struct {
 	// Referral is the referral programme: the account's invite link and what its invitees
 	// bring it. nil: none.
 	Referral *referral.Service
+	// Campaigns are the ad campaign tags: a tagged /start binds the chat to a campaign.
+	// nil: none.
+	Campaigns *campaigns.Service
 	// Tunnel reaches addr through node id, for RouteNode; nil: the panel has no nodes.
 	Tunnel func(ctx context.Context, nodeID int64, addr string) (net.Conn, error)
 
@@ -575,6 +579,8 @@ func (b *Bot) onMessage(ctx context.Context, out *Outbox, m *Message) {
 	switch {
 	case strings.HasPrefix(text, "/start "+refPrefix):
 		notice = b.Referral(ctx, w, chat, strings.TrimSpace(strings.TrimPrefix(text, "/start "+refPrefix)))
+	case strings.HasPrefix(text, "/start "+campaigns.Prefix):
+		notice = b.CampaignVisit(ctx, w, chat, strings.TrimSpace(strings.TrimPrefix(text, "/start "+campaigns.Prefix)))
 	case strings.HasPrefix(text, "/start "):
 		notice = b.linkByCode(ctx, out, w, chat, who(m.From), strings.TrimSpace(strings.TrimPrefix(text, "/start ")))
 	default:

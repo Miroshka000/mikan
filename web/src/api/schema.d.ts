@@ -277,6 +277,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Метки рекламных кампаний */
+        get: operations["list-campaigns"];
+        put?: never;
+        /** Создать метку кампании */
+        post: operations["create-campaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Изменить метку кампании */
+        put: operations["update-campaign"];
+        post?: never;
+        /** Удалить метку кампании */
+        delete: operations["delete-campaign"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/campaigns/{id}/enabled": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Включить или выключить метку */
+        post: operations["enable-campaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/campaigns/{id}/visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Кто пришёл по метке кампании */
+        get: operations["list-campaign-visits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/filters": {
         parameters: {
             query?: never;
@@ -2088,6 +2158,70 @@ export interface components {
             /** Format: int64 */
             affected: number;
         };
+        CampaignEnabledInputBody: {
+            enabled: boolean;
+        };
+        CampaignStatsView: {
+            /** Format: int64 */
+            bought: number;
+            /** Format: int64 */
+            campaigns: number;
+            /** Format: int64 */
+            renewed: number;
+            /** Format: int64 */
+            visits: number;
+        };
+        CampaignView: {
+            /**
+             * Format: int64
+             * @description Сумма применённых оплат в копейках (только RUB)
+             */
+            amount: number;
+            /**
+             * Format: int64
+             * @description Сколько из них купили подписку впервые
+             */
+            bought: number;
+            /** @enum {string} */
+            currency: "RUB";
+            enabled: boolean;
+            /** Format: int64 */
+            id: number;
+            /** @description Ссылка на бота с меткой кампании; пусто, пока бот не подключён */
+            link?: string;
+            name: string;
+            note: string;
+            /**
+             * Format: int64
+             * @description Сколько продлили подписку
+             */
+            renewed: number;
+            tag: string;
+            /**
+             * Format: int64
+             * @description Сколько людей пришло по ссылке
+             */
+            visits: number;
+        };
+        CampaignVisitView: {
+            /** Format: int64 */
+            chat_id: number;
+            /** Format: date-time */
+            first_seen: string;
+            name?: string;
+            tag: string;
+        };
+        CampaignVisitsOutputBody: {
+            items: components["schemas"]["CampaignVisitView"][];
+            /** Format: int64 */
+            total: number;
+        };
+        CampaignsOutputBody: {
+            items: components["schemas"]["CampaignView"][];
+            stats: components["schemas"]["CampaignStatsView"];
+            /** Format: int64 */
+            total: number;
+        };
         CascadeExit: {
             /** @description Подключения этой ноды, которые выходят через ту ноду */
             inbounds: string[];
@@ -2212,6 +2346,12 @@ export interface components {
             prefix: string;
             /** @enum {string} */
             scope: "read" | "full";
+        };
+        CreateCampaignInputBody: {
+            name: string;
+            note: string;
+            /** @description Метка в ссылке: латиница, цифры, дефис и подчёркивание */
+            tag: string;
         };
         CreateFolderInputBody: {
             /**
@@ -4254,6 +4394,11 @@ export interface components {
             real_ip?: boolean;
             sniffer?: boolean;
         };
+        UpdateCampaignInputBody: {
+            enabled: boolean;
+            name: string;
+            note: string;
+        };
         UpdateStatus: {
             /** @description RFC 3339 */
             at: string;
@@ -5046,6 +5191,204 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TotpSetupOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-campaigns": {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCampaignInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCampaignInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "enable-campaign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignEnabledInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-campaign-visits": {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignVisitsOutputBody"];
                 };
             };
             /** @description Error */

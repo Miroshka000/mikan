@@ -107,6 +107,13 @@ func (s *Service) takeBack(ctx context.Context, q *db.Queries, p db.Payment) (rv
 			return rv, u, err
 		}
 	}
+	// A refund takes a purchase or renewal back out of the campaign's numbers, so a
+	// campaign is not credited with a sale that did not stand.
+	if s.d.Campaigns != nil {
+		if err = s.d.Campaigns.Revert(ctx, q, p.ID); err != nil {
+			return rv, u, err
+		}
+	}
 	if !p.UserID.Valid {
 		return rv, u, nil
 	}

@@ -32,6 +32,7 @@ export const qk = {
   promocodes: ["promocodes"] as const,
   promocodeRedemptions: ["promocodes", "redemptions"] as const,
   referrals: ["referrals"] as const,
+  campaigns: ["campaigns"] as const,
   userGrants: (id: number) => ["users", "grants", id] as const,
   torrent: ["torrent"] as const,
   filters: ["filters"] as const,
