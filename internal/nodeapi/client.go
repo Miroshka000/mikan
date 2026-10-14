@@ -215,6 +215,14 @@ func (c *Client) Warp(ctx context.Context, force bool) (WarpStatus, error) {
 	return r, err
 }
 
+// Turn asks the node how its traffic-through-a-VK-call server is doing. Nodes older
+// than the server answer 404 (a StatusError).
+func (c *Client) Turn(ctx context.Context) (TurnStatus, error) {
+	var r TurnStatus
+	err := c.do(ctx, http.MethodGet, "/v1/turn", nil, &r, 10*time.Second)
+	return r, err
+}
+
 // Probe checks the internet through one outbound of the node: WARP or NODE-<id>.
 func (c *Client) Probe(ctx context.Context, proxy string) (ProbeResult, error) {
 	var r ProbeResult

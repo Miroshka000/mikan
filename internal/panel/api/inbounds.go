@@ -400,22 +400,27 @@ func configError(err error) error {
 
 // portError is how the API reports a port something else holds; other errors pass
 // through.
-func portError(err error) error {
+func portError(err error) error { return portErrorAt(err, "body.port") }
+
+// portErrorAt is portError for an input that names the port otherwise than "port".
+func portErrorAt(err error, location string) error {
 	var busy *domain.PortInUseError
 	if !errors.As(err, &busy) {
 		return err
 	}
 	switch busy.Kind {
 	case domain.PortRelay:
-		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: "body.port", Message: "port_relay"})
+		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: location, Message: "port_relay"})
 	case domain.PortSub:
-		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: "body.port", Message: "port_sub"})
+		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: location, Message: "port_sub"})
 	case domain.PortPanel:
-		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: "body.port", Message: "port_panel"})
+		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: location, Message: "port_panel"})
 	case domain.PortNodeAPI:
-		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: "body.port", Message: "port_node_api"})
+		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: location, Message: "port_node_api"})
+	case domain.PortTurn:
+		return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: location, Message: "port_turn"})
 	}
-	return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: "body.port", Message: "port_in_use", Value: busy.Name})
+	return huma.Error409Conflict("port_in_use", &huma.ErrorDetail{Location: location, Message: "port_in_use", Value: busy.Name})
 }
 
 func (h *handlers) deleteInbound(ctx context.Context, in *userIDInput) (*struct{}, error) {

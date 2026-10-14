@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, ShieldCheck, Trash2, Users, Waypoints } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, ArrowUpDown, Check, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, Plus, RadioTower, ShieldCheck, Trash2, Users, Waypoints } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
@@ -18,6 +18,7 @@ import { CascadeDrawer } from "./node-cascade";
 import { NodeClientsDrawer } from "./node-clients";
 import { SpeedDrawer } from "./node-speed";
 import { NodeTrafficDrawer } from "./node-traffic";
+import { TurnDrawer } from "./node-turn";
 import { WarpDrawer } from "./node-warp";
 
 type Node = Schemas["NodeInfo"];
@@ -45,6 +46,7 @@ export function NodesPage() {
   const [trafficOf, setTrafficOf] = useState<Node | null>(null);
   const [clientsOf, setClientsOf] = useState<Node | null>(null);
   const [cascadeOf, setCascadeOf] = useState<Node | null>(null);
+  const [turnOf, setTurnOf] = useState<Node | null>(null);
   const [certOf, setCertOf] = useState<Node | null>(null);
   // The arrows that order the nodes show only while ordering: most of the time they are noise.
   const [ordering, setOrdering] = useState(false);
@@ -176,7 +178,7 @@ export function NodesPage() {
                 </p>
               ) : null}
               {list.map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onClients={() => setClientsOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onClients={() => setClientsOf(n)} onCascade={() => setCascadeOf(n)} onTurn={() => setTurnOf(n)} onCert={() => setCertOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -197,6 +199,7 @@ export function NodesPage() {
       <NodeTrafficDrawer node={trafficOf ? { id: trafficOf.id, name: nodeLabel(trafficOf) } : null} onClose={() => setTrafficOf(null)} />
       <NodeClientsDrawer node={clientsOf ? { id: clientsOf.id, name: nodeLabel(clientsOf) } : null} onClose={() => setClientsOf(null)} />
       <CascadeDrawer node={cascadeOf ? { id: cascadeOf.id, name: nodeLabel(cascadeOf) } : null} onClose={() => setCascadeOf(null)} />
+      <TurnDrawer node={turnOf ? { id: turnOf.id, name: nodeLabel(turnOf) } : null} onClose={() => setTurnOf(null)} />
       <CertDrawer
         open={!!certOf}
         onClose={() => setCertOf(null)}
@@ -258,6 +261,7 @@ function NodeCard({
   onTraffic,
   onClients,
   onCascade,
+  onTurn,
   onCert,
   onRekey,
   onRemove,
@@ -284,6 +288,7 @@ function NodeCard({
   onTraffic: () => void;
   onClients: () => void;
   onCascade: () => void;
+  onTurn: () => void;
   onCert: () => void;
   onRekey: () => void;
   onRemove: () => void;
@@ -419,6 +424,9 @@ function NodeCard({
             <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
               <Menu.Item className="menu-item" onSelect={onWarp}>
                 <Cloud size={16} aria-hidden /> WARP
+              </Menu.Item>
+              <Menu.Item className="menu-item" onSelect={onTurn}>
+                <RadioTower size={16} aria-hidden /> {t("turn.menu")}
               </Menu.Item>
               <Menu.Item className="menu-item" onSelect={onCascade}>
                 <Waypoints size={16} aria-hidden /> {t("cascade.title")}

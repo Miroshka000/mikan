@@ -25,6 +25,7 @@ export const qk = {
   paymentSettings: ["payment-settings"] as const,
   addons: ["addons"] as const,
   warp: (node: number) => ["warp", node] as const,
+  turn: (node: number) => ["turn", node] as const,
   cascade: (node: number) => ["cascade", node] as const,
   pools: ["pools"] as const,
   userPools: (id: number) => ["users", "pools", id] as const,

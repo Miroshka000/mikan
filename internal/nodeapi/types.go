@@ -43,6 +43,9 @@ type DesiredState struct {
 	// Filters keep users' traffic from places and strangers from the node; nil: none.
 	// Nodes older than the filters ignore it.
 	Filters *Filters `json:"filters,omitempty"`
+	// Turn is the traffic-through-a-VK-call server on the node; nil: off. Nodes older
+	// than it ignore the field.
+	Turn *Turn `json:"turn,omitempty"`
 }
 
 // Filters are the ingress and egress filters of the node.
@@ -391,6 +394,35 @@ type WarpStatus struct {
 	// Older nodes send the code "unreachable" and no detail.
 	Error     string    `json:"error,omitempty"`
 	Detail    string    `json:"detail,omitempty"`
+	CheckedAt time.Time `json:"checked_at"`
+}
+
+// Turn is the "traffic inside a VK call" server on a node: what users reach through the
+// TURN servers of VK calls, where a whitelist lets nothing else out. The node runs the
+// server, which unwraps the DTLS the client sends and hands it to Target - a port of an
+// inbound of this node, so the users' keys, limits and accounting stay the inbound's own.
+type Turn struct {
+	Listen string `json:"listen"` // "0.0.0.0:56000"
+	Target string `json:"target"` // "127.0.0.1:443"
+	// VLESS forwards TCP connections (VLESS, XHTTP, REALITY) instead of UDP packets
+	// (WireGuard, Hysteria2): the client app speaks to the target through the tunnel as
+	// if it were the target's own address.
+	VLESS  bool   `json:"vless,omitempty"`
+	Binary string `json:"binary,omitempty"` // the server binary; "" = the one in the image
+}
+
+// TurnStatus is the node's TURN server as it is now.
+type TurnStatus struct {
+	Configured bool      `json:"configured"`
+	Running    bool      `json:"running"`
+	PID        int       `json:"pid,omitempty"`
+	Since      time.Time `json:"since,omitempty"`    // when the current run started
+	Restarts   int       `json:"restarts,omitempty"` // since the node started
+	// Error is a stable code: no_binary | bad_config | exited | failed. Detail says the
+	// same in words for the admin (no secrets).
+	Error     string    `json:"error,omitempty"`
+	Detail    string    `json:"detail,omitempty"`
+	Log       []string  `json:"log,omitempty"` // the last lines of the server's output
 	CheckedAt time.Time `json:"checked_at"`
 }
 

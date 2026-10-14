@@ -7057,6 +7057,189 @@
         },
         "type": "object"
       },
+      "TurnCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "detail": {
+            "description": "Своими словами, без секретов; на английском",
+            "type": "string"
+          },
+          "error": {
+            "description": "no_binary | bad_config | exited | failed — с ноды; node_too_old — нода старше этой возможности; node_unreachable — нода не ответила",
+            "type": "string"
+          },
+          "log": {
+            "description": "Последние строки вывода сервера",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "pid": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "restarts": {
+            "description": "Сколько раз сервер поднимался заново",
+            "format": "int64",
+            "type": "integer"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "since": {
+            "description": "Когда запущен нынешний процесс",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "running",
+          "checked_at"
+        ],
+        "type": "object"
+      },
+      "TurnPatchInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "binary_path": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "client_host": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "client_port": {
+            "pattern": "^[0-9]{1,5}$",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "inbound_id": {
+            "description": "Подключение этой ноды, которому сервер отдаёт трафик",
+            "format": "int64",
+            "type": "integer"
+          },
+          "links": {
+            "description": "Ссылки на звонки VK (https://vk.com/call/join/…); пустой список — у записи нет ссылки",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "listen_port": {
+            "pattern": "^[0-9]{1,5}$",
+            "type": "string"
+          },
+          "streams": {
+            "format": "int64",
+            "maximum": 64,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 64,
+            "type": "string"
+          },
+          "udp": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "TurnView": {
+        "additionalProperties": false,
+        "properties": {
+          "binary_path": {
+            "description": "Путь к серверу на ноде; пусто — тот, что в образе",
+            "type": "string"
+          },
+          "client_host": {
+            "description": "Адрес, который набирает приложение клиента: там слушает программа-клиент",
+            "type": "string"
+          },
+          "client_port": {
+            "type": "string"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "entry": {
+            "description": "Как запись выглядит в подписке",
+            "type": "string"
+          },
+          "inbound": {
+            "description": "Подключение ноды, которому сервер отдаёт трафик",
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "links": {
+            "description": "Ссылки на звонки VK: по одной в строке, пользователи расходятся по ним",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "listen_port": {
+            "description": "Порт сервера на ноде (UDP)",
+            "type": "string"
+          },
+          "mode": {
+            "description": "Что несёт клиент: целые соединения (VLESS, XHTTP) или датаграммы (Hysteria2)",
+            "enum": [
+              "vless",
+              "udp",
+              ""
+            ],
+            "type": "string"
+          },
+          "peer": {
+            "description": "Адрес сервера для клиента: хост ноды и порт сервера",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TurnCheck",
+            "description": "Сервер на ноде, как его видит панель; нет — нода старая или не ответила"
+          },
+          "streams": {
+            "description": "Потоков у клиента: VK ограничивает один, клиент разводит их несколько",
+            "format": "int64",
+            "type": "integer"
+          },
+          "title": {
+            "description": "Имя записи в приложении; пусто — имя подключения плюс « WL»",
+            "type": "string"
+          },
+          "udp": {
+            "description": "Клиент говорит с TURN-серверами VK по UDP",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "configured",
+          "enabled",
+          "udp",
+          "links"
+        ],
+        "type": "object"
+      },
       "UpdateCampaignInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -10401,6 +10584,134 @@
           }
         },
         "summary": "График трафика ноды",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}/turn": {
+      "delete": {
+        "operationId": "delete-node-turn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Убрать VK TURN с ноды",
+        "tags": [
+          "node"
+        ]
+      },
+      "get": {
+        "operationId": "get-node-turn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "VK TURN ноды",
+        "tags": [
+          "node"
+        ]
+      },
+      "patch": {
+        "operationId": "save-node-turn",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TurnPatchInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TurnView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Настроить VK TURN на ноде",
         "tags": [
           "node"
         ]

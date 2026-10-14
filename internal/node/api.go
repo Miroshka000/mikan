@@ -93,6 +93,9 @@ func Handler(e *Engine, log *slog.Logger) http.Handler {
 		defer cancel()
 		writeJSON(w, http.StatusOK, e.WarpStatus(ctx, r.URL.Query().Get("force") == "1"))
 	})
+	mux.HandleFunc("GET /v1/turn", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, e.TurnStatus())
+	})
 	mux.HandleFunc("GET /v1/probe", func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 18*time.Second)
 		defer cancel()

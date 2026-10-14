@@ -25,6 +25,7 @@ var codeSources = []struct {
 	{"internal/proto", []*regexp.Regexp{failCode, structCode}},
 	{"internal/panel/presets", []*regexp.Regexp{failCode, structCode}},
 	{"internal/panel/warp", []*regexp.Regexp{structCode}},
+	{"internal/panel/turn", []*regexp.Regexp{structCode}},
 	{"internal/panel/subs", []*regexp.Regexp{structCode}},
 	// billing.errCode keeps a provider's refusal in payments.error, for the history.
 	{"internal/panel/billing", []*regexp.Regexp{structCode}},

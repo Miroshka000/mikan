@@ -24,6 +24,7 @@ const (
 	PortPanel   = "panel"    // the panel's own HTTPS, on the panel's node
 	PortSub     = "sub"      // the subscription port, on the panel's node
 	PortNodeAPI = "node_api" // the node API the panel connects to, on a remote node
+	PortTurn    = "turn"     // the VK-call server's listener, on a node
 )
 
 // HostLookup says what listens on a node's server now, as the node reported it; nil for a
@@ -108,6 +109,15 @@ func NodePorts(ctx context.Context, q *db.Queries, node db.Node) (PortMap, error
 	switch {
 	case err == nil:
 		m.add(PortHolder{Kind: PortRelay}, r.Port, "tcp", false)
+	case !errors.Is(err, sql.ErrNoRows):
+		return PortMap{}, err
+	}
+	t, err := q.GetNodeTurn(ctx, node.ID)
+	switch {
+	case err == nil:
+		// The server takes its port over UDP whether it is on or off: an off one can be
+		// turned back on at any moment, and something else must not sit on the port.
+		m.add(PortHolder{Kind: PortTurn}, t.ListenPort, "udp", t.Enabled == 0)
 	case !errors.Is(err, sql.ErrNoRows):
 		return PortMap{}, err
 	}

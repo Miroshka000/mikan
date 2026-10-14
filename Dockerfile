@@ -26,11 +26,26 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/mikan-node ./cmd/mikan-node
 
 FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
-RUN apk add --no-cache ca-certificates tzdata libcap postgresql18-client && \
+# Filled in by BuildKit for each platform; read before the first use.
+ARG TARGETARCH
+RUN apk add --no-cache ca-certificates tzdata libcap postgresql18-client curl && \
     addgroup -S -g 65532 mikan && adduser -S -D -H -u 65532 -G mikan mikan
 COPY --from=build /out/ /usr/local/bin/
+# The server of the VK-call way in ("WL"): the node agent runs it as a child process
+# (internal/node/turn.go), handing the users' traffic to one of the node's inbounds. It is
+# a third-party program, GPL-3.0 like mikan itself, taken as the project's own release
+# binary and pinned by sha256; sources and licence: github.com/cacggghp/vk-turn-proxy
+ARG VKTURN_VERSION=v1.8.3
+RUN set -eux; \
+    case "$TARGETARCH" in \
+      amd64) asset=server-linux-amd64; sum=dfe4c9602d6cc21da0f8c5fc289b75ecfcc7e4862d53a7c7aced37e2a115c42e ;; \
+      arm64) asset=server-linux-arm64; sum=5b51916deb83f361ea6544f8cbb9f72f2db552ff0acbadff3797862793fc0472 ;; \
+      *) echo "vk-turn-proxy has no build for $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /usr/local/bin/vk-turn-proxy "https://github.com/cacggghp/vk-turn-proxy/releases/download/${VKTURN_VERSION}/${asset}"; \
+    echo "${sum}  /usr/local/bin/vk-turn-proxy" | sha256sum -c -; \
+    chmod 0755 /usr/local/bin/vk-turn-proxy
 # The binaries must be the image's own architecture: the ELF machine field says so.
-ARG TARGETARCH
 RUN case "$TARGETARCH" in amd64) want="3e 00" ;; arm64) want="b7 00" ;; *) want="" ;; esac; \
     for f in /usr/local/bin/mikan /usr/local/bin/mikan-node; do \
       got=$(od -A n -t x1 -j 18 -N 2 "$f" | tr -s " " | sed "s/^ //"); \
