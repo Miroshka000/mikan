@@ -278,6 +278,12 @@ func (m *Manager) identifier(ctx context.Context) (string, error) {
 	return m.set.String(ctx, settings.KeyPublicHost)
 }
 
+// subDomain is the subscription links' own domain, "" when they ride the panel's address.
+func (m *Manager) subDomain(ctx context.Context) (string, error) {
+	d, err := m.set.String(ctx, settings.KeySubDomain)
+	return strings.TrimSpace(d), err
+}
+
 // ensure makes the panel serve the right certificate and, when it needs a new one from
 // Let's Encrypt, orders it. It reports whether that order failed. The order runs outside
 // m.mu: uploading a certificate of one's own must not wait for it.
@@ -292,7 +298,11 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 	if id, need = m.settle(ctx); !need {
 		return false
 	}
-	cert, err := m.obtain(ctx, id)
+	sub, err := m.subDomain(ctx)
+	if err != nil {
+		m.log.Warn("acme: subscription domain not read", "err", err)
+	}
+	cert, err := m.obtain(ctx, id, sub)
 	if err != nil {
 		m.log.Warn("acme: certificate not obtained", "identifier", id, "err", err)
 		m.mu.Lock()
@@ -327,10 +337,11 @@ func (m *Manager) settle(ctx context.Context) (id string, order bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	id, err := m.identifier(ctx)
+	sub, serr := m.subDomain(ctx)
 	st := &Status{Kind: "self-signed", Identifier: id, CheckedAt: m.now()}
 	defer func() { m.status.Store(st) }()
-	if err != nil {
-		st.Error = err.Error()
+	if err != nil || serr != nil {
+		st.Error = errors.Join(err, serr).Error()
 		return id, false
 	}
 	// The admin's own certificate wins while it is valid; an expired or broken one falls
@@ -360,15 +371,28 @@ func (m *Manager) settle(ctx context.Context) (id string, order bool) {
 		st.Error = "no_public_host"
 		return id, false
 	}
+	// The subscription domain must be covered too, or its links fail the handshake. An
+	// address in the identifier gets in the way: Let's Encrypt issues IP certificates
+	// only in the shortlived profile, with the IP alone — no DNS name beside it. Whoever
+	// fronts the subscription domain then keeps its TLS; the links are built all the same.
+	subMust := sub != "" && net.ParseIP(id) == nil
+	if sub != "" && net.ParseIP(id) != nil && !tlscert.HasCustom(m.customDir) {
+		st.Error = "sub_domain_no_tls"
+	}
+	var leaf *x509.Certificate
 	if cert, err := m.load(); err == nil && tlscert.Covers(cert.Leaf, id) {
-		m.holder.Set(cert) // kept serving while it is renewed
+		m.holder.Set(cert) // kept serving while the missing name, if any, is ordered
 		st.Kind, st.NotAfter = "letsencrypt", cert.Leaf.NotAfter
-		if !m.needsRenewal(cert.Leaf) {
-			return id, false
-		}
+		leaf = cert.Leaf
+	}
+	if leaf != nil && !m.needsRenewal(leaf) && (!subMust || tlscert.Covers(leaf, sub)) && (st.Error == "" || st.Error == "sub_domain_no_tls") {
+		return id, false
 	}
 	if st.Kind == "self-signed" {
 		m.useFallback()
+	}
+	if st.Error == "sub_domain_no_tls" {
+		return id, false // nothing to order: the subscription host's TLS is not ours to take
 	}
 	return id, true
 }
@@ -396,7 +420,7 @@ func (u *user) GetEmail() string                        { return u.email }
 func (u *user) GetRegistration() *registration.Resource { return u.reg }
 func (u *user) GetPrivateKey() crypto.PrivateKey        { return u.key }
 
-func (m *Manager) obtain(ctx context.Context, id string) (*tls.Certificate, error) {
+func (m *Manager) obtain(ctx context.Context, id, sub string) (*tls.Certificate, error) {
 	if err := os.MkdirAll(m.dir, 0o700); err != nil {
 		return nil, err
 	}
@@ -406,7 +430,7 @@ func (m *Manager) obtain(ctx context.Context, id string) (*tls.Certificate, erro
 	}
 	email, _ := m.set.String(ctx, settings.KeyACMEEmail)
 	u := &user{email: email, key: key}
-	req, noCN := order(id)
+	req, noCN := order(id, sub)
 	cfg := lego.NewConfig(u)
 	cfg.CADirURL = m.directory
 	cfg.Certificate.KeyType = certcrypto.EC256
@@ -439,14 +463,19 @@ func (m *Manager) obtain(ctx context.Context, id string) (*tls.Certificate, erro
 	return m.load()
 }
 
-// order is what Let's Encrypt is asked for. It issues an IP certificate only with the
-// shortlived profile and only with the IP in the SAN: an IP in the Common Name is refused
-// as badCSR, so the CSR goes without one. A domain keeps its Common Name.
-func order(id string) (req certificate.ObtainRequest, noCommonName bool) {
+// order is what Let's Encrypt is asked for: the panel's domain and, when there is one,
+// the subscription domain beside it — one certificate for both. It issues an IP
+// certificate only with the shortlived profile and only with the IP in the SAN: an IP
+// in the Common Name is refused as badCSR, so the CSR goes without one. A domain keeps
+// its Common Name.
+func order(id, sub string) (req certificate.ObtainRequest, noCommonName bool) {
 	req = certificate.ObtainRequest{Domains: []string{id}, Bundle: true}
 	if net.ParseIP(id) != nil {
 		req.Profile = "shortlived"
 		return req, true
+	}
+	if sub != "" {
+		req.Domains = []string{id, sub}
 	}
 	return req, false
 }

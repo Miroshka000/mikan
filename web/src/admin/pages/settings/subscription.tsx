@@ -14,6 +14,60 @@ import { useSaveSettings } from "./shared";
 // port among them needs nothing else on the server.
 const OPEN_PORTS = [443, 2053, 2083, 2087, 2096, 8443] as const;
 
+// Subscription links on a domain of their own, apart from the panel and the nodes: when
+// the panel moves, the links stand — only the domain's DNS follows it.
+export function SubDomainCard({ s }: { s: Schemas["SettingsView"] }) {
+  const save = useSaveSettings();
+  const { draft: domain, setDraft: setDomain } = useDraft(s.sub_domain ?? "");
+  const error = fieldErrors(save.error).sub_domain;
+  const value = domain.trim().toLowerCase();
+  const valid = value === "" || /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(value);
+  const changed = value !== (s.sub_domain ?? "");
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (valid) save.mutate({ sub_domain: value });
+  };
+  return (
+    <section className="card glass reveal" style={{ "--i": 0 } as React.CSSProperties}>
+      <form onSubmit={submit} noValidate>
+        <div className="card-head">
+          <div>
+            <h2 className="card-title">{t("settings.subDomain")}</h2>
+            <div className="card-sub">{t("settings.subDomainSub")}</div>
+          </div>
+          {s.sub_domain ? <Pill tone="ok">{s.sub_domain}</Pill> : null}
+        </div>
+        {s.sub_base_url ? (
+          <div className="panel-soft mb-4 p-3">
+            <div className="text-xs text-[var(--ink-500)]">{t("settings.subPortLinks")}</div>
+            {/* The secret path is the users' credential; the subscription domain has none. */}
+            <div className="mono truncate text-[13px]">{s.sub_domain ? s.sub_base_url : s.sub_base_url.replace(/[^/]+\/$/, "…")}</div>
+          </div>
+        ) : null}
+        <Field
+          label={t("settings.subDomainField")}
+          htmlFor="s-sub-domain"
+          hint={t("settings.subDomainHint")}
+          error={error ?? (valid ? undefined : t("errors.api.sub_domain_invalid"))}
+        >
+          <input
+            id="s-sub-domain"
+            className="input mono"
+            value={domain}
+            onChange={(e) => setDomain(e.target.value.replace(/\s+/g, "").toLowerCase())}
+            placeholder="sub.example.com"
+            autoComplete="off"
+            spellCheck={false}
+            aria-invalid={!!error || !valid}
+          />
+        </Field>
+        <p className="text-xs text-[var(--ink-500)]">{t("settings.subDomainNote")}</p>
+        <FormActions saving={save.isPending && save.variables?.sub_domain === value} disabled={!changed || !valid} onReset={() => setDomain(s.sub_domain ?? "")} />
+      </form>
+    </section>
+  );
+}
+
 // Subscriptions on a port of their own: a usual HTTPS port looks like any site, and the
 // admin panel's port stops showing in every link. Links on the old port keep working.
 export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
@@ -47,12 +101,6 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
         {s.sub_port_error ? (
           <div className="banner err mb-4" role="alert">
             {t("settings.subPortBusy", { port: s.sub_port, panel: s.panel_port })}
-          </div>
-        ) : null}
-        {s.sub_base_url ? (
-          <div className="panel-soft mb-4 p-3">
-            <div className="text-xs text-[var(--ink-500)]">{t("settings.subPortLinks")}</div>
-            <div className="mono truncate text-[13px]">{s.sub_base_url.replace(/[^/]+\/$/, "…")}</div>
           </div>
         ) : null}
         <Field label={t("settings.subPortField")} htmlFor="s-sub-port" hint={t("settings.subPortHint", { panel: s.panel_port })} error={error ?? (valid ? undefined : t("settings.subPortInvalid"))}>

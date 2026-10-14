@@ -58,3 +58,49 @@ func TestCachedSettings(t *testing.T) {
 		t.Fatal("a plain Settings reads the table every time")
 	}
 }
+
+// Subscription links point at the subscription domain when one is set, else at the
+// panel's address; the subscription port replaces the panel's when set.
+func TestSubEndpoint(t *testing.T) {
+	ctx := context.Background()
+	st, err := storetest.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	set := New(st.Q)
+	if err := Set(ctx, set, KeyPublicHost, "203.0.113.7"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Set(ctx, set, KeyPanelPort, 2053); err != nil {
+		t.Fatal(err)
+	}
+	if ep, err := set.SubEndpoint(ctx); err != nil || (ep != Endpoint{Host: "203.0.113.7", Port: 2053}) {
+		t.Fatalf("the public address: %+v, %v", ep, err)
+	}
+	if err := Set(ctx, set, KeyDomain, "vpn.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if ep, err := set.SubEndpoint(ctx); err != nil || (ep != Endpoint{Host: "vpn.example.com", Port: 2053}) {
+		t.Fatalf("the domain wins over the address: %+v, %v", ep, err)
+	}
+	if err := Set(ctx, set, KeySubPort, 8443); err != nil {
+		t.Fatal(err)
+	}
+	if ep, err := set.SubEndpoint(ctx); err != nil || (ep != Endpoint{Host: "vpn.example.com", Port: 8443}) {
+		t.Fatalf("the subscription port: %+v, %v", ep, err)
+	}
+	if err := Set(ctx, set, KeySubDomain, "sub.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if ep, err := set.SubEndpoint(ctx); err != nil || (ep != Endpoint{Host: "sub.example.com", Port: 8443}) {
+		t.Fatalf("the subscription domain: %+v, %v", ep, err)
+	}
+	// Without it the links keep pointing at the panel, whatever the subscription port.
+	if err := Set(ctx, set, KeySubDomain, ""); err != nil {
+		t.Fatal(err)
+	}
+	if ep, err := set.SubEndpoint(ctx); err != nil || (ep != Endpoint{Host: "vpn.example.com", Port: 8443}) {
+		t.Fatalf("cleared: %+v, %v", ep, err)
+	}
+}

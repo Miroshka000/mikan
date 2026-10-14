@@ -190,11 +190,19 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if err != nil || ep.Host == "" {
 			return ""
 		}
+		base := "https://" + net.JoinHostPort(ep.Host, strconv.Itoa(ep.Port))
+		// The subscription domain's host serves subscriptions alone, at the root: it keeps
+		// working when the panel moves to another address, so no secret path in its links.
+		if own, err := set.String(ctx, settings.KeySubDomain); err != nil {
+			return ""
+		} else if own != "" {
+			return base
+		}
 		paths, err := set.Paths(ctx)
 		if err != nil {
 			return ""
 		}
-		return "https://" + net.JoinHostPort(ep.Host, strconv.Itoa(ep.Port)) + "/" + paths.Sub
+		return base + "/" + paths.Sub
 	}
 	p.Addons = addons.New(o.DataDir, o.AddonsCatalog, o.Version, o.Log, o.Now)
 	deps.Addons = p.Addons
@@ -300,16 +308,18 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if err != nil {
 			return subs.Config{}, err
 		}
-		var domainName, publicHost, routing, fingerprint, rules string
+		var domainName, publicHost, subDomain, routing, fingerprint, rules string
 		var groups subs.Groups
-		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeyPublicHost: &publicHost, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
+		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeyPublicHost: &publicHost, settings.KeySubDomain: &subDomain, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
 			settings.KeyRouting: &routing, settings.KeyFingerprint: &fingerprint, settings.KeyRules: &rules} {
 			if *dst, err = set.String(ctx, key); err != nil {
 				return subs.Config{}, err
 			}
 		}
 		cfg := subs.Config{Brand: brand, SupportURL: support, Groups: groups, Routing: subs.ParseRouting(routing), Fingerprint: fingerprint,
-			Direct: []string{publicHost, domainName}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
+			// The subscription address is fetched before the tunnel works, it must not go
+			// through the tunnel itself.
+			Direct: []string{publicHost, domainName, subDomain}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
 		if cfg.Routes, _, err = settings.Get[subs.Routes](ctx, set, settings.KeyRoutes); err != nil {
 			return subs.Config{}, err
 		}
@@ -419,7 +429,8 @@ func (p *Panel) SubOnly() http.Handler { return p.server.SubOnly() }
 // the CLI writes within this.
 const loopSettingsTTL = 15 * time.Second
 
-// Apply loads the secret paths into the router and the default language into the pages.
+// Apply loads the secret paths, the subscription domain and the default language into
+// the router and the pages.
 func (p *Panel) Apply(ctx context.Context) (settings.Paths, error) {
 	paths, err := p.reload.Paths(ctx)
 	if err != nil {
@@ -429,7 +440,12 @@ func (p *Panel) Apply(ctx context.Context) (settings.Paths, error) {
 	if err != nil {
 		return paths, err
 	}
+	subDomain, err := p.reload.String(ctx, settings.KeySubDomain)
+	if err != nil {
+		return paths, err
+	}
 	p.server.SetPaths(paths)
+	p.server.SetSubDomain(subDomain)
 	p.spa.SetPrefix(paths.Admin)
 	p.spa.SetLang(lang)
 	if p.subPage != nil {

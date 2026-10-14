@@ -21,8 +21,12 @@ const (
 	KeyPanelPort  = "panel_port"
 	// KeySubPort is a port of its own for subscriptions; 0 or unset: the panel's port.
 	// The panel's port keeps serving subscriptions either way, for links handed out.
-	KeySubPort   = "sub_port"
-	KeyDomain    = "domain"
+	KeySubPort = "sub_port"
+	KeyDomain  = "domain"
+	// KeySubDomain is the host subscription links point to, apart from the panel and the
+	// nodes: its own domain or subdomain, fronted by whatever fronts it. Empty: the
+	// panel's own address. Links built on it survive a panel move — only its DNS moves.
+	KeySubDomain = "sub_domain"
 	KeyACMEEmail = "acme_email"
 	KeyGroupMain = "sub_group_main" // subscription group names, see subs.Groups
 	KeyGroupAuto = "sub_group_auto"
@@ -302,11 +306,17 @@ type Endpoint struct {
 	Port int
 }
 
-// SubEndpoint is where subscription links point: the subscription port when one is set.
+// SubEndpoint is where subscription links point: the subscription domain when one is
+// set, else the panel's address; the subscription port when one is set.
 func (s *Settings) SubEndpoint(ctx context.Context) (Endpoint, error) {
 	ep, err := s.Endpoint(ctx)
 	if err != nil {
 		return ep, err
+	}
+	if d, err := s.String(ctx, KeySubDomain); err != nil {
+		return ep, err
+	} else if d != "" {
+		ep.Host = d
 	}
 	if p, _, err := Get[int](ctx, s, KeySubPort); err != nil {
 		return ep, err
