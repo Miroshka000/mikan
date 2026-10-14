@@ -1406,7 +1406,7 @@
     "sales": "Selling subscriptions",
     "salesOnToast": "Selling is on",
     "salesOffToast": "Selling is off",
-        "subDomain": "Subscription domain",
+    "subDomain": "Subscription domain",
     "subDomainSub": "Subscription links on a domain or subdomain of their own — apart from the panel and the nodes. The panel moves, the links stand: only the DNS changes.",
     "subDomainField": "Domain",
     "subDomainHint": "sub.example.com, pointed at the panel or at a proxy of yours in front of it. Empty: links carry the panel's address.",
