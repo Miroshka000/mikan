@@ -34,7 +34,7 @@ type SettingsView struct {
 	BrandLogoURL string      `json:"brand_logo_url" doc:"Логотип: https, PNG, WebP или JPEG до 512 КБ; пусто — значок приложения"`
 	PublicHost   string      `json:"public_host"`
 	Domain       string      `json:"domain"`
-	SubDomain    string      `json:"sub_domain" doc:"Свой домен или поддомен ссылок подписки, отдельно от панели и серверов; направьте его на панель или на свой прокси перед ней. Ссылки подписки переживают переезд панели: при переезде меняется только DNS. Пусто — адрес панели; ссылка обычно вида https://адрес:порт/секрет/`
+	SubDomain    string      `json:"sub_domain" doc:"Свой домен или поддомен ссылок подписки, отдельно от панели и серверов; направьте его на панель или на свой прокси перед ней. Ссылки подписки переживают переезд панели: при переезде меняется только DNS. Пусто — адрес панели; ссылка обычно вида https://адрес:порт/секрет/"`
 	PanelPort    int         `json:"panel_port"`
 	SubPort      int         `json:"sub_port" doc:"Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае"`
 	SubPortError string      `json:"sub_port_error,omitempty" doc:"sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели"`
