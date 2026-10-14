@@ -35,7 +35,9 @@ func fakeTurnServer(t *testing.T, body string) string {
 
 func waitTurn(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	// A freshly written script can take seconds to spawn on a loaded or sandboxed
+	// machine: this waits for the server, it does not measure how fast the box is.
+	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
