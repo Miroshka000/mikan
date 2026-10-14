@@ -13,6 +13,7 @@ import (
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/panel/turn"
 	"mikan/internal/proto"
 )
 
@@ -135,6 +136,11 @@ type Profile struct {
 	Fingerprint string
 	// Rules are the admin's own Clash rules (ServedRules), before the built-in routing.
 	Rules []string
+	// Turn is the VK-call way in of each node, by node id: its inbound is listed a second
+	// time as a server of its own (the WL entry), at the client's own address.
+	Turn map[int64]turn.Config
+	// UserID picks the user's share of a node's VK call links.
+	UserID int64
 	// Routes go after the admin's rules, for the apps that take rule lists (App); Lang
 	// names the groups they add.
 	Routes Routes
@@ -201,9 +207,41 @@ func build(p Profile) ([]proxy, error) {
 			}
 			used[name] = true
 			out = append(out, proxy{name: name, node: n.ID, uri: c.URI, yaml: c.Mihomo})
+			out = append(out, turnCopies(p, n, in, t, base, used, slot)...)
 		}
 	}
 	return out, nil
+}
+
+// turnCopies are the WL entries of an inbound: the same server, reached through the TURN
+// servers of a VK call by the client program running next to the user's app, so it stands
+// in the list at the client's own address and looks like one more server. Only the
+// inbound the node's server hands traffic to gets one, and only when the node has TURN on.
+func turnCopies(p Profile, n Node, in db.Inbound, t proto.Template, base string, used map[string]bool, slot proto.Slot) []proxy {
+	tc, ok := p.Turn[n.ID]
+	if !ok || tc.InboundID != in.ID || tc.Port() == 0 {
+		return nil
+	}
+	// The copy reaches this very node: whatever stands in front of it for the usual
+	// clients (a CDN address) must not apply.
+	direct, err := turn.Direct(t)
+	if err != nil {
+		p.skip(in, err)
+		return nil
+	}
+	name := tc.Name(base)
+	for i := 2; used[name]; i++ {
+		name = tc.Name(base) + " " + strconv.Itoa(i)
+	}
+	c, err := proto.ClientConfig(direct, proto.ClientInput{Name: name, Host: tc.ClientHost, Port: tc.Port(),
+		PortSpec: strconv.Itoa(tc.Port()), SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256,
+		Fingerprint: p.Fingerprint, Slot: slot})
+	if err != nil {
+		p.skip(in, err)
+		return nil
+	}
+	used[name] = true
+	return []proxy{{name: name, node: n.ID, uri: c.URI, yaml: c.Mihomo}}
 }
 
 func (p Profile) skip(in db.Inbound, err error) {

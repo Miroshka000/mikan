@@ -349,6 +349,18 @@ func (m *Manager) Activity(ctx context.Context, id int64) (nodeapi.Activity, err
 	return c.Activity(ctx)
 }
 
+// Turn asks a node how its VK-call server is doing. A node older than the server answers
+// 404, which comes back as ErrUnavailable: the panel shows it as a node to update.
+func (m *Manager) Turn(ctx context.Context, id int64) (nodeapi.TurnStatus, error) {
+	c, err := clientOf[interface {
+		Turn(context.Context) (nodeapi.TurnStatus, error)
+	}](m, id)
+	if err != nil {
+		return nodeapi.TurnStatus{}, err
+	}
+	return c.Turn(ctx)
+}
+
 // CheckTarget tests a REALITY target from the node that dials it.
 func (m *Manager) CheckTarget(ctx context.Context, id int64, req nodeapi.TargetCheckRequest) (nodeapi.TargetResult, error) {
 	c, err := clientOf[interface {

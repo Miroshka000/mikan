@@ -73,6 +73,9 @@ type Engine struct {
 	sys  *sysSampler
 	host hostPortsCache
 
+	// turn is the VK-call way in: a child process the panel turns on per node.
+	turn *turnSupervisor
+
 	routes string // routesKey of what tunnel's proxies and rules hold now
 	warpMu sync.Mutex
 	warp   nodeapi.WarpStatus // the last check, kept for a minute
@@ -129,6 +132,12 @@ func (e *Engine) WarpStatus(ctx context.Context, force bool) nodeapi.WarpStatus 
 	return e.warp
 }
 
+// TurnStatus is the node's TURN server as it is now: what the panel shows in the node's
+// setup drawer.
+func (e *Engine) TurnStatus() nodeapi.TurnStatus {
+	return e.turn.Status()
+}
+
 // logWarp writes a failed WARP check to the log once per change (ok to failed, failed
 // to ok, another reason), not once per probe: the panel polls every cycle.
 func (e *Engine) logWarp(s nodeapi.WarpStatus, endpoint string) {
@@ -167,6 +176,7 @@ func Start(o Options) (*Engine, error) {
 		listeners: map[string]nodeapi.ListenerStatus{},
 		errs:      map[string]string{}, marker: make(chan string, 8), sys: newSysSampler(),
 	}
+	e.turn = newTurnSupervisor(log)
 	go e.pumpLogs()
 
 	cs, err := loadCounters(filepath.Join(dataDir, countersFile), log)
@@ -265,6 +275,9 @@ func (e *Engine) Apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	e.Reg.SetShared(sharedListeners(st))
 	e.Reg.SetTorrent(st.Torrent)
 	e.Reg.SetIngress(st.Filters)
+	// The TURN server is a child process of this agent, not a mihomo listener: it is
+	// started, restarted and stopped here, beside the rest of the state.
+	e.turn.Apply(st.Turn)
 	pools := map[string]string{}
 	for _, in := range st.Inbounds {
 		if in.Pool != "" {

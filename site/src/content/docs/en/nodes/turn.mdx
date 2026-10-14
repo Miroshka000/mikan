@@ -1,0 +1,63 @@
+---
+title: VK TURN — the way in through a call
+description: The node serves a chosen inbound through the TURN servers of VK calls — for networks where a whitelist lets only calls through.
+---
+
+Some networks leave only a whitelist working: messengers, state services, banks and calls. Ordinary protocols go silent there, while calls keep working. VK TURN carries traffic through the TURN servers of VK calls: from the outside it looks like an ordinary call.
+
+How it works:
+
+- The node runs the `vk-turn-proxy` server (it ships in the node image) and hands what it unwraps to a port of a chosen inbound of that node.
+- Next to the user's app runs the `vk-turn-proxy` client: it joins the VK call and carries the traffic to the node.
+- The app is pointed not at the node but at the client program (127.0.0.1:9000 by default). Keys, REALITY and camouflage stay the same: TLS runs end to end from the app to the node, the tunnel only moves bytes.
+
+## Turning it on for a node
+
+Node card → “⋯” → **VK TURN**.
+
+- **The server is on** — an off server does not run, and its entry is not in the subscription.
+- **Which inbound to serve** — a protocol of this node whose port becomes the server's target. The same inbound is listed a second time in the subscription. The one used most often (say VLESS · REALITY · XHTTP) is the natural choice.
+- **The server's port (UDP)** — the port on the node the client's DTLS arrives at. 56000 by default; the panel refuses a taken one.
+- **The address and port in the app** — what the app dials instead of the node: the client program listens there. 127.0.0.1:9000 by default.
+- **Streams at the client** — how many connections the client keeps to VK's TURN servers; a single stream is rate-limited by VK, several are faster. 10 by default.
+- **The client talks to VK over UDP** — usually steadier; turn it off if the client cannot connect.
+- **The name in the subscription** — what the entry is called at the client. Empty: the inbound's name plus “ WL”, e.g. “Germany (XHTTP) WL”.
+- **VK call links** — one per line (`https://vk.com/call/join/…`). Users are spread over them so they do not all land in one call. An empty list leaves the entry without a link.
+- **Path to the server on the node** — only when the binary is not where it usually is (`/usr/local/bin/vk-turn-proxy`).
+
+## What clients get
+
+The chosen inbound appears a second time in the subscription, under its own name, at `127.0.0.1:9000` (or whatever you set) — the app shows one more ordinary server next to the rest.
+
+For the client program there is a text of its own: the subscription address with `?format=turn` (or `?format=wl`) serves the node, the call link, the local address and the mode:
+
+```text
+# vk turn
+
+## 🇩🇪 Germany
+peer: 203.0.113.9:56000
+vk: https://vk.com/call/join/XXXXXXXX
+listen: 127.0.0.1:9000
+mode: vless
+n: 10
+udp: on
+```
+
+These values go into the client program on a phone or a computer: it raises a local listener, the app talks to it, and the traffic leaves through the call to the node.
+
+:::caution
+A VK call carries a limited rate — one call for everybody is usually not enough. Add several links: the panel spreads users over them. A link lives until somebody ends the call for everyone; check it from time to time.
+:::
+
+## Checking
+
+The VK TURN window shows the server on the node: running, not running, not checked, off. **Check** asks the node again.
+
+| Reason | What it means |
+|---|---|
+| the node has no program | the node's image has no `vk-turn-proxy`: the image predates this, update the node |
+| the settings were refused | the port or the address is wrong |
+| the server stopped | the process exited; its last lines are shown below |
+| it did not start | the process could not be started |
+| the node did not answer | the panel could not reach the node |
+| the node is older than this | the node knows nothing of VK TURN, update it |

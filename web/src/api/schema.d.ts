@@ -824,6 +824,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/nodes/{id}/turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** VK TURN ноды */
+        get: operations["get-node-turn"];
+        put?: never;
+        post?: never;
+        /** Убрать VK TURN с ноды */
+        delete: operations["delete-node-turn"];
+        options?: never;
+        head?: never;
+        /** Настроить VK TURN на ноде */
+        patch: operations["save-node-turn"];
+        trace?: never;
+    };
     "/api/v1/nodes/{id}/update": {
         parameters: {
             query?: never;
@@ -4469,6 +4488,85 @@ export interface components {
             real_ip?: boolean;
             sniffer?: boolean;
         };
+        TurnCheck: {
+            /** Format: date-time */
+            checked_at: string;
+            /** @description Своими словами, без секретов; на английском */
+            detail?: string;
+            /** @description no_binary | bad_config | exited | failed — с ноды; node_too_old — нода старше этой возможности; node_unreachable — нода не ответила */
+            error?: string;
+            /** @description Последние строки вывода сервера */
+            log?: string[];
+            ok: boolean;
+            /** Format: int64 */
+            pid?: number;
+            /**
+             * Format: int64
+             * @description Сколько раз сервер поднимался заново
+             */
+            restarts?: number;
+            running: boolean;
+            /**
+             * Format: date-time
+             * @description Когда запущен нынешний процесс
+             */
+            since?: string;
+        };
+        TurnPatchInputBody: {
+            binary_path?: string;
+            client_host?: string;
+            client_port?: string;
+            enabled?: boolean;
+            /**
+             * Format: int64
+             * @description Подключение этой ноды, которому сервер отдаёт трафик
+             */
+            inbound_id?: number;
+            /** @description Ссылки на звонки VK (https://vk.com/call/join/…); пустой список — у записи нет ссылки */
+            links?: string[];
+            listen_port?: string;
+            /** Format: int64 */
+            streams?: number;
+            title?: string;
+            udp?: boolean;
+        };
+        TurnView: {
+            /** @description Путь к серверу на ноде; пусто — тот, что в образе */
+            binary_path?: string;
+            /** @description Адрес, который набирает приложение клиента: там слушает программа-клиент */
+            client_host?: string;
+            client_port?: string;
+            configured: boolean;
+            enabled: boolean;
+            /** @description Как запись выглядит в подписке */
+            entry?: string;
+            /** @description Подключение ноды, которому сервер отдаёт трафик */
+            inbound?: string;
+            /** Format: int64 */
+            inbound_id?: number;
+            /** @description Ссылки на звонки VK: по одной в строке, пользователи расходятся по ним */
+            links: string[];
+            /** @description Порт сервера на ноде (UDP) */
+            listen_port?: string;
+            /**
+             * @description Что несёт клиент: целые соединения (VLESS, XHTTP) или датаграммы (Hysteria2)
+             * @enum {string}
+             */
+            mode?: "vless" | "udp" | "";
+            /** @description Адрес сервера для клиента: хост ноды и порт сервера */
+            peer?: string;
+            /** @description Сервер на ноде, как его видит панель; нет — нода старая или не ответила */
+            status?: components["schemas"]["TurnCheck"];
+            /**
+             * Format: int64
+             * @description Потоков у клиента: VK ограничивает один, клиент разводит их несколько
+             */
+            streams?: number;
+            /** @description Имя записи в приложении; пусто — имя подключения плюс « WL» */
+            title?: string;
+            /** @description Клиент говорит с TURN-серверами VK по UDP */
+            udp: boolean;
+        };
         UpdateCampaignInputBody: {
             enabled: boolean;
             name: string;
@@ -6663,6 +6761,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrafficOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-node-turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TurnView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-node-turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "save-node-turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TurnPatchInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TurnView"];
                 };
             };
             /** @description Error */

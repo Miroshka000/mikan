@@ -215,6 +215,22 @@ type NodeTrafficHourly struct {
 	Down   int64
 }
 
+type NodeTurn struct {
+	NodeID     int64
+	Enabled    int64
+	InboundID  int64
+	ListenPort string
+	ClientHost string
+	ClientPort string
+	Streams    int64
+	Udp        int64
+	Title      string
+	VkLinks    string
+	BinaryPath string
+	CreatedAt  int64
+	UpdatedAt  int64
+}
+
 type NodeWarp struct {
 	NodeID        int64
 	Enabled       int64

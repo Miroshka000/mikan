@@ -134,6 +134,8 @@ type NodeRuntime interface {
 	Warp(ctx context.Context, id int64, force bool) (nodeapi.WarpStatus, error)
 	// Probe checks the internet through one outbound of a node (NODE-<id> of a cascade).
 	Probe(ctx context.Context, id int64, proxy string) (nodeapi.ProbeResult, error)
+	// Turn asks the node how its VK-call server is doing.
+	Turn(ctx context.Context, id int64) (nodeapi.TurnStatus, error)
 	// SpeedTest measures a node's own way to the internet.
 	SpeedTest(ctx context.Context, id int64) (nodeapi.SpeedTest, error)
 }
@@ -254,6 +256,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerCampaigns()
 	h.registerAddons()
 	h.registerWarp()
+	h.registerTurn()
 	h.registerCascade()
 	h.registerPools()
 	h.registerPackages()

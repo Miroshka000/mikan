@@ -25,6 +25,7 @@ import (
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
+	"mikan/internal/panel/turn"
 	"mikan/internal/proto"
 )
 
@@ -323,6 +324,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(fileName(profileTitle(cfg, vars)))+".json")
 		_, _ = w.Write(body)
+	case "turn":
+		// The parameters of the WL servers, for the client program next to the apps.
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(TurnSubscription(prof)))
 	default:
 		links, err := URIs(prof)
 		if errors.Is(err, ErrNoProxies) {
@@ -776,7 +781,7 @@ func (h *Handler) slotFor(r *http.Request, u db.User, cfg Config) (db.Slot, erro
 
 // profile lists what the user may use; slot is whose keys go in (zero for the page).
 func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Slot) (Profile, error) {
-	prof := Profile{Nodes: cfg.Nodes, Direct: cfg.Direct, Slot: slot, Fingerprint: cfg.Fingerprint}
+	prof := Profile{Nodes: cfg.Nodes, Direct: cfg.Direct, Slot: slot, Fingerprint: cfg.Fingerprint, UserID: u.ID}
 	all, err := h.st.Q.ListInbounds(ctx)
 	if err != nil {
 		return prof, err
@@ -790,6 +795,18 @@ func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Sl
 	nodes := map[int64]bool{}
 	for _, n := range cfg.Nodes {
 		nodes[n.ID] = true
+	}
+	turns, err := h.st.Q.ListNodeTurns(ctx)
+	if err != nil {
+		return prof, err
+	}
+	for _, row := range turns {
+		if tc := turn.FromRow(row); tc.Enabled && nodes[row.NodeID] {
+			if prof.Turn == nil {
+				prof.Turn = map[int64]turn.Config{}
+			}
+			prof.Turn[row.NodeID] = tc
+		}
 	}
 	for _, in := range all {
 		if in.Enabled == 0 || !nodes[in.NodeID] || (len(allowed) > 0 && !slices.Contains(allowed, in.ID)) || in.PoolID.Valid && spent[in.PoolID.Int64] {
@@ -1059,6 +1076,8 @@ func Format(userAgent, accept, query string) string {
 		return "uri"
 	case "singbox", "sing-box":
 		return "singbox"
+	case "turn", "wl":
+		return "turn"
 	case "html":
 		return "html"
 	}

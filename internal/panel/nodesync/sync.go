@@ -205,6 +205,9 @@ func (s *Syncer) desired(ctx context.Context) (nodeapi.DesiredState, error) {
 	if st.Relay, st.Exits, err = s.cascade(ctx, n, inbounds); err != nil {
 		return st, err
 	}
+	if st.Turn, err = s.turn(ctx, n, inbounds); err != nil {
+		return st, err
+	}
 	if s.local {
 		// The panel runs next to its own node, so its HTTPS port is the self-steal REALITY target.
 		if st.SelfStealPort, _, err = settings.Get[int](ctx, s.m.set, settings.KeyPanelPort); err != nil {
@@ -756,7 +759,8 @@ func stateKey(st nodeapi.DesiredState) string {
 		E []nodeapi.Exit
 		B *nodeapi.TorrentBlock
 		F *nodeapi.Filters
-	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters})
+		V *nodeapi.Turn
+	}{st.Inbounds, st.Slots, st.TLS, st.SelfStealPort, st.Warp, st.Relay, st.Exits, st.Torrent, st.Filters, st.Turn})
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
