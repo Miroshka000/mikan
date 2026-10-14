@@ -1,18 +1,21 @@
 name: ci
 
-# Pull requests only: dev is where work happens, a pull request into main is where it is
-# checked. Nothing here publishes; releases come from tags (release.yml).
+# Pushes to main and dev are checked too: the fork works on main directly, so a push
+# there is checked like a pull request would be. Nothing here publishes; releases come
+# from tags (release.yml).
 #
 # Every action is pinned to a commit (the comment is the version it was), so that a moved
 # tag cannot change what runs; dependabot (.github/dependabot.yml) proposes the updates.
 on:
+  push:
+    branches: [main, dev]
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
