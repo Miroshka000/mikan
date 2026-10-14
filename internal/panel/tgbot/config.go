@@ -35,6 +35,7 @@ type MenuButton struct {
 	ID     string `json:"id" doc:"Постоянный id кнопки"`
 	Action string `json:"action" enum:"sub,devices,connect,renew,referral,support,app,url,page"`
 	Label  string `json:"label"`
+	Style  string `json:"style,omitempty" enum:",primary,success,danger" doc:"Цвет кнопки в свежих клиентах Telegram: primary — синий, success — зелёный, danger — красный; пусто — обычная тёмная"`
 	On     bool   `json:"on"`
 	Row    bool   `json:"row" doc:"В одном ряду с предыдущей"`
 	URL    string `json:"url,omitempty" doc:"Для action=url: https:// или tg://"`
@@ -66,28 +67,45 @@ type Notify struct {
 // Built-in actions, each at most once in the menu.
 var builtins = []string{"sub", "devices", "connect", "renew", "referral", "support", "app"}
 
-// Default is the menu of a fresh bot in lang, "en" or else Russian.
-func Default(lang string) Config {
-	if lang != "en" {
-		lang = "ru"
-	}
+// defaults is the menu of a fresh bot in lang, with the look of a store front: the
+// subscription and its devices blue, renewing green.
+func defaults(lang string) []MenuButton {
 	l := func(ru, en string) string {
 		if lang == "en" {
 			return en
 		}
 		return ru
 	}
+	return []MenuButton{
+		{ID: "sub", Action: "sub", Label: l("👤 Подписка", "👤 Subscription"), Style: tgate.StylePrimary, On: true},
+		{ID: "devices", Action: "devices", Label: l("🛠 Устройства", "🛠 Devices"), Style: tgate.StylePrimary, On: true, Row: true},
+		{ID: "connect", Action: "connect", Label: l("🔗 Подключить устройство", "🔗 Connect a device"), On: true},
+		{ID: "renew", Action: "renew", Label: l("🛒 Продлить", "🛒 Renew"), Style: tgate.StyleSuccess, On: true},
+		{ID: "referral", Action: "referral", Label: l("🤝 Пригласить друзей", "🤝 Invite friends"), On: true},
+		{ID: "support", Action: "support", Label: l("🎧 Поддержка", "🎧 Support"), On: true, Row: true},
+		{ID: "app", Action: "app", Label: l("📲 Открыть страницу подписки", "📲 Open the subscription page"), On: true},
+	}
+}
+
+// legacyLabels are the built-in labels before the colors came in. A menu kept with one
+// of these exactly gets the new label and its color (Validate's refreshBuiltin); anything the admin
+// wrote is left alone.
+var legacyLabels = map[string]map[string]string{
+	"devices": {"ru": "📱 Устройства", "en": "📱 Devices"},
+	"sub":     {"ru": "📊 Подписка", "en": "📊 Subscription"},
+	"support": {"ru": "💬 Поддержка", "en": "💬 Support"},
+	"app":     {"ru": "🌐 Открыть страницу подписки", "en": "🌐 Open the subscription page"},
+	"renew":   {"ru": "💳 Продлить", "en": "💳 Renew"},
+}
+
+// Default is the config of a fresh bot in lang, "en" or else Russian.
+func Default(lang string) Config {
+	if lang != "en" {
+		lang = "ru"
+	}
 	return Config{
-		Lang: lang,
-		Buttons: []MenuButton{
-			{ID: "sub", Action: "sub", Label: l("📊 Подписка", "📊 Subscription"), On: true},
-			{ID: "devices", Action: "devices", Label: l("📱 Устройства", "📱 Devices"), On: true, Row: true},
-			{ID: "connect", Action: "connect", Label: l("🔌 Подключить устройство", "🔌 Connect a device"), On: true},
-			{ID: "renew", Action: "renew", Label: l("💳 Продлить", "💳 Renew"), On: true},
-			{ID: "referral", Action: "referral", Label: l("🤝 Пригласить друзей", "🤝 Invite friends"), On: true},
-			{ID: "support", Action: "support", Label: l("💬 Поддержка", "💬 Support"), On: true, Row: true},
-			{ID: "app", Action: "app", Label: l("🌐 Открыть страницу подписки", "🌐 Open the subscription page"), On: true},
-		},
+		Lang:        lang,
+		Buttons:     defaults(lang),
 		Notify:      Notify{Expire3d: true, Expire1d: true, Expired: true, Traffic90: true, Traffic100: true},
 		MiniApp:     true,
 		CleanChat:   true,
@@ -108,6 +126,7 @@ const (
 var (
 	ErrButtons     = errors.New("tg_buttons")
 	ErrButtonLabel = errors.New("tg_button_label")
+	ErrButtonStyle = errors.New("tg_button_style")
 	ErrButtonURL   = errors.New("tg_button_url")
 	ErrButtonText  = errors.New("tg_button_text")
 	ErrText        = errors.New("tg_text")
@@ -127,6 +146,10 @@ func (c *Config) Validate() error {
 		b.Label = strings.TrimSpace(b.Label)
 		if b.Label == "" || utf8.RuneCountInString(b.Label) > maxLabel {
 			return ErrButtonLabel
+		}
+		b.Style = strings.TrimSpace(b.Style)
+		if !tgate.ValidStyle(b.Style) {
+			return ErrButtonStyle
 		}
 		switch b.Action {
 		case "url":
@@ -166,5 +189,28 @@ func (c *Config) Validate() error {
 	if utf8.RuneCountInString(c.Texts.FreeButton) > maxLabel {
 		return ErrButtonLabel
 	}
+	c.refreshBuiltin()
 	return c.Channel.Validate()
+}
+
+// refreshBuiltin lifts a menu nobody customized to the current look: a built-in whose
+// label is still the old default takes the new label and its color. Anything the admin
+// wrote — a label or a color of their own — is left as it is.
+func (c *Config) refreshBuiltin() {
+	for i := range c.Buttons {
+		b := &c.Buttons[i]
+		if b.Style != "" {
+			continue
+		}
+		old, ok := legacyLabels[b.Action]
+		if !ok || old[c.Lang] != b.Label {
+			continue
+		}
+		for _, d := range defaults(c.Lang) {
+			if d.Action == b.Action {
+				b.Label, b.Style = d.Label, d.Style
+				break
+			}
+		}
+	}
 }

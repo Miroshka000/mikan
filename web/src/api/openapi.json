@@ -3601,6 +3601,16 @@
             "description": "В одном ряду с предыдущей",
             "type": "boolean"
           },
+          "style": {
+            "description": "Цвет кнопки в свежих клиентах Telegram: primary — синий, success — зелёный, danger — красный; пусто — обычная тёмная",
+            "enum": [
+              "",
+              "primary",
+              "success",
+              "danger"
+            ],
+            "type": "string"
+          },
           "text": {
             "description": "Для action=page: текст страницы",
             "type": "string"

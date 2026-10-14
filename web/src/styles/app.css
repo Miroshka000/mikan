@@ -315,6 +315,15 @@
   .tg-keyboard { margin-top: 4px; display: flex; flex-direction: column; gap: 4px; }
   .tg-row { display: flex; gap: 4px; }
   .tg-btn { flex: 1; min-width: 0; border-radius: 10px; background: rgba(40, 60, 30, 0.28); color: #fff; font-size: 12px; font-weight: 500; line-height: 16px; padding: 8px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tg-btn.primary { background: #409fdb; }
+  .tg-btn.success { background: #2fb35a; }
+  .tg-btn.danger { background: #e0564f; }
+  .tg-swatch { width: 16px; height: 16px; border-radius: 50%; border: 2px solid transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35); cursor: pointer; padding: 0; }
+  .tg-swatch[aria-pressed="true"] { border-color: var(--ink-500); }
+  .tg-swatch.primary { background: #409fdb; }
+  .tg-swatch.success { background: #2fb35a; }
+  .tg-swatch.danger { background: #e0564f; }
+  .tg-swatch:not(.primary):not(.success):not(.danger) { background: rgba(40, 60, 30, 0.45); }
 
   .sk { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--ink-50) 0%, var(--ink-100) 40%, var(--ink-50) 80%); background-size: 300% 100%; animation: shimmer 1.4s ease-in-out infinite; }
   .state-box { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; padding: 64px 24px 72px; max-width: 520px; margin: 0 auto; }

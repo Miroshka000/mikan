@@ -689,6 +689,10 @@ function RouteCard({ v }: { v: View }) {
 
 const ACTIONS = ["sub", "devices", "connect", "renew", "support", "app"] as const;
 
+// The button colors Telegram paints for a `style` (Bot API 9.4); "" is the plain dark one.
+const STYLES = ["", "primary", "success", "danger"] as const;
+const STYLE_TITLES = { "": "telegram.stylePlain", primary: "telegram.stylePrimary", success: "telegram.styleSuccess", danger: "telegram.styleDanger" } as const;
+
 function actionLabel(a: string): string {
   return tMaybe(`telegram.action.${a}`) ?? a;
 }
@@ -751,6 +755,22 @@ function MenuCard({ draft, setDraft }: { draft: Config; setDraft: (c: Config) =>
                     <input type="checkbox" className="check" checked={b.row} onChange={(e) => set(i, { row: e.target.checked })} /> {t("telegram.sameRow")}
                   </label>
                 ) : null}
+                <label className="flex items-center gap-1.5" aria-label={t("telegram.buttonStyle")}>
+                  {t("telegram.buttonStyle")}:
+                  <span className="flex items-center gap-1" role="group">
+                    {STYLES.map((st) => (
+                      <button
+                        key={st || "plain"}
+                        type="button"
+                        className={`tg-swatch ${st}`}
+                        title={t(STYLE_TITLES[st])}
+                        aria-pressed={(b.style ?? "") === st}
+                        aria-label={t(STYLE_TITLES[st])}
+                        onClick={() => set(i, { style: st || undefined })}
+                      />
+                    ))}
+                  </span>
+                </label>
               </div>
               {b.action === "url" ? <input className="input mono mt-2" value={b.url ?? ""} onChange={(e) => set(i, { url: e.target.value })} placeholder="https://… / tg://…" aria-label={t("telegram.buttonUrl")} /> : null}
               {b.action === "page" ? (
@@ -1021,7 +1041,7 @@ function Preview({ draft, v, bare }: { draft: Config; v: View; bare?: boolean })
                   {r.map((b) => (
                     <motion.span
                       key={b.id}
-                      className="tg-btn"
+                      className={`tg-btn ${b.style ?? ""}`}
                       layout={!reduce}
                       initial={reduce ? false : { opacity: 0, scale: 0.85 }}
                       animate={{ opacity: 1, scale: 1 }}

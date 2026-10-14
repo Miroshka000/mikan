@@ -110,7 +110,7 @@ func TestHandleEventPaymentMessages(t *testing.T) {
 	// trial.not_given: why, and where the money comes back, with the support link.
 	by := events.NotGiven{PaymentID: 8, Amount: 100, Currency: "RUB", Reason: events.TrialUsed, Refund: events.RefundedManually}
 	msg = e.said(event(t, events.TrialNotGiven, 0, buyer, by), buyer, "не засчитан")
-	if !strings.Contains(text(msg), "платёж 1 ₽ не засчитан") || buttons(msg)["💬 Поддержка"] != "https://t.me/mikan_support" {
+	if !strings.Contains(text(msg), "платёж 1 ₽ не засчитан") || buttons(msg)["🎧 Поддержка"] != "https://t.me/mikan_support" {
 		t.Fatalf("trial not given: %q %v", text(msg), buttons(msg))
 	}
 	// One that went back by itself is told by its payment.refunded alone.
@@ -170,12 +170,12 @@ func TestHandleEventNotices(t *testing.T) {
 	u, _ := e.st.Q.GetUser(e.ctx, e.user.ID)
 
 	msg := e.said(event(t, events.UserExpiring, u.ID, anna, events.Notice{Days: 3, ExpiresAt: u.ExpiresAt.Int64}), anna, "заканчивается")
-	if !strings.Contains(text(msg), "Подписка «Анна» заканчивается") || buttons(msg)["💳 Продлить"] != "r" {
+	if !strings.Contains(text(msg), "Подписка «Анна» заканчивается") || buttons(msg)["🛒 Продлить"] != "r" {
 		t.Fatalf("expiring: %q %v", text(msg), buttons(msg))
 	}
 	e.expireIn(-time.Hour)
 	msg = e.said(event(t, events.UserExpired, u.ID, anna, events.Notice{ExpiresAt: u.ExpiresAt.Int64}), anna, "закончилась")
-	if !strings.Contains(text(msg), "закончилась") || buttons(msg)["💳 Продлить"] != "r" {
+	if !strings.Contains(text(msg), "закончилась") || buttons(msg)["🛒 Продлить"] != "r" {
 		t.Fatalf("expired: %q %v", text(msg), buttons(msg))
 	}
 	// Traffic: 90% has no renew button, the end of it has; neither offers packages here, as
@@ -185,7 +185,7 @@ func TestHandleEventNotices(t *testing.T) {
 		t.Fatalf("traffic 90: %q %v", text(msg), buttons(msg))
 	}
 	msg = e.said(event(t, events.Traffic100, u.ID, anna, events.Notice{PeriodFrom: u.PeriodStart}), anna, "на этот период")
-	if !strings.Contains(text(msg), "на этот период закончился") || buttons(msg)["💳 Продлить"] != "r" {
+	if !strings.Contains(text(msg), "на этот период закончился") || buttons(msg)["🛒 Продлить"] != "r" {
 		t.Fatalf("traffic 100: %q %v", text(msg), buttons(msg))
 	}
 	// The night's notices come without a sound.

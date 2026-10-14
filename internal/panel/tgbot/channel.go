@@ -42,13 +42,14 @@ func (b *Bot) gateScreen(ctx context.Context, cfg Config, w *words, notice strin
 	return text, &tgate.Keyboard{InlineKeyboard: channelButtons(cfg, w, "gc")}
 }
 
-// channelButtons: the link to join the channel and a check that goes to data.
+// channelButtons: the link to join the channel and a check that goes to data. The join
+// is the blue one to see, the check — the green one to tap after joining.
 func channelButtons(cfg Config, w *words, data string) [][]tgate.Button {
 	var rows [][]tgate.Button
 	if link := cfg.Channel.Link(); link != "" {
-		rows = append(rows, []tgate.Button{{Text: w.channelJoin, URL: link}})
+		rows = append(rows, []tgate.Button{{Text: w.channelJoin, URL: link, Style: tgate.StylePrimary}})
 	}
-	return append(rows, []tgate.Button{{Text: w.channelCheck, CallbackData: data}})
+	return append(rows, []tgate.Button{{Text: w.channelCheck, CallbackData: data, Style: tgate.StyleSuccess}})
 }
 
 // freeButton is the free plan's button, while the account may take it.

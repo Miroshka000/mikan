@@ -229,12 +229,32 @@ func (u *Update) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// Styles of a Button (Bot API 9.4's `style`): the colors Telegram paints. "" keeps the
+// app's own dark button.
+const (
+	StylePrimary = "primary" // blue
+	StyleSuccess = "success" // green
+	StyleDanger  = "danger"  // red
+)
+
+// ValidStyle says whether s is a style a send may carry.
+func ValidStyle(s string) bool {
+	switch s {
+	case "", StylePrimary, StyleSuccess, StyleDanger:
+		return true
+	}
+	return false
+}
+
 // Button is an inline keyboard button: one of callback data, a link or the Mini App.
 type Button struct {
 	Text         string  `json:"text"`
 	CallbackData string  `json:"callback_data,omitempty"`
 	URL          string  `json:"url,omitempty"`
 	WebApp       *WebApp `json:"web_app,omitempty"`
+	// Style colors the button in clients new enough for Bot API 9.4; ValidStyle says
+	// what may go in.
+	Style string `json:"style,omitempty"`
 }
 
 type WebApp struct {

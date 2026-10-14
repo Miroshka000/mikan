@@ -77,7 +77,7 @@ var ru = words{
 	channel:    "Чтобы пользоваться ботом {brand}, подпишитесь на наш канал. Потом нажмите «Проверить».",
 	freeButton: "🎁 Бесплатный тариф",
 
-	back: "⬅️ Назад", promo: "🎟 Промокоды", yesUnbind: "✅ Да, отвязать", cancel: "↩️ Отмена", subscriptions: "🔁 Подписки", openPage: "🌐 Открыть страницу подписки", support: "💬 Поддержка",
+	back: "⬅️ Назад", promo: "🎟 Промокоды", yesUnbind: "✅ Да, отвязать", cancel: "↩️ Отмена", subscriptions: "🔁 Подписки", openPage: "📲 Открыть страницу подписки", support: "🎧 Поддержка",
 	subTitle: "Подписка «%s»", devicesTitle: "Устройства", connectTitle: "Подключить устройство", switchTitle: "Какую подписку показать?",
 	stateActive: "✅ Работает", stateExpiring: "⏳ Скоро закончится", stateLimited: "📦 Трафик на этот период закончился", stateExpired: "⛔️ Подписка закончилась", stateOff: "⏸ Доступ приостановлен",
 	forever: "бессрочно", termUntil: "до %s — осталось %s", noLimit: "без лимита", trafficOf: "%s из %s", trafficNoLimit: "%s, без лимита", resets: "🔄 Обновится: %s",
@@ -209,7 +209,7 @@ var en = words{
 	channel:    "To use the {brand} bot, join our channel, then tap “Check”.",
 	freeButton: "🎁 Free plan",
 
-	back: "⬅️ Back", promo: "🎟 Promo codes", yesUnbind: "✅ Yes, unbind", cancel: "↩️ Cancel", subscriptions: "🔁 Subscriptions", openPage: "🌐 Open the subscription page", support: "💬 Support",
+	back: "⬅️ Back", promo: "🎟 Promo codes", yesUnbind: "✅ Yes, unbind", cancel: "↩️ Cancel", subscriptions: "🔁 Subscriptions", openPage: "📲 Open the subscription page", support: "🎧 Support",
 	subTitle: "Subscription “%s”", devicesTitle: "Devices", connectTitle: "Connect a device", switchTitle: "Which subscription to show?",
 	stateActive: "✅ Working", stateExpiring: "⏳ Ends soon", stateLimited: "📦 Traffic for this period is used up", stateExpired: "⛔️ The subscription has ended", stateOff: "⏸ Access is paused",
 	forever: "no end date", termUntil: "until %s — %s left", noLimit: "unlimited", trafficOf: "%s of %s", trafficNoLimit: "%s, unlimited", resets: "🔄 Renews: %s",

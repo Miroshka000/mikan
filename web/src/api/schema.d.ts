@@ -3624,6 +3624,11 @@ export interface components {
             on: boolean;
             /** @description В одном ряду с предыдущей */
             row: boolean;
+            /**
+             * @description Цвет кнопки в свежих клиентах Telegram: primary — синий, success — зелёный, danger — красный; пусто — обычная тёмная
+             * @enum {string}
+             */
+            style?: "" | "primary" | "success" | "danger";
             /** @description Для action=page: текст страницы */
             text?: string;
             /** @description Для action=url: https:// или tg:// */

@@ -170,15 +170,16 @@ func (b *Bot) welcome(ctx context.Context, cfg Config, w *words, chat int64, not
 	var rows [][]tgate.Button
 	shop := b.d.Backend.Shop()
 	if o, _, ok := shop.TrialOffer(ctx, chat); ok {
-		rows = append(rows, []tgate.Button{{Text: fmt.Sprintf(w.trialPaid, w.cheapest(billing.Offer{Stars: o.Stars, Rub: o.Rub})), CallbackData: "tr"}})
+		rows = append(rows, []tgate.Button{{Text: fmt.Sprintf(w.trialPaid, w.cheapest(billing.Offer{Stars: o.Stars, Rub: o.Rub})), CallbackData: "tr", Style: tgate.StylePrimary}})
 	} else if shop.TrialOpen(ctx, chat) {
-		rows = append(rows, []tgate.Button{{Text: w.trial, CallbackData: "tr"}})
+		rows = append(rows, []tgate.Button{{Text: w.trial, CallbackData: "tr", Style: tgate.StylePrimary}})
 	}
 	if btn, ok := b.freeButton(ctx, cfg, w, chat); ok {
+		btn.Style = tgate.StyleSuccess
 		rows = append(rows, []tgate.Button{btn})
 	}
 	if b.canBuyNew(ctx) {
-		rows = append(rows, []tgate.Button{{Text: w.buy, CallbackData: "b"}})
+		rows = append(rows, []tgate.Button{{Text: w.buy, CallbackData: "b", Style: tgate.StyleSuccess}})
 	}
 	if sup := b.supportURL(ctx); sup != "" {
 		rows = append(rows, []tgate.Button{{Text: labelOf(cfg, "support", w.support), URL: sup}})
@@ -216,33 +217,34 @@ func (b *Bot) menu(ctx context.Context, cfg Config, w *words, chat int64, subs i
 		var btn tgate.Button
 		switch mb.Action {
 		case "sub":
-			btn = tgate.Button{Text: mb.Label, CallbackData: "s"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "s", Style: mb.Style}
 		case "devices":
-			btn = tgate.Button{Text: mb.Label, CallbackData: "d"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "d", Style: mb.Style}
 		case "connect":
-			btn = tgate.Button{Text: mb.Label, CallbackData: "c"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "c", Style: mb.Style}
 		case "renew":
-			btn = tgate.Button{Text: mb.Label, CallbackData: "r"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "r", Style: mb.Style}
 		case "referral":
 			if !b.referralButton(ctx, cfg) {
 				continue
 			}
-			btn = tgate.Button{Text: mb.Label, CallbackData: "f"}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "f", Style: mb.Style}
 		case "support":
 			sup := b.supportURL(ctx)
 			if sup == "" {
 				continue
 			}
-			btn = tgate.Button{Text: mb.Label, URL: sup}
+			btn = tgate.Button{Text: mb.Label, URL: sup, Style: mb.Style}
 		case "app":
 			var ok bool
 			if btn, ok = b.pageButton(ctx, cfg, w, mb.Label); !ok {
 				continue
 			}
+			btn.Style = mb.Style
 		case "url":
-			btn = tgate.Button{Text: mb.Label, URL: mb.URL}
+			btn = tgate.Button{Text: mb.Label, URL: mb.URL, Style: mb.Style}
 		case "page":
-			btn = tgate.Button{Text: mb.Label, CallbackData: "p:" + mb.ID}
+			btn = tgate.Button{Text: mb.Label, CallbackData: "p:" + mb.ID, Style: mb.Style}
 		default:
 			continue
 		}

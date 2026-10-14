@@ -482,7 +482,7 @@ func testBot(t *testing.T, with ...func(*env, *wiring)) {
 	e.say(anna, "привет")
 	calls := e.tg.wait(t, n, "sendMessage")
 	send, _ := find(calls, "sendMessage")
-	if !strings.Contains(text(send), "Mikan VPN") || buttons(send)["💬 Поддержка"] != "https://t.me/mikan_support" {
+	if !strings.Contains(text(send), "Mikan VPN") || buttons(send)["🎧 Поддержка"] != "https://t.me/mikan_support" {
 		t.Fatalf("welcome: %q %v", text(send), buttons(send))
 	}
 
@@ -493,8 +493,8 @@ func testBot(t *testing.T, with ...func(*env, *wiring)) {
 	calls = e.tg.wait(t, n, "sendMessage")
 	send, _ = find(calls, "sendMessage")
 	menu := buttons(send)
-	if !strings.Contains(text(send), "Подписка «Анна» подключена") || !strings.Contains(text(send), "Анна") || menu["📊 Подписка"] != "s" ||
-		menu["🌐 Открыть страницу подписки"] != "webapp:https://vpn.example.com:21355/sub/tg" {
+	if !strings.Contains(text(send), "Подписка «Анна» подключена") || !strings.Contains(text(send), "Анна") || menu["👤 Подписка"] != "s" ||
+		menu["📲 Открыть страницу подписки"] != "webapp:https://vpn.example.com:21355/sub/tg" {
 		t.Fatalf("linked menu: %q %v", text(send), menu)
 	}
 	cleaned := false
