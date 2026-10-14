@@ -57,6 +57,9 @@ Commands:
                                 add a node; prints its join key
   admin node key NODE           issue a new join key (the old one stops working)
   admin node set NODE [--name] [--host] [--domain] [--enabled]
+  admin migrate --public-host IP [--port PORT] [--domain DOMAIN | --no-domain] [--no-check-nodes]
+                                finish moving the panel to this server after a restore:
+                                new address, same subscription links, check the nodes
   admin targets scan [--node NODE] [--json]
                                 look for REALITY camouflage sites next to a node, fastest first
   admin targets check --dest HOST:PORT [--sni NAME] [--node NODE] [--json]
@@ -157,6 +160,8 @@ func adminCmd(ctx context.Context, args []string) error {
 		return certCmd(ctx, st, set, cfg.DataDir, args[1:], os.Stdin, os.Stdout)
 	case "node":
 		return nodeCmd(ctx, st, cfg.DataDir, args[1:], os.Stdout, os.Stderr)
+	case "migrate":
+		return migrateCmd(ctx, st, set, cfg, args[1:], os.Stdout, os.Stderr)
 	case "inbound":
 		return inboundCmd(ctx, st, args[1:], os.Stdout, os.Stderr)
 	case "targets":
