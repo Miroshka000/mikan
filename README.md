@@ -16,7 +16,7 @@
 
 **English** · [Русский](README.ru.md) · [简体中文](README.zh-CN.md) · [فارسی](README.fa.md) · [Türkçe](README.tr.md) · [Español](README.es.md)
 
-<sub>A fork of [mikan](https://github.com/Miroshka000/mikan) with a built-in referral programme and ad campaign tags.</sub>
+<sub>A fork of [mikan](https://github.com/Miroshka000/mikan): everything upstream has, plus a built-in referral programme, ad campaign tags, a subscription domain and a few other things of its own. This fork releases on its own, signed with its own key.</sub>
 
 </div>
 
@@ -42,11 +42,53 @@ Without questions, for scripts: `… | sudo bash -s -- --yes --lang en --domain 
 
 ### Moving from stock mikan
 
-Already running the upstream panel? `scripts/install-fork.sh` switches the running server to this fork's image with a backup and a rollback path — no data is rewritten (the fork adds only empty tables). Point it at the fork image:
+Already running the upstream panel? Switching is just the image swap: your data stays as it is. The fork adds only new tables of its own (all of them empty — nothing existing is rewritten), and the panel applies the missing migrations itself at the first start.
+
+**1. Stock mikan.** If no panel is installed yet, do the regular install first — it also sets up Docker, the firewall and compose:
+
+```bash
+curl -fsSL https://github.com/Miroshka000/mikan/releases/latest/download/install.sh | sudo bash
+```
+
+**2. Switching to the fork.** Take the tag from the [fork's releases](https://github.com/o0hhs/mikanaddons/releases):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/o0hhs/mikanaddons/main/scripts/install-fork.sh | sudo bash -s -- --image ghcr.io/o0hhs/mikan:<tag>
 ```
+
+What `scripts/install-fork.sh` does:
+
+- pulls the fork image first: if something is off (the package is not public yet, no registry access) nothing is changed, the stack keeps running;
+- backs the database up (pg_dump) and keeps a copy of `.env`;
+- switches the image and restarts the stack;
+- verifies the database schema and the counts of users, plans and payments: a failed check rolls everything back by itself;
+- leaves auto-update on: the fork has its own release repo and its own signing key, so the panel will not "update itself" back to upstream. The `--disable-auto-update` flag is only for older fork builds whose release repo still pointed at upstream.
+
+Preview the script's plan without touching anything: the same request with `--dry-run`. If the image does not pull, make the package public: GitHub → Packages → mikan → Package settings → Change visibility → Public (the script prints this hint when it happens).
+
+**3. After the switch.** Turn the programme on (**Payments → Referrals**) and create campaign tags on the **Payments** page. Everything else — users, plans, payments, nodes, subscription links — stays as it was.
+
+**Rolling back to stock mikan** is the same script with the backup taken before the switch (payments, users and plans return to the state of that moment; the referral programme and campaign tag data is not part of that backup):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/o0hhs/mikanaddons/main/scripts/install-fork.sh | sudo bash -s -- --rollback /opt/mikan/data/panel/backup-<date>-before-fork.dump
+```
+
+## What this fork adds
+
+The official mikan lives at [Miroshka000/mikan](https://github.com/Miroshka000/mikan). This repository is a fork: the upstream panel with everything it does, plus a few things of its own. Upstream is followed closely — its releases are carried over here, so the upstream fixes and features appear here too (0.5.1.0 is in).
+
+The fork's own additions:
+
+- **Referral programme** (Payments → Referrals): invites by a bot link, a referrer's internal balance, reward rules per plan. More below.
+- **Ad campaign tags** (Payments → Campaigns): a tagged link per ad and the counters behind it. More below.
+- **Subscription domain** (Settings → Subscription): subscription links on a domain or subdomain of their own, apart from the panel's address. The panel's TLS certificate is issued with that name in it, or you can serve the domain through your own proxy or CDN — it does not even have to point at the server. Moving the panel no longer breaks the links: only the DNS follows.
+- **Protocol copies** (Protocols → a protocol → Copy): raise the same protocol — the same keys, passwords and camouflage — on another port of the node or on another node, changing only the port and, for REALITY, the camouflage site.
+- **VK TURN** (a node card → ⋯ → VK TURN): where a whitelist lets only calls through, the node carries one of its protocols over the TURN servers of VK calls; in the subscription it appears once more — an ordinary-looking server at the client's own address.
+- **Finishing a panel move**: after a restore on a new server, `mikan admin migrate` sets the new address, keeps the subscription links and checks the nodes — they accept the moved panel without re-joining.
+- **An update channel of its own**: the image is `ghcr.io/o0hhs/mikan`, releases live on this page, the manifest is signed with the fork's key, and `mikan update` and the **Update** button fetch from here, not from upstream. Docs: [o0hhs.github.io/mikanaddons](https://o0hhs.github.io/mikanaddons).
+
+How upstream feels about builds from other sources is said plainly in [Forks and third-party builds](#-forks-and-third-party-builds): check what you run, and run what you can read.
 
 ## Why mikan
 
@@ -206,6 +248,7 @@ Run `mikan` for the menu, or use the commands directly:
 | `mikan reset-password` · `reset-path` · `disable-2fa` | regain access |
 | `mikan update` | update now (backup first, automatic rollback) |
 | `mikan backup` · `restore FILE` | backups in `/opt/mikan/backups` |
+| `mikan admin migrate --public-host IP` | finish a panel move after a restore on a new server: new address, same links, nodes verified |
 | `mikan node …` · `mikan inbound …` | nodes and protocols |
 | `mikan targets scan` · `apply` | REALITY camouflage sites next to the server |
 | `mikan join KEY` | on a node: take a new key from the panel |
