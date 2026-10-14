@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -33,6 +34,7 @@ type SettingsView struct {
 	BrandLogoURL string      `json:"brand_logo_url" doc:"Логотип: https, PNG, WebP или JPEG до 512 КБ; пусто — значок приложения"`
 	PublicHost   string      `json:"public_host"`
 	Domain       string      `json:"domain"`
+	SubDomain    string      `json:"sub_domain" doc:"Свой домен или поддомен ссылок подписки, отдельно от панели и серверов; направьте его на панель или на свой прокси перед ней. Ссылки подписки переживают переезд панели: при переезде меняется только DNS. Пусто — адрес панели; ссылка обычно вида https://адрес:порт/секрет/`
 	PanelPort    int         `json:"panel_port"`
 	SubPort      int         `json:"sub_port" doc:"Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае"`
 	SubPortError string      `json:"sub_port_error,omitempty" doc:"sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели"`
@@ -80,6 +82,7 @@ type patchSettingsInput struct {
 		HappCrypt     *string      `json:"happ_crypt,omitempty" enum:"off,api,local"`
 		PublicHost    *string      `json:"public_host,omitempty" maxLength:"253"`
 		Domain        *string      `json:"domain,omitempty" maxLength:"253"`
+		SubDomain     *string      `json:"sub_domain,omitempty" maxLength:"253" doc:"Имя DNS (не IP), например sub.example.com; пусто — убрано. На нём панель отдаёт подписки без секретного пути"`
 		QuietHourUTC  *int         `json:"quiet_hour_utc,omitempty" minimum:"0" maximum:"23"`
 		SubGroupMain  *string      `json:"sub_group_main,omitempty" maxLength:"200"`
 		SubGroupAuto  *string      `json:"sub_group_auto,omitempty" maxLength:"200"`
@@ -139,6 +142,7 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	get(settings.KeyHappCrypt, &v.HappCrypt)
 	get(settings.KeyPublicHost, &v.PublicHost)
 	get(settings.KeyDomain, &v.Domain)
+	get(settings.KeySubDomain, &v.SubDomain)
 	get(settings.KeyGroupMain, &v.SubGroupMain)
 	get(settings.KeyGroupAuto, &v.SubGroupAuto)
 	get(settings.KeyRouting, &v.SubRouting)
@@ -212,11 +216,20 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	// The addresses carry the secret path segments: not for a key that may only read.
 	if host != "" && !hidesSecrets(ctx) {
 		v.AdminURL = "https://" + net.JoinHostPort(host, strconv.Itoa(v.PanelPort)) + "/" + paths.Admin + "/"
+	}
+	// The subscription links survive a panel move: on the subscription domain they stand
+	// even when the panel itself is yet on a bare address, and at the root, without the
+	// secret path — that host serves subscriptions alone.
+	if !hidesSecrets(ctx) && (v.SubDomain != "" || host != "") {
 		subPort := v.PanelPort
 		if v.SubPort > 0 {
 			subPort = v.SubPort
 		}
-		v.SubBaseURL = "https://" + net.JoinHostPort(host, strconv.Itoa(subPort)) + "/" + paths.Sub + "/"
+		if v.SubDomain != "" {
+			v.SubBaseURL = "https://" + net.JoinHostPort(v.SubDomain, strconv.Itoa(subPort)) + "/"
+		} else {
+			v.SubBaseURL = "https://" + net.JoinHostPort(host, strconv.Itoa(subPort)) + "/" + paths.Sub + "/"
+		}
 	}
 	v.Certificate = acme.Status{Kind: "self-signed"}
 	if h.d.Cert != nil {
@@ -237,7 +250,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	b := in.Body
 	// Where clients are sent, and what they are told to trust: a leaked API key must not
 	// move subscriptions to another server or add rules to every client.
-	for field, touched := range map[string]bool{"public_host": b.PublicHost != nil, "domain": b.Domain != nil, "sub_port": b.SubPort != nil,
+	for field, touched := range map[string]bool{"public_host": b.PublicHost != nil, "domain": b.Domain != nil, "sub_domain": b.SubDomain != nil, "sub_port": b.SubPort != nil,
 		"sub_rules": b.SubRules != nil, "sub_routes": b.SubRoutes != nil, "sub_template": b.SubTemplate != nil, "sub_routing": b.SubRouting != nil, "support_url": b.SupportURL != nil,
 		// What every subscriber's app shows: text, links and the logo it downloads.
 		"sub_title": b.SubTitle != nil, "sub_announce": b.Announce != nil, "sub_announce_url": b.AnnounceURL != nil, "app_branding": b.AppBranding != nil,
@@ -385,6 +398,33 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			}
 		}
 	}
+	// The subscription domain must be a DNS name the world resolves: unlike the panel's
+	// own, it may point anywhere — at the panel or at a proxy kept in front of it — never
+	// nowhere. Checked when it changes, after the cheap checks, since it asks public DNS.
+	if b.SubDomain != nil && len(details) == 0 {
+		sub := strings.TrimSpace(*b.SubDomain)
+		if sub != "" && !hostname.Name(sub) {
+			details = append(details, &huma.ErrorDetail{Location: "body.sub_domain", Message: "sub_domain_invalid"})
+		} else if sub != "" && h.d.DNS != nil {
+			cur, err := h.d.Settings.String(ctx, settings.KeySubDomain)
+			if err != nil {
+				return nil, err
+			}
+			if sub != cur {
+				cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+				addrs, err := h.d.DNS.Lookup(cctx, sub)
+				cancel()
+				switch {
+				case err == nil && len(addrs) > 0:
+				case errors.Is(err, dnscheck.ErrNotFound):
+					details = append(details, &huma.ErrorDetail{Location: "body.sub_domain", Message: "domain_not_found"})
+				case err != nil:
+					h.d.Log.Warn("sub domain check", "domain", sub, "err", err)
+					details = append(details, &huma.ErrorDetail{Location: "body.sub_domain", Message: "domain_unchecked"})
+				}
+			}
+		}
+	}
 	if len(details) > 0 {
 		return nil, huma.Error422UnprocessableEntity("validation", details...)
 	}
@@ -432,7 +472,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 				return err
 			}
 		}
-		for key, v := range map[string]*string{settings.KeyBrand: b.Brand, settings.KeySupportURL: b.SupportURL, settings.KeyPublicHost: b.PublicHost, settings.KeyDomain: b.Domain,
+		for key, v := range map[string]*string{settings.KeyBrand: b.Brand, settings.KeySupportURL: b.SupportURL, settings.KeyPublicHost: b.PublicHost, settings.KeyDomain: b.Domain, settings.KeySubDomain: b.SubDomain,
 			settings.KeySubTitle: b.SubTitle, settings.KeyAnnounce: b.Announce, settings.KeyAnnounceURL: b.AnnounceURL, settings.KeyBrandAccent: b.BrandAccent, settings.KeyBrandLogo: b.BrandLogoURL,
 			settings.KeyGroupMain: b.SubGroupMain, settings.KeyGroupAuto: b.SubGroupAuto, settings.KeyRouting: b.SubRouting, settings.KeyFingerprint: b.Fingerprint, settings.KeyDefaultLang: b.DefaultLang,
 			settings.KeyHappRouting: b.HappRouting, settings.KeyHappProvider: b.HappProvider} {
@@ -483,12 +523,13 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		return nil, err
 	}
 	// The bot's Mini App button points at the subscription page.
-	if b.SubPort != nil && h.d.Telegram != nil {
+	if (b.SubPort != nil || b.SubDomain != nil) && h.d.Telegram != nil {
 		h.d.Telegram.Reload()
 	}
 	// The certificate is for the domain, or the address without one: a new name gets its
-	// certificate now, not at the next six-hourly check.
-	if (b.Domain != nil || b.PublicHost != nil) && h.d.RenewCert != nil {
+	// certificate now, not at the next six-hourly check. The subscription domain rides
+	// the same certificate.
+	if (b.Domain != nil || b.PublicHost != nil || b.SubDomain != nil) && h.d.RenewCert != nil {
 		h.d.RenewCert()
 	}
 	var auditDetails map[string]any

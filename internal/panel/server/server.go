@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net"
 	"net/http"
 	"path"
 	"strings"
@@ -20,6 +21,29 @@ type Server struct {
 	legacy http.Handler // the old panel's links (settings.Paths.Legacy); nil: none
 	site   http.Handler // every other path (OwnSite); nil: NotFound
 	hsts   atomic.Pointer[func() bool]
+	// subHost is the subscription domain's host when one is set: that host serves
+	// subscriptions alone, at the root, and nothing of the panel.
+	subHost atomic.Pointer[string]
+}
+
+// SetSubDomain points the host-only routing at the subscription domain's host ("" when
+// there is none). Requests addressed to it never reach the panel, whatever their path.
+func (s *Server) SetSubDomain(host string) {
+	host = strings.ToLower(strings.Trim(strings.TrimSpace(host), "."))
+	if host == "" {
+		s.subHost.Store(nil)
+		return
+	}
+	s.subHost.Store(&host)
+}
+
+// hostOnly is the Host header's host part, without the port (addresses arrive as
+// "name:port", IPv6 literals as "[::1]:port" or bare "[::1]").
+func hostOnly(hostname string) string { //nolint:gocritic // a name, not an address
+	if h, _, err := net.SplitHostPort(hostname); err == nil {
+		return strings.Trim(h, "[]")
+	}
+	return strings.Trim(hostname, "[]")
 }
 
 // SetLegacy takes the handler of the old panel's subscription links.
@@ -61,6 +85,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 	SecurityHeaders(w.Header())
 	if on := s.hsts.Load(); on != nil && (*on)() {
 		w.Header().Set("Strict-Transport-Security", HSTSValue)
+	}
+	// The subscription domain's host: subscriptions alone, at the root — the panel's
+	// paths are a 404 there, like on the subscription port.
+	if sh := s.subHost.Load(); sh != nil && strings.EqualFold(hostOnly(r.Host), *sh) {
+		s.sub.ServeHTTP(w, r)
+		return
 	}
 	p := r.URL.Path
 	// Reject non-canonical paths ("//", "/./", "/../") instead of guessing what they mean.

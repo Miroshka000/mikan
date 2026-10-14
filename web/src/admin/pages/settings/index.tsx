@@ -12,7 +12,7 @@ import { GoalsCard } from "./goals";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { RoutingSection } from "./routing";
 import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
-import { AppsCard, DevicesCard, SubPortCard, SubscriptionCard } from "./subscription";
+import { AppsCard, DevicesCard, SubDomainCard, SubPortCard, SubscriptionCard } from "./subscription";
 import { HappCard } from "./happ";
 import { SubPageSettings, type SubPagePart } from "./sub-page";
 
@@ -75,6 +75,7 @@ export function SettingsPage() {
                 </>
               ) : tab === "subscription" ? (
                 <>
+                  <SubDomainCard s={s} />
                   <DevicesCard s={s} />
                   <AppsCard s={s} />
                   <HappCard s={s} />

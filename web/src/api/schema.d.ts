@@ -3403,6 +3403,8 @@ export interface components {
             sub_announce?: string;
             /** @description https://… или tg://… */
             sub_announce_url?: string;
+            /** @description Имя DNS (не IP), например sub.example.com; пусто — убрано. На нём панель отдаёт подписки без секретного пути */
+            sub_domain?: string;
             sub_group_auto?: string;
             sub_group_main?: string;
             /**
@@ -4061,6 +4063,7 @@ export interface components {
             /** @description Куда ведёт нажатие на объявление */
             sub_announce_url: string;
             sub_base_url: string;
+            sub_domain: string;
             /** @description Группа автовыбора самого быстрого подключения */
             sub_group_auto: string;
             /** @description Главная группа в Clash-приложениях */

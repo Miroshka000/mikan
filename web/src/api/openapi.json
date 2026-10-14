@@ -4136,6 +4136,11 @@
             "maxLength": 200,
             "type": "string"
           },
+          "sub_domain": {
+            "description": "Имя DNS (не IP), например sub.example.com; пусто — убрано. На нём панель отдаёт подписки без секретного пути",
+            "maxLength": 253,
+            "type": "string"
+          },
           "sub_group_auto": {
             "maxLength": 200,
             "type": "string"
@@ -5941,6 +5946,9 @@
           "sub_base_url": {
             "type": "string"
           },
+          "sub_domain": {
+            "type": "string"
+          },
           "sub_group_auto": {
             "description": "Группа автовыбора самого быстрого подключения",
             "type": "string"
@@ -5998,6 +6006,7 @@
           "brand_logo_url",
           "public_host",
           "domain",
+          "sub_domain",
           "panel_port",
           "sub_port",
           "quiet_hour_utc",
