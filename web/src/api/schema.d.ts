@@ -587,6 +587,23 @@ export interface paths {
         patch: operations["update-inbound"];
         trace?: never;
     };
+    "/api/v1/inbounds/{id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Копировать подключение: тот же ключ и маскировка, свой порт и сайт */
+        post: operations["copy-inbound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/metrics": {
         parameters: {
             query?: never;
@@ -2370,6 +2387,19 @@ export interface components {
             /** @description Уведомления с 22:00 до 9:00 МСК приходят без звука */
             quiet_night: boolean;
             texts: components["schemas"]["Texts"];
+        };
+        CopyInboundInputBody: {
+            /** @description Новый сайт маскировки REALITY (host:port); пусто — как у исходного */
+            dest?: string;
+            /**
+             * Format: int64
+             * @description Нода, куда копировать; пусто — та же нода
+             */
+            node_id?: number;
+            /** @description Пусто — порт исходного подключения */
+            port?: string;
+            /** @description SNI для клиентов, если dest — IP (цель из подбора соседей) */
+            server_name?: string;
         };
         CreateAPIKeyInputBody: {
             /**
@@ -6219,6 +6249,41 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "copy-inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopyInboundInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };

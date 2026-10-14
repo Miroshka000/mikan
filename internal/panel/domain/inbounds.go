@@ -181,6 +181,111 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 	return row, err
 }
 
+// CopyInbound is an inbound to add from another one: its template — the same keys,
+// passwords and camouflage — on the same or another node, with a port and a REALITY
+// target of its own.
+type CopyInbound struct {
+	SourceID int64
+	NodeID   int64  // 0: the source's node
+	Port     string // "": the source's
+	Dest     string // a REALITY template's new target; "": as the source's
+	SNI      string // the name clients send when Dest is an IP; "" takes the host of Dest
+}
+
+// Copy adds an inbound that is another one: the same template with its keys at the same
+// preset, already on the port it is given. It comes on, with the same listen address,
+// automatic switches and traffic pool as its source; its way out is not inherited — an
+// exit's relay belongs to the node it was made on, so a copy dials out directly until it
+// is given an exit of its own — and its name in subscriptions is the preset's until the
+// admin names it.
+func (s *Inbounds) Copy(ctx context.Context, c CopyInbound) (db.Inbound, error) {
+	src, err := s.st.Q.GetInbound(ctx, c.SourceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return db.Inbound{}, ErrUnknownInbound
+	}
+	if err != nil {
+		return db.Inbound{}, err
+	}
+	node, err := s.node(ctx, c.NodeID)
+	if err != nil {
+		return db.Inbound{}, err
+	}
+	port := c.Port
+	if port == "" {
+		port = src.Port
+	}
+	if !ValidPort(port) {
+		return db.Inbound{}, ErrBadPort
+	}
+	config, err := applyCopyDest(src.Config, c.Dest, c.SNI)
+	if err != nil {
+		return db.Inbound{}, err
+	}
+	t, err := s.CheckTemplate(ctx, node, config, port)
+	if err != nil {
+		return db.Inbound{}, err
+	}
+	var row db.Inbound
+	err = s.st.Tx(ctx, func(q *db.Queries) error {
+		if err := CheckPort(ctx, q, node, port, t.Network(), PortHolder{}); err != nil {
+			return err
+		}
+		existing, err := q.ListNodeInbounds(ctx, node.ID)
+		if err != nil {
+			return err
+		}
+		now := s.now().Unix()
+		row, err = q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, baseName(src.Name)), Preset: src.Preset, Port: port,
+			Config: config, CreatedAt: now, UpdatedAt: now})
+		if err != nil {
+			return err
+		}
+		if src.PoolID.Valid {
+			if err := q.SetInboundPool(ctx, db.SetInboundPoolParams{PoolID: src.PoolID, ID: row.ID}); err != nil {
+				return err
+			}
+		}
+		if src.Listen != "" {
+			if err := q.SetInboundListen(ctx, db.SetInboundListenParams{Listen: src.Listen, ID: row.ID}); err != nil {
+				return err
+			}
+		}
+		// The insert's defaults are the automatic switches on; the source's flags win.
+		if row.AutoPort != src.AutoPort || row.AutoSni != src.AutoSni {
+			if err := q.SetInboundAuto(ctx, db.SetInboundAutoParams{AutoPort: src.AutoPort, AutoSni: src.AutoSni, ID: row.ID}); err != nil {
+				return err
+			}
+		}
+		row, err = q.GetInbound(ctx, row.ID)
+		return err
+	})
+	return row, err
+}
+
+// applyCopyDest points the copy's REALITY camouflage at another site; dest "" keeps the
+// template as it is.
+func applyCopyDest(config, dest, sni string) (string, error) {
+	if dest == "" {
+		return config, nil
+	}
+	p := InboundPatch{Dest: &dest}
+	if name := strings.TrimSpace(sni); name != "" {
+		p.ServerName = &name
+	}
+	return editTemplate(config, p)
+}
+
+// baseName strips the "-2", "-3"… FreeName adds: a copy of vless-xhttp-2 is a vless-xhttp
+// again.
+func baseName(name string) string {
+	if i := strings.LastIndexByte(name, '-'); i > 0 {
+		if _, err := strconv.Atoi(name[i+1:]); err == nil {
+			return name[:i]
+		}
+	}
+	return name
+}
+
 // Update changes an inbound and returns it before and after. Every field is checked
 // before anything is written, and everything is written in one transaction. The checks
 // reach the node over the network, so the patch is applied to the row they ran on and the

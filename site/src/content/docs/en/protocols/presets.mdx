@@ -59,10 +59,14 @@ The **Configure** button opens the tabs "Main", "Masking" (XHTTP only) and "Conf
 - **Camouflage site (REALITY)**: `www.microsoft.com:443` by default. The buttons are "Check" and "Find near the server" (looks for sites in the same /24 network as the node). If the panel has a domain, you can pick your own domain. If an IP is given instead of a name, the "Site domain (SNI)" field is required.
 - **Obfuscation** for Hysteria2: Salamander or Gecko. Gecko cuts the QUIC handshake into pieces of random size with padding, against DPI that recognizes QUIC by packet sizes. Only Clash apps on mihomo 1.19.26+ receive it, so keep a plain Hysteria2 next to it.
 - **TLS fingerprint**: as in the settings (Chrome by default), Chrome, Firefox, Safari, iOS, Android, Edge, 360, QQ, a random browser, or "Own…" with any uTLS profile name, for example `chrome120`. The shared default is set in **Settings → Subscription**. Hysteria2 and TUIC have no fingerprint.
-- **Way out to the internet**: direct, [WARP](/mikan/en/nodes/warp/) or [via a node](/mikan/en/nodes/cascades/).
-- **Traffic pool**: if you have pools, a protocol can count against a separate limit, see [Pools and packages](/mikan/en/billing/pools/).
-- **Behind a proxy (nginx, HAProxy)**: see [Behind a proxy](/mikan/en/protocols/behind-proxy/).
-- **Automatic fixes**: switches for moving the port and changing the site, see [Automatic fixes](/mikan/en/protocols/autotune/).
+- **Way out to the internet**: direct, [WARP](/mikanaddons/en/nodes/warp/) or [via a node](/mikanaddons/en/nodes/cascades/).
+- **Traffic pool**: if you have pools, a protocol can count against a separate limit, see [Pools and packages](/mikanaddons/en/billing/pools/).
+- **Behind a proxy (nginx, HAProxy)**: see [Behind a proxy](/mikanaddons/en/protocols/behind-proxy/).
+- **Automatic fixes**: switches for moving the port and changing the site, see [Automatic fixes](/mikanaddons/en/protocols/autotune/).
+
+## Copies
+
+The **Copy** button makes another connection with the same template — the same keys, passwords and camouflage — so a protocol is not set up twice. In the window, pick another port, another node, or both; for REALITY you can point the copy at another camouflage site. The copy works as soon as it is saved; the automatic-fix switches, the listen address and the traffic pool come along, while a way out through WARP or another node does not — the copy dials out directly until it is given an exit of its own. Copies of a protocol with one key share that key: cut it off only together.
 
 ## Own config
 

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, errorText, unwrap, type Inbound, type Schemas } from "../../api/client";
 import { qk, useInbounds, useNodes } from "../../api/hooks";
@@ -13,6 +13,7 @@ import { ago, maskedAs } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
 import { hostPort, listenerError } from "./inbound/shared";
 import { AddDrawer } from "./inbound/add";
+import { CopyDrawer } from "./inbound/copy";
 import { EditDrawer } from "./inbound/edit";
 
 export function InboundsPage() {
@@ -29,6 +30,7 @@ export function InboundsPage() {
   const inbounds = useMemo(() => (all.data ?? []).filter((i) => !multi || i.node_id === nodeId), [all.data, multi, nodeId]);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Inbound | null>(null);
+  const [copying, setCopying] = useState<Inbound | null>(null);
   const [removing, setRemoving] = useState<Inbound | null>(null);
   const patch = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Schemas["PatchInboundInputBody"] }) => unwrap(api.PATCH("/api/v1/inbounds/{id}", { params: { path: { id } }, body })),
@@ -150,6 +152,9 @@ export function InboundsPage() {
                     <Button size="sm" onClick={() => setEditing(i)}>
                       <Pencil size={16} aria-hidden /> {t("inbounds.configure")}
                     </Button>
+                    <Button size="sm" onClick={() => setCopying(i)}>
+                      <Copy size={16} aria-hidden /> <span className="max-[900px]:hidden">{t("inbounds.copy")}</span>
+                    </Button>
                     <Button size="sm" variant="danger" onClick={() => setRemoving(i)}>
                       <Trash2 size={16} aria-hidden /> {t("common.delete")}
                     </Button>
@@ -162,6 +167,7 @@ export function InboundsPage() {
       </QueryBoundary>
       <AddDrawer open={adding} onOpenChange={setAdding} nodeId={nodeId} nodeName={multi && node ? nodeLabel(node) : undefined} />
       <EditDrawer inbound={editing} onClose={() => setEditing(null)} />
+      <CopyDrawer inbound={copying} onClose={() => setCopying(null)} />
       <Confirm
         open={!!removing}
         onOpenChange={(v) => !v && setRemoving(null)}
