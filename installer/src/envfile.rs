@@ -137,10 +137,7 @@ mod tests {
         assert_eq!(e.get("MIKAN"), None);
         e.set("MIKAN_IMAGE", "ghcr.io/o0hhs/mikan@sha256:abc").unwrap();
         e.set("MIKAN_VERSION", "0.3.9").unwrap();
-        assert_eq!(
-            e.render(),
-            "MIKAN_IMAGE=ghcr.io/o0hhs/mikan@sha256:abc\n# note\nPANEL_PORT=21355\nMIKAN_UFW=1\nMIKAN_VERSION=0.3.9\n"
-        );
+        assert_eq!(e.render(), "MIKAN_IMAGE=ghcr.io/o0hhs/mikan@sha256:abc\n# note\nPANEL_PORT=21355\nMIKAN_UFW=1\nMIKAN_VERSION=0.3.9\n");
         assert!(e.set("X", "a\nb").is_err());
     }
 
