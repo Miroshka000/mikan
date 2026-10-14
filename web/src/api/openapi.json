@@ -1211,6 +1211,33 @@
         ],
         "type": "object"
       },
+      "CopyInboundInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "dest": {
+            "description": "Новый сайт маскировки REALITY (host:port); пусто — как у исходного",
+            "maxLength": 255,
+            "type": "string"
+          },
+          "node_id": {
+            "description": "Нода, куда копировать; пусто — та же нода",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "port": {
+            "description": "Пусто — порт исходного подключения",
+            "pattern": "^[0-9]{1,5}(-[0-9]{1,5})?$",
+            "type": "string"
+          },
+          "server_name": {
+            "description": "SNI для клиентов, если dest — IP (цель из подбора соседей)",
+            "maxLength": 253,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "CreateAPIKeyInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -9836,6 +9863,59 @@
           }
         },
         "summary": "Изменить подключение",
+        "tags": [
+          "inbounds"
+        ]
+      }
+    },
+    "/api/v1/inbounds/{id}/copy": {
+      "post": {
+        "operationId": "copy-inbound",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyInboundInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InboundView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Копировать подключение: тот же ключ и маскировка, свой порт и сайт",
         "tags": [
           "inbounds"
         ]

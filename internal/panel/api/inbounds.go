@@ -121,6 +121,16 @@ type patchInboundInput struct {
 	}
 }
 
+type copyInboundInput struct {
+	ID   int64 `path:"id" minimum:"1"`
+	Body struct {
+		NodeID     int64  `json:"node_id,omitempty" minimum:"1" doc:"Нода, куда копировать; пусто — та же нода"`
+		Port       string `json:"port,omitempty" pattern:"^[0-9]{1,5}(-[0-9]{1,5})?$" doc:"Пусто — порт исходного подключения"`
+		Dest       string `json:"dest,omitempty" maxLength:"255" doc:"Новый сайт маскировки REALITY (host:port); пусто — как у исходного"`
+		ServerName string `json:"server_name,omitempty" maxLength:"253" doc:"SNI для клиентов, если dest — IP (цель из подбора соседей)"`
+	}
+}
+
 type validateInboundInput struct {
 	Body struct {
 		NodeID int64  `json:"node_id,omitempty" minimum:"1"`
@@ -142,6 +152,7 @@ func (h *handlers) registerInbounds() {
 	huma.Register(h.api, huma.Operation{OperationID: "list-presets", Method: http.MethodGet, Path: "/api/v1/presets", Summary: "Доступные пресеты подключений", Tags: []string{"inbounds"}}, h.listPresets)
 	huma.Register(h.api, huma.Operation{OperationID: "list-inbounds", Method: http.MethodGet, Path: "/api/v1/inbounds", Summary: "Подключения", Tags: []string{"inbounds"}}, h.listInbounds)
 	huma.Register(h.api, huma.Operation{OperationID: "create-inbound", Method: http.MethodPost, Path: "/api/v1/inbounds", Summary: "Добавить подключение", Tags: []string{"inbounds"}, DefaultStatus: http.StatusCreated}, h.createInbound)
+	huma.Register(h.api, huma.Operation{OperationID: "copy-inbound", Method: http.MethodPost, Path: "/api/v1/inbounds/{id}/copy", Summary: "Копировать подключение: тот же ключ и маскировка, свой порт и сайт", Tags: []string{"inbounds"}, DefaultStatus: http.StatusCreated}, h.copyInbound)
 	huma.Register(h.api, huma.Operation{OperationID: "validate-inbound", Method: http.MethodPost, Path: "/api/v1/inbounds/validate", Summary: "Проверить шаблон листенера без сохранения", Tags: []string{"inbounds"}}, h.validateInbound)
 	huma.Register(h.api, huma.Operation{OperationID: "update-inbound", Method: http.MethodPatch, Path: "/api/v1/inbounds/{id}", Summary: "Изменить подключение", Tags: []string{"inbounds"}}, h.updateInbound)
 	huma.Register(h.api, huma.Operation{OperationID: "delete-inbound", Method: http.MethodDelete, Path: "/api/v1/inbounds/{id}", Summary: "Удалить подключение", Tags: []string{"inbounds"}, DefaultStatus: http.StatusNoContent}, h.deleteInbound)
@@ -275,6 +286,18 @@ func (h *handlers) createInbound(ctx context.Context, in *createInboundInput) (*
 	v := h.viewInbound(row, nil)
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "inbound.create", "inbound", row.Name, map[string]any{"preset": row.Preset, "type": v.Type, "port": row.Port})
+	return &inboundOutput{Body: v}, nil
+}
+
+func (h *handlers) copyInbound(ctx context.Context, in *copyInboundInput) (*inboundOutput, error) {
+	b := in.Body
+	row, err := h.d.Inbounds.Copy(ctx, domain.CopyInbound{SourceID: in.ID, NodeID: b.NodeID, Port: b.Port, Dest: b.Dest, SNI: b.ServerName})
+	if err != nil {
+		return nil, inboundError(err, b.Dest != "")
+	}
+	v := h.viewInbound(row, nil)
+	h.d.Changes.SlotsChanged()
+	h.audit(ctx, sessionOf(ctx).AdminID, "inbound.copy", "inbound", v.Name, map[string]any{"node_id": row.NodeID, "port": row.Port, "source_id": in.ID})
 	return &inboundOutput{Body: v}, nil
 }
 
