@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 /// The public half of the release signing key, the same as internal/release.PublicKey.
 /// This fork signs its own releases with its own key; a manifest signed with the upstream
 /// key is refused here.
-pub const PUBLIC_KEY: &str = "H+GnL17JW6e7qw4qsYOC2YNMFPLp1mTjJmUqops3z7o=";
+pub const PUBLIC_KEY: &str = "ayuo0yLe0M0N5QQPaxkjAA0ltZcXSG7LRANrgyFAhUg=";
 
 pub const REPO: &str = "o0hhs/mikanaddons";
 

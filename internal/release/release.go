@@ -20,7 +20,7 @@ import (
 // private half lives only in the RELEASE_SIGNING_KEY secret of the release workflow and
 // with the maintainer. It is this fork's own key: releases of o0hhs/mikanaddons are
 // signed with it, and a manifest signed with the upstream key is refused here.
-const PublicKey = "H+GnL17JW6e7qw4qsYOC2YNMFPLp1mTjJmUqops3z7o="
+const PublicKey = "ayuo0yLe0M0N5QQPaxkjAA0ltZcXSG7LRANrgyFAhUg="
 
 // Repo is where this fork publishes its releases.
 const Repo = "o0hhs/mikanaddons"
@@ -60,6 +60,11 @@ var (
 )
 
 // Key decodes a raw Ed25519 public key in base64.
+// CatalogKey is the public half of the key the built-in addon catalog is signed with: the
+// marketplace is the project's own (github.com/getmikan/marketplace), so its key is not the
+// release key a fork signs its releases with.
+const CatalogKey = "Z3wSIPBSaJxh5CsGO8eINI0aM0kyrQ46EcJSNeH85W8="
+
 func Key(b64 string) (ed25519.PublicKey, error) {
 	raw, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil || len(raw) != ed25519.PublicKeySize {

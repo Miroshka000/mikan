@@ -388,7 +388,9 @@ func New(dataDir, catalogURL, panelVersion string, log *slog.Logger, now func() 
 	if catalogURL == "" {
 		catalogURL = CatalogURL
 	}
-	pub, _ := release.Key(release.PublicKey)
+	// The catalog's own key: the marketplace is the project's, and a fork's release key
+	// signs its releases, not this catalog (sources pin their own keys, see sources.go).
+	pub, _ := release.Key(release.CatalogKey)
 	m := &Manager{catalogURL: catalogURL, pub: pub, version: panelVersion, log: log, now: now,
 		hc:    &http.Client{Timeout: 15 * time.Second},
 		infos: map[string]described[Info]{}, infos2: map[string]described[InfoV2]{}, noInfo: map[string]noInfo{},

@@ -40,7 +40,7 @@ chmod +x "$tmp/bin/curl"
 # The release key of this test, in the script instead of the real one.
 openssl genpkey -algorithm ed25519 -out "$tmp/key.pem" 2>/dev/null
 pub=$(openssl pkey -in "$tmp/key.pem" -pubout | sed -n 2p)
-sed "s|^MCowBQYDK2VwAyEAZ3wSIPBSaJxh5CsGO8eINI0aM0kyrQ46EcJSNeH85W8=\$|$pub|" "$here/install.sh" >"$tmp/install.sh"
+sed "s|^MCowBQYDK2VwAyEAayuo0yLe0M0N5QQPaxkjAA0ltZcXSG7LRANrgyFAhUg=\$|$pub|" "$here/install.sh" >"$tmp/install.sh"
 grep -q "^$pub\$" "$tmp/install.sh"
 
 releases="$tmp/www/github.com/o0hhs/mikanaddons/releases"
