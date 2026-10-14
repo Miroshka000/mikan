@@ -66,6 +66,27 @@ func (b *Bot) Referral(ctx context.Context, w *words, chat int64, code string) s
 	return w.refJoinedPlain
 }
 
+// CampaignVisit binds the chat to the campaign whose tagged link it followed, so the panel
+// counts where it came from. A chat is counted once, on the first tagged link it opens; the
+// newcomer is greeted like anybody else, with a short line saying the link was followed.
+func (b *Bot) CampaignVisit(ctx context.Context, w *words, chat int64, tag string) string {
+	if b.d.Campaigns == nil {
+		return ""
+	}
+	c, counted, err := b.d.Campaigns.Visit(ctx, chat, tag)
+	if err != nil {
+		b.d.Log.Warn("telegram: campaign visit", "tg", chat, "tag", tag, "err", err)
+		return ""
+	}
+	if !counted {
+		return ""
+	}
+	if c.Name != "" {
+		return fmt.Sprintf(w.campThanksNamed, html.EscapeString(c.Name))
+	}
+	return w.campThanks
+}
+
 // referrerName is how the programme calls the account that invited this one.
 func (b *Bot) referrerName(ctx context.Context, tgID int64) string {
 	ch, err := b.d.Store.Q.GetTgChat(ctx, tgID)

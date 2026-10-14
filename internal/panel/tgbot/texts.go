@@ -48,6 +48,9 @@ type words struct {
 	refOff, refSelf, refAlready, refJoined, refJoinedPlain, refCodeInvalid                 string
 	refLinkUnavailable, refEarnedRub, refEarnedDays, refEarnedDaysEvery                    string
 
+	// A campaign tag in a /start link says where the chat came from; the panel counts it.
+	campThanks, campThanksNamed string
+
 	// A refund takes back what the payment gave.
 	refundedNew, refundedRenew, refundedPackage, refundedGone string
 }
@@ -154,6 +157,8 @@ var ru = words{
 	refEarnedRub:        "💰 Приглашённый оплатил подписку: на ваш баланс начислено %s.",
 	refEarnedDays:       "🎁 По вашей ссылке оплатили подписку: подписка продлена на %s.",
 	refEarnedDaysEvery:  "🎁 По вашей ссылке набралось %d оплат: подписка продлена на %s.",
+	campThanks:          "👋 Спасибо, что зашли! Выбирайте тариф — мы рядом.",
+	campThanksNamed:     "👋 Спасибо, что зашли по ссылке «%s»! Выбирайте тариф — мы рядом.",
 
 	refundedNew:     "↩️ Платёж за тариф «%s» возвращён. Подписка «%s» отключена.",
 	refundedRenew:   "↩️ Платёж за продление «%s» возвращён. Срок подписки «%s» уменьшен. Окончание: %s.",
@@ -263,6 +268,8 @@ var en = words{
 	refEarnedRub:        "💰 An invitee paid for a subscription: %s was added to your balance.",
 	refEarnedDays:       "🎁 Somebody paid through your link: your subscription is extended by %s.",
 	refEarnedDaysEvery:  "🎁 Your link has brought %d payments: your subscription is extended by %s.",
+	campThanks:          "👋 Thanks for stopping by! Pick a plan — we are right here.",
+	campThanksNamed:     "👋 Thanks for stopping by from “%s”! Pick a plan — we are right here.",
 
 	refundedNew:     "↩️ The payment for plan “%s” is refunded. Subscription “%s” is turned off.",
 	refundedRenew:   "↩️ The payment for the renewal “%s” is refunded. The term of subscription “%s” is shortened. Ends: %s.",

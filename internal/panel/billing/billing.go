@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"mikan/internal/panel/addons"
+	"mikan/internal/panel/campaigns"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/referral"
@@ -98,6 +99,9 @@ type Deps struct {
 	// Referral is the bot's referral programme: what an invitee's payment gives the
 	// account that invited them, and what a balance pays of an invoice. nil: none.
 	Referral *referral.Service
+	// Campaigns are the ad campaign tags: which tagged link a buyer arrived through, so a
+	// campaign's first purchases and renewals are counted. nil: none.
+	Campaigns *campaigns.Service
 }
 
 type Service struct {
@@ -965,6 +969,11 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		}
 		if s.d.Referral != nil {
 			if rewards, err = s.d.Referral.RewardPayment(ctx, q, pay); err != nil {
+				return err
+			}
+		}
+		if s.d.Campaigns != nil {
+			if err := s.d.Campaigns.Attribute(ctx, q, pay); err != nil {
 				return err
 			}
 		}
