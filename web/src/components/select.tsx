@@ -3,7 +3,7 @@
 // of the system's list, whose look and width differ from one browser and OS to the next.
 import * as Sel from "@radix-ui/react-select";
 import { Check, ChevronDown } from "lucide-react";
-import { Children, Fragment, isValidElement, type ChangeEvent, type CSSProperties, type ReactElement, type ReactNode } from "react";
+import { Children, Fragment, isValidElement, useState, type ChangeEvent, type CSSProperties, type ReactElement, type ReactNode } from "react";
 
 type Opt = { value: string; label: ReactNode; disabled?: boolean };
 type Entry = Opt | { group: ReactNode; items: Opt[] };
@@ -66,7 +66,10 @@ export type SelectProps = {
 
 export function Select({ id, name, className, style, title, value, defaultValue, disabled, required, onChange, children, ...aria }: SelectProps) {
   const list = entries(children);
+  // The choice of an uncontrolled select (defaultValue), for the form's own field below.
+  const [inner, setInner] = useState(defaultValue === undefined ? "" : String(defaultValue));
   const change = (v: string) => {
+    setInner(fromItem(v));
     const target = { value: fromItem(v), name: name ?? "", id: id ?? "" };
     // The handlers read e.target.value, as they did from the native select.
     onChange?.({ target, currentTarget: target } as unknown as ChangeEvent<HTMLSelectElement>);
@@ -79,39 +82,51 @@ export function Select({ id, name, className, style, title, value, defaultValue,
       </Sel.ItemIndicator>
     </Sel.Item>
   );
+  // A form reads the choice from a native select of our own, with "" as "", so an empty choice
+  // submits empty and fails `required`; Radix's own hidden select would carry the sentinel.
+  const current = value === undefined ? inner : String(value);
+  const native =
+    name !== undefined || required ? (
+      <select aria-hidden tabIndex={-1} className="sr-only" name={name} required={required} disabled={disabled} value={current} onChange={() => {}}>
+        {list.flatMap((e) => ("group" in e ? e.items : [e])).map((o) => (
+          <option key={o.value} value={o.value} />
+        ))}
+      </select>
+    ) : null;
   return (
-    <Sel.Root
-      value={value === undefined ? undefined : toItem(String(value))}
-      defaultValue={defaultValue === undefined ? undefined : toItem(String(defaultValue))}
-      onValueChange={change}
-      disabled={disabled}
-      required={required}
-      name={name}
-    >
-      <Sel.Trigger id={id} className={`${className ?? "input"} select-trigger`} style={style} title={title} {...aria}>
-        <span className="select-value">
-          <Sel.Value />
-        </span>
-        <Sel.Icon className="select-icon">
-          <ChevronDown size={16} aria-hidden />
-        </Sel.Icon>
-      </Sel.Trigger>
-      <Sel.Portal>
-        <Sel.Content className="menu glass-strong select-menu" position="popper" sideOffset={6} collisionPadding={12}>
-          <Sel.Viewport className="select-viewport">
-            {list.map((e, i) =>
-              "group" in e ? (
-                <Sel.Group key={`g${i}`}>
-                  <Sel.Label className="menu-label">{e.group}</Sel.Label>
-                  {e.items.map(item)}
-                </Sel.Group>
-              ) : (
-                item(e)
-              ),
-            )}
-          </Sel.Viewport>
-        </Sel.Content>
-      </Sel.Portal>
-    </Sel.Root>
+    <>
+      {native}
+      <Sel.Root
+        value={value === undefined ? undefined : toItem(String(value))}
+        defaultValue={defaultValue === undefined ? undefined : toItem(String(defaultValue))}
+        onValueChange={change}
+        disabled={disabled}
+      >
+        <Sel.Trigger id={id} className={`${className ?? "input"} select-trigger`} style={style} title={title} {...aria}>
+          <span className="select-value">
+            <Sel.Value />
+          </span>
+          <Sel.Icon className="select-icon">
+            <ChevronDown size={16} aria-hidden />
+          </Sel.Icon>
+        </Sel.Trigger>
+        <Sel.Portal>
+          <Sel.Content className="menu glass-strong select-menu" position="popper" sideOffset={6} collisionPadding={12}>
+            <Sel.Viewport className="select-viewport">
+              {list.map((e, i) =>
+                "group" in e ? (
+                  <Sel.Group key={`g${i}`}>
+                    <Sel.Label className="menu-label">{e.group}</Sel.Label>
+                    {e.items.map(item)}
+                  </Sel.Group>
+                ) : (
+                  item(e)
+                ),
+              )}
+            </Sel.Viewport>
+          </Sel.Content>
+        </Sel.Portal>
+      </Sel.Root>
+    </>
   );
 }
