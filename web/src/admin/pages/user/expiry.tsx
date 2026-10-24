@@ -7,6 +7,7 @@ import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { dateLong, dateShort, days, expiryText, fromInputDate, inputDate, months } from "../../../lib/format";
 import { Section } from "./section";
+import { Select } from "../../../components/select";
 
 export function ExpirySection({ u }: { u: User }) {
   const toast = useToast();
@@ -59,14 +60,14 @@ function BillingDayField({ u }: { u: User }) {
     );
   return (
     <Field label={t("userDrawer.billingDay")} htmlFor={`u-bday-${u.id}`} hint={t("userDrawer.billingDayHint")}>
-      <select id={`u-bday-${u.id}`} className="input" value={u.billing_day ?? 0} disabled={update.isPending} onChange={(e) => set(Number(e.target.value))}>
+      <Select id={`u-bday-${u.id}`} className="input" value={u.billing_day ?? 0} disabled={update.isPending} onChange={(e) => set(Number(e.target.value))}>
         <option value={0}>{t("userDrawer.billingDayNone")}</option>
         {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
           <option key={d} value={d}>
             {t("userDrawer.billingDayOption", { d })}
           </option>
         ))}
-      </select>
+      </Select>
     </Field>
   );
 }

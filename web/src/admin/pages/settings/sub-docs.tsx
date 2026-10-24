@@ -16,6 +16,7 @@ import { fieldErrors } from "../../../lib/fields";
 import { Markdown } from "../../../lib/markdown";
 import { PLATFORMS } from "../../../sub/page";
 import { CardHead } from "../../../components/layout";
+import { Select } from "../../../components/select";
 
 type SubDoc = Schemas["SubDocView"];
 type Body = Schemas["SubDocBody"];
@@ -196,14 +197,14 @@ function DocEditor({ doc, onClose }: { doc: SubDoc | null; onClose: () => void }
             </Field>
           </div>
           <Field label={t("settings.page.docPlatform")} htmlFor="doc-platform" hint={t("settings.page.docPlatformHint")} error={errors.platform}>
-            <select id="doc-platform" className="input" value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value as Body["platform"] })}>
+            <Select id="doc-platform" className="input" value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value as Body["platform"] })}>
               <option value="">{t("settings.page.docAll")}</option>
               {PLATFORMS.map((p) => (
                 <option key={p} value={p}>
                   {PLATFORM_NAMES[p]}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <SwitchRow className="mb-4 py-0" label={t("settings.page.docPublish")} sub={t("settings.page.docPublishHint")} checked={form.published} onChange={(published) => setForm({ ...form, published })} />
           <div className="field">

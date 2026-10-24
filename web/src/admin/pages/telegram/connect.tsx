@@ -11,6 +11,7 @@ import { Button, Field, Segmented, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { rise, usePatchTelegram, type View } from "./shared";
+import { Select } from "../../../components/select";
 
 export function ConnectCard({ v }: { v: View }) {
   const patch = usePatchTelegram();
@@ -187,7 +188,7 @@ export function RouteCard({ v }: { v: View }) {
             </div>
           ) : (
             <Field label={t("telegram.routeNodeLabel")} htmlFor="tg-route-node" hint={t("telegram.routeNodeHint")} error={error}>
-              <select id="tg-route-node" className="input max-w-[320px]" value={picked} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
+              <Select id="tg-route-node" className="input max-w-[320px]" value={picked} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
                 <option value={0} disabled>
                   {t("telegram.routeNodePick")}
                 </option>
@@ -196,7 +197,7 @@ export function RouteCard({ v }: { v: View }) {
                     {tunnels(n.version) ? n.name : t("telegram.routeNodeOld", { name: n.name })}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           )
         ) : null}

@@ -13,6 +13,7 @@ import { Button, EmptyState, Field, Pill, Segmented, Skeleton } from "../../comp
 import { t, tMaybe } from "../../i18n";
 import { dateShort, GiB, money, time } from "../../lib/format";
 import { PROMO_TABS } from "../search";
+import { Select } from "../../components/select";
 
 type PromoTab = (typeof PROMO_TABS)[number];
 
@@ -357,12 +358,12 @@ function PromoForm({ value, onSave, onSaving, onBlocked }: { value: PromoCode; o
       </Field>
       <div className="grid gap-x-3 sm:grid-cols-2">
         <Field label={t("promocodes.type")} htmlFor="pc-type">
-          <select id="pc-type" className="input" value={p.type} onChange={set("type")}>
+          <Select id="pc-type" className="input" value={p.type} onChange={set("type")}>
             <option value="days">{t("promocodes.days")}</option>
             <option value="traffic">{t("promocodes.traffic")}</option>
             <option value="percent">{t("promocodes.percent")}</option>
             <option value="fixed">{t("promocodes.fixed")}</option>
-          </select>
+          </Select>
         </Field>
         <Field label={p.type === "fixed" && p.currency ? `${t("promocodes.value")}, ${unitOf(p.currency)}` : t("promocodes.value")} htmlFor="pc-value">
           <input id="pc-value" className="input" type="number" inputMode="decimal" min={step === "0.01" ? "0.01" : "1"} step={step} max={p.type === "days" ? 36500 : undefined} value={p.value} onChange={set("value")} />
@@ -370,23 +371,23 @@ function PromoForm({ value, onSave, onSaving, onBlocked }: { value: PromoCode; o
       </div>
       {discount ? (
         <Field label={t("promocodes.currency")} htmlFor="pc-currency" hint={p.type === "percent" && !p.currency ? t("promocodes.anyCurrencyHint") : undefined}>
-          <select id="pc-currency" className="input" value={p.currency} onChange={set("currency")}>
+          <Select id="pc-currency" className="input" value={p.currency} onChange={set("currency")}>
             {p.type === "percent" || !p.currency ? <option value="">{t("promocodes.anyCurrency")}</option> : null}
             <option value="RUB">RUB</option>
             <option value="XTR">XTR</option>
-          </select>
+          </Select>
         </Field>
       ) : null}
       {p.type === "traffic" ? (
         <Field label={t("promocodes.trafficPool")} htmlFor="pc-pool" error={pools.isError ? errorText(pools.error) : undefined}>
-          <select id="pc-pool" className="input" value={p.pool_id ?? ""} disabled={pools.isError} onChange={(e) => setP((x) => ({ ...x, pool_id: e.target.value ? Number(e.target.value) : undefined }))}>
+          <Select id="pc-pool" className="input" value={p.pool_id ?? ""} disabled={pools.isError} onChange={(e) => setP((x) => ({ ...x, pool_id: e.target.value ? Number(e.target.value) : undefined }))}>
             <option value="">{t("promocodes.mainTraffic")}</option>
             {(pools.data ?? []).map((pool) => (
               <option key={pool.id} value={pool.id}>
                 {pool.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       ) : null}
       <Field label={t("promocodes.name")} htmlFor="pc-name">

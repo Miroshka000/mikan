@@ -364,6 +364,21 @@
   .input { height: 44px; padding: 0 12px; border-radius: var(--r-md); border: 1px solid var(--hairline); background: var(--surface); color: var(--ink-900); outline: 0; width: 100%; transition: border-color 0.2s, box-shadow 0.2s; }
   .input:focus { border-color: var(--mikan-600); box-shadow: 0 0 0 3px var(--ring); }
   .input[aria-invalid="true"] { border-color: var(--berry-600); }
+  /* The select (components/select.tsx): the field shows the choice, its list is a menu as
+     wide as the field, rows highlighted edge to edge, the chosen one ticked. */
+  .select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; }
+  .select-trigger:disabled { opacity: 0.6; cursor: default; }
+  .select-trigger[data-state="open"] { border-color: var(--mikan-600); box-shadow: 0 0 0 3px var(--ring); }
+  .select-trigger[data-placeholder] .select-value { color: var(--ink-400); }
+  .select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .select-icon { display: flex; flex: none; color: var(--ink-500); transition: transform 0.2s var(--ease-out); }
+  .select-trigger[data-state="open"] .select-icon { transform: rotate(180deg); }
+  .menu.select-menu { min-width: var(--radix-select-trigger-width); max-width: calc(100vw - 24px); max-height: min(360px, var(--radix-select-content-available-height)); overflow: hidden; }
+  .select-viewport { padding: 0; }
+  .select-item { justify-content: space-between; height: auto; min-height: 36px; padding-block: 8px; line-height: 20px; }
+  .select-item[data-state="checked"] { color: var(--ink-900); }
+  .select-item[data-disabled] { opacity: 0.45; cursor: not-allowed; }
+  .select-check { display: flex; flex: none; color: var(--mikan-600); }
   /* The frame is the wrapper's, and the unit sits beside the field in the flow: a unit of
      any width ("Мбит/с", "мес.") takes its own room and never covers the digits. */
   .input-unit { display: flex; align-items: center; height: 44px; border-radius: var(--r-md); border: 1px solid var(--hairline); background: var(--surface); cursor: text; transition: border-color 0.2s, box-shadow 0.2s; }

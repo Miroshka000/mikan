@@ -14,6 +14,7 @@ import { useDraft } from "../../lib/draft";
 import { fieldErrors } from "../../lib/fields";
 import { ago } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
+import { Select } from "../../components/select";
 
 type Cascade = Schemas["CascadeView"];
 type Route = "direct" | "warp" | "node";
@@ -124,7 +125,7 @@ function Body({ nodeId, c, refetch, checking }: { nodeId: number; c: Cascade; re
             ]}
           />
           {route === "node" ? (
-            <select className="input mt-2 max-w-[320px]" value={exit} onChange={(e) => setExit(Number(e.target.value))} aria-label={t("inbounds.exitNode")}>
+            <Select className="input mt-2 max-w-[320px]" value={exit} onChange={(e) => setExit(Number(e.target.value))} aria-label={t("inbounds.exitNode")}>
               <option value={0} disabled>
                 {t("inbounds.exitPick")}
               </option>
@@ -135,7 +136,7 @@ function Body({ nodeId, c, refetch, checking }: { nodeId: number; c: Cascade; re
                     {nodeLabel(n)}
                   </option>
                 ))}
-            </select>
+            </Select>
           ) : null}
         </Field>
         <div className="form-actions">
