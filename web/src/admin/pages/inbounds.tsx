@@ -16,6 +16,7 @@ import { AddDrawer } from "./inbound/add";
 import { EditDrawer } from "./inbound/edit";
 import { CopyDrawer } from "./inbound/copy";
 import { ExitBar } from "./inbound/exit-bar";
+import { Select } from "../../components/select";
 
 export function InboundsPage() {
   const all = useInbounds();
@@ -83,7 +84,7 @@ export function InboundsPage() {
             <label htmlFor="inbounds-node" className="text-[13px] font-medium text-[var(--ink-700)]">
               {t("inbounds.node")}
             </label>
-            <select id="inbounds-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => {
+            <Select id="inbounds-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => {
                 setNodeId(Number(e.target.value));
                 setSelected(new Set());
               }}>
@@ -92,7 +93,7 @@ export function InboundsPage() {
                   {nodeLabel(n)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )
       ) : null}

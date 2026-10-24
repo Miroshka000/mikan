@@ -14,6 +14,7 @@ import { ago } from "../../../lib/format";
 import { safeHref } from "../../../lib/url";
 import { ClosedForSupport } from "../../support-closed";
 import type { View } from "./shared";
+import { Select } from "../../../components/select";
 
 export function InfrastructureCard({ v, draft, setDraft, error }: { v: View; draft: Schemas["AlertsConfig"]; setDraft: Dispatch<SetStateAction<Schemas["AlertsConfig"]>>; error: string }) {
   const qc = useQueryClient();
@@ -166,13 +167,13 @@ export function BackupCard() {
       </div>
       <div className="grid gap-x-3 sm:grid-cols-[120px_1fr]">
         <Field label={t("telegram.infra.backupHour")} htmlFor="backup-hour">
-          <select id="backup-hour" className="input" value={b.hour} disabled={patch.isPending} onChange={(e) => patch.mutate({ hour: Number(e.target.value) })}>
+          <Select id="backup-hour" className="input" value={b.hour} disabled={patch.isPending} onChange={(e) => patch.mutate({ hour: Number(e.target.value) })}>
             {Array.from({ length: 24 }, (_, h) => (
               <option key={h} value={h}>
                 {String(h).padStart(2, "0")}:00
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("telegram.infra.backupPassword")} htmlFor="backup-password" hint={b.password_set ? t("telegram.infra.backupPasswordSet") : t("telegram.infra.backupPasswordHint")} error={error}>
           <div className="flex gap-2">

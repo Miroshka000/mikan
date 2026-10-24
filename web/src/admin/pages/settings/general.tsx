@@ -16,6 +16,7 @@ import { fieldErrors } from "../../../lib/fields";
 import { inlineMarkdown } from "../../../lib/inline-md";
 import { ago, utcHourLabel } from "../../../lib/format";
 import { useSaveSettings } from "./shared";
+import { Select } from "../../../components/select";
 
 const serviceForm = (s: Schemas["SettingsView"]) => ({ brand: s.brand, public_host: s.public_host, domain: s.domain, support_url: s.support_url, quiet_hour_utc: s.quiet_hour_utc });
 
@@ -51,13 +52,13 @@ export function ServiceCard({ s }: { s: Schemas["SettingsView"] }) {
         </Field>
         <Disclosure title={t("common.advanced")} open={!!errors.quiet_hour_utc}>
           <Field label={t("settings.quietHour")} htmlFor="s-quiet" hint={t("settings.quietHourHint")} error={errors.quiet_hour_utc}>
-            <select id="s-quiet" className="input max-w-[240px]" value={form.quiet_hour_utc} onChange={(e) => setForm((f) => ({ ...f, quiet_hour_utc: Number(e.target.value) }))}>
+            <Select id="s-quiet" className="input max-w-[240px]" value={form.quiet_hour_utc} onChange={(e) => setForm((f) => ({ ...f, quiet_hour_utc: Number(e.target.value) }))}>
               {Array.from({ length: 24 }, (_, h) => (
                 <option key={h} value={h}>
                   {utcHourLabel(h)}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         </Disclosure>
         <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />

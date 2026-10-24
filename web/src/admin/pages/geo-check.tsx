@@ -12,6 +12,7 @@ import { ServerPicks, useServerPicks } from "./server-picks";
 import { useNodes } from "../../api/hooks";
 import { nodeLabel } from "../../lib/node-label";
 import { CardHead } from "../../components/layout";
+import { Select } from "../../components/select";
 
 type Geo = Schemas["GeoCheck"];
 type Node = Schemas["NodeInfo"];
@@ -218,13 +219,13 @@ function RegionsCard() {
       ) : (
         <>
           <Field label={t("geo.services.node")} htmlFor="regions-node">
-            <select id="regions-node" className="input max-w-[320px]" value={id ?? ""} onChange={(e) => setPicked(Number(e.target.value))}>
+            <Select id="regions-node" className="input max-w-[320px]" value={id ?? ""} onChange={(e) => setPicked(Number(e.target.value))}>
               {list.map((n) => (
                 <option key={n.id} value={n.id}>
                   {nodeLabel(n)}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <RegionsCheck nodeId={id} />
         </>

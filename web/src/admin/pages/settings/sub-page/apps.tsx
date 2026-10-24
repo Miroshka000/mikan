@@ -7,6 +7,7 @@ import { APPS, type Platform } from "../../../../sub/apps";
 import { orderApps, PLATFORMS } from "../../../../sub/page";
 import { PLATFORM_NAMES } from "../sub-docs";
 import { Card, type Config, type Set } from "./parts";
+import { Select } from "../../../../components/select";
 
 export function AppsSection({ config, set, announce, platform, setPlatform }: { config: Config; set: Set; announce: (text: string) => void; platform: Platform; setPlatform: (p: Platform) => void }) {
   const apps = config.apps;
@@ -30,14 +31,14 @@ export function AppsSection({ config, set, announce, platform, setPlatform }: { 
     <Card title={t("settings.page.apps")} sub={t("settings.page.appsSub")}>
       <div className="grid gap-x-3 sm:grid-cols-2">
         <Field label={t("settings.page.appsDefault")} htmlFor="sp-platform" hint={t("settings.page.appsDefaultHint")}>
-          <select id="sp-platform" className="input" value={apps.platform} onChange={(e) => set((c) => ({ ...c, apps: { ...c.apps, platform: e.target.value as Config["apps"]["platform"] } }))}>
+          <Select id="sp-platform" className="input" value={apps.platform} onChange={(e) => set((c) => ({ ...c, apps: { ...c.apps, platform: e.target.value as Config["apps"]["platform"] } }))}>
             <option value="auto">{t("settings.page.appsAuto")}</option>
             {PLATFORMS.map((p) => (
               <option key={p} value={p}>
                 {PLATFORM_NAMES[p]}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <SwitchRow label={t("settings.page.qr")} sub={t("settings.page.qrSub")} checked={apps.qr} onChange={(qr) => set((c) => ({ ...c, apps: { ...c.apps, qr } }))} />
       </div>

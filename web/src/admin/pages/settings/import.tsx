@@ -8,6 +8,7 @@ import { Button, Field } from "../../../components/ui";
 import { t, type Key } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors, onFormError } from "../../../lib/fields";
+import { Select } from "../../../components/select";
 
 type Kind = "marzban" | "pasarguard" | "remnawave";
 const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave"];
@@ -66,13 +67,13 @@ export function ImportCard() {
       <form onSubmit={submit} noValidate>
         <CardHead title={t("settings.import.title")} sub={t("settings.import.sub")} />
         <Field label={t("settings.import.kind")} htmlFor="imp-kind">
-          <select id="imp-kind" className="input" value={src.kind} onChange={set("kind")} disabled={running}>
+          <Select id="imp-kind" className="input" value={src.kind} onChange={set("kind")} disabled={running}>
             {KINDS.map((k) => (
               <option key={k} value={k}>
                 {t(`settings.import.kinds.${k}`)}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("settings.import.url")} htmlFor="imp-url" hint={t("settings.import.urlHint")}>
           <input id="imp-url" className="input" value={src.url} onChange={set("url")} placeholder="https://panel.example.com" autoComplete="off" disabled={running} />
@@ -112,14 +113,14 @@ export function ImportCard() {
             <Names label="settings.import.invalid" list={preview.invalid} bad />
             <div className="banner warn my-2">{t("settings.import.notCarried")}</div>
             <Field label={t("settings.import.tariff")} htmlFor="imp-tariff" hint={t("settings.import.tariffHint")} error={errors.tariff_id}>
-              <select id="imp-tariff" className="input" value={tariff} onChange={(e) => setTariff(e.target.value ? Number(e.target.value) : "")}>
+              <Select id="imp-tariff" className="input" value={tariff} onChange={(e) => setTariff(e.target.value ? Number(e.target.value) : "")}>
                 <option value="">—</option>
                 {(tariffs.data ?? []).map((tr) => (
                   <option key={tr.id} value={tr.id}>
                     {tr.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Button type="button" variant="primary" loading={run.isPending} disabled={tariff === "" || preview.new === 0} onClick={() => run.mutate()}>
               {t("settings.import.run", { n: preview.new })}
@@ -209,14 +210,14 @@ export function LegacyLinksCard() {
         </div>
       ) : null}
       <Field label={t("settings.import.legacyKind")} htmlFor="leg-kind">
-        <select id="leg-kind" className="input" value={draft.kind} onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value as Kind | "", path: d.path || (e.target.value ? OLD_PATH[e.target.value as Kind] : "") }))}>
+        <Select id="leg-kind" className="input" value={draft.kind} onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value as Kind | "", path: d.path || (e.target.value ? OLD_PATH[e.target.value as Kind] : "") }))}>
           <option value="">—</option>
           {KINDS.map((k) => (
             <option key={k} value={k}>
               {t(`settings.import.kinds.${k}`)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label={t("settings.import.legacyPath")} htmlFor="leg-path" hint={t("settings.import.legacyPathHint")} error={errors.path}>
         <input id="leg-path" className="input mono" value={draft.path} onChange={(e) => setDraft((d) => ({ ...d, path: e.target.value }))} placeholder="sub" autoComplete="off" aria-invalid={!!errors.path} />

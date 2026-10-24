@@ -20,6 +20,7 @@ import { useWarp } from "../node-warp";
 import { Editor, type ListenAt, ValidateResult, hostPort, listenAt, loopback, preloadEditor, useValidate } from "./shared";
 import { TargetPicker } from "./target";
 import { CdnSettings, cdnClient, cdnFormOf, type CdnForm } from "./cdn";
+import { Select } from "../../../components/select";
 
 /** The inbound form's fields as its inputs hold them. */
 type InboundForm = {
@@ -360,7 +361,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   ]}
                 />
                 {outbound === "node" ? (
-                  <select
+                  <Select
                     className="input mt-2 max-w-[320px]"
                     value={exitNode}
                     onChange={(e) => {
@@ -381,19 +382,19 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                           {n.enabled ? "" : ` — ${t("nodes.disabled")}`}
                         </option>
                       ))}
-                  </select>
+                  </Select>
                 ) : null}
               </Field>
               {pools.data?.length ? (
                 <Field label={t("pools.inbound")} htmlFor="ed-pool" hint={t("pools.inboundHint")}>
-                  <select id="ed-pool" className="input max-w-[320px]" value={poolId} onChange={(e) => set.poolId(Number(e.target.value))}>
+                  <Select id="ed-pool" className="input max-w-[320px]" value={poolId} onChange={(e) => set.poolId(Number(e.target.value))}>
                     <option value={0}>{t("pools.mainServers")}</option>
                     {pools.data.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               ) : null}
               {inbound?.sni443_possible ? (

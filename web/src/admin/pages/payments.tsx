@@ -20,6 +20,7 @@ import { addonName } from "./payment-addons";
 import { PromoSection } from "./promocodes";
 import { CampaignsSection } from "./campaigns";
 import { TopupsSection } from "./topups";
+import { Select } from "../../components/select";
 
 type Settings = Schemas["PaymentSettingsView"];
 type Payment = Schemas["PaymentView"];
@@ -172,22 +173,22 @@ function History() {
     <section className="card glass reveal min-w-0">
       <CardHead title={t("payments.history")} sub={totals.length ? totals.map((x) => t("payments.total", { n: num(x.count), sum: money(x.total, x.currency) })).join(" · ") : t("payments.noTotals")} />
       <div className="mb-4 flex flex-wrap gap-2">
-        <select className="input max-w-[200px]" value={status} onChange={(e) => setStatus(e.target.value as Status | "")} aria-label={t("payments.status")}>
+        <Select className="input max-w-[200px]" value={status} onChange={(e) => setStatus(e.target.value as Status | "")} aria-label={t("payments.status")}>
           <option value="">{t("payments.allStatuses")}</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
               {t(`payments.statuses.${s}`)}
             </option>
           ))}
-        </select>
-        <select className="input max-w-[200px]" value={provider} onChange={(e) => setProvider(e.target.value as Provider | "")} aria-label={t("payments.provider")}>
+        </Select>
+        <Select className="input max-w-[200px]" value={provider} onChange={(e) => setProvider(e.target.value as Provider | "")} aria-label={t("payments.provider")}>
           <option value="">{t("payments.allProviders")}</option>
           {providers.map((p) => (
             <option key={p} value={p}>
               {providerName(p, addons)}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <QueryBoundary
         query={list}
@@ -418,7 +419,7 @@ function RulesCard({ s }: { s: Settings }) {
           />
           <div className="pt-4">
             <Field label={t("payments.trial")} htmlFor="pay-trial" hint={`${form.trialStars.trim() || form.trialRub.trim() ? t("payments.trialSubPaid") : t("payments.trialSub")}${s.trials ? ` ${t("payments.trialsGiven", { n: s.trials })}` : ""}`}>
-              <select id="pay-trial" className="input" value={form.trial} onChange={(e) => {
+              <Select id="pay-trial" className="input" value={form.trial} onChange={(e) => {
                   const trial = Number(e.target.value);
                   setForm((f) => (trial ? { ...f, trial } : { ...f, trial, trialStars: "", trialRub: "" }));
                 }}>
@@ -428,7 +429,7 @@ function RulesCard({ s }: { s: Settings }) {
                     {tr.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             {form.trial ? (
               <div className="grid gap-x-3 sm:grid-cols-2" role="group" aria-label={t("payments.trialPrice")}>
@@ -444,14 +445,14 @@ function RulesCard({ s }: { s: Settings }) {
           </div>
           <div className="pt-4">
             <Field label={t("payments.free")} htmlFor="pay-free" hint={`${t("payments.freeSub")}${s.free_plans ? ` ${t("payments.freeGiven", { n: s.free_plans })}` : ""}`}>
-              <select id="pay-free" className="input" value={form.free} onChange={(e) => setForm((f) => ({ ...f, free: Number(e.target.value) }))}>
+              <Select id="pay-free" className="input" value={form.free} onChange={(e) => setForm((f) => ({ ...f, free: Number(e.target.value) }))}>
                 <option value={0}>{t("payments.freeOff")}</option>
                 {(tariffs.data ?? []).map((tr) => (
                   <option key={tr.id} value={tr.id}>
                     {tr.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             {form.free ? (
               <Field
@@ -459,12 +460,12 @@ function RulesCard({ s }: { s: Settings }) {
                 htmlFor="pay-free-condition"
                 hint={form.freeCondition === "channel" ? t("payments.freeChannelHint") : !hasChannel ? t("payments.freeNoChannel") : undefined}
               >
-                <select id="pay-free-condition" className="input" value={form.freeCondition} onChange={(e) => setForm((f) => ({ ...f, freeCondition: e.target.value as Settings["free_condition"] }))}>
+                <Select id="pay-free-condition" className="input" value={form.freeCondition} onChange={(e) => setForm((f) => ({ ...f, freeCondition: e.target.value as Settings["free_condition"] }))}>
                   <option value="none">{t("payments.freeNone")}</option>
                   <option value="channel" disabled={!hasChannel && form.freeCondition !== "channel"}>
                     {t("payments.freeChannel")}
                   </option>
-                </select>
+                </Select>
               </Field>
             ) : null}
           </div>
@@ -569,13 +570,13 @@ function BalanceCard({ s }: { s: Settings }) {
         >
           <div className="grid gap-x-4 md:grid-cols-2">
             <Field label={t("payments.balance.currency")} htmlFor="bal-currency">
-              <select id="bal-currency" className="input" value={form.currency} onChange={(e) => set("currency", e.target.value as BalanceCurrency)}>
+              <Select id="bal-currency" className="input" value={form.currency} onChange={(e) => set("currency", e.target.value as BalanceCurrency)}>
                 {BALANCE_CURRENCIES.map((c) => (
                   <option key={c} value={c}>
                     {t(`payments.balance.currencies.${c}`)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             {form.currency !== "RUB" ? (
               <Field label={t("payments.balance.rate", { currency: form.currency })} htmlFor="bal-rate" hint={t("payments.balance.rateHint")} error={errors.rate}>

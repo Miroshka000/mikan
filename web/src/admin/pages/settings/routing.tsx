@@ -14,6 +14,7 @@ import { ExitDnsFields, exitDnsDraftOf, useSaveExitDns, type ExitDnsDraft } from
 import { RulesEditor } from "./rules";
 import { useSaveSettings } from "./shared";
 import { TemplateCard } from "./template";
+import { Select } from "../../../components/select";
 
 type Routes = Schemas["Routes"];
 type DNS = NonNullable<Routes["dns"]>;
@@ -231,7 +232,7 @@ function useTargetSelect() {
   const nodes = useNodes();
   const nodeName = (n: { id: number; name: string; local: boolean }) => t("settings.routesOnServer", { name: n.name || (n.local ? t("settings.routesThisServer") : `#${n.id}`) });
   return (id: string, value: string, onChange: (v: string) => void, opts: { follow?: boolean; label?: string; className?: string } = {}) => (
-    <select id={id} className={opts.className ?? "input max-w-[220px]"} value={value} onChange={(e) => onChange(e.target.value)} aria-label={opts.label}>
+    <Select id={id} className={opts.className ?? "input max-w-[220px]"} value={value} onChange={(e) => onChange(e.target.value)} aria-label={opts.label}>
       {TARGETS.filter((x) => opts.follow !== false || x.id).map((x) => (
         <option key={x.id} value={x.id}>
           {t(x.label)}
@@ -246,7 +247,7 @@ function useTargetSelect() {
           ))}
         </optgroup>
       ) : null}
-    </select>
+    </Select>
   );
 }
 
@@ -344,16 +345,16 @@ function ListsPart({ routes, setRoutes, error }: { routes: Routes; setRoutes: Se
               <input className="input mono" value={l.name} onChange={(e) => setList(i, { name: e.target.value.toLowerCase() })} maxLength={32} aria-label={t("settings.routesListName")} placeholder="whitelist" />
               <input className="input mono" value={l.url} onChange={(e) => setList(i, { url: e.target.value.trim() })} maxLength={500} inputMode="url" autoComplete="off" spellCheck={false} aria-label={t("settings.routesListUrl")} placeholder="https://raw.githubusercontent.com/…/list.yaml" />
               <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-                <select className="input max-w-[170px]" value={l.behavior} onChange={(e) => setList(i, { behavior: e.target.value })} aria-label={t("settings.routesListBehavior")}>
+                <Select className="input max-w-[170px]" value={l.behavior} onChange={(e) => setList(i, { behavior: e.target.value })} aria-label={t("settings.routesListBehavior")}>
                   <option value="classical">{t("settings.routesListClassical")}</option>
                   <option value="domain">{t("settings.routesListDomain")}</option>
                   <option value="ipcidr">{t("settings.routesListIP")}</option>
-                </select>
-                <select className="input max-w-[110px]" value={l.format} onChange={(e) => setList(i, { format: e.target.value })} aria-label={t("settings.routesListFormat")}>
+                </Select>
+                <Select className="input max-w-[110px]" value={l.format} onChange={(e) => setList(i, { format: e.target.value })} aria-label={t("settings.routesListFormat")}>
                   <option value="yaml">YAML</option>
                   <option value="text">TXT</option>
                   <option value="mrs">MRS</option>
-                </select>
+                </Select>
                 {targetSelect(`s-list-${i}`, l.target, (v) => setList(i, { target: v }), { follow: false, label: t("settings.routesListTarget") })}
                 <Button variant="ghost" className="ml-auto" onClick={() => dropList(i)} aria-label={t("settings.routesListRemoveNamed", { name: l.name })}>
                   {t("settings.routesListRemove")}
@@ -439,13 +440,13 @@ function AdvancedPart({ routes, setRoutes, error }: { routes: Routes; setRoutes:
           />
         </Field>
         <Field label={t("settings.routesInterval")} htmlFor="s-interval" hint={t("settings.routesIntervalHint")}>
-          <select id="s-interval" className="input max-w-[280px]" value={servers.interval ?? 0} onChange={(e) => setServers({ interval: Number(e.target.value) || undefined })}>
+          <Select id="s-interval" className="input max-w-[280px]" value={servers.interval ?? 0} onChange={(e) => setServers({ interval: Number(e.target.value) || undefined })}>
             {[...new Set([0, 60, 120, 600, 1800, servers.interval ?? 0])].map((n) => (
               <option key={n} value={n}>
                 {n ? t("settings.routesIntervalSec", { n }) : t("settings.routesIntervalDefault")}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <SwitchRow label={t("settings.routesCountries")} sub={t("settings.routesCountriesSub")} checked={!servers.no_countries} onChange={(v) => setServers({ no_countries: v ? undefined : true })} />
         {error ? (

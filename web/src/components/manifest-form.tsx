@@ -6,6 +6,7 @@ import type { Schemas } from "../api/client";
 import { t } from "../i18n";
 import { localized } from "../lib/localized";
 import { Field } from "./ui";
+import { Select } from "./select";
 
 type ManifestField = Schemas["AddonField"];
 
@@ -120,14 +121,14 @@ function FieldControl({ id, f, value, onChange, error, disabled }: { id: string;
     const byDefault = options.find((o) => o.value === f.default);
     return (
       <Field label={label} htmlFor={id} hint={help || undefined} error={error}>
-        <select id={id} className="input" value={text} disabled={disabled} aria-invalid={!!error} aria-required={f.required || undefined} onChange={(e) => onChange(e.target.value)}>
+        <Select id={id} className="input" value={text} disabled={disabled} aria-invalid={!!error} aria-required={f.required || undefined} onChange={(e) => onChange(e.target.value)}>
           <option value="">{byDefault ? t("addons.form.byDefault", { value: localized(byDefault.label, byDefault.value) }) : t("addons.form.notChosen")}</option>
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {localized(o.label, o.value)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
     );
   }

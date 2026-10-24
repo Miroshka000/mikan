@@ -18,6 +18,7 @@ import { bytes, days as daysText, GiB, rubles } from "../../lib/format";
 import { isKopecks, isLifetimeDays, isStars, isTrafficGB, LIFETIME_DAYS_PRESETS, parseDecimal, rubKopecks } from "../../lib/validate";
 import { canBuy, fitsTariff, quotasOf } from "./sale-rules";
 import { CardHead } from "../../components/layout";
+import { Select } from "../../components/select";
 
 type Package = Schemas["PackageView"];
 type Pool = Schemas["PoolView"];
@@ -259,14 +260,14 @@ function PackageDrawer({
           </div>
         </Field>
         <Field label={t("packages.target")} htmlFor="pk-pool" hint={t("packages.targetHint")} error={errors.pool_id}>
-          <select id="pk-pool" className="input max-w-[320px]" value={pool} onChange={(e) => setPool(Number(e.target.value))}>
+          <Select id="pk-pool" className="input max-w-[320px]" value={pool} onChange={(e) => setPool(Number(e.target.value))}>
             <option value={0}>{t("pools.mainTraffic")}</option>
             {pools.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         {tariffs.length ? (
           <Field label={t("packages.tariffs")} hint={some ? t("packages.tariffsHint") : undefined} error={errors.tariffs}>
