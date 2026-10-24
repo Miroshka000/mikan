@@ -310,12 +310,13 @@ func TestImportFromPasarGuardKeepsSignedLinks(t *testing.T) {
 	}))
 	defer old.Close()
 	run := map[string]any{"kind": "pasarguard", "url": old.URL, "token": "pg_key", "tariff_id": tariffs[1].ID}
-	if r := runImport(t, h, api, csrf, run); r.Created != 1 || r.Links != 2 {
+	// One person with two keys (the name and the id): one user with old links, not two.
+	if r := runImport(t, h, api, csrf, run); r.Created != 1 || r.Links != 1 {
 		t.Fatalf("import: %+v", r)
 	}
 	// PasarGuard's own code made this token for user id 42 with this secret.
 	const token = "djMsNDIsMTc1OTQwMDAwMA.fa-02Knno9F0qsz39WtypLtudEubWHfKFrYoyF8skR4"
-	if resp, body := h.do(http.MethodPatch, api+"/import/legacy", map[string]any{"path": "sub", "secret": "s3cr3t-key-from-jwt-table"}, csrf); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"kind":"pasarguard"`) {
+	if resp, body := h.do(http.MethodPatch, api+"/import/legacy", map[string]any{"path": "sub", "secret": "s3cr3t-key-from-jwt-table"}, csrf); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"kind":"pasarguard"`) || !strings.Contains(string(body), `"links":1`) {
 		t.Fatalf("legacy: %d %s", resp.StatusCode, body)
 	}
 	if _, err := h.p.Apply(ctx); err != nil {
@@ -370,6 +371,11 @@ func TestImportRefusesMixingSignedPanels(t *testing.T) {
 	}
 	if err := settings.Set(ctx, settings.New(h.st.Q), settings.KeyLegacySubKind, "pasarguard"); err != nil {
 		t.Fatal(err)
+	}
+	// The preview says so too, before the admin reads it and picks a plan.
+	check := map[string]any{"kind": "marzban", "url": "https://old.example.com", "username": "a", "password": "b"}
+	if resp, body := h.do(http.MethodPost, api+"/import/preview", check, csrf); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "import_kind_conflict") {
+		t.Fatalf("mixing, preview: %d %s", resp.StatusCode, body)
 	}
 	run := map[string]any{"kind": "marzban", "url": "https://old.example.com", "username": "a", "password": "b", "tariff_id": tariffs[1].ID}
 	if resp, body := h.do(http.MethodPost, api+"/import", run, csrf); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "import_kind_conflict") {

@@ -1853,7 +1853,8 @@
       "failed": "The import stopped: {error}",
       "invalid": "Cannot be taken as they are (too long, broken numbers): {n}",
       "notCarried": "Not carried over: the traffic reset strategy, groups and protocols of the old panel (clients get the plan's). An on-hold term starts at the import. Links revoked in the old panel work again: reissue them.",
-      "report": "Created {created}, old links ready for {links}",
+      "report": "Created {created}, old links filed for {links}",
+      "reportNext": "The old links do not open yet: turn them on in the Old subscription links card",
       "skipped": "{n} left out: the name is taken",
       "legacy": "Old subscription links",
       "legacySub": "Point the old panel's domain at this server and set its subscription port in Settings → Subscription: the links people have keep working.",
@@ -1863,7 +1864,10 @@
       "secret": "Signing secret of the old panel",
       "secretHint": "Marzban and PasarGuard sign every link: without their secret an old link cannot be told from a forged one, so it does not open. The secret is in the old panel's database: SELECT secret_key FROM jwt;",
       "secretSet": "The secret is set. Type a new one to change it.",
-      "legacyCount": "Old links and clients on file: {n}",
+      "legacyCount": "Clients with old links: {n}",
+      "legacyOff": "The clients' old links do not open yet: set the path the old panel gave them under and save",
+      "legacyNoSecret": "The old panel's signed links do not open without its secret: paste it and save",
+      "legacyUse": "Use {path}",
       "legacySaved": "Saved"
     },
     "torrent": {

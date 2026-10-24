@@ -95,7 +95,7 @@ func newList() List { return List{Names: []string{}} }
 type Report struct {
 	Created int  `json:"created"`
 	Skipped List `json:"skipped" doc:"Имена, которые уже есть в mikan: эти пользователи не перенесены"`
-	Links   int  `json:"links" doc:"Старые ссылки и ключи, заведённые этим импортом"`
+	Links   int  `json:"links" doc:"Пользователи, чьи старые ссылки заведены этим импортом"`
 	NoLink  List `json:"no_link" doc:"Перенесены без старой ссылки: её токен слишком короткий, чтобы быть секретом"`
 	Failed  List `json:"failed" doc:"Имя и причина для тех, кого не удалось создать"`
 }
@@ -223,7 +223,10 @@ func Apply(ctx context.Context, st *store.Store, users *domain.Users, now time.T
 				r.Failed.add(in.Name + ": " + failure(err))
 			default:
 				r.Created++
-				r.Links += links
+				// People, not keys: a PasarGuard user's link is filed under the name and the id.
+				if links > 0 {
+					r.Links++
+				}
 				created = true
 				if in.WeakToken {
 					r.NoLink.add(in.Name)

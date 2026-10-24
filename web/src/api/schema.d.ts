@@ -4117,7 +4117,7 @@ export interface components {
             kind: string;
             /**
              * Format: int64
-             * @description Сколько старых ссылок и пользователей заведено
+             * @description У скольких пользователей заведены старые ссылки
              */
             links: number;
             /** @description Путь старых ссылок подписки: sub у Marzban и PasarGuard, api/sub у Remnawave; пусто — выключено */
@@ -5618,7 +5618,7 @@ export interface components {
             failed: components["schemas"]["List"];
             /**
              * Format: int64
-             * @description Старые ссылки и ключи, заведённые этим импортом
+             * @description Пользователи, чьи старые ссылки заведены этим импортом
              */
             links: number;
             /** @description Перенесены без старой ссылки: её токен слишком короткий, чтобы быть секретом */
