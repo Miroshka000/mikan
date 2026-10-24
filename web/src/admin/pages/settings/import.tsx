@@ -57,6 +57,9 @@ export function ImportCard() {
   };
   const preview = st?.mode === "preview" && st.state === "done" ? st.preview : undefined;
   const report = st?.mode === "import" ? st.report : undefined;
+  // Filed links open only once the next card has the old path (and a signing panel's secret).
+  const legacy = useQuery({ queryKey: ["legacy-links"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/legacy", { signal })), enabled: !!report?.links });
+  const linksOff = !!report?.links && !!legacy.data && !legacyActive(legacy.data);
   const usesPassword = src.kind !== "remnawave";
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
@@ -126,6 +129,7 @@ export function ImportCard() {
         {report ? (
           <div className="panel-soft mt-3 p-3 text-[13px]">
             <div className="font-medium">{t("settings.import.report", { created: report.created, links: report.links })}</div>
+            {linksOff ? <div className="banner warn mt-2">{t("settings.import.reportNext")}</div> : null}
             {report.skipped.count ? <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.import.skipped", { n: report.skipped.count })}</div> : null}
             <Names label="settings.import.noLink" list={report.no_link} />
             <Names label="settings.import.failedUsers" list={report.failed} bad />
@@ -137,6 +141,11 @@ export function ImportCard() {
 }
 
 const busy = (s?: string) => s === "fetching" || s === "checking" || s === "importing";
+
+const signedKind = (k: string) => k === "marzban" || k === "pasarguard";
+
+/** The old links open: they have a path, and a signing panel's links a secret. */
+const legacyActive = (v: Schemas["LegacyView"]) => v.path !== "" && (!signedKind(v.kind) || v.secret_set);
 
 /** A long list of names: the first ones, and how many there are in all. */
 function Names({ label, list, bad }: { label: Key; list: { names: string[]; count: number }; bad?: boolean }) {
@@ -175,7 +184,10 @@ export function LegacyLinksCard() {
   });
   const errors = fieldErrors(save.error);
   if (!v) return null;
-  const signed = draft.kind === "marzban" || draft.kind === "pasarguard";
+  const signed = signedKind(draft.kind);
+  // Imported clients whose links do not open yet: say what is missing.
+  const off = v.links > 0 && !legacyActive(v);
+  const suggest = !draft.path && draft.kind ? OLD_PATH[draft.kind] : "";
   return (
     <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
       <form
@@ -186,6 +198,16 @@ export function LegacyLinksCard() {
         }}
       >
       <CardHead title={t("settings.import.legacy")} sub={t("settings.import.legacySub")} />
+      {off ? (
+        <div className="banner warn mb-3 flex flex-wrap items-center justify-between gap-2" role="status">
+          <span>{t(v.path === "" ? "settings.import.legacyOff" : "settings.import.legacyNoSecret")}</span>
+          {suggest ? (
+            <Button type="button" size="sm" variant="ghost" onClick={() => setDraft((d) => ({ ...d, path: suggest }))}>
+              {t("settings.import.legacyUse", { path: suggest })}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <Field label={t("settings.import.legacyKind")} htmlFor="leg-kind">
         <select id="leg-kind" className="input" value={draft.kind} onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value as Kind | "", path: d.path || (e.target.value ? OLD_PATH[e.target.value as Kind] : "") }))}>
           <option value="">—</option>

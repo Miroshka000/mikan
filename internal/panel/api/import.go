@@ -60,7 +60,7 @@ type LegacyView struct {
 	Path      string `json:"path" doc:"Путь старых ссылок подписки: sub у Marzban и PasarGuard, api/sub у Remnawave; пусто — выключено"`
 	Kind      string `json:"kind" doc:"Чьи ссылки: marzban, pasarguard или remnawave; импорт ставит его сам"`
 	SecretSet bool   `json:"secret_set" doc:"Секрет старой панели задан; сам он не возвращается"`
-	Links     int64  `json:"links" doc:"Сколько старых ссылок и пользователей заведено"`
+	Links     int64  `json:"links" doc:"У скольких пользователей заведены старые ссылки"`
 }
 
 type legacyOutput struct{ Body LegacyView }
@@ -100,6 +100,10 @@ func (h *handlers) startJob(start func() error) (*importStateOutput, error) {
 }
 
 func (h *handlers) importPreview(ctx context.Context, in *importPreviewInput) (*importStateOutput, error) {
+	// The run would refuse it: say so before the admin reads a preview and picks a plan.
+	if err := h.kindConflict(ctx, in.Body.Kind); err != nil {
+		return nil, err
+	}
 	return h.startJob(func() error { return h.d.Importer.Preview(in.Body.source(), in.Body.host()) })
 }
 
@@ -116,26 +120,35 @@ func signed(kind string) bool {
 	return kind == string(panelimport.Marzban) || kind == string(panelimport.PasarGuard)
 }
 
+// kindConflict refuses users of a signing panel while links of the other one are here:
+// Marzban's and PasarGuard's links are checked with one secret, so the second panel's users
+// on top would turn the first one's links off without a word.
+func (h *handlers) kindConflict(ctx context.Context, kind string) error {
+	if !signed(kind) {
+		return nil
+	}
+	current, err := h.d.Settings.String(ctx, settings.KeyLegacySubKind)
+	if err != nil {
+		return err
+	}
+	links, err := h.d.Store.Q.CountLegacySubTokens(ctx)
+	if err != nil {
+		return err
+	}
+	if signed(current) && current != kind && links > 0 {
+		return huma.Error409Conflict("import_kind_conflict")
+	}
+	return nil
+}
+
 func (h *handlers) importRun(ctx context.Context, in *importRunInput) (*importStateOutput, error) {
 	b := in.Body
 	src := importSource{Kind: b.Kind, URL: b.URL, Username: b.Username, Password: b.Password, Token: b.Token}
 	if _, err := h.d.Store.Q.GetTariff(ctx, b.TariffID); err != nil {
 		return nil, fieldErr("body.tariff_id", "tariff_not_found")
 	}
-	// Marzban's and PasarGuard's links are checked with one secret: users of the other one
-	// on top would turn the first one's links off without a word.
-	if signed(b.Kind) {
-		current, err := h.d.Settings.String(ctx, settings.KeyLegacySubKind)
-		if err != nil {
-			return nil, err
-		}
-		links, err := h.d.Store.Q.CountLegacySubTokens(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if signed(current) && current != b.Kind && links > 0 {
-			return nil, huma.Error409Conflict("import_kind_conflict")
-		}
+	if err := h.kindConflict(ctx, b.Kind); err != nil {
+		return nil, err
 	}
 	out, err := h.startJob(func() error { return h.d.Importer.Start(src.source(), b.TariffID, src.host()) })
 	if err == nil {
@@ -165,7 +178,7 @@ func (h *handlers) getLegacy(ctx context.Context, _ *struct{}) (*legacyOutput, e
 		return nil, err
 	}
 	v.SecretSet = secret != ""
-	if v.Links, err = h.d.Store.Q.CountLegacySubTokens(ctx); err != nil {
+	if v.Links, err = h.d.Store.Q.CountLegacyUsers(ctx); err != nil {
 		return nil, err
 	}
 	return &legacyOutput{Body: v}, nil

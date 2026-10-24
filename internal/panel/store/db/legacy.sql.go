@@ -47,6 +47,18 @@ func (q *Queries) CountLegacySubTokens(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countLegacyUsers = `-- name: CountLegacyUsers :one
+SELECT count(DISTINCT user_id) FROM legacy_sub_tokens
+`
+
+// The users with an old link: a PasarGuard user has two keys (name and id), one person.
+func (q *Queries) CountLegacyUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLegacyUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteLegacySubTokensOf = `-- name: DeleteLegacySubTokensOf :exec
 DELETE FROM legacy_sub_tokens WHERE user_id = $1
 `
