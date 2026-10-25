@@ -19,7 +19,7 @@ Subscribers buy and renew access in the bot and Mini App. The panel creates or e
 
 </Steps>
 
-The same place has the "Sell to new people" and "Renewal resets traffic" switches. A renewal adds the plan's term after the current one and, unless switched off, starts a new traffic period.
+The same place has the "Sell to new people" and "Renewal resets traffic" switches. A renewal adds the plan's term after the current one and, unless switched off, starts a new traffic period. The leftover of the last period goes into the new one if that is turned on in the [subscription rules](/mikan/en/billing/lifecycle/#leftover-traffic).
 
 If no plan with a price for an enabled payment method is on sale, the **Payments** section warns you: the bot will only tell people to message support.
 
@@ -55,6 +55,7 @@ Adapters are installed only by the mikan program on the host: the panel itself d
 - a new subscription is disabled, but not deleted;
 - a renewal loses the term it bought, and if nothing changed after the payment, the previous plan and limits are restored;
 - a traffic package is deleted;
+- the leftover of the last period that this payment carried over is taken away with it;
 - a promo code can be used again.
 
 Traffic reset by a renewal is not restored. Refunds that Telegram makes on its own are handled the same way. The buyer gets a message in the bot.
