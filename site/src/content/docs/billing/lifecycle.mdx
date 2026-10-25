@@ -138,10 +138,7 @@ description: Перенос остатка трафика, срок с перв�
 
 ## Для API и аддонов
 
-- `GET /api/v1/lifecycle` и `PUT /api/v1/lifecycle`: правила (`carry.on`, `carry.cap_percent`, `removal.on`, `removal.days`).
-- `GET /api/v1/lifecycle/inactive?days=N`: пробный прогон удаления, ничего не удаляет. Без `days` берётся сохранённое число, иначе от 7 до 3650.
-- `PUT /api/v1/users/{id}/next-tariff` и `DELETE /api/v1/users/{id}/next-tariff`: следующий тариф (`tariff_id` и необязательный `term_days`, 0 значит бессрочно). Ответ `switched: true`, если тариф применён сразу.
-- `POST /api/v1/users/bulk/preview`: тело как у `POST /api/v1/users/bulk` (`ids`, `action`, `days`, `folder_id`), ничего не меняет. Ответ: `requested`, `found`, `missing`, `changed`, `unchanged`, `sample` (первые 10) и для `delete` ещё `at_stake`. Права те же, что у самого действия.
-- У тарифа поля `carry_over` (`inherit`, `on`, `off`) и `starts_on_connect`, у клиента `starts_on_connect` и `next_tariff`. `PATCH /api/v1/users/{id}` с `starts_on_connect: true` включает ожидание, с `false` запускает срок сейчас.
+Всё это доступно и через API: правила, пробный прогон удаления, следующий тариф пользователя, поля тарифа и пользователя, предпросмотр массовых действий. Методы с параметрами, ответами и правами ключа собраны в [справочнике API](/mikan/api/reference/): [правила подписок](/mikan/api/reference/operations/get-lifecycle/), [следующий тариф](/mikan/api/reference/operations/set-next-tariff/), [предпросмотр массовых действий](/mikan/api/reference/operations/bulk-users-preview/).
+
 - Журнал аудита: `lifecycle.update`, `user.next_tariff`, `user.next_tariff_clear`, `user.switch_tariff`, `user.remove_inactive`.
 - События для аддонов: `user.started` (`by`: `connection` или `admin`), `user.switched` (`tariff_id`, `from_tariff_id`, `expires_at`, `carried`), `user.removed` (`by`: `inactive`, `expired_at`, `online_at`, `days`).

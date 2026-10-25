@@ -138,10 +138,7 @@ A confirmed action is done for all the clients found in one transaction: for all
 
 ## For the API and addons
 
-- `GET /api/v1/lifecycle` and `PUT /api/v1/lifecycle`: the rules (`carry.on`, `carry.cap_percent`, `removal.on`, `removal.days`).
-- `GET /api/v1/lifecycle/inactive?days=N`: a dry run of the removal that deletes nothing. Without `days` the saved number is used; otherwise it is from 7 to 3650.
-- `PUT /api/v1/users/{id}/next-tariff` and `DELETE /api/v1/users/{id}/next-tariff`: the next plan (`tariff_id` and an optional `term_days`, 0 means no expiry). The answer has `switched: true` if the plan was applied at once.
-- `POST /api/v1/users/bulk/preview`: the body of `POST /api/v1/users/bulk` (`ids`, `action`, `days`, `folder_id`); it changes nothing. The answer: `requested`, `found`, `missing`, `changed`, `unchanged`, `sample` (the first 10) and, for `delete`, `at_stake`. The rights are those of the action itself.
-- A plan has the fields `carry_over` (`inherit`, `on`, `off`) and `starts_on_connect`; a client has `starts_on_connect` and `next_tariff`. `PATCH /api/v1/users/{id}` with `starts_on_connect: true` turns the wait on, with `false` it starts the term now.
+All of this is available through the API too: the rules, the dry run of the removal, a user's next plan, the fields of a plan and of a user, the preview of bulk actions. The methods with their parameters, answers and key rights are in the [API reference](/mikan/en/api/reference/): [the subscription rules](/mikan/en/api/reference/operations/get-lifecycle/), [the next plan](/mikan/en/api/reference/operations/set-next-tariff/), [the preview of bulk actions](/mikan/en/api/reference/operations/bulk-users-preview/).
+
 - Audit log: `lifecycle.update`, `user.next_tariff`, `user.next_tariff_clear`, `user.switch_tariff`, `user.remove_inactive`.
 - Events for addons: `user.started` (`by`: `connection` or `admin`), `user.switched` (`tariff_id`, `from_tariff_id`, `expires_at`, `carried`), `user.removed` (`by`: `inactive`, `expired_at`, `online_at`, `days`).
