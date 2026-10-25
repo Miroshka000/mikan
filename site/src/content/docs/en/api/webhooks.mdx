@@ -1,0 +1,206 @@
+---
+title: Webhooks
+description: The panel sends its events to your address, from payments to a node going down. How to connect an address, check the signature and take retries.
+---
+
+import { Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+The panel sends its events to your address: a plan was paid for, a subscription is about to end, a node stopped answering. You do not have to poll the API: for each event the panel makes one POST request with a JSON body, and the signature in a header proves the request is the panel's and not someone else's.
+
+<Steps>
+
+1. **Prepare a handler** on your server: it takes a POST with JSON and answers with a 2xx code. The panel must be able to reach the address over `http` or `https`.
+
+2. **Add the address in the panel**: **Settings → Security → Webhooks → Open → Add address**. Give it a name, the address and the events: all of them or only the ticked ones.
+
+3. **Copy the secret**. It looks like `whsec_...` and is shown once: the panel keeps it only to sign requests, and later tells just its last four characters.
+
+4. **Check the signature** in the handler, as shown below.
+
+5. **Press "Send test"** at the address: the panel sends a `webhook.test` event at once and shows what the receiver answered. Every attempt, a test too, is written to the **Deliveries** log.
+
+</Steps>
+
+Webhook addresses are set from the panel only: an API key can neither read nor change them, because an address decides where the events go, and an address may carry a token.
+
+## What arrives
+
+A `POST` request with a JSON body and these headers:
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `User-Agent` | `mikan-webhooks/<panel version>` |
+| `X-Mikan-Event` | the event type, for example `payment.paid` |
+| `X-Mikan-Event-Id` | the event's number, the same as `id` in the body |
+| `X-Mikan-Timestamp` | the time of this attempt, Unix seconds |
+| `X-Mikan-Signature` | the signature: `v1=<hex>` |
+
+The body is the same for every event, only `data` differs:
+
+```json
+{
+  "id": 1042,
+  "type": "payment.paid",
+  "at": "2026-10-25T14:03:11Z",
+  "user_id": 87,
+  "tg_id": 123456789,
+  "data": {
+    "payment_id": 7,
+    "kind": "new",
+    "provider": "stars",
+    "amount": 100,
+    "currency": "XTR",
+    "tariff_id": 2,
+    "tariff_name": "Month",
+    "term_days": 30,
+    "created": true
+  }
+}
+```
+
+- `id` grows with every event of the panel: it puts events in order and tells one from another.
+- `at` is the time of the event, UTC, RFC 3339.
+- `user_id` is the subscription's number, `tg_id` the Telegram account the event is about. When there is none, the field is not in the body.
+- In `data`, fields with an empty value (zero, `false`, an empty string) are left out.
+
+## Checking the signature
+
+The signature is an HMAC-SHA256 in hex. The key is the whole secret, `whsec_` included, and what is signed is the time in seconds, a dot and the request body, in the very bytes it came in:
+
+```text
+hex( HMAC-SHA256( secret, X-Mikan-Timestamp + "." + body ) )
+```
+
+The time is part of the signature, so a captured request can neither be rebuilt with another body nor passed off as a new one later. Every attempt is signed anew: a retry hours later also carries a fresh time, and a window of five minutes will not reject it.
+
+Check in this order:
+
+1. Take the **body as bytes**, before parsing the JSON: a body rebuilt from an object has other bytes and the signature will not match.
+2. Reject a request whose `X-Mikan-Timestamp` is more than 5 minutes away from your clock.
+3. Compute the signature and compare it with `v1=...` **character by character in constant time** (`timingSafeEqual`, `compare_digest`), not with `==`.
+4. No match: answer 401 and do nothing.
+
+The `v1=` prefix names the scheme. If a later panel version signs by another scheme as well, it will stand beside `v1`, so check the part that starts with `v1=`.
+
+<Tabs syncKey="api-client">
+<TabItem label="Node.js">
+
+```js
+import crypto from "node:crypto";
+import express from "express";
+
+const SECRET = process.env.MIKAN_WEBHOOK_SECRET; // whsec_...
+const app = express();
+
+// The signature covers the bytes as they came: take the body raw, not parsed.
+app.post("/mikan-webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const stamp = req.get("X-Mikan-Timestamp") ?? "";
+  const given = /(?:^|[ ,])v1=([0-9a-f]+)/.exec(req.get("X-Mikan-Signature") ?? "")?.[1] ?? "";
+  const expected = crypto.createHmac("sha256", SECRET).update(`${stamp}.`).update(req.body).digest("hex");
+
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  const same = a.length === b.length && crypto.timingSafeEqual(a, b);
+  const fresh = Math.abs(Date.now() / 1000 - Number(stamp)) <= 300;
+  if (!same || !fresh) return res.sendStatus(401);
+
+  const event = JSON.parse(req.body.toString("utf8"));
+  console.log(event.id, event.type, event.data);
+  res.sendStatus(204); // 2xx: taken, the panel sends the next one
+});
+
+app.listen(3000);
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import hashlib
+import hmac
+import os
+import re
+import time
+
+from flask import Flask, abort, request
+
+SECRET = os.environ["MIKAN_WEBHOOK_SECRET"].encode()  # whsec_...
+app = Flask(__name__)
+
+
+@app.post("/mikan-webhook")
+def mikan_webhook():
+    # The signature covers the bytes as they came: take the body raw, not parsed.
+    body = request.get_data()
+    stamp = request.headers.get("X-Mikan-Timestamp", "")
+    match = re.search(r"(?:^|[ ,])v1=([0-9a-f]+)", request.headers.get("X-Mikan-Signature", ""))
+    given = match.group(1) if match else ""
+    expected = hmac.new(SECRET, stamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+
+    same = hmac.compare_digest(given.encode(), expected.encode())
+    fresh = stamp.isdigit() and abs(time.time() - int(stamp)) <= 300
+    if not same or not fresh:
+        abort(401)
+
+    event = request.get_json()
+    print(event["id"], event["type"], event["data"])
+    return "", 204  # 2xx: taken, the panel sends the next one
+```
+
+</TabItem>
+</Tabs>
+
+To compare by hand, for debugging, use a shell: put in the time, the body and the secret from the request.
+
+```bash
+printf '%s.%s' "$TIMESTAMP" "$BODY" | openssl dgst -sha256 -hmac "$SECRET"
+```
+
+## Delivery
+
+- **One request per event**, in the order of `id`. Until an address takes an event, the ones behind it wait.
+- **Taken** means a 2xx answer. Anything else is "not taken": 4xx and 5xx, a broken connection, an answer later than 10 seconds and a 3xx redirect (the panel does not follow it). The body of the answer is not kept, only the code matters.
+- **An event that was not taken is sent again.** The pause between attempts doubles from 1 second to 5 minutes and starts over after a success. If you fix the address, the secret or the switch for local targets, the panel tries at once, without waiting out the pause.
+- **Events are kept for 7 days.** A receiver that was down for a day gets everything it missed, in order, when it is back. An address that is turned off gets nothing, and the events wait for it for the same 7 days. An event the address did not take in that time is marked "Not sent" in the log.
+- **Delivery is at least once.** If an answer is lost on the way, the same event comes again. Keep the `id` of the events you took and skip the ones you have seen.
+- **Answer quickly.** The panel waits 10 seconds for an answer, and the next event does not go until this one is over. Parse and do the heavy work after answering.
+- **A new address gets events from the moment it is made**, past ones are not sent. A type added to the choice works the same way: it counts from that moment, and the week's history of that type is not sent.
+
+The **Deliveries** log of an address shows what was sent and when, what code the receiver answered with and why it did not take the event (the address is closed, the name does not resolve, the connection was refused, no answer in time, a TLS error, a redirect, an error code). Rows are kept for 7 days after the last attempt.
+
+## The secret
+
+Each address has a secret of its own. **Edit → New secret** makes another one: the old one stops signing at once. The events the receiver refused while you were putting the new secret in are sent again by the panel, nothing is lost. The order is this: press the button, copy the secret at once and set it at the receiver.
+
+## Which addresses are allowed
+
+- Only `http` and `https` with a host name. A login, a password and a `#fragment` in the address are refused: the receiver knows the panel by the signature, not by a password.
+- A public address is fine as it is. An address of this server or its local network (`localhost`, a name without a dot, `10.x`, `172.16.x`, `192.168.x`, `100.64.x`) works only with the **Allow local targets** switch.
+- Cloud metadata addresses (`169.254.x.x` and other known ones) are closed always, the switch does not open them.
+- The name is checked at every delivery, against the address the panel connects to, so a name cannot be turned towards a closed address after it was saved.
+- Up to 20 addresses.
+
+## Events
+
+The choice of events in the panel takes this same list. A type that is not in the table may come with a later panel version: a receiver that chose "All events" gets it as it is, so skip a type you do not know by answering 2xx.
+
+| Event | When | Fields of `data` |
+|---|---|---|
+| `payment.paid` | a payment was applied: a subscription made or extended, a package credited | `payment_id`, `kind` (`new`, `renew`, `package`, `trial`, `device`), `provider`, `amount` in minor units of the currency, `currency`, `tariff_id`, `tariff_name`, `package_id`, `term_days`, `created` |
+| `payment.refunded` | a payment was refunded and what it gave was taken back; `user_id` is 0 when the subscription is gone or the refund was made by hand | the same, with `disabled` (the subscription was turned off) instead of `created` |
+| `user.created` | an admin made a subscription, it was bought, taken as a trial or as the free plan; an import does not count | `source` (`admin`, `bot`, `trial`, `free`), `tariff_id` |
+| `user.granted` | an addon with the `users:grant` permission gave days or traffic | `days`, `bytes`, `pool_id`, `addon` |
+| `user.expiring` | a subscription ends in 3 or 1 days, which days is up to the admin's switches | `days`, `expires_at` |
+| `user.expired` | a subscription ended | `expires_at` |
+| `traffic.90` | 90% of the traffic is used | `period_from` |
+| `traffic.100` | the traffic is used up | `period_from` |
+| `trial.started` | an account took its trial | `tariff_id`, `paid`, `payment_id` |
+| `trial.not_given` | an account paid for a trial it may no longer have, no subscription was made | `payment_id`, `provider`, `amount`, `currency`, `tariff_id`, `term_days`, `reason`, `refund` (`auto`: the money went back and `payment.refunded` follows; `manual`: the admin returns it by hand) |
+| `device.bound` | a device took a place on a subscription | `device_id`, `label`, `shared` |
+| `device.unbound` | a device lost its place | the same and `by` (`subscriber`, `admin`, `ban`, `idle`, `reissue`, `limit`) |
+| `node.down` | a node did not answer three checks in a row, about 15 seconds | `node_id`, `name`, `code`, `since` |
+| `node.up` | a node that was down answers again | `node_id`, `name`, `down_since` |
+| `balance.topup` | an admin approved or rejected a balance top-up | `topup_id`, `status` (`approved`, `rejected`), `amount`, `currency`, `balance`, `reason` |
+
+The times in `data` (`expires_at`, `since`, `down_since`, `period_from`) are Unix seconds. The `webhook.test` event from the test button is not in this list and cannot be chosen: it goes only to the address whose button was pressed.

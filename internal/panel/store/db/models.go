@@ -755,3 +755,29 @@ type UserStart struct {
 	UserID   int64
 	FrozenAt int64
 }
+
+type WebhookDelivery struct {
+	ID           int64
+	EndpointID   int64
+	EventID      sql.NullInt64
+	Type         string
+	Status       string
+	Attempts     int64
+	ResponseCode int64
+	Error        string
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+type WebhookEndpoint struct {
+	ID         int64
+	Name       string
+	Url        string
+	Secret     string
+	Events     []string
+	Enabled    bool
+	AllowLocal bool
+	LastID     int64
+	CreatedAt  int64
+	SecretAt   int64
+}

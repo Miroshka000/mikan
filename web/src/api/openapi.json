@@ -2411,6 +2411,44 @@
         ],
         "type": "object"
       },
+      "CreateWebhookInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "description": "Разрешить адреса этого сервера и его сети: localhost, 10.x, 172.16-31.x, 192.168.x, 100.64-127.x. Метаданные облака (169.254.169.254 и подобные) закрыты всегда",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Не задано — включён",
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Типы событий (GET /webhooks/events); пусто или не задано — все, и те, что появятся позже",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "name": {
+            "description": "Название для списка",
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "description": "http:// или https:// и адрес получателя. Адреса этого сервера, его сети и облачных метаданных панель не принимает; для адресов сети нужен allow_local",
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
       "DNS": {
         "additionalProperties": false,
         "properties": {
@@ -6759,6 +6797,36 @@
           },
           "traffic_unlimited": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PatchWebhookInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Пустой список — все события. Добавленные типы начинаются с этой минуты, если адрес ничего не должен; что ему должны, он получит",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
           }
         },
         "type": "object"
@@ -11359,6 +11427,290 @@
           "plus",
           "routes",
           "inbounds"
+        ],
+        "type": "object"
+      },
+      "WebhookCreatedView": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "description": "Можно ли слать на адреса этого сервера и его сети (localhost, 10.x, 192.168.x, 100.64.x). Адреса из диапазона 169.254 с метаданными облака и подобные закрыты всегда",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Выключенный адрес ничего не получает, события ждут его до недели",
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Какие события отправляются; пусто — все, и новые тоже",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last": {
+            "$ref": "#/components/schemas/WebhookDeliveryView",
+            "description": "Последняя доставка: по ней видно, всё ли в порядке"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "description": "Секрет подписи: показывается один раз, потом только его конец (secret_hint). Получатель проверяет им каждый запрос",
+            "type": "string"
+          },
+          "secret_at": {
+            "description": "Когда секрет создан или заменён",
+            "format": "date-time",
+            "type": "string"
+          },
+          "secret_hint": {
+            "description": "Последние символы секрета: чтобы понять, какой из них у получателя",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "waiting": {
+            "description": "Сколько событий ждёт отправки этому адресу",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "secret",
+          "id",
+          "name",
+          "url",
+          "events",
+          "enabled",
+          "allow_local",
+          "secret_hint",
+          "secret_at",
+          "created_at",
+          "waiting"
+        ],
+        "type": "object"
+      },
+      "WebhookDeliveriesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "От новых к старым",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliveryView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "description": "Передайте как before за следующей страницей; 0 — это всё",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "next"
+        ],
+        "type": "object"
+      },
+      "WebhookDeliveryView": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "description": "Сколько раз пробовали",
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "description": "Первая попытка",
+            "format": "date-time",
+            "type": "string"
+          },
+          "error": {
+            "description": "Почему не вышло в последний раз: address_local, address_blocked, dns, refused, timeout, tls, redirect, status, network, internal; после 2xx пусто",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Номер события в ленте; у проверки его нет",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "response_code": {
+            "description": "HTTP-статус последнего ответа; 0 — ответа не было",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "retrying — будет отправлено снова; delivered — получатель ответил 2xx; failed — больше не пробуем (проверка не прошла, событие ушло из ленты или адрес его больше не просит)",
+            "enum": [
+              "retrying",
+              "delivered",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "description": "Тип события; webhook.test — проверка кнопкой",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "Последняя попытка",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "attempts",
+          "response_code",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "WebhookEventsView": {
+        "additionalProperties": false,
+        "properties": {
+          "types": {
+            "description": "Типы событий, которые панель отправляет: каждый можно выбрать для адреса",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "types"
+        ],
+        "type": "object"
+      },
+      "WebhookTestView": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "description": "Сколько шла проверка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Почему не вышло: те же коды, что у доставок",
+            "type": "string"
+          },
+          "ok": {
+            "description": "Получатель ответил 2xx",
+            "type": "boolean"
+          },
+          "status": {
+            "description": "HTTP-статус ответа; 0 — ответа не было",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "duration_ms"
+        ],
+        "type": "object"
+      },
+      "WebhookView": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "description": "Можно ли слать на адреса этого сервера и его сети (localhost, 10.x, 192.168.x, 100.64.x). Адреса из диапазона 169.254 с метаданными облака и подобные закрыты всегда",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Выключенный адрес ничего не получает, события ждут его до недели",
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Какие события отправляются; пусто — все, и новые тоже",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last": {
+            "$ref": "#/components/schemas/WebhookDeliveryView",
+            "description": "Последняя доставка: по ней видно, всё ли в порядке"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret_at": {
+            "description": "Когда секрет создан или заменён",
+            "format": "date-time",
+            "type": "string"
+          },
+          "secret_hint": {
+            "description": "Последние символы секрета: чтобы понять, какой из них у получателя",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "waiting": {
+            "description": "Сколько событий ждёт отправки этому адресу",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "events",
+          "enabled",
+          "allow_local",
+          "secret_hint",
+          "secret_at",
+          "created_at",
+          "waiting"
+        ],
+        "type": "object"
+      },
+      "WebhooksView": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Сколько адресов можно завести",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit"
         ],
         "type": "object"
       },
@@ -20578,6 +20930,371 @@
         "tags": [
           "users"
         ]
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "operationId": "list-webhooks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhooksView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Адреса для событий (webhooks)",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      },
+      "post": {
+        "operationId": "create-webhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookCreatedView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Добавить адрес: секрет подписи показывается один раз",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/events": {
+      "get": {
+        "operationId": "list-webhook-events",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEventsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Какие события можно отправлять",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}": {
+      "delete": {
+        "operationId": "delete-webhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить адрес вместе с его журналом",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      },
+      "patch": {
+        "operationId": "update-webhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchWebhookInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить адрес",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}/deliveries": {
+      "get": {
+        "operationId": "list-webhook-deliveries",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Записи до этого номера; 0 — самые новые",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "default": 0,
+              "description": "Записи до этого номера; 0 — самые новые",
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Только с этим статусом; не задано — любые",
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "description": "Только с этим статусом; не задано — любые",
+              "enum": [
+                "retrying",
+                "delivered",
+                "failed"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveriesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Журнал доставок адреса: хранится 7 суток после последней попытки",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}/secret": {
+      "post": {
+        "operationId": "rotate-webhook-secret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookCreatedView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Выпустить новый секрет: старый перестаёт подписывать сразу, новый показывается один раз",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}/test": {
+      "post": {
+        "operationId": "test-webhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookTestView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Отправить проверочное событие webhook.test: одна попытка, ответ сразу",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
       }
     }
   },

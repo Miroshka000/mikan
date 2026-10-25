@@ -45,6 +45,7 @@ import (
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
+	"mikan/internal/panel/webhooks"
 )
 
 type Deps struct {
@@ -135,6 +136,9 @@ type Deps struct {
 	Addons *addons.Manager
 	// Pages are the addons' own pages in the admin panel; nil: none.
 	Pages *pages.Pages
+	// Webhooks sends the events to the addresses the admin names; nil in tests that do not
+	// need it.
+	Webhooks *webhooks.Service
 	// Resolve looks a name up for what the panel dials on the admin's word (a REALITY
 	// target); nil asks the system's resolver.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
@@ -323,6 +327,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerSpeedTests()
 	h.registerNodeUpdates()
 	h.registerAPIKeys()
+	h.registerWebhooks()
 	h.registerPayments()
 	h.registerPromocodes()
 	h.registerAddons()
