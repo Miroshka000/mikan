@@ -193,6 +193,9 @@ The choice of events in the panel takes this same list. A type that is not in th
 | `user.granted` | an addon with the `users:grant` permission gave days or traffic | `days`, `bytes`, `pool_id`, `addon` |
 | `user.expiring` | a subscription ends in 3 or 1 days, which days is up to the admin's switches | `days`, `expires_at` |
 | `user.expired` | a subscription ended | `expires_at` |
+| `user.started` | a subscription whose term waited for its first connection started it: by that connection or by the admin | `expires_at`, `by` (`connection`, `admin`) |
+| `user.switched` | the next plan set for a subscription took over as its term ended: a term from that end and a new traffic period | `tariff_id`, `from_tariff_id`, `expires_at`, `carried` |
+| `user.removed` | the panel removed a subscription by the admin's rules: its term ended that many days ago and it has not connected since; the API no longer knows that `user_id` | `by` (`inactive`), `expired_at`, `online_at`, `days` |
 | `traffic.90` | 90% of the traffic is used | `period_from` |
 | `traffic.100` | the traffic is used up | `period_from` |
 | `trial.started` | an account took its trial | `tariff_id`, `paid`, `payment_id` |

@@ -193,6 +193,9 @@ printf '%s.%s' "$TIMESTAMP" "$BODY" | openssl dgst -sha256 -hmac "$SECRET"
 | `user.granted` | аддон с правом `users:grant` добавил дни или трафик | `days`, `bytes`, `pool_id`, `addon` |
 | `user.expiring` | подписка кончится через 3 или 1 день, какие дни, решают переключатели админа | `days`, `expires_at` |
 | `user.expired` | подписка закончилась | `expires_at` |
+| `user.started` | подписка, срок которой ждал первого подключения, пошла: от этого подключения или по решению админа | `expires_at`, `by` (`connection`, `admin`) |
+| `user.switched` | следующий тариф, назначенный подписке, включился, когда кончился срок: срок от этого конца и новый период трафика | `tariff_id`, `from_tariff_id`, `expires_at`, `carried` |
+| `user.removed` | панель удалила подписку по правилам админа: срок кончился столько дней назад, а подключений с тех пор не было; такого `user_id` в API уже нет | `by` (`inactive`), `expired_at`, `online_at`, `days` |
 | `traffic.90` | израсходовано 90% трафика | `period_from` |
 | `traffic.100` | трафик израсходован полностью | `period_from` |
 | `trial.started` | аккаунт взял пробный период | `tariff_id`, `paid`, `payment_id` |
