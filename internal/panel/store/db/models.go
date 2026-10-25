@@ -541,6 +541,12 @@ type TariffInbound struct {
 	InboundID int64
 }
 
+type TariffLifecycle struct {
+	TariffID       int64
+	CarryOver      sql.NullBool
+	StartOnConnect bool
+}
+
 type TariffNode struct {
 	TariffID int64
 	NodeID   int64
@@ -721,6 +727,13 @@ type UserFolder struct {
 	CreatedAt int64
 }
 
+type UserNextTariff struct {
+	UserID    int64
+	TariffID  int64
+	TermDays  sql.NullInt64
+	CreatedAt int64
+}
+
 type UserPool struct {
 	UserID       int64
 	PoolID       int64
@@ -736,4 +749,9 @@ type UserSite struct {
 	Site   string
 	Up     int64
 	Down   int64
+}
+
+type UserStart struct {
+	UserID   int64
+	FrozenAt int64
 }

@@ -79,7 +79,7 @@ type GrantView struct {
 	Lifetime    string     `json:"lifetime" enum:"used,period,days"`
 	ExpiresAt   *time.Time `json:"expires_at"`
 	Active      bool       `json:"active" doc:"Ещё считается: не израсходован и не истёк"`
-	Source      string     `json:"source" enum:"purchase,admin,gift" doc:"purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате"`
+	Source      string     `json:"source" enum:"purchase,admin,gift,carry" doc:"purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате, carry — остаток трафика прошлого периода, перенесённый продлением или следующим тарифом"`
 	PaymentID   *int64     `json:"payment_id"`
 	PackageName string     `json:"package_name" doc:"Название пакета; пусто — начислено вручную"`
 	Note        string     `json:"note"`

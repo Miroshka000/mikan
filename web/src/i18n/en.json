@@ -595,6 +595,11 @@
       "bad_unbind_limit": "Devices per period: 0 to 100, 0 for no limit",
       "bad_unbind_days": "Period: 1 to 365 days",
       "bad_return_hours": "Pause: 0 to 720 hours, or \"Never\"",
+      "bad_carry_cap": "From 1 to 100% of the new period's quota",
+      "bad_removal_days": "After how many days: from 7 to 3650",
+      "already_connected": "The client has connected already: their term is running",
+      "no_term_end": "The subscription has no end date",
+      "term_ended": "The term is over: renew the subscription first",
       "required": "Fill in this field"
     },
     "acme": {
@@ -786,7 +791,36 @@
     "clearSelection": "Clear selection",
     "deleteTitle": "{n, plural, one {Delete # client?} other {Delete # clients?}}",
     "deleteText": "Their links stop working immediately and the statistics are deleted. This cannot be undone.",
-    "deleteWho": "Selected: {names}.",
+    "waits": "From the first connection",
+    "waitsTerm": "{term} after it",
+    "nextTariff": "then {name}",
+    "bulkConfirm": {
+      "title": {
+        "extend": "{n, plural, one {Extend # client?} other {Extend # clients?}}",
+        "reset": "{n, plural, one {Reset the traffic of # client?} other {Reset the traffic of # clients?}}",
+        "disable": "{n, plural, one {Disable # client?} other {Disable # clients?}}"
+      },
+      "text": {
+        "extend": "Each by one period from their end date: to the next billing day, 30 days without one. Disabled clients are turned on.",
+        "reset": "What was used in the period is zeroed and the period starts anew. Traffic packages that last for the period burn.",
+        "disable": "Their subscriptions stop working until they are turned on. Term and traffic are kept."
+      },
+      "confirm": {
+        "extend": "Extend",
+        "reset": "Reset",
+        "disable": "Disable"
+      },
+      "nothing": "Nothing to change: all of the selected are that way already.",
+      "alreadyOff": "Already disabled: {n}.",
+      "missing": "Already deleted: {n}.",
+      "active": "{n, plural, one {# still works} other {# still work}}: connections will drop.",
+      "withBalance": "With money on the linked account's balance: {n}. The balance stays with the account.",
+      "paying": "With a payment not applied yet, or a top-up under review: {n}.",
+      "granted": "With running traffic packages: {n}. The packages are deleted with the subscription.",
+      "sample": "Who the action changes",
+      "used": "used {used}",
+      "more": "And {n} more"
+    },
     "bulkDone": {
       "extend": "Extended: {n}",
       "reset": "Traffic reset: {n}",
@@ -797,6 +831,47 @@
       "hide": "Hidden: {n}",
       "unhide": "Back in the list: {n}"
     }
+  },
+  "lifecycle": {
+    "open": "Rules",
+    "title": "Subscription rules",
+    "meta": "Leftover traffic and removal of inactive ones",
+    "saved": "Rules saved",
+    "carryTitle": "Leftover traffic",
+    "carryText": "When a renewal or the next plan starts a new period, the part of the plan's quota left unused goes into the new period as a package: it is spent after the quota and burns when the period ends. Traffic packages are not carried over, they have terms of their own.",
+    "carryOn": "Carry the leftover over",
+    "carryOnSub": "Off: a new period starts with the plan's quota only, as before",
+    "carryCap": "At most",
+    "carryCapHint": "{n}% of the new period's quota. At 100% a client starts a period with two quotas at the most.",
+    "carryTariffs": "A plan can decide for itself: «Leftover traffic» in the plan's card.",
+    "removalTitle": "Removal of inactive ones",
+    "removalText": "A subscription is deleted once this many days have passed since its term ended and since its last connection. Not deleted: subscriptions with money on the balance, with a payment not applied yet or a top-up under review, with running traffic packages, with a next plan, and with a term that waits for the first connection. Every removal is written to the journal.",
+    "removalOn": "Delete inactive subscriptions",
+    "removalOnSub": "A pass every 10 minutes. A deletion cannot be undone: the links stop working",
+    "removalDays": "After",
+    "daysUnit": "days",
+    "reachTitle": "Who the rule reaches now",
+    "reachLoading": "Counting who the rule reaches",
+    "reachNone": "Nobody: no subscription ended more than {days} ago.",
+    "reachOn": "Will be deleted in the next pass: {due}. Will stay: {kept}.",
+    "reachOff": "If turned on, will be deleted: {due}. Will stay: {kept}.",
+    "reachMore": "And {n} more",
+    "endedOn": "term ended {date}",
+    "seen": "connected {ago}",
+    "neverSeen": "never connected",
+    "keep": {
+      "balance": "Money on the balance",
+      "payment": "Payment on its way",
+      "grant": "Packages running"
+    },
+    "goes": "Will be deleted",
+    "confirmTitle": "Delete subscriptions after {days}?",
+    "confirmFurtherTitle": "Delete as early as after {days}?",
+    "confirmNobody": "The rule will delete nobody now: it will delete those who become inactive.",
+    "confirmText": "{n, plural, one {# subscription will be deleted} other {# subscriptions will be deleted}} in the next 10 minutes, their links will stop working. This cannot be undone.",
+    "confirmWho": "Among them: {names}.",
+    "confirmKept": "{n, plural, one {# subscription will stay} other {# subscriptions will stay}}: there is still money, payments or packages in them.",
+    "confirm": "Turn on"
   },
   "folders": {
     "title": "Folders",
@@ -859,7 +934,9 @@
     "tariffHint": "Term, volume and device limit come from the plan, you can change them in the card.",
     "tariffRequired": "Choose a plan",
     "createdCopied": "{name} created, link copied",
-    "created": "{name} created"
+    "created": "{name} created",
+    "wait": "Term from the first connection",
+    "waitSub": "Until the client connects the term stands still: handy when the link is handed out in advance"
   },
   "userDrawer": {
     "organise": "Folder and visibility",
@@ -921,6 +998,25 @@
     "leftDays": "{text} left",
     "year": "year",
     "nowForever": "No expiry now",
+    "waitTitle": "{term} from the first connection",
+    "waitText": "The term stands still until the client connects, and the subscription shows it whole. A renewal adds to it, and a date set by hand starts it at once.",
+    "waitStart": "Start now",
+    "waitStarted": "The term is running: until {date}",
+    "waitOffer": "Start the term at the first connection",
+    "waitSet": "The term will start at the first connection",
+    "nextTitle": "Next plan",
+    "nextTerm": "Term",
+    "nextTermOwn": "As the plan's: {term}",
+    "nextTermOwnPlain": "As the plan's",
+    "nextHint": "Turns on by itself on {date}, when the current term ends: the plan's limits, a new term from that date, traffic from zero. A disabled client stays disabled.",
+    "nextAdd": "Set the next plan",
+    "nextThen": "Then: {name}",
+    "nextFrom": "from {date}",
+    "nextClear": "Remove",
+    "nextCleared": "Next plan removed",
+    "nextSaved": "Next plan set",
+    "nextSwitched": "The term is over already: the client is moved to «{name}»",
+    "nextNoEnd": "A next plan is set for a subscription with a term, and this one has none.",
     "billingAside": "billed on day {d}",
     "billingDay": "Billing day",
     "billingDayHint": "Extending by a month runs to this day, without it by days. The current term stays.",
@@ -1068,6 +1164,19 @@
     "billingDay": "Billing day",
     "billingDayHint": "Terms always end on this day. The first one ends on the nearest such day at least 15 days away. A month without this day ends on its last day.",
     "dayOfEveryMonth": "day of every month",
+    "waits": "Term from the first connection",
+    "waitsSub": "The term of a new subscription on the plan starts when the client first connects, not when the subscription is made",
+    "termFromConnect": "{term} from the connection",
+    "carry": "Leftover traffic",
+    "carryHint": "Whether what is left unused goes into the new period on a renewal and on a switch to this plan",
+    "carryInherit": "As in the rules",
+    "carryOn": "Carry over",
+    "carryOff": "Do not carry over",
+    "carryShort": {
+      "inherit": "as in the rules",
+      "on": "carried over",
+      "off": "not carried over"
+    },
     "devicesAtOnce": "Devices at once",
     "speed": "Speed",
     "speedShort": "up to {n} Mbit/s",
@@ -3530,6 +3639,7 @@
     "bought": "bought “{name}”",
     "package": "package",
     "byAdmin": "added by hand",
+    "carried": "leftover of the last period",
     "left": "{bytes} left",
     "expired": "Expired",
     "usedUp": "Used up",
@@ -4537,6 +4647,7 @@
       "folder": "Client folders",
       "import": "Import",
       "inbound": "Protocols",
+      "lifecycle": "Subscription rules",
       "node": "Nodes",
       "package": "Traffic packages",
       "payment": "Payments",
@@ -4591,7 +4702,14 @@
         "delete": "Client deleted",
         "extend": "Subscription extended",
         "reissue": "Subscription link replaced",
-        "reset_traffic": "Client traffic reset"
+        "reset_traffic": "Client traffic reset",
+        "switch_tariff": "Moved to the next plan",
+        "next_tariff": "Next plan set",
+        "next_tariff_clear": "Next plan removed",
+        "remove_inactive": "Inactive subscription deleted"
+      },
+      "lifecycle": {
+        "update": "Subscription rules changed"
       },
       "node": {
         "create": "Node added",

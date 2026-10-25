@@ -111,6 +111,10 @@ type CreateInput struct {
 	// TgID is the Telegram account that buys or takes the user, 0 for the admin's: it goes
 	// to the addons with events.UserCreated, nothing else reads it.
 	TgID int64
+	// StartsOnConnect makes the term wait for the first connection (starts.go); nil: as the
+	// tariff says (TariffLifecycle.StartOnConnect). A term without an end waits for nothing,
+	// and an import's users bring theirs running.
+	StartsOnConnect *bool
 }
 
 // Create makes a user the admin names (the panel, an API key): the name is checked as
@@ -192,6 +196,19 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 	if source == UserFromImport {
 		return u, nil
 	}
+	wait := in.StartsOnConnect
+	if wait == nil {
+		tl, err := LoadTariffLifecycle(ctx, q, t.ID)
+		if err != nil {
+			return u, err
+		}
+		wait = &tl.StartOnConnect
+	}
+	if *wait && u.ExpiresAt.Valid {
+		if err := waitForConnection(ctx, q, u.ID, time.Unix(now, 0)); err != nil {
+			return u, err
+		}
+	}
 	return u, feed.Emit(ctx, q, s.now(), events.UserCreated, u.ID, in.TgID, events.User{Source: source, TariffID: t.ID},
 		events.UserCreated+":"+strconv.FormatInt(u.ID, 10))
 }
@@ -217,6 +234,9 @@ type PurchaseInput struct {
 	// KeepExtraDevices: devices bought on top of the tariff stay with a renewal of the same
 	// tariff; off, or another tariff, they go with the term they were bought for.
 	KeepExtraDevices bool
+	// PaymentID is the payment that pays (0: none): what it carries over goes with it on a
+	// refund.
+	PaymentID int64
 }
 
 // Purchase applies a paid tariff on q's transaction, so the payment and its effect commit
@@ -225,8 +245,9 @@ type PurchaseInput struct {
 // (from now when that already ended; what is left of another tariff's term is what it is
 // worth on this one, carryOver) and turns the user on, one the admin switched off too:
 // the buyer paid for the term, and the admin who wants someone out deletes the subscription
-// or stops selling to them (decided 2026-10-11). ErrNoSlots: refill and run again.
-// The caller calls Changed after the commit.
+// or stops selling to them (decided 2026-10-11). A renewal that starts a new traffic period
+// carries what the old one left into it, by the carry-over rules (carryInto).
+// ErrNoSlots: refill and run again. The caller calls Changed after the commit.
 func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (u db.User, created bool, err error) {
 	if in.UserID != 0 {
 		u, err = q.GetUser(ctx, in.UserID)
@@ -255,40 +276,15 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (
 		}
 		base = now.Add(left)
 	}
-	billingDay := t.BillingDay
-	if !billingDay.Valid {
-		billingDay = u.BillingDay
-	}
-	devices, extra, until := t.DeviceLimit, int64(0), sql.NullInt64{}
-	switch {
-	case in.KeepExtraDevices && u.TariffID.Valid && u.TariffID.Int64 == t.ID && u.ExtraDevices > 0:
-		// They go on with the renewal, paid with it (billing.renewalExtra).
-		extra = u.ExtraDevices
-	case u.ExtraDevices > 0 && u.ExtraDevicesUntil.Valid && u.ExtraDevicesUntil.Int64 > now.Unix():
-		// Bought until the end of the term: they stay until then, and not into the new one
-		// (the maintenance takes them back, Devices.ExpireExtra).
-		extra, until = u.ExtraDevices, u.ExtraDevicesUntil
-	}
-	if devices.Valid {
-		devices.Int64 += extra
-	}
-	if extra != u.ExtraDevices || until != u.ExtraDevicesUntil {
-		if err := q.SetUserExtraDevices(ctx, db.SetUserExtraDevicesParams{ExtraDevices: extra, Until: until, ID: u.ID}); err != nil {
+	// What the period leaves is counted on the user as it is, before the tariff's limit.
+	var carried int64
+	if in.ResetTraffic {
+		if carried, err = carryInto(ctx, q, u, t); err != nil {
 			return u, false, err
 		}
 	}
-	par := UserParams(u, now.Unix())
-	par.Status, par.TariffID = "active", sql.NullInt64{Int64: t.ID, Valid: true}
-	par.TrafficLimit, par.DeviceLimit, par.SpeedLimit, par.ResetStrategy = t.TrafficLimit, devices, t.SpeedLimit, t.ResetStrategy
-	par.ExpiresAt, par.BillingDay = tariffExpiry(base, durationTariff{termDays(t, in.Term), billingDay}), billingDay
-	u, err = q.UpdateUser(ctx, par)
-	if err != nil {
-		return u, false, err
-	}
-	if err := setDeviceMode(ctx, q, &u, t.DeviceMode, now.Unix()); err != nil {
-		return u, false, err
-	}
-	if err := ApplyTariffPools(ctx, q, u.ID, t.ID); err != nil {
+	keep := in.KeepExtraDevices && u.TariffID.Valid && u.TariffID.Int64 == t.ID
+	if u, err = takeTariff(ctx, q, u, t, tariffTake{base: base, days: termDays(t, in.Term), keepExtra: keep, turnOn: true}, now); err != nil {
 		return u, false, err
 	}
 	if !in.ResetTraffic {
@@ -297,8 +293,64 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (
 	if err := StartPeriod(ctx, q, u.ID, now.Unix(), now); err != nil {
 		return u, false, err
 	}
-	u, err = q.GetUser(ctx, u.ID)
-	return u, false, err
+	if u, err = q.GetUser(ctx, u.ID); err != nil {
+		return u, false, err
+	}
+	return u, false, grantCarry(ctx, q, u, carried, in.PaymentID, now)
+}
+
+// tariffTake is how takeTariff puts a user on a tariff.
+type tariffTake struct {
+	base time.Time // where the new term starts
+	days int64     // the term on the tariff (termDays)
+	// keepExtra: places bought on top stay with the term (a renewal of the same tariff that
+	// pays for them again, billing.renewalExtra).
+	keepExtra bool
+	// turnOn: the subscription is turned on, one the admin switched off too (a payment's).
+	turnOn bool
+}
+
+// takeTariff puts u on tariff t as of now, on q's transaction: the tariff's limits, device
+// mode and server groups, a term of take.days from take.base up to the tariff's billing day
+// (the user's own without one), and the places bought on top: with keepExtra they go on;
+// otherwise those bought until a date still ahead stay until then and not into the new term
+// (the maintenance takes them back, Devices.ExpireExtra), the rest go now. The traffic
+// period is the caller's.
+func takeTariff(ctx context.Context, q *db.Queries, u db.User, t db.Tariff, take tariffTake, now time.Time) (db.User, error) {
+	billingDay := t.BillingDay
+	if !billingDay.Valid {
+		billingDay = u.BillingDay
+	}
+	devices, extra, until := t.DeviceLimit, int64(0), sql.NullInt64{}
+	switch {
+	case take.keepExtra && u.ExtraDevices > 0:
+		extra = u.ExtraDevices
+	case u.ExtraDevices > 0 && u.ExtraDevicesUntil.Valid && u.ExtraDevicesUntil.Int64 > now.Unix():
+		extra, until = u.ExtraDevices, u.ExtraDevicesUntil
+	}
+	if devices.Valid {
+		devices.Int64 += extra
+	}
+	if extra != u.ExtraDevices || until != u.ExtraDevicesUntil {
+		if err := q.SetUserExtraDevices(ctx, db.SetUserExtraDevicesParams{ExtraDevices: extra, Until: until, ID: u.ID}); err != nil {
+			return u, err
+		}
+	}
+	par := UserParams(u, now.Unix())
+	if take.turnOn {
+		par.Status = "active"
+	}
+	par.TariffID = sql.NullInt64{Int64: t.ID, Valid: true}
+	par.TrafficLimit, par.DeviceLimit, par.SpeedLimit, par.ResetStrategy = t.TrafficLimit, devices, t.SpeedLimit, t.ResetStrategy
+	par.ExpiresAt, par.BillingDay = tariffExpiry(take.base, durationTariff{take.days, billingDay}), billingDay
+	u, err := q.UpdateUser(ctx, par)
+	if err != nil {
+		return u, err
+	}
+	if err := setDeviceMode(ctx, q, &u, t.DeviceMode, now.Unix()); err != nil {
+		return u, err
+	}
+	return u, ApplyTariffPools(ctx, q, u.ID, t.ID)
 }
 
 // UserParams is u as it is, to change some of it and write it back with UpdateUser: the
@@ -418,6 +470,11 @@ type Patch struct {
 	// Extend adds a term to the expiry the transaction reads, so a payment that lands
 	// meanwhile is not overwritten by an absolute date worked out before it.
 	Extend *Extension
+	// StartsOnConnect true makes the term wait for the first connection (starts.go): only
+	// a subscription that never connected and whose term is still ahead; false starts a
+	// waiting term now. An end given by hand (ExpiresAt, ClearExpiry) ends a wait too and
+	// stands as given; an extension adds to what waits.
+	StartsOnConnect *bool
 }
 
 // Extension adds time to the current expiry, or to now when the term already ended. Days
@@ -473,6 +530,10 @@ func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) 
 		return err
 	})
 	if err == nil {
+		// A wait that ended is told (events.UserStarted).
+		if p.StartsOnConnect != nil || p.ExpiresAt != nil || p.ClearExpiry {
+			s.hub.Kick()
+		}
 		s.changes.PoliciesChanged()
 	}
 	return out, err
@@ -619,6 +680,37 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		if err := q.SetUserFolder(ctx, db.SetUserFolderParams{FolderID: out.FolderID, UpdatedAt: now, ID: id}); err != nil {
 			return out, err
 		}
+	}
+	return s.waitOn(ctx, q, out, p)
+}
+
+// waitOn applies what p says of the wait for the first connection to out, just written on
+// q's transaction, and returns the user as it is after it.
+func (s *Users) waitOn(ctx context.Context, q *db.Queries, out db.User, p Patch) (db.User, error) {
+	now := s.now()
+	if p.ExpiresAt != nil || p.ClearExpiry {
+		if err := endWait(ctx, q, out.ID, now); err != nil {
+			return out, err
+		}
+	}
+	if p.StartsOnConnect == nil {
+		return out, nil
+	}
+	waiting, err := Waiting(ctx, q, out.ID)
+	switch {
+	case err != nil:
+		return out, err
+	case *p.StartsOnConnect && !waiting:
+		if err := mayWait(out, now); err != nil {
+			return out, err
+		}
+		return out, waitForConnection(ctx, q, out.ID, now)
+	case !*p.StartsOnConnect && waiting:
+		if _, err := startWaiting(ctx, q, []int64{out.ID}, now, events.StartedByAdmin); err != nil {
+			return out, err
+		}
+		// The clock moved on to now: the row as it is after.
+		return q.GetUser(ctx, out.ID)
 	}
 	return out, nil
 }
@@ -781,6 +873,30 @@ type BulkOpt struct {
 	Folder *int64
 }
 
+// extension is what BulkExtend adds to each user's term.
+func (o BulkOpt) extension() Extension { return Extension{Days: o.Days, Period: o.Days <= 0} }
+
+// checkBulk refuses an action Bulk does not know, and one it knows with a bad option.
+func checkBulk(action string, opt BulkOpt) error {
+	switch action {
+	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove:
+	default:
+		return fmt.Errorf("bulk action %q", action)
+	}
+	if action == BulkExtend && opt.Days > MaxExtendDays {
+		return fieldErr("days", "bad_days")
+	}
+	return nil
+}
+
+// bulkIDs are the users a bulk action is asked for, each once, in id order: the order the
+// rows are locked in.
+func bulkIDs(ids []int64) []int64 {
+	want := slices.Clone(ids)
+	slices.Sort(want)
+	return slices.Compact(want)
+}
+
 // Bulk does one action to every user of ids in one transaction: all of them, or, if one
 // fails, none (half a list applied, and no record of it, was what a loop of single
 // changes left behind). A user that is gone is skipped; a user listed twice is done once.
@@ -790,18 +906,10 @@ type BulkOpt struct {
 // COMMITTED is enough: what each change reads (the expiry an extension adds to) comes
 // from the locked rows, and the traffic batches lock the same rows in the same order.
 func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOpt) (int, error) {
-	switch action {
-	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove:
-	default:
-		return 0, fmt.Errorf("bulk action %q", action)
+	if err := checkBulk(action, opt); err != nil {
+		return 0, err
 	}
-	days := opt.Days
-	if action == BulkExtend && days > MaxExtendDays {
-		return 0, fieldErr("days", "bad_days")
-	}
-	want := slices.Clone(ids)
-	slices.Sort(want)
-	want = slices.Compact(want)
+	want := bulkIDs(ids)
 	done := 0
 	err := s.st.TxRC(ctx, func(q *db.Queries) error {
 		done = 0
@@ -826,7 +934,7 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 		now := s.now()
 		switch action {
 		case BulkExtend:
-			ext := Extension{Days: days, Period: days <= 0}
+			ext := opt.extension()
 			p := db.SetUsersExpiryParams{UpdatedAt: now.Unix(), Ids: found, ExpiresAt: make([]int64, len(users))}
 			for i, u := range users {
 				p.ExpiresAt[i] = ext.until(now, u.ExpiresAt, u.BillingDay).Unix()

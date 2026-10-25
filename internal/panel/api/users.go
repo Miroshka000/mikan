@@ -59,7 +59,11 @@ type UserView struct {
 	Source        string        `json:"source" enum:"admin,bot,trial,free,import" doc:"Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется"`
 	FolderID      *int64        `json:"folder_id" doc:"Папка пользователя; null — вне папок"`
 	Hidden        bool          `json:"hidden" doc:"Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются"`
-	CreatedAt     time.Time     `json:"created_at"`
+	// StartsOnConnect: the term waits for the first connection (domain/starts.go).
+	StartsOnConnect bool `json:"starts_on_connect" doc:"Срок ждёт первого подключения: до него стоит на месте, expires_at уходит вперёд вместе с часами (обновляется раз в 10 минут), подписка показывает весь срок"`
+	// NextTariff is the tariff the subscription moves to once its term ends.
+	NextTariff *NextTariffView `json:"next_tariff" doc:"Следующий тариф: включится сам, когда кончится срок; null — нет"`
+	CreatedAt  time.Time       `json:"created_at"`
 }
 
 // userEnv is what every user of one response shares, read once for the whole response: a
@@ -69,6 +73,21 @@ type userEnv struct {
 	subBase string // "": no address yet, or the caller may not see links
 	online  map[string]nodeapi.Online
 	bans    map[int64]int64 // user → when the torrent ban ends; nil while the blocker is off
+	// The lifecycle of the answer's users (lifecycleOf): whose term waits for its first
+	// connection, and who has a next tariff.
+	waiting map[int64]bool
+	next    map[int64]domain.NextTariff
+}
+
+// lifecycleOf reads the lifecycle of the users of ids into e: two small tables, one read
+// each for the whole answer.
+func (h *handlers) lifecycleOf(ctx context.Context, e *userEnv, ids []int64) error {
+	var err error
+	if e.waiting, err = domain.WaitingOf(ctx, h.d.Store.Q, ids); err != nil {
+		return err
+	}
+	e.next, err = domain.NextTariffsOf(ctx, h.d.Store.Q, ids)
+	return err
 }
 
 func (h *handlers) userEnv(ctx context.Context) userEnv {
@@ -129,6 +148,9 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 	}
 	v.OnlineIPs = env.liveIPs(slots)
 	v.Online = len(v.OnlineIPs) > 0
+	v.StartsOnConnect = env.waiting[u.ID]
+	n, ok := env.next[u.ID]
+	v.NextTariff = nextView(n, ok)
 	return v
 }
 
@@ -205,6 +227,8 @@ type createUserInput struct {
 		Note     string   `json:"note,omitempty" maxLength:"2000"`
 		Tags     []string `json:"tags,omitempty" maxItems:"20"`
 		TariffID int64    `json:"tariff_id" minimum:"1"`
+		// StartsOnConnect over the tariff's own word; nil: the tariff's.
+		StartsOnConnect *bool `json:"starts_on_connect,omitempty" doc:"Срок начнётся с первого подключения; не задано — как у тарифа"`
 	}
 }
 
@@ -230,6 +254,7 @@ type patchUserInput struct {
 		TariffID         *int64     `json:"tariff_id,omitempty" minimum:"1" doc:"Применить тариф: лимиты из тарифа, срок — от сегодня"`
 		Hidden           *bool      `json:"hidden,omitempty" doc:"Скрыть пользователя из списка или вернуть в него; доступ он не теряет"`
 		FolderID         *int64     `json:"folder_id,omitempty" minimum:"0" doc:"Положить в папку; 0 — убрать из папки"`
+		StartsOnConnect  *bool      `json:"starts_on_connect,omitempty" doc:"true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана"`
 	}
 }
 
@@ -253,6 +278,38 @@ type bulkInput struct {
 type bulkOutput struct {
 	Body struct {
 		Affected int `json:"affected"`
+	}
+}
+
+// BulkSample is one of the users a bulk action would change, as it is and what changes.
+type BulkSample struct {
+	UserID       int64      `json:"user_id"`
+	UserName     string     `json:"user_name"`
+	State        string     `json:"state" enum:"active,expiring,limited,expired,disabled"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	ExpiresAfter *time.Time `json:"expires_after,omitempty" doc:"extend: новый конец срока"`
+	Used         int64      `json:"used" doc:"Израсходовано за период: reset начинает период заново"`
+	FolderID     *int64     `json:"folder_id"`
+}
+
+// BulkAtStake is what the users a deletion reaches hold, as the removal of the inactive
+// counts it: what a deletion takes with them.
+type BulkAtStake struct {
+	Active      int `json:"active" doc:"Ещё работают: срок и трафик не кончились, не отключены"`
+	WithBalance int `json:"with_balance" doc:"С деньгами на балансе привязанного аккаунта"`
+	Paying      int `json:"paying" doc:"С платежом, который ещё не применён, или пополнением на проверке"`
+	Granted     int `json:"granted" doc:"С действующими пакетами трафика"`
+}
+
+type bulkPreviewOutput struct {
+	Body struct {
+		Requested int          `json:"requested" doc:"Сколько разных пользователей в запросе"`
+		Found     int          `json:"found" doc:"Сколько из них есть: к ним действие и применится (affected)"`
+		Missing   int          `json:"missing" doc:"Сколько уже удалены"`
+		Changed   int          `json:"changed" doc:"Скольких действие изменит"`
+		Unchanged int          `json:"unchanged" doc:"Сколько уже такие: например, уже отключены"`
+		Sample    []BulkSample `json:"sample" doc:"Первые 10 изменяемых, по id"`
+		AtStake   *BulkAtStake `json:"at_stake,omitempty" doc:"Только для delete: что удалится вместе с пользователями"`
 	}
 }
 
@@ -293,6 +350,8 @@ func (h *handlers) registerUsers() {
 	huma.Register(h.api, huma.Operation{OperationID: "reset-user-traffic", Method: http.MethodPost, Path: "/api/v1/users/{id}/reset-traffic", Summary: "Сбросить трафик", Tags: tags}, h.resetUserTraffic)
 	huma.Register(h.api, huma.Operation{OperationID: "reissue-user", Method: http.MethodPost, Path: "/api/v1/users/{id}/reissue", Summary: "Перевыпустить ссылку", Tags: tags}, h.reissueUser)
 	huma.Register(h.api, huma.Operation{OperationID: "bulk-users", Method: http.MethodPost, Path: "/api/v1/users/bulk", Summary: "Массовое действие", Tags: tags}, h.bulkUsers)
+	huma.Register(h.api, huma.Operation{OperationID: "bulk-users-preview", Method: http.MethodPost, Path: "/api/v1/users/bulk/preview",
+		Summary: "Что сделает массовое действие: без изменений, для подтверждения", Tags: tags}, h.bulkPreview)
 	huma.Register(h.api, huma.Operation{OperationID: "user-traffic", Method: http.MethodGet, Path: "/api/v1/users/{id}/traffic", Summary: "График трафика пользователя", Tags: tags}, h.userTraffic)
 	huma.Register(h.api, huma.Operation{OperationID: "user-devices", Method: http.MethodGet, Path: "/api/v1/users/{id}/devices", Summary: "Адреса, с которых заходил пользователь", Tags: tags}, h.userDevices)
 	huma.Register(h.api, huma.Operation{OperationID: "user-bound-devices", Method: http.MethodGet, Path: "/api/v1/users/{id}/bound-devices", Summary: "Устройства, привязанные к подписке", Tags: tags}, h.boundDevices)
@@ -301,6 +360,7 @@ func (h *handlers) registerUsers() {
 	huma.Register(h.api, huma.Operation{OperationID: "ban-device", Method: http.MethodPost, Path: "/api/v1/users/{id}/bound-devices/{device}/ban", Summary: "Заблокировать устройство: отвязать и не давать привязаться снова по его ID", Tags: tags, DefaultStatus: http.StatusCreated}, h.banDevice)
 	huma.Register(h.api, huma.Operation{OperationID: "device-bans", Method: http.MethodGet, Path: "/api/v1/users/{id}/device-bans", Summary: "Заблокированные устройства пользователя", Tags: tags}, h.deviceBans)
 	huma.Register(h.api, huma.Operation{OperationID: "unban-device", Method: http.MethodDelete, Path: "/api/v1/users/{id}/device-bans/{ban}", Summary: "Разблокировать устройство: оно снова сможет привязаться", Tags: tags, DefaultStatus: http.StatusNoContent}, h.unbanDevice)
+	h.registerLifecycle()
 }
 
 func mapDomainErr(err error) error {
@@ -502,6 +562,9 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 			bound[c.UserID] = c.N
 		}
 		env := h.userEnv(ctx)
+		if err := h.lifecycleOf(ctx, &env, ids); err != nil {
+			return nil, err
+		}
 		for _, u := range page {
 			out.Body.Items = append(out.Body.Items, h.viewUser(u, names[u.ID], bound[u.ID], grants, env))
 		}
@@ -525,11 +588,16 @@ func (h *handlers) userResult(ctx context.Context, u db.User, err error) (*userO
 	if err != nil {
 		return nil, err
 	}
-	return &userOutput{Body: h.viewUser(u, slots, bound, grants, h.userEnv(ctx))}, nil
+	env := h.userEnv(ctx)
+	if err := h.lifecycleOf(ctx, &env, []int64{u.ID}); err != nil {
+		return nil, err
+	}
+	return &userOutput{Body: h.viewUser(u, slots, bound, grants, env)}, nil
 }
 
 func (h *handlers) createUser(ctx context.Context, in *createUserInput) (*userOutput, error) {
-	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID, Source: domain.UserFromAdmin})
+	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID,
+		Source: domain.UserFromAdmin, StartsOnConnect: in.Body.StartsOnConnect})
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, fieldErr("body.tariff_id", "tariff_not_found")
 	}
@@ -565,6 +633,7 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 		DeviceLimit: b.DeviceLimit, ClearDeviceLimit: b.DevicesUnlimited, DeviceMode: b.DeviceMode,
 		SpeedLimit: b.SpeedLimit, ClearSpeedLimit: b.SpeedUnlimited,
 		ExpiresAt: b.ExpiresAt, ClearExpiry: b.NeverExpires, Inbounds: b.Inbounds, TariffID: b.TariffID, Hidden: b.Hidden,
+		StartsOnConnect: b.StartsOnConnect,
 	}
 	if b.FolderID != nil {
 		if *b.FolderID == 0 {
@@ -803,13 +872,54 @@ func (h *handlers) reissueUser(ctx context.Context, in *userIDInput) (*userOutpu
 	return h.userResult(ctx, u, err)
 }
 
-func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, error) {
-	// One transaction for the list: it is applied whole or not at all.
+// bulkOpt is what the action of in needs besides the users.
+func bulkOpt(in *bulkInput) domain.BulkOpt {
 	opt := domain.BulkOpt{Days: in.Body.Days}
-	details := map[string]any{"requested": len(in.Body.IDs)}
 	if in.Body.Action == domain.BulkMove && in.Body.Folder > 0 {
 		opt.Folder = &in.Body.Folder
-		details["folder"] = in.Body.Folder
+	}
+	return opt
+}
+
+// bulkPreview is what bulkUsers would do with the same body, done by nothing: the admin
+// confirms what they see. A folder named is checked as the action checks it.
+func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreviewOutput, error) {
+	opt := bulkOpt(in)
+	if opt.Folder != nil {
+		if _, err := h.d.Store.Q.GetFolder(ctx, *opt.Folder); errors.Is(err, sql.ErrNoRows) {
+			return nil, fieldErr("body.folder_id", "folder_not_found")
+		} else if err != nil {
+			return nil, err
+		}
+	}
+	plan, err := h.d.Users.BulkPlan(ctx, in.Body.IDs, in.Body.Action, opt)
+	if err != nil {
+		return nil, mapDomainErr(err)
+	}
+	out := &bulkPreviewOutput{}
+	b := &out.Body
+	b.Requested, b.Found, b.Missing, b.Changed, b.Unchanged = plan.Asked, plan.Found, plan.Asked-plan.Found, plan.Changed, plan.Found-plan.Changed
+	b.Sample = make([]BulkSample, 0, len(plan.Sample))
+	for _, c := range plan.Sample {
+		s := BulkSample{UserID: c.User.ID, UserName: c.User.Name, State: c.State, ExpiresAt: store.TimePtr(c.User.ExpiresAt),
+			Used: c.User.UsedUp + c.User.UsedDown, FolderID: store.Int64Ptr(c.User.FolderID)}
+		if in.Body.Action == domain.BulkExtend {
+			s.ExpiresAfter = store.TimePtr(c.Expires)
+		}
+		b.Sample = append(b.Sample, s)
+	}
+	if plan.AtStake != nil {
+		b.AtStake = &BulkAtStake{Active: plan.Active, WithBalance: int(plan.AtStake.WithBalance), Paying: int(plan.AtStake.Paying), Granted: int(plan.AtStake.Granted)}
+	}
+	return out, nil
+}
+
+func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, error) {
+	// One transaction for the list: it is applied whole or not at all.
+	opt := bulkOpt(in)
+	details := map[string]any{"requested": len(in.Body.IDs)}
+	if opt.Folder != nil {
+		details["folder"] = *opt.Folder
 	}
 	n, err := h.d.Users.Bulk(ctx, in.Body.IDs, in.Body.Action, opt)
 	if err != nil {

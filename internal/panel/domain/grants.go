@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"mikan/internal/panel/events"
 	"mikan/internal/panel/model"
 	"mikan/internal/panel/store/db"
 )
@@ -30,7 +31,8 @@ const (
 const (
 	SourcePurchase = "purchase"
 	SourceAdmin    = "admin"
-	SourceGift     = "gift" // a gift of the tariff a payment was for (gifts.go)
+	SourceGift     = "gift"  // a gift of the tariff a payment was for (gifts.go)
+	SourceCarry    = "carry" // what a period left, carried into the next (lifecycle.go)
 )
 
 // Limits of a package or a grant.
@@ -223,6 +225,11 @@ func CountTraffic(ctx context.Context, q *db.Queries, b TrafficBatch, now time.T
 		}
 	}
 	if err := spendGrants(ctx, q, over, now); err != nil {
+		return err
+	}
+	// Counted traffic is the first connection a waiting term waits for (starts.go): its
+	// clock runs from this batch on, under the same locks.
+	if _, err := startWaiting(ctx, q, users, now, events.StartedByConnection); err != nil {
 		return err
 	}
 	if err := q.AddTrafficHourlyBatch(ctx, db.AddTrafficHourlyBatchParams{UserIds: stats.UserIds, Hour: now.Unix() / 3600, Up: stats.Up, Down: stats.Down}); err != nil {

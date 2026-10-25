@@ -1,9 +1,10 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CalendarClock, CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { basePath, errorText, type Tariff, type User } from "../../api/client";
+import { basePath, errorText, type Schemas, type Tariff, type User } from "../../api/client";
 import { userActions, useFolders, useOverview, useSettings, useTariffs, useUserMutation, useUsersPages } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { FloatingBar } from "../../components/layout";
@@ -11,11 +12,12 @@ import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
 import { Avatar, Bar, Button, EmptyState, PageHeader, Skeleton, StatePill } from "../../components/ui";
 import { t, useLocale } from "../../i18n";
-import { bytes, dateShort, expiryText, num } from "../../lib/format";
+import { bytes, dateShort, days, expiryText, num, waitingDays } from "../../lib/format";
 import { useMediaQuery } from "../../lib/media";
 import { pagedItems } from "../../lib/paging";
 import { useUrlSearchText } from "../../lib/url-search";
 import { USER_HIDDEN, USER_SOURCES, USER_STATES, type UsersSearch } from "../search";
+import { LifecycleDrawer } from "./lifecycle";
 import { CreateUserDrawer } from "./user-create";
 import { UserDrawer } from "./user-drawer";
 import { FolderBadge, FolderMark, FolderMenuItems, FoldersDrawer, type Folder } from "./user-folders";
@@ -96,6 +98,7 @@ export function UsersPage() {
   const folders = useFolders();
   const overview = useOverview({ poll: false });
   const [managing, setManaging] = useState(false);
+  const [rules, setRules] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const narrow = useMediaQuery("(max-width: 767px)");
   // With binding a place is a bound device, else an address online (see the drawer). Read
@@ -161,6 +164,10 @@ export function UsersPage() {
         sub={overview.data ? `${t("users.subtitle", { n: overview.data.users_total, active: num(overview.data.users_active) })}${hiddenTotal > 0 ? ` · ${t("users.hiddenCount", { n: hiddenTotal })}` : ""}` : "…"}
         actions={
           <>
+            <Button onClick={() => setRules(true)} aria-label={t("lifecycle.open")}>
+              <CalendarClock size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("lifecycle.open")}</span>
+            </Button>
             <Button onClick={() => setManaging(true)} aria-label={t("users.manageFolders")}>
               <FolderCog size={18} aria-hidden />
               <span className="max-[760px]:hidden">{t("users.manageFolders")}</span>
@@ -297,7 +304,17 @@ export function UsersPage() {
                     </thead>
                     <tbody>
                       {items.map((u) => (
-                        <UserRow key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} selected={selected.has(u.id)} binding={binding} onToggle={toggle} onOpen={openUser} />
+                        <UserRow
+                          key={u.id}
+                          u={u}
+                          tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined}
+                          next={u.next_tariff ? tariffById.get(u.next_tariff.tariff_id) : undefined}
+                          folder={u.folder_id ? folderById.get(u.folder_id) : undefined}
+                          selected={selected.has(u.id)}
+                          binding={binding}
+                          onToggle={toggle}
+                          onOpen={openUser}
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -321,6 +338,7 @@ export function UsersPage() {
 
       <BulkBar chosen={chosen} clear={clear} folders={folderList} />
       <FoldersDrawer open={managing} onOpenChange={setManaging} />
+      <LifecycleDrawer open={rules} onOpenChange={setRules} />
       <CreateUserDrawer
         open={!!search.create}
         onOpenChange={(v) => void navigate({ search: (s) => ({ ...s, create: v ? true : undefined }) })}
@@ -365,6 +383,15 @@ function Usage({ u }: { u: User }) {
 
 function Expiry({ u }: { u: User }) {
   const e = expiryText(u.expires_at);
+  // A term that waits for its first connection has no date yet: its end moves on with the clock.
+  if (u.starts_on_connect && u.expires_at) {
+    return (
+      <>
+        <div className="font-medium">{t("users.waits")}</div>
+        <div className="exp-days">{t("users.waitsTerm", { term: days(waitingDays(u.expires_at)) })}</div>
+      </>
+    );
+  }
   return (
     <>
       <div className="font-medium">{u.expires_at ? t("users.until", { date: dateShort(u.expires_at) }) : t("time.forever")}</div>
@@ -395,7 +422,26 @@ function openLink(id: number, onOpen: (id: number) => void) {
 // Rows are memoized: a poll hands back the same objects for users that did not change, and
 // a tick in one checkbox then redraws that one row. Text is read at render time, so a row
 // subscribes to the language itself.
-const UserRow = memo(function UserRow({ u, tariff, folder, selected, binding, onToggle, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; selected: boolean; binding: boolean; onToggle: (id: number) => void; onOpen: (id: number) => void }) {
+const UserRow = memo(function UserRow({
+  u,
+  tariff,
+  next,
+  folder,
+  selected,
+  binding,
+  onToggle,
+  onOpen,
+}: {
+  u: User;
+  tariff?: Tariff;
+  /** The tariff the user moves to when the term ends. */
+  next?: Tariff;
+  folder?: Folder;
+  selected: boolean;
+  binding: boolean;
+  onToggle: (id: number) => void;
+  onOpen: (id: number) => void;
+}) {
   useLocale();
   // The online mode counts the addresses online at once, not the places taken.
   const devices = binding && u.device_mode !== "online" ? u.bound_devices : u.online_ips.length;
@@ -431,6 +477,7 @@ const UserRow = memo(function UserRow({ u, tariff, folder, selected, binding, on
       <td>
         <div className="font-medium">{tariff?.name ?? "—"}</div>
         <div className="mt-0.5 text-xs text-[var(--ink-500)]">{u.traffic_limit != null ? bytes(u.traffic_limit) : t("users.unlimited")}</div>
+        {u.next_tariff ? <div className="mt-0.5 text-xs text-[var(--ink-500)]">{t("users.nextTariff", { name: next?.name ?? `#${u.next_tariff.tariff_id}` })}</div> : null}
       </td>
       <td>
         <Usage u={u} />
@@ -468,7 +515,7 @@ const UserCard = memo(function UserCard({ u, tariff, folder, onOpen }: { u: User
           {u.online ? <span className="online-dot" role="img" aria-label={t("users.onlineNow")} /> : null}
         </div>
         <div className="truncate text-xs text-[var(--ink-500)]">
-          {tariff?.name ?? t("users.noTariff")} · {e.text}
+          {tariff?.name ?? t("users.noTariff")} · {u.starts_on_connect ? t("users.waits") : e.text}
         </div>
         {u.source !== "admin" || folder || u.hidden ? (
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
@@ -510,16 +557,20 @@ function TableSkeleton() {
 
 type BulkAction = "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move";
 
-/** How many names the delete confirmation lists before it says "…". */
-const NAMES_SHOWN = 5;
+/** What the bulk preview found for an action the admin is asked to confirm. */
+type Asked = { action: "extend" | "reset" | "disable" | "delete"; plan: Schemas["BulkPreviewOutputBody"] };
 
 function BulkBar({ chosen, clear, folders }: { chosen: User[]; clear: () => void; folders: Folder[] }) {
   const toast = useToast();
   const bulk = useUserMutation(userActions.bulk);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  // What changes a subscription is shown before it is done: the server says how many it
+  // changes and who the first of them are, and the admin confirms. Where a user is listed
+  // (hide, move) changes nothing of the subscription and is undone with one click: at once.
+  const preview = useMutation({ mutationFn: userActions.bulkPreview });
+  const [asked, setAsked] = useState<Asked | null>(null);
   const n = chosen.length;
-  const busy = bulk.isPending;
-  const running = (action: BulkAction) => busy && bulk.variables?.action === action;
+  const busy = bulk.isPending || preview.isPending;
+  const running = (action: BulkAction) => (bulk.isPending && bulk.variables?.action === action) || (preview.isPending && preview.variables?.action === action);
   // Hiding is one button that does what the chosen need: bring them back when all of them
   // are hidden, hide them otherwise.
   const unhide = n > 0 && chosen.every((u) => u.hidden);
@@ -531,28 +582,26 @@ function BulkBar({ chosen, clear, folders }: { chosen: User[]; clear: () => void
         onSuccess: (r) => {
           toast.ok(t(`users.bulkDone.${action}`, { n: r.affected }));
           clear();
-          setConfirmDelete(false);
+          setAsked(null);
         },
         onError: (e) => toast.error(errorText(e)),
       },
     );
-  // The confirmation of a delete has nothing to confirm once the selection is gone.
+  const ask = (action: Asked["action"]) =>
+    preview.mutate({ ids: chosen.map((u) => u.id), action }, { onSuccess: (plan) => setAsked({ action, plan }), onError: (e) => toast.error(errorText(e)) });
+  // The confirmation has nothing to confirm once the selection is gone.
   useEffect(() => {
-    if (n === 0) setConfirmDelete(false);
+    if (n === 0) setAsked(null);
   }, [n]);
-  const names = chosen
-    .slice(0, NAMES_SHOWN)
-    .map((u) => u.name)
-    .join(", ");
   return (
     <>
       <FloatingBar open={n > 0} className="bulk-bar" label={t("users.bulkLabel")}>
         <span className="num mr-2 font-semibold whitespace-nowrap">{t("users.selected", { n })}</span>
-        <Button size="sm" loading={running("extend")} disabled={busy} onClick={() => run("extend")} title={t("users.extendPeriodHint")}>
+        <Button size="sm" loading={running("extend")} disabled={busy} onClick={() => ask("extend")} title={t("users.extendPeriodHint")}>
           <CalendarPlus size={16} aria-hidden />
           <span className="max-sm:hidden">{t("users.extendPeriod")}</span>
         </Button>
-        <Button size="sm" loading={running("reset")} disabled={busy} onClick={() => run("reset")} aria-label={t("users.resetTraffic")}>
+        <Button size="sm" loading={running("reset")} disabled={busy} onClick={() => ask("reset")} aria-label={t("users.resetTraffic")}>
           <RotateCcw size={16} aria-hidden />
           <span className="max-sm:hidden">{t("users.resetTraffic")}</span>
         </Button>
@@ -575,27 +624,81 @@ function BulkBar({ chosen, clear, folders }: { chosen: User[]; clear: () => void
           {unhide ? <Eye size={16} aria-hidden /> : <EyeOff size={16} aria-hidden />}
           <span className="max-sm:hidden">{unhide ? t("users.unhide") : t("users.hide")}</span>
         </Button>
-        <Button size="sm" variant="danger" loading={running("disable")} disabled={busy} onClick={() => run("disable")} aria-label={t("users.disable")}>
+        <Button size="sm" variant="danger" loading={running("disable")} disabled={busy} onClick={() => ask("disable")} aria-label={t("users.disable")}>
           <Power size={16} aria-hidden />
           <span className="max-sm:hidden">{t("users.disable")}</span>
         </Button>
-        <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmDelete(true)} aria-label={t("users.deleteSelected")}>
+        <Button size="sm" variant="danger" loading={running("delete")} disabled={busy} onClick={() => ask("delete")} aria-label={t("users.deleteSelected")}>
           <Trash2 size={16} aria-hidden />
         </Button>
         <button type="button" className="icon-btn" aria-label={t("users.clearSelection")} disabled={busy} onClick={clear}>
           <X size={16} />
         </button>
       </FloatingBar>
-      <Confirm
-        open={confirmDelete && n > 0}
-        onOpenChange={setConfirmDelete}
-        title={t("users.deleteTitle", { n })}
-        text={`${t("users.deleteText")} ${t("users.deleteWho", { names: n > NAMES_SHOWN ? `${names}…` : names })}`}
-        confirm={t("common.delete")}
-        danger
-        loading={running("delete")}
-        onConfirm={() => run("delete")}
-      />
+      {asked ? <BulkConfirm asked={asked} loading={bulk.isPending} onClose={() => setAsked(null)} onConfirm={() => run(asked.action)} /> : null}
     </>
+  );
+}
+
+/** What a bulk action will do, as the server worked it out, for the admin to confirm: how
+ * many it changes and how many it leaves as they are, the first of those it changes, and
+ * before a deletion what goes with the users. */
+function BulkConfirm({ asked, loading, onClose, onConfirm }: { asked: Asked; loading: boolean; onClose: () => void; onConfirm: () => void }) {
+  const { action, plan } = asked;
+  const stake = plan.at_stake;
+  const notes = [
+    plan.unchanged > 0 ? t("users.bulkConfirm.alreadyOff", { n: plan.unchanged }) : "",
+    plan.missing > 0 ? t("users.bulkConfirm.missing", { n: plan.missing }) : "",
+  ].filter(Boolean);
+  const warnings = stake
+    ? [
+        stake.active > 0 ? t("users.bulkConfirm.active", { n: stake.active }) : "",
+        stake.with_balance > 0 ? t("users.bulkConfirm.withBalance", { n: stake.with_balance }) : "",
+        stake.paying > 0 ? t("users.bulkConfirm.paying", { n: stake.paying }) : "",
+        stake.granted > 0 ? t("users.bulkConfirm.granted", { n: stake.granted }) : "",
+      ].filter(Boolean)
+    : [];
+  return (
+    <Confirm
+      open
+      onOpenChange={(v) => !v && onClose()}
+      title={action === "delete" ? t("users.deleteTitle", { n: plan.changed }) : t(`users.bulkConfirm.title.${action}`, { n: plan.changed })}
+      text={plan.changed === 0 ? t("users.bulkConfirm.nothing") : action === "delete" ? t("users.deleteText") : t(`users.bulkConfirm.text.${action}`)}
+      confirm={action === "delete" ? t("common.delete") : t(`users.bulkConfirm.confirm.${action}`)}
+      danger={action === "delete" || action === "disable"}
+      loading={loading}
+      confirmDisabled={plan.changed === 0}
+      onConfirm={onConfirm}
+    >
+      {notes.length ? <p className="mt-2 text-xs text-[var(--ink-600)]">{notes.join(" ")}</p> : null}
+      {warnings.length ? (
+        <ul className="banner warn mt-3 flex flex-col items-start gap-1 text-[13px]" role="alert">
+          {warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      ) : null}
+      {plan.sample.length ? (
+        <ul className="row-list mt-3 max-h-[240px] overflow-y-auto rounded-2xl border border-[var(--hairline)] px-3" aria-label={t("users.bulkConfirm.sample")}>
+          {plan.sample.map((s) => (
+            <li key={s.user_id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
+              <span className="min-w-0 truncate font-medium">{s.user_name}</span>
+              <span className="shrink-0 text-xs text-[var(--ink-600)]">
+                {action === "extend" && s.expires_after ? (
+                  <span className="num">
+                    {s.expires_at ? dateShort(s.expires_at) : t("time.forever")} → {dateShort(s.expires_after)}
+                  </span>
+                ) : action === "reset" ? (
+                  <span className="num">{t("users.bulkConfirm.used", { used: bytes(s.used) })}</span>
+                ) : (
+                  <StatePill state={s.state} />
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {plan.changed > plan.sample.length ? <p className="mt-2 text-xs text-[var(--ink-500)]">{t("users.bulkConfirm.more", { n: plan.changed - plan.sample.length })}</p> : null}
+    </Confirm>
   );
 }

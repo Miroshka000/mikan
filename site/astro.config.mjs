@@ -111,6 +111,7 @@ export default defineConfig({
 					translations: { en: 'Users and billing' },
 					items: [
 						{ slug: 'billing/plans' },
+						{ slug: 'billing/lifecycle' },
 						{ slug: 'billing/pools' },
 						{ slug: 'billing/telegram' },
 						{ slug: 'billing/payments' },

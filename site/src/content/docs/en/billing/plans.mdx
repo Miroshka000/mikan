@@ -9,9 +9,11 @@ description: Plans with a term, traffic and several sale terms, users, devices a
 
 - **Traffic per period** in GB, or unlimited.
 - **Term**: "In days" (0 means no expiry) or "To a day of the month": N months and a billing day. The first term ends on the nearest such day, but not sooner than 15 days from now. In a month without that day, the term ends on the last day.
+- **Term from the first connection**: a switch under the term, which appears when the term has an end. The term of new subscriptions on the plan starts when the client first connects, not when the subscription is made, see [Subscription lifecycle](/mikan/en/billing/lifecycle/#term-from-the-first-connection).
 - **Devices at once**: from 1 to 100, or unlimited.
 - **Speed** in Mbit/s, or unlimited: each way, for all of the user's devices together. A user's own speed is set in their card next to the plan: 10, 25, 50, 100, other or ∞. Each node holds the cap on its own, and with [channel sharing](/mikan/en/nodes/nodes/#share-the-channel-evenly) the plan's speed stays the ceiling.
 - **When to reset traffic**: every 30 days, on the 1st (or on the billing day), never.
+- **Leftover traffic**: whether what is left unused goes into the new period on a renewal and on a move to this plan: "As in the rules", "Carry over" or "Do not carry over". The field is there for plans with a traffic limit, details in [Subscription lifecycle](/mikan/en/billing/lifecycle/#leftover-traffic).
 - **Price label**: shown only in the panel.
 - **Description for buyers**: up to 300 characters and 5 lines of plain text. When the limits do not show what sets plans apart ("with white lists", "without"), say it here: the description appears in the bot and the Mini App next to the line built from the limits. Markup does not work, line breaks are kept. An empty description changes nothing.
 - **What is included**: [server groups](/mikan/en/billing/pools/) (on the main traffic, with a limit of their own, unlimited or not included) and packages as a gift with a payment. The preview shows what the buyer sees.
@@ -22,7 +24,7 @@ An archived plan cannot be chosen for new users; nothing changes for existing on
 
 ## Users
 
-"New user": a name, an optional contact and a plan. The term, traffic and device limit come from the plan and can be changed later in the card. The "Create and copy the link" button copies the subscription link right away.
+"New user": a name, an optional contact and a plan. The term, traffic and device limit come from the plan and can be changed later in the card. The "Create and copy the link" button copies the subscription link right away. If the plan's term has an end, a "Term from the first connection" switch sits under the plan choice: it repeats the plan's setting and can be changed for this client.
 
 In the user card:
 
@@ -30,12 +32,13 @@ In the user card:
 - **Extend**: by 7, 30, 90 days or a year, or, with a billing day, by 1, 3, 6 or 12 months. There is also an exact end date and "No expiry".
 - **Billing day**: extending by a month runs the term to this day.
 - **Change plan**: limits come from the new plan, the term starts again from today, and used traffic is kept.
+- **Next plan**: in the "Plan" block, set the plan the client moves to by itself when the term ends, see [Subscription lifecycle](/mikan/en/billing/lifecycle/#next-plan).
 - **Reset traffic**, **Disable**.
 - **More actions → Reissue the link**: the old link and all devices stop working immediately, along with any old links left after an import.
 - **Add traffic**: a package as a gift or as compensation.
 - **Telegram → Unlink**, a torrent ban and "Do not check for torrents".
 
-The list can be filtered by state: active, expiring, limit reached, expired, disabled. Search works on name, contact, tag and note. With rows selected, you can do "+1 month", reset traffic, disable and delete.
+The list can be filtered by state: active, expiring, limit reached, expired, disabled. Search works on name, contact, tag and note. With rows selected, you can do "+1 month", reset traffic, disable and delete: before doing it the panel shows what will change and waits for a confirmation, see [Preview of bulk actions](/mikan/en/billing/lifecycle/#preview-of-bulk-actions). The **Rules** button in the page header opens the general subscription rules: carrying leftover traffic over and removing inactive subscriptions, see [Subscription lifecycle](/mikan/en/billing/lifecycle/).
 
 Since version 0.5.0.3 there are also folders, a user source (created in the panel, bought in the bot, free trial, import) and hidden users. Hiding only removes the row from the list: the subscription, payment and nodes work as usual.
 

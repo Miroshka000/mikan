@@ -1,0 +1,147 @@
+---
+title: Subscription lifecycle
+description: Carrying leftover traffic over, a term that starts at the first connection, the next plan, removal of inactive subscriptions and a preview of bulk actions.
+---
+
+These rules decide what happens to a subscription after the purchase: where unused traffic goes, when the term starts, which plan the client moves to by itself, when the panel removes forgotten subscriptions, and how to check a bulk action before it is done.
+
+The general rules, carrying leftover traffic over and removing inactive subscriptions, are in the **Subscription rules** window. The **Rules** button in the header of the **Clients** and **Plans** pages opens it. The rest is set on a plan and in the client's card.
+
+## Leftover traffic
+
+When a renewal or the next plan starts a new traffic period, the part of the plan's quota left unused can go into it. It arrives as a package, "leftover of the last period": it is spent after the plan's quota and burns when the period ends.
+
+Carrying over is off by default: a new period starts with the plan's quota only, as before. Turn it on in **Rules → Leftover traffic → Carry the leftover over**. The **At most** field sets a share of the new period's quota, from 1 to 100% (quick picks 25, 50 and 100%, 100% by default). At 100% a client starts a period with two quotas at the most.
+
+What is carried is what is left of the main quota (the client's limit less what was used in the period), but no more than the set share of the new plan's quota. For example, on a 150 GB plan with "At most" 50%, a client who used 40 GB carries 75 GB over, not 110.
+
+Not carried:
+
+- traffic packages: they have terms of their own, and the carried leftover is a package itself, so it is not carried a second time;
+- the limits of server groups: only the main traffic;
+- a leftover under 1 MB;
+- anything, if the client has no traffic limit now or the new plan has none.
+
+### When it is carried
+
+| What happened | New period | Leftover |
+|---|---|---|
+| A paid renewal, "Renewal resets traffic" on | starts | carried by the rules |
+| A paid renewal, the switch off | no, the counter goes on | no |
+| A move to the next plan | starts | carried by the rules |
+| A scheduled reset: every 30 days or on the 1st | starts | no |
+| **Reset traffic** in the card or over selected clients | starts | no, packages "until the end of the period" burn |
+| **Extend** and **Change plan** in the card | no, what was used is kept | no |
+
+The "Renewal resets traffic" switch is in **Payments → Sales rules** and is on by default.
+
+### The plan decides
+
+In the plan form the **Leftover traffic** field is there for plans with a traffic limit. It replaces the general rule for renewals onto this plan and moves to it: **As in the rules**, **Carry over** or **Do not carry over**. In the list of plans, a plan with a word of its own shows the line "Leftover traffic: carried over" or "not carried over". The "At most" share is one for the whole panel.
+
+### Where it shows
+
+In the client's card the carried leftover is among the traffic packages, labelled "leftover of the last period". On a plan with a reset (every 30 days or on the 1st) it burns at the next reset; on a plan with "no reset" it stays until it is used. If the payment that carried the leftover is refunded, the leftover is taken away with it, like the other packages of that payment.
+
+## Term from the first connection
+
+Normally the term starts when the subscription is made. With this rule it starts when the panel first counts the client's traffic. This is handy when the link is handed out in advance: the person doesn't lose days while installing the app.
+
+### How to turn it on
+
+- **For a plan**: the **Term from the first connection** switch in the plan form, which appears when the term has an end. New subscriptions on that plan get it: made in the panel, bought in the bot, and free trials. An import brings clients with a running term, and the rule leaves them alone. In the list of plans the term of such a plan reads "30 days from the connection".
+- **For a new client**: in **New client** the same switch is set as the chosen plan says, and it can be changed for this client.
+- **For an existing client**: in the card, in the **Term** block, the **Start the term at the first connection** link. It is there only for a client who has not connected yet and whose term is not over. Otherwise the panel refuses: "The client has connected already: their term is running", "The subscription has no end date" or "The term is over: renew the subscription first".
+
+### What "connected" means
+
+The client's first traffic that the panel has counted, on any server. Loading the subscription into the app does not count as a connection: until traffic has passed through the servers, the term waits.
+
+### While the term waits
+
+- The clock stands still: every 10 minutes the panel moves the end date forward by the time that has passed, so the term stays whole. The date in the app changes in steps of ten minutes.
+- Whatever would run out with time waits along: the traffic period "reset every 30 days" (the reset on the 1st follows the calendar and does not wait), packages that have an end, and devices bought until the end of the term.
+- The subscription works as a normal one: the servers let the client in, and their first traffic starts the term.
+- In the client list, "From the first connection" and "30 days after it" take the place of the date; in the card it reads "30 days from the first connection".
+- The bot sends no notices to such a subscription, the next plan does not turn on, and the removal of inactive ones leaves it alone.
+
+### What the administrator can do
+
+In the card, a waiting term has the **Start now** button, which starts the whole term from this minute. **Extend** adds time to the waiting term, and it keeps waiting. An end date set by hand and **No expiry** start the term at once and stay as given. If a refund took the whole term, the wait ends with it.
+
+## Next plan
+
+The plan the client moves to by itself when the term ends. It is set in the client's card, in the **Plan** block: **Set the next plan**. Choose a plan and its term: "As the plan's" (the plan's first term) or one of its other terms. After that the card shows "Then: Premium", the date and the term, and the **Change** and **Remove** buttons change the choice or take it away. In the client list "then Premium" is under the plan.
+
+A next plan can be set only for a subscription with an end date: one with no expiry has nothing to move on from. The plan must not be archived.
+
+When the term ends:
+
+- the new plan's limits turn on: traffic, devices, speed, device mode and server groups;
+- the new term is counted from the end of the old one, or, if the old one is over already (the panel was down, say), from this minute;
+- traffic starts from zero, and the leftover of the last period is carried over by the [rules](#leftover-traffic);
+- nothing is paid, and a subscription that is on stays on, one that is off stays off;
+- the move happens once, and after it there is no next plan.
+
+The panel checks terms every 10 minutes and moves the subscriptions whose term ends before the next check, so a move may happen a few minutes before the term ends, and the new term still starts at that end. If you set a next plan for a subscription whose term is over already or ends within these 10 minutes, the move happens at once, and the panel says so. If the client renewed earlier, the term moved out and the move happens at the new end. While a term waits for the first connection it does not end, and the move waits too.
+
+The audit log gets "Next plan set" (`user.next_tariff`), "Next plan removed" (`user.next_tariff_clear`) and "Moved to the next plan" (`user.switch_tariff`, with the plans and the number of bytes carried over).
+
+## Removing inactive subscriptions
+
+The panel can delete subscriptions nobody has used for a long time. The rule is off by default; turn it on in **Rules → Removal of inactive ones**:
+
+- **Delete inactive subscriptions**: the switch;
+- **After**: the number of days, from 7 to 3650 (quick picks 14, 30, 90 and 180, 30 by default).
+
+A subscription is deleted when at least this many days have passed since its term ended and since its last connection, both. If the client never connected, only the end of the term counts. The rule does not look at whether the subscription is on or off.
+
+Not deleted:
+
+- subscriptions with no expiry;
+- subscriptions whose term waits for the first connection, and subscriptions with a next plan;
+- subscriptions that still hold something of the client's: money on the balance of the linked Telegram account, a payment on its way (an invoice that is open, or paid but not applied yet), a top-up under review, or running traffic packages with traffic left.
+
+### Who the rule reaches
+
+Under the number of days, the rules window has the **Who the rule reaches now** list. It is counted at once, whether the rule is on or not, and is recounted when you change the number of days. At the top it says how many subscriptions will be deleted in the next pass and how many will stay. Then come the first 200, the longest-ended first: the name, "term ended" with a date, "connected" with how long ago or "never connected", and a **Will be deleted** mark or the reason the subscription stays: **Money on the balance**, **Payment on its way**, **Packages running**.
+
+Turning the rule on, or cutting the number of days, first shows a confirmation: "Delete subscriptions after 30 days?", with the number of subscriptions, the first five names and the number that will stay. The **Turn on** button saves it.
+
+:::caution[Deleting cannot be undone]
+The links of deleted subscriptions stop working at once and the statistics go. Look at the list before turning it on, and start with a large number of days.
+:::
+
+### How it works
+
+A pass runs every 10 minutes with the rest of the panel's upkeep and deletes at most 200 subscriptions at a time, the longest-ended first. Each subscription is deleted in a transaction of its own, which checks the conditions once more before deleting: a payment that arrives in those minutes saves the subscription. A Telegram account's balance is not touched by a deletion: a subscription with money on it stays anyway.
+
+Every deletion goes into the audit log as "Inactive subscription deleted" (`user.remove_inactive`): the name, the date the term ended, the last connection and the rule's number of days. The line does not link to the card, as the subscription is gone. Addons get the `user.removed` event.
+
+Only an administrator's session changes the removal rule. An API key, even a full one, and support access get a 403: `session_only` or `support_extended`. A key with full access may change the carrying over, and a read-only key may read the rules and the list.
+
+## Preview of bulk actions
+
+On the **Clients** page, select rows, and the action bar appears at the bottom. **+1 month**, **Reset traffic**, **Disable** and **Delete selected** now first show what will change and wait for a confirmation. Hide, bring back to the list and move to a folder are done at once: they change nothing in the subscription and are undone with one click.
+
+The confirmation window has:
+
+- a title with the number of clients the action will change: "Extend N clients?", "Reset the traffic of N clients?", "Disable N clients?", "Delete N clients?";
+- what the action does. **+1 month**: each client by one period from their end date (or from today if the term is over), to the next billing day, by 30 days without one, and disabled clients are turned on. **Reset traffic**: what was used in the period is zeroed, the period starts anew, and packages "until the end of the period", the carried leftover included, burn. **Disable**: the subscriptions stop working, the term and traffic are kept;
+- notes: "Already disabled: N" for those who need no disabling, and "Already deleted: N" for selected clients who are gone by now;
+- the first 10 clients the action will change, with what happens to them: for **+1 month** the old date and the new one, for **Reset traffic** "used" and the amount, for the others the state. The rest are counted by the line "And N more";
+- for a deletion, warnings: how many clients still work (connections will drop), how many have money on the linked account's balance (the balance stays with the account), a payment not applied yet or a top-up under review, and running traffic packages (the packages are deleted with the subscription).
+
+When the action would change nobody, the window says "Nothing to change: all of the selected are that way already", and the confirm button is unavailable.
+
+A confirmed action is done for all the clients found in one transaction: for all of them or for none. A client deleted between the preview and the confirmation is skipped, and one changed in that time is handled as they have become.
+
+## For the API and addons
+
+- `GET /api/v1/lifecycle` and `PUT /api/v1/lifecycle`: the rules (`carry.on`, `carry.cap_percent`, `removal.on`, `removal.days`).
+- `GET /api/v1/lifecycle/inactive?days=N`: a dry run of the removal that deletes nothing. Without `days` the saved number is used; otherwise it is from 7 to 3650.
+- `PUT /api/v1/users/{id}/next-tariff` and `DELETE /api/v1/users/{id}/next-tariff`: the next plan (`tariff_id` and an optional `term_days`, 0 means no expiry). The answer has `switched: true` if the plan was applied at once.
+- `POST /api/v1/users/bulk/preview`: the body of `POST /api/v1/users/bulk` (`ids`, `action`, `days`, `folder_id`); it changes nothing. The answer: `requested`, `found`, `missing`, `changed`, `unchanged`, `sample` (the first 10) and, for `delete`, `at_stake`. The rights are those of the action itself.
+- A plan has the fields `carry_over` (`inherit`, `on`, `off`) and `starts_on_connect`; a client has `starts_on_connect` and `next_tariff`. `PATCH /api/v1/users/{id}` with `starts_on_connect: true` turns the wait on, with `false` it starts the term now.
+- Audit log: `lifecycle.update`, `user.next_tariff`, `user.next_tariff_clear`, `user.switch_tariff`, `user.remove_inactive`.
+- Events for addons: `user.started` (`by`: `connection` or `admin`), `user.switched` (`tariff_id`, `from_tariff_id`, `expires_at`, `carried`), `user.removed` (`by`: `inactive`, `expired_at`, `online_at`, `days`).

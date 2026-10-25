@@ -780,6 +780,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Правила подписок: перенос остатка трафика и удаление неактивных */
+        get: operations["get-lifecycle"];
+        /**
+         * Изменить правила подписок
+         * @description Удаление неактивных меняет только сессия админа: ключу API и поддержке — 403 session_only / support_extended.
+         */
+        put: operations["update-lifecycle"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lifecycle/inactive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Кого достаёт удаление неактивных: пробный прогон, ничего не удаляет */
+        get: operations["list-inactive-users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs": {
         parameters: {
             query?: never;
@@ -2499,6 +2537,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/bulk/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Что сделает массовое действие: без изменений, для подтверждения */
+        post: operations["bulk-users-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}": {
         parameters: {
             query?: never;
@@ -2668,6 +2723,24 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/next-tariff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Следующий тариф: включится сам, когда кончится срок */
+        put: operations["set-next-tariff"];
+        post?: never;
+        /** Убрать следующий тариф */
+        delete: operations["clear-next-tariff"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3265,6 +3338,28 @@ export interface components {
             /** Format: int64 */
             queued: number;
         };
+        BulkAtStake: {
+            /**
+             * Format: int64
+             * @description Ещё работают: срок и трафик не кончились, не отключены
+             */
+            active: number;
+            /**
+             * Format: int64
+             * @description С действующими пакетами трафика
+             */
+            granted: number;
+            /**
+             * Format: int64
+             * @description С платежом, который ещё не применён, или пополнением на проверке
+             */
+            paying: number;
+            /**
+             * Format: int64
+             * @description С деньгами на балансе привязанного аккаунта
+             */
+            with_balance: number;
+        };
         BulkInputBody: {
             /**
              * @description hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ
@@ -3286,6 +3381,58 @@ export interface components {
         BulkOutputBody: {
             /** Format: int64 */
             affected: number;
+        };
+        BulkPreviewOutputBody: {
+            /** @description Только для delete: что удалится вместе с пользователями */
+            at_stake?: components["schemas"]["BulkAtStake"];
+            /**
+             * Format: int64
+             * @description Скольких действие изменит
+             */
+            changed: number;
+            /**
+             * Format: int64
+             * @description Сколько из них есть: к ним действие и применится (affected)
+             */
+            found: number;
+            /**
+             * Format: int64
+             * @description Сколько уже удалены
+             */
+            missing: number;
+            /**
+             * Format: int64
+             * @description Сколько разных пользователей в запросе
+             */
+            requested: number;
+            /** @description Первые 10 изменяемых, по id */
+            sample: components["schemas"]["BulkSample"][];
+            /**
+             * Format: int64
+             * @description Сколько уже такие: например, уже отключены
+             */
+            unchanged: number;
+        };
+        BulkSample: {
+            /**
+             * Format: date-time
+             * @description extend: новый конец срока
+             */
+            expires_after?: string;
+            /** Format: date-time */
+            expires_at: string | null;
+            /** Format: int64 */
+            folder_id: number | null;
+            /** @enum {string} */
+            state: "active" | "expiring" | "limited" | "expired" | "disabled";
+            /**
+             * Format: int64
+             * @description Израсходовано за период: reset начинает период заново
+             */
+            used: number;
+            /** Format: int64 */
+            user_id: number;
+            user_name: string;
         };
         CampaignView: {
             /** @description В архиве: ссылка больше не метит новых людей, статистика остаётся */
@@ -3320,6 +3467,15 @@ export interface components {
             revenue_rub: number;
             /** Format: int64 */
             revenue_stars: number;
+        };
+        CarryRules: {
+            /**
+             * Format: int64
+             * @description Сколько можно перенести: процент квоты нового периода
+             */
+            cap_percent: number;
+            /** @description Переносить остаток трафика периода в новый период при продлении и при переходе на следующий тариф. Тариф может решить по-своему */
+            on: boolean;
         };
         CascadeConns: {
             /** Format: int64 */
@@ -3618,6 +3774,8 @@ export interface components {
             contact?: string;
             name: string;
             note?: string;
+            /** @description Срок начнётся с первого подключения; не задано — как у тарифа */
+            starts_on_connect?: boolean;
             tags?: string[];
             /** Format: int64 */
             tariff_id: number;
@@ -3897,10 +4055,10 @@ export interface components {
             /** Format: int64 */
             remaining: number;
             /**
-             * @description purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате
+             * @description purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате, carry — остаток трафика прошлого периода, перенесённый продлением или следующим тарифом
              * @enum {string}
              */
-            source: "purchase" | "admin" | "gift";
+            source: "purchase" | "admin" | "gift" | "carry";
         };
         GroupInTariff: {
             /** @enum {string} */
@@ -3979,6 +4137,49 @@ export interface components {
             url: string;
             /** @description Marzban, PasarGuard: логин администратора */
             username?: string;
+        };
+        InactiveOutputBody: {
+            /**
+             * Format: int64
+             * @description Число дней, с которым составлен список
+             */
+            days: number;
+            /**
+             * Format: int64
+             * @description Сколько подписок удалится
+             */
+            due: number;
+            /** @description Первые 200 по сроку, дольше всех кончившиеся первыми */
+            items: components["schemas"]["InactiveView"][];
+            /**
+             * Format: int64
+             * @description Сколько правило достаёт, но оставит
+             */
+            kept: number;
+            /** @description Правило включено: следующий проход удалит тех, кого ничто не держит */
+            on: boolean;
+        };
+        InactiveView: {
+            /**
+             * Format: date-time
+             * @description Когда кончился срок
+             */
+            expires_at: string;
+            /**
+             * @description Почему подписка останется: balance — деньги на балансе привязанного аккаунта, payment — платёж ещё не применён или пополнение ждёт проверки, grant — действуют пакеты трафика; пусто — удалится
+             * @enum {string}
+             */
+            keep: "" | "balance" | "payment" | "grant";
+            /**
+             * Format: date-time
+             * @description Последнее подключение; null — не подключался
+             */
+            online_at: string | null;
+            /** Format: int64 */
+            tariff_id: number | null;
+            /** Format: int64 */
+            user_id: number;
+            user_name: string;
         };
         InboundView: {
             /** @description Приложения, которым подключение попадает в подписку: mihomo, xray, singbox, stash, other */
@@ -4124,6 +4325,10 @@ export interface components {
             path: string;
             /** @description Секрет старой панели задан; сам он не возвращается */
             secret_set: boolean;
+        };
+        Lifecycle: {
+            carry: components["schemas"]["CarryRules"];
+            removal: components["schemas"]["RemovalRules"];
         };
         LiftTorrentOutputBody: {
             /**
@@ -4357,6 +4562,29 @@ export interface components {
             text?: string;
             /** @description Для action=url: https:// или tg:// */
             url?: string;
+        };
+        NextTariffInputBody: {
+            /** Format: int64 */
+            tariff_id: number;
+            /**
+             * Format: int64
+             * @description Срок на нём в днях (0 — бессрочно); не задан — первый срок тарифа
+             */
+            term_days?: number;
+        };
+        NextTariffOutputBody: {
+            /** @description Срок уже кончился или кончится до следующего прохода: тариф применён сразу */
+            switched: boolean;
+            user: components["schemas"]["UserView"];
+        };
+        NextTariffView: {
+            /** Format: int64 */
+            tariff_id: number;
+            /**
+             * Format: int64
+             * @description Срок на нём; null — первый срок тарифа
+             */
+            term_days: number | null;
         };
         NodeCertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
@@ -5150,6 +5378,8 @@ export interface components {
             speed_limit?: number;
             /** @description Снять ограничение скорости */
             speed_unlimited?: boolean;
+            /** @description true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана */
+            starts_on_connect?: boolean;
             tags?: string[];
             /**
              * Format: int64
@@ -5602,6 +5832,15 @@ export interface components {
             limit: number;
             /** @description Подписчик не меняет ссылку сам, только админ */
             off?: boolean;
+        };
+        RemovalRules: {
+            /**
+             * Format: int64
+             * @description Через сколько дней после конца срока и последнего подключения
+             */
+            days: number;
+            /** @description Удалять неактивные подписки сами */
+            on: boolean;
         };
         RenameDeviceInputBody: {
             /** @description Своё имя устройства, до 40 символов одной строкой; пустое — вернуть имя от приложения */
@@ -6179,6 +6418,11 @@ export interface components {
              * @description Срок до этого числа месяца: месяц = от дня оплаты до дня оплаты
              */
             billing_day?: number;
+            /**
+             * @description Перенос остатка трафика: inherit — как в правилах подписок, on, off. Не передан — без изменений (у нового тарифа — inherit)
+             * @enum {string}
+             */
+            carry_over?: "inherit" | "on" | "off";
             /** @description Текст для покупателей, виден в боте и Mini App рядом со строкой из лимитов: чем тариф отличается, когда лимиты этого не показывают («с белыми списками»). Простой текст до 300 символов и до 5 строк; не передан или пустой — только строка из лимитов */
             description?: string;
             /** Format: int64 */
@@ -6224,6 +6468,8 @@ export interface components {
              * @description Скорость, Мбит/с в каждую сторону; не передана — без ограничения
              */
             speed_limit?: number;
+            /** @description Срок новой подписки начинается с первого подключения. Не передан — без изменений (у нового тарифа — нет) */
+            starts_on_connect?: boolean;
             /** @description Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений */
             terms?: components["schemas"]["TermBody"][];
             /** Format: int64 */
@@ -6235,6 +6481,11 @@ export interface components {
              * @description День месяца, в который заканчивается срок; null — срок в днях
              */
             billing_day: number | null;
+            /**
+             * @description Перенос остатка трафика в новый период при продлении и переходе на этот тариф: inherit — как в правилах подписок, on — переносить, off — нет
+             * @enum {string}
+             */
+            carry_over: "inherit" | "on" | "off";
             /** @description Текст для покупателей: чем тариф отличается, когда лимиты этого не показывают; до 300 символов, до 5 строк, пустой — только строка из лимитов */
             description: string;
             /** Format: int64 */
@@ -6282,6 +6533,8 @@ export interface components {
              * @description Мбит/с в каждую сторону; null — без ограничения
              */
             speed_limit: number | null;
+            /** @description Срок новой подписки на этом тарифе начинается с первого подключения, а не с создания */
+            starts_on_connect: boolean;
             /**
              * Format: int64
              * @description Сколько подписок выдано на этом тарифе
@@ -6734,6 +6987,8 @@ export interface components {
             /** @description Старые ссылки подписки из панели, откуда импортирован пользователь. Только в карточке и не для ключа только на чтение: это тоже ссылка */
             legacy?: components["schemas"]["LegacyLinks"];
             name: string;
+            /** @description Следующий тариф: включится сам, когда кончится срок; null — нет */
+            next_tariff: components["schemas"]["NextTariffView"];
             note: string;
             online: boolean;
             /** Format: date-time */
@@ -6756,6 +7011,8 @@ export interface components {
              * @description Мбит/с в каждую сторону; null — без ограничения
              */
             speed_limit: number | null;
+            /** @description Срок ждёт первого подключения: до него стоит на месте, expires_at уходит вперёд вместе с часами (обновляется раз в 10 минут), подписка показывает весь срок */
+            starts_on_connect: boolean;
             /** @enum {string} */
             state: "active" | "expiring" | "limited" | "expired" | "disabled";
             sub_url: string;
@@ -8724,6 +8981,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InboundView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lifecycle"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-lifecycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Lifecycle"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lifecycle"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-inactive-users": {
+        parameters: {
+            query?: {
+                /** @description Посмотреть, кого достанет правило с этим числом дней; 0 — с сохранённым */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InactiveOutputBody"];
                 };
             };
             /** @description Error */
@@ -12756,6 +13107,39 @@ export interface operations {
             };
         };
     };
+    "bulk-users-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkPreviewOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-user": {
         parameters: {
             query?: never;
@@ -13192,6 +13576,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HappLinkOutputBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-next-tariff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NextTariffInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextTariffOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "clear-next-tariff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

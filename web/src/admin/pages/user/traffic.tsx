@@ -1,13 +1,14 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, errorText, unwrap, type Schemas, type User } from "../../../api/client";
+import { api, errorText, unwrap, type Schemas, type Tariff, type User } from "../../../api/client";
 import { qk, userActions, usePools, useTariffs, useUserMutation, useUserTraffic } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
+import { Select } from "../../../components/select";
 import { useToast } from "../../../components/toast";
-import { Bar, Button, Ring } from "../../../components/ui";
+import { Bar, Button, Field, Ring } from "../../../components/ui";
 import { t } from "../../../i18n";
-import { bytes, dateShort } from "../../../lib/format";
+import { bytes, dateShort, days, months, termMonths } from "../../../lib/format";
 import { draftOf, GroupModesField, modeShort, settingsOf, type GroupDraft } from "../pools";
 import { tariffSummary } from "../tariffs";
 import { LimitPicker } from "./limit-picker";
@@ -49,6 +50,7 @@ export function TariffSection({ u }: { u: User }) {
           </Menu.Portal>
         </Menu.Root>
       </div>
+      <NextTariffRow u={u} />
       <SpeedRow u={u} />
       <Confirm
         open={pick !== null}
@@ -71,6 +73,126 @@ export function TariffSection({ u }: { u: User }) {
         }
       />
     </Section>
+  );
+}
+
+/** A term of so many days on tariff tr in words: months up to its billing day, or days. */
+function termLabel(tr: Tariff, n: number): string {
+  if (!n) return t("time.forever");
+  return tr.billing_day != null ? months(termMonths(n)) : days(n);
+}
+
+/** The tariff the client moves to by itself when the term ends: shown, set, changed and taken
+ * away here. A term with no end has nothing to follow. */
+function NextTariffRow({ u }: { u: User }) {
+  const tariffs = useTariffs();
+  const toast = useToast();
+  const set = useUserMutation(userActions.setNextTariff);
+  const clear = useUserMutation(userActions.clearNextTariff);
+  const [editing, setEditing] = useState(false);
+  const [tariffId, setTariffId] = useState(0);
+  const [term, setTerm] = useState("");
+  const next = tariffs.data?.find((x) => x.id === u.next_tariff?.tariff_id);
+  const chosen = tariffs.data?.find((x) => x.id === tariffId);
+  const open = () => {
+    setTariffId(u.next_tariff?.tariff_id ?? tariffs.data?.[0]?.id ?? 0);
+    setTerm(u.next_tariff?.term_days != null ? String(u.next_tariff.term_days) : "");
+    setEditing(true);
+  };
+  const save = () =>
+    set.mutate(
+      { id: u.id, tariff_id: tariffId, term_days: term === "" ? undefined : Number(term) },
+      {
+        onSuccess: (r) => {
+          setEditing(false);
+          toast.ok(r.switched ? t("userDrawer.nextSwitched", { name: chosen?.name ?? "" }) : t("userDrawer.nextSaved"));
+        },
+        onError: (e) => toast.error(errorText(e)),
+      },
+    );
+  if (!u.expires_at) {
+    return <p className="mt-3 text-xs text-[var(--ink-500)]">{t("userDrawer.nextNoEnd")}</p>;
+  }
+  if (editing) {
+    return (
+      <div className="panel-soft mt-3 p-4" role="group" aria-labelledby={`next-${u.id}`}>
+        <div id={`next-${u.id}`} className="mb-2 text-[13px] font-semibold">
+          {t("userDrawer.nextTitle")}
+        </div>
+        <div className="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
+          <Field label={t("users.colTariff")} htmlFor={`next-tariff-${u.id}`}>
+            <Select
+              id={`next-tariff-${u.id}`}
+              className="input"
+              value={tariffId}
+              onChange={(e) => {
+                // Another tariff has other terms: its own first one again.
+                setTariffId(Number(e.target.value));
+                setTerm("");
+              }}
+            >
+              {(tariffs.data ?? []).map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t("userDrawer.nextTerm")} htmlFor={`next-term-${u.id}`}>
+            <Select id={`next-term-${u.id}`} className="input" value={term} onChange={(e) => setTerm(e.target.value)}>
+              <option value="">{chosen ? t("userDrawer.nextTermOwn", { term: termLabel(chosen, chosen.duration_days) }) : t("userDrawer.nextTermOwnPlain")}</option>
+              {/* The first term is the tariff's own, the option above. */}
+              {(chosen?.terms ?? []).slice(1).map((x) => (
+                <option key={x.days} value={x.days}>
+                  {termLabel(chosen!, x.days)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <p className="mb-3 text-xs text-[var(--ink-500)]">{t("userDrawer.nextHint", { date: dateShort(u.expires_at) })}</p>
+        <div className="flex gap-2">
+          <Button size="sm" variant="primary" loading={set.isPending} disabled={!tariffId} onClick={save}>
+            {t("common.save")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  if (!u.next_tariff) {
+    return (
+      <button type="button" className="link-btn mt-3 text-xs" disabled={!tariffs.data?.length} onClick={open}>
+        {t("userDrawer.nextAdd")}
+      </button>
+    );
+  }
+  const termDays = u.next_tariff.term_days ?? next?.duration_days;
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--hairline)] p-3">
+      <div className="min-w-0 text-[13px]">
+        <div className="font-medium">{t("userDrawer.nextThen", { name: next?.name ?? `#${u.next_tariff.tariff_id}` })}</div>
+        <div className="text-xs text-[var(--ink-500)]">
+          {t("userDrawer.nextFrom", { date: dateShort(u.expires_at) })}
+          {termDays != null && next ? ` · ${termLabel(next, termDays)}` : ""}
+        </div>
+      </div>
+      <div className="flex gap-1">
+        <Button size="sm" variant="ghost" onClick={open}>
+          {t("userDrawer.change")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          loading={clear.isPending}
+          onClick={() => clear.mutate(u.id, { onSuccess: () => toast.ok(t("userDrawer.nextCleared")), onError: (e) => toast.error(errorText(e)) })}
+        >
+          {t("userDrawer.nextClear")}
+        </Button>
+      </div>
+    </div>
   );
 }
 
