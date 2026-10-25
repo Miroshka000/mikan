@@ -4,13 +4,43 @@
 package xray
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"mikan/internal/sub/model"
 )
+
+// Links are the share links of ps, one a line, and the proxies they are of: the
+// mihomo-only protocols have none. model.ErrNoProxies when no proxy has one.
+func Links(ps []model.Proxy) (string, []model.Proxy, error) {
+	lines := make([]string, 0, len(ps))
+	in := make([]model.Proxy, 0, len(ps))
+	for _, p := range ps {
+		if link := Link(p); link != "" {
+			lines = append(lines, link)
+			in = append(in, p)
+		}
+	}
+	if len(lines) == 0 {
+		return "", nil, model.ErrNoProxies
+	}
+	return strings.Join(lines, "\n"), in, nil
+}
+
+// Stub is the link of one placeholder server named after why there are no others: the app
+// shows it where the servers would be.
+func Stub(name string) string {
+	return "vless://00000000-0000-0000-0000-000000000000@127.0.0.1:1?encryption=none&type=tcp#" + url.PathEscape(name)
+}
+
+// Encode is a subscription of links as the apps fetch it: the base64 of the lines.
+func Encode(links string) []byte {
+	return []byte(base64.StdEncoding.EncodeToString([]byte(links)))
+}
 
 // Link is p's share link, "" for the protocols that have no common link format (the
 // mihomo-only ones): only Clash profiles carry those.
