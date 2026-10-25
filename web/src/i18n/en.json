@@ -2367,6 +2367,13 @@
       "textPlaceholder": "This app is not supported, install Happ",
       "preview": "What a blocked app shows"
     },
+    "xrayJson": {
+      "title": "Xray configs for Happ and INCY",
+      "sub": "Instead of links these apps get whole Xray configs with the panel's routing, DNS and automatic choice. The server list starts with the automatic choice and the countries, then every server.",
+      "on": "Serve Xray configs",
+      "onSub": "Happ and INCY get configs. A link with ?format=uri still gives links.",
+      "offSub": "Happ and INCY get links, like the other Xray apps. A link with ?format=xray still gives configs."
+    },
     "subLog": {
       "title": "Request log",
       "sub": "Every request for a subscription: the time, the address, the app, the rule that fired and what the panel answered. The log is in the user's card.",
@@ -2452,7 +2459,8 @@
       "format": {
         "clash": "Clash (mihomo)",
         "singbox": "sing-box",
-        "uri": "Links (base64)"
+        "uri": "Links (base64)",
+        "xray": "Xray configs (JSON)"
       },
       "skipHwid": "Do not require a device ID",
       "skipHwidSub": "An app with no ID gets its keys even if the panel requires an ID of every app: such devices share one place.",

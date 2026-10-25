@@ -3,6 +3,7 @@ package serve
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -397,13 +398,52 @@ func TestStubText(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	h := http.Header{"User-Agent": {"Happ/3.4.1"}}
-	if got := Resolve(h, "", apps.Decision{}); got != FormatURI {
+	if got := Resolve(h, "", apps.Decision{}, false); got != FormatURI {
 		t.Errorf("%s", got)
 	}
-	if got := Resolve(h, "clash", apps.Decision{}); got != FormatClash {
+	if got := Resolve(h, "clash", apps.Decision{}, true); got != FormatClash {
 		t.Errorf("?format=: %s", got)
 	}
-	if got := Resolve(h, "clash", apps.Decision{Action: apps.Action{Format: FormatSingBox}}); got != FormatSingBox {
+	// Happ runs whole xray configs while the switch is on, unless the request asks for links.
+	if got := Resolve(h, "", apps.Decision{}, true); got != FormatXray {
+		t.Errorf("Happ: %s", got)
+	}
+	if got := Resolve(h, "uri", apps.Decision{}, true); got != FormatURI {
+		t.Errorf("Happ asking for links: %s", got)
+	}
+	if got := Resolve(http.Header{"User-Agent": {"v2rayNG/1.10.20"}}, "", apps.Decision{}, true); got != FormatURI {
+		t.Errorf("an xray app off the list: %s", got)
+	}
+	for _, q := range []string{"xray", "json", "v2ray-json"} {
+		if got := Resolve(http.Header{"User-Agent": {"curl/8.9"}}, q, apps.Decision{}, false); got != FormatXray {
+			t.Errorf("?format=%s: %s", q, got)
+		}
+	}
+	if got := Resolve(h, "clash", apps.Decision{Action: apps.Action{Format: FormatSingBox}}, true); got != FormatSingBox {
 		t.Errorf("a rule's format: %s", got)
+	}
+}
+
+// Happ gets the xray JSON profile, a list of whole configs, while the switch is on; with it
+// off, or for a stub, the links.
+func TestXrayJSONForTheAppsOfTheList(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true})
+	sub.cfg.XrayJSON = true
+	w := fetch(t, sub, "Happ/3.4.1", "X-Hwid", "abc")
+	var configs []map[string]any
+	if w.Code != 200 || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") || json.Unmarshal(w.Body.Bytes(), &configs) != nil ||
+		len(configs) < 2 || configs[0]["remarks"] != "Auto" {
+		t.Fatalf("%d %v\n%.300s", w.Code, w.Header(), w.Body)
+	}
+	if e := oneEntry(t, sub); e.Format != FormatXray || e.Outcome != OutcomeServed {
+		t.Errorf("%+v", e)
+	}
+	sub.keysErr = ErrDeviceLimit
+	if w := fetch(t, sub, "Happ/3.4.1", "X-Hwid", "abc"); !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") || !strings.Contains(stubName(t, w), "device places") {
+		t.Errorf("the stub is a link: %v\n%.200s", w.Header(), w.Body)
+	}
+	sub.keysErr, sub.cfg.XrayJSON = nil, false
+	if w := fetch(t, sub, "Happ/3.4.1", "X-Hwid", "abc"); !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
+		t.Errorf("switched off: %v", w.Header())
 	}
 }

@@ -1,6 +1,9 @@
 package apps
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Known is an app the panel tells by its User-Agent and the admin may allow or block. The
 // list is plain on purpose: what an app can run is Family and App's business, this is only
@@ -114,6 +117,17 @@ func Alternatives(blocked map[string]bool, n int) []string {
 		}
 	}
 	return out
+}
+
+// XrayJSON are the apps that get whole xray configs (the xray JSON profile) in place of
+// share links, by id: the ones checked on devices to run them. v2RayTun, Streisand and
+// v2rayNG are next.
+var XrayJSON = []string{"happ", "incy"}
+
+// TakesXrayJSON says whether the app asking by its User-Agent is one of XrayJSON.
+func TakesXrayJSON(userAgent string) bool {
+	k, ok := Identify(userAgent)
+	return ok && slices.Contains(XrayJSON, k.ID)
 }
 
 // ValidID says whether id is a known app's.

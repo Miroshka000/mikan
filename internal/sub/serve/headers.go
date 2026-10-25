@@ -64,7 +64,7 @@ func contentType(hd http.Header, format string) {
 	switch format {
 	case FormatClash:
 		hd.Set("Content-Type", contentYAML)
-	case FormatSingBox:
+	case FormatSingBox, FormatXray:
 		hd.Set("Content-Type", contentJSON)
 	default:
 		hd.Set("Content-Type", contentLinks)

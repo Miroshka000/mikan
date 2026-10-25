@@ -439,6 +439,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if cfg.InactiveServer, err = set.On(ctx, settings.InactiveServer); err != nil {
 			return subsrc.Config{}, err
 		}
+		if cfg.XrayJSON, err = set.On(ctx, settings.XrayJSON); err != nil {
+			return subsrc.Config{}, err
+		}
 		if cfg.InactiveText, err = set.String(ctx, settings.KeyInactiveText); err != nil {
 			return subsrc.Config{}, err
 		}

@@ -17,6 +17,11 @@ import (
 // server named after the reason, so the app shows it where the servers would be, and the
 // headers Happ-like apps read.
 func (h *Handler) stub(w http.ResponseWriter, cfg Config, format string, reason error) {
+	// The stub of an xray JSON answer is a link all the same: the app reads either, and one
+	// placeholder server needs no routing.
+	if format == FormatXray {
+		format = FormatURI
+	}
 	en := textutil.Lang(cfg.Lang).En()
 	name := "⛔ Все места для устройств заняты — откройте ссылку подписки в браузере"
 	if en {

@@ -224,10 +224,10 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 		t.Fatalf("%d days, %d entries: %+v", log.Days, len(log.Items), log.Items)
 	}
 	first, oldest := log.Items[0], log.Items[len(log.Items)-1]
-	if first.App != "incy" || first.AppName != "INCY" || first.Rule != "apps" || first.Format != "uri" || first.Outcome != "stub" || first.IP == "" {
+	if first.App != "incy" || first.AppName != "INCY" || first.Rule != "apps" || first.Format != "xray" || first.Outcome != "stub" || first.IP == "" {
 		t.Errorf("the newest: %+v", first)
 	}
-	if oldest.App != "happ" || oldest.Rule != "" || oldest.Format != "uri" || oldest.Outcome != "served" {
+	if oldest.App != "happ" || oldest.Rule != "" || oldest.Format != "xray" || oldest.Outcome != "served" {
 		t.Errorf("the oldest: %+v", oldest)
 	}
 	byRule := map[string]string{}

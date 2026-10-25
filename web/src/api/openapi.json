@@ -6463,6 +6463,9 @@
             "maxLength": 200,
             "type": "string"
           },
+          "sub_xray_json": {
+            "type": "boolean"
+          },
           "support_access": {
             "type": "boolean"
           },
@@ -8819,6 +8822,10 @@
             "description": "Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего, {devices} — привязанные устройства (2/3); без срока или лимита — ∞",
             "type": "string"
           },
+          "sub_xray_json": {
+            "description": "Happ и INCY получают полные конфиги Xray (JSON) вместо ссылок: маршрутизация, DNS и «Авто» панели доходят до них; запрос с ?format= получает свой формат в любом случае",
+            "type": "boolean"
+          },
           "support_access": {
             "description": "Разрешить доступ для поддержки (Настройки → Безопасность). Выключено: новый доступ не выдать, действующий закрывается. MIKAN_SUPPORT_ACCESS=off в .env сервера выключает его независимо от этой настройки",
             "type": "boolean"
@@ -8841,6 +8848,7 @@
           "app_branding",
           "sub_inactive_server",
           "sub_inactive_text",
+          "sub_xray_json",
           "sub_log_days",
           "site_template",
           "site_own",

@@ -398,3 +398,27 @@ func TestCheckRules(t *testing.T) {
 		t.Errorf("the path names the rule: %v", err)
 	}
 }
+
+// The apps that get the xray JSON profile are the ones of the list, by the app and not by
+// its core: the other xray apps keep their links.
+func TestTakesXrayJSON(t *testing.T) {
+	for ua, want := range map[string]bool{
+		"Happ/3.4.1/Android":       true,
+		"INCY/2.1.0":               true,
+		"v2rayNG/1.10.20":          false,
+		"v2RayTun/5.1":             false,
+		"Streisand/1.6":            false,
+		"koala-clash/1.4.0 mihomo": false,
+		"Mozilla/5.0 (Windows NT)": false,
+		"":                         false,
+	} {
+		if got := TakesXrayJSON(ua); got != want {
+			t.Errorf("TakesXrayJSON(%q) = %v, want %v", ua, got, want)
+		}
+	}
+	for _, id := range XrayJSON {
+		if k, ok := Lookup(id); !ok || k.Family != FamilyXray {
+			t.Errorf("%s is no xray app of the catalog", id)
+		}
+	}
+}

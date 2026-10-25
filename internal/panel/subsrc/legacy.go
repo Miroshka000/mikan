@@ -64,6 +64,8 @@ func legacyFormat(clientType string) string {
 		return serve.FormatClash
 	case "v2ray", "links", "links-base64", "links_base64", "base64", "xray-base64", "xray_base64":
 		return serve.FormatURI
+	case "v2ray-json", "v2ray_json", "xray-json", "xray_json", "json":
+		return serve.FormatXray
 	}
 	return ""
 }

@@ -269,6 +269,10 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 	if err != nil {
 		return nil, err
 	}
+	xrayJSON, err := h.d.Settings.On(ctx, settings.XrayJSON)
+	if err != nil {
+		return nil, err
+	}
 	d := r.Decide(req)
 	out := &testSubRulesOutput{}
 	out.Body = SubRuleTest{AppID: d.App.ID, AppName: d.App.Name, Rule: d.Rule, Position: d.Position, Respond: d.Responds(), Headers: []apps.Header{}, SkipHWID: d.Action.SkipHWID}
@@ -285,10 +289,10 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 		out.Body.Status = http.StatusOK
 	case apps.RespondStub:
 		out.Body.Status, out.Body.Text = http.StatusOK, serve.StubText(lang, d)
-		out.Body.Format = serve.Resolve(req, "", d)
+		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
 	default:
 		out.Body.Status = http.StatusOK
-		out.Body.Format = serve.Resolve(req, "", d)
+		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
 	}
 	return out, nil
 }

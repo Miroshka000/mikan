@@ -104,6 +104,9 @@ type Config struct {
 	// Responses decides a request by its headers before anything is made for it: the apps
 	// the admin blocked and the response rules (rules.go); nil serves every request.
 	Responses *apps.Responder
+	// XrayJSON: the apps that run whole xray configs (apps.XrayJSON) get the xray JSON
+	// profile in place of share links; a request that names a format gets it either way.
+	XrayJSON bool
 }
 
 // User is what a subscription's headers and texts say of its user.
@@ -249,7 +252,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		return h.refuse(w, r, ex)
 	}
 	ua := r.Header.Get("User-Agent")
-	format := Resolve(r.Header, r.URL.Query().Get("format"), dec)
+	format := Resolve(r.Header, r.URL.Query().Get("format"), dec, cfg.XrayJSON)
 	ex.format = format
 	// A messenger that builds a preview of a pasted link gets the page, which has the
 	// preview's title and picture and nothing of the user's.
@@ -329,6 +332,14 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 			return h.profileFailed(w, cfg, format, err)
 		}
 		profileHeaders(hd, format, profileTitle(cfg, vars))
+		_, _ = w.Write(body)
+	case FormatXray:
+		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
+		body, err := xray.Render(prof, cfg.Groups, cfg.Mode, cfg.Template)
+		if err != nil {
+			return h.profileFailed(w, cfg, format, err)
+		}
+		profileHeaders(hd, format, "")
 		_, _ = w.Write(body)
 	default:
 		links, ps, err := xray.Links(proxies)

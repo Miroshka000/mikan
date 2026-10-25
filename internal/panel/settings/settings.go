@@ -98,6 +98,9 @@ const (
 	// A subscription that cannot connect gets one notice in place of its servers
 	// (serve.Config.InactiveServer), with the admin's words or the built-in ones.
 	KeyInactiveServer = "sub_inactive_server"
+	// KeyXrayJSON: the apps that run whole xray configs (Happ, INCY) get the xray JSON profile
+	// in place of share links (serve.Config.XrayJSON).
+	KeyXrayJSON = "sub_xray_json"
 	// The response rules of the subscription (internal/sub/apps): KeySubBuiltin switches the
 	// built-in ones, KeySubBlockedText is the words of the entry an app on the list of
 	// blocked ones gets in place of the servers. The rules and the list are in tables
@@ -163,6 +166,7 @@ var (
 	AppBranding    = Switch{KeyAppBranding, false}
 	HappHide       = Switch{KeyHappHide, false}
 	InactiveServer = Switch{KeyInactiveServer, false}
+	XrayJSON       = Switch{KeyXrayJSON, true}
 	SubBuiltin     = Switch{KeySubBuiltin, true}
 	TrafficDetail  = Switch{KeyTrafficDetail, false}
 	SupportAccess  = Switch{KeySupportAccess, true}

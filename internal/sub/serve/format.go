@@ -12,6 +12,7 @@ const (
 	FormatClash   = "clash"   // the Clash profile (mihomo)
 	FormatSingBox = "singbox" // the whole sing-box config
 	FormatURI     = "uri"     // share links, base64
+	FormatXray    = "xray"    // whole xray-core configs, JSON (xray.Render)
 	FormatHTML    = "html"    // the subscription page
 )
 
@@ -22,15 +23,8 @@ var linkApps = []string{"streisand", "shadowrocket", "foxray"}
 // Format picks the response format: explicit ?format= wins, then the client's User-Agent,
 // by the family apps.DetectApp makes of it, so the two never disagree about an app.
 func Format(userAgent, accept, query string) string {
-	switch strings.ToLower(query) {
-	case "clash", "mihomo", "yaml":
-		return FormatClash
-	case "uri", "v2ray", "base64":
-		return FormatURI
-	case "singbox", "sing-box":
-		return FormatSingBox
-	case "html":
-		return FormatHTML
+	if f := queryFormat(query); f != "" {
+		return f
 	}
 	app := apps.DetectApp(userAgent)
 	if app.Whole && app.Core.AtLeast(singbox.Since) {
@@ -67,4 +61,21 @@ func LinkPreview(userAgent string) bool {
 		}
 	}
 	return false
+}
+
+// queryFormat is the format ?format= names, "" for none.
+func queryFormat(query string) string {
+	switch strings.ToLower(query) {
+	case "clash", "mihomo", "yaml":
+		return FormatClash
+	case "uri", "v2ray", "base64":
+		return FormatURI
+	case "singbox", "sing-box":
+		return FormatSingBox
+	case "xray", "json", "v2ray-json":
+		return FormatXray
+	case "html":
+		return FormatHTML
+	}
+	return ""
 }

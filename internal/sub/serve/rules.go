@@ -16,7 +16,7 @@ import (
 
 // Formats are the formats a response rule may force on an answer, for apps.CheckOpts.
 // A format the handler can write (Serve) is listed here to be named.
-var Formats = []string{FormatClash, FormatSingBox, FormatURI}
+var Formats = []string{FormatClash, FormatSingBox, FormatURI, FormatXray}
 
 // exchange is one request as the handler works it.
 type exchange struct {
@@ -29,13 +29,20 @@ type exchange struct {
 }
 
 // Resolve is the format of the answer to a request with the headers h and the query's
-// ?format=: the one the deciding rule names, else the one Format picks. The admin panel's
-// tester asks it too, so that it shows what Serve does.
-func Resolve(h http.Header, query string, dec apps.Decision) string {
+// ?format=: the one the deciding rule names, else the one Format picks. An app that runs
+// whole xray configs (apps.XrayJSON) gets them in place of the links Format picks for it
+// while xrayJSON (Config.XrayJSON) is on, unless the request names the links itself. The
+// admin panel's tester asks it too, so that it shows what Serve does.
+func Resolve(h http.Header, query string, dec apps.Decision, xrayJSON bool) string {
 	if f := dec.Action.Format; f != "" {
 		return f
 	}
-	return Format(h.Get("User-Agent"), h.Get("Accept"), query)
+	ua := h.Get("User-Agent")
+	f := Format(ua, h.Get("Accept"), query)
+	if f == FormatURI && queryFormat(query) == "" && xrayJSON && apps.TakesXrayJSON(ua) {
+		return FormatXray
+	}
+	return f
 }
 
 // refuse answers a request a rule turned away: with the status or the page it names, or
