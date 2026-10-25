@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 )
 
@@ -56,6 +58,56 @@ func TestMaintainCutsWhatOnlyGrows(t *testing.T) {
 	}
 	if err := h.st.DB.QueryRow("SELECT count(*) FROM audit_log WHERE action = 'test'").Scan(&entries); err != nil || entries != 2 {
 		t.Fatalf("audit rows: %d %v, want the two within 180 days", entries, err)
+	}
+}
+
+// The housekeeping's round moves the lifecycle on: a waiting term keeps its whole term, a
+// next tariff takes over from a term that ends before the next round, and an inactive
+// subscription goes by the admin's rules, only once they are on.
+func TestMaintainMovesTheLifecycleOn(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	tariffs, _ := h.st.Q.ListTariffs(ctx)
+	yes := true
+	waits, err := h.p.users.Create(ctx, domain.CreateInput{Name: "waits", TariffID: tariffs[1].ID, StartsOnConnect: &yes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, err := h.p.users.Create(ctx, domain.CreateInput{Name: "next", TariffID: tariffs[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := h.p.users.SetNextTariff(ctx, next.ID, domain.NextTariff{TariffID: tariffs[2].ID}); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := h.p.users.Create(ctx, domain.CreateInput{Name: "gone", TariffID: tariffs[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.st.DB.ExecContext(ctx, "UPDATE users SET expires_at = $1 WHERE id = $2", h.now.Add(-60*24*time.Hour).Unix(), gone.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	h.now = h.now.Add(30*24*time.Hour - 5*time.Minute)
+	h.p.maintain(ctx)
+	if u, _ := h.p.users.Get(ctx, waits.ID); u.ExpiresAt.Int64 != h.now.Add(30*24*time.Hour).Unix() {
+		t.Fatalf("the waiting term ends %v, want its whole term from now", u.ExpiresAt)
+	}
+	if u, _ := h.p.users.Get(ctx, next.ID); u.TariffID.Int64 != tariffs[2].ID {
+		t.Fatalf("the next tariff did not take over: %+v", u)
+	}
+	if _, err := h.p.users.Get(ctx, gone.ID); err != nil {
+		t.Fatalf("removed with the rules off: %v", err)
+	}
+	if err := settings.Set(ctx, h.p.Settings, domain.KeyLifecycle, domain.Lifecycle{Carry: domain.DefaultLifecycle.Carry, Removal: domain.RemovalRules{On: true, Days: 30}}); err != nil {
+		t.Fatal(err)
+	}
+	h.p.maintain(ctx)
+	if _, err := h.p.users.Get(ctx, gone.ID); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("an inactive subscription is still there: %v", err)
 	}
 }
 

@@ -84,6 +84,7 @@ type Panel struct {
 	sessions  *auth.Sessions
 	st        *store.Store
 	devices   *domain.Devices
+	users     *domain.Users // the housekeeping moves their lifecycle on (maintain)
 	ipLimit   *auth.Limiter
 	userLimit *auth.Limiter
 	now       func() time.Time
@@ -236,7 +237,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.Inbounds.SetResolver(deps.Resolve)
 	deps.Devices = domain.NewDevices(st, pool, changes, o.Now)
 	deps.Devices.SetEvents(hub)
-	p.st, p.devices = st, deps.Devices
+	p.st, p.devices, p.users = st, deps.Devices, deps.Users
 	deps.Packages = domain.NewPackages(st, o.Now)
 	deps.Campaigns = domain.NewCampaigns(st, o.Now)
 	deps.Balancer = domain.NewBalancer(st, o.Now, o.Log)
