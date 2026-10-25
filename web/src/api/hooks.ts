@@ -49,6 +49,9 @@ export const qk = {
   subPage: ["sub-page"] as const,
   subDocs: ["sub-docs"] as const,
   folders: ["folders"] as const,
+  lifecycle: ["lifecycle"] as const,
+  // Under the users: a change of any of them may move who the removal reaches.
+  inactive: (days: number) => ["users", "inactive", days] as const,
   nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
   nodeShares: (range: string) => ["node-shares", range] as const,
 };
@@ -263,6 +266,21 @@ export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/settings", { signal })) });
 }
 
+/** The rules of the subscriptions' lifecycle: the carry-over of traffic and the removal of the inactive. */
+export function useLifecycle() {
+  return useQuery({ queryKey: qk.lifecycle, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/lifecycle", { signal })) });
+}
+
+/** Whom the removal of the inactive reaches with days (the saved number, or one being tried). */
+export function useInactive(days: number, enabled = true) {
+  return useQuery({
+    queryKey: qk.inactive(days),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/lifecycle/inactive", { params: { query: { days } }, signal })),
+    placeholderData: keepPreviousData,
+    enabled,
+  });
+}
+
 /** Followed every few seconds while the server updates, hourly otherwise. */
 export function useUpdates() {
   return useQuery({
@@ -309,6 +327,10 @@ export const userActions = {
   reissue: (id: number) => unwrap(api.POST("/api/v1/users/{id}/reissue", { params: { path: { id } } })),
   remove: (id: number) => unwrap(api.DELETE("/api/v1/users/{id}", { params: { path: { id } } })),
   bulk: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk", { body })),
+  bulkPreview: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk/preview", { body })),
+  setNextTariff: ({ id, ...body }: { id: number } & Schemas["NextTariffInputBody"]) =>
+    unwrap(api.PUT("/api/v1/users/{id}/next-tariff", { params: { path: { id } }, body })),
+  clearNextTariff: (id: number) => unwrap(api.DELETE("/api/v1/users/{id}/next-tariff", { params: { path: { id } } })),
   unbindDevice: ({ id, device }: { id: number; device: number }) =>
     unwrap(api.DELETE("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } } })),
   renameDevice: ({ id, device, name }: { id: number; device: number; name: string }) =>

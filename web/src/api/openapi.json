@@ -1230,6 +1230,38 @@
         ],
         "type": "object"
       },
+      "BulkAtStake": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "description": "Ещё работают: срок и трафик не кончились, не отключены",
+            "format": "int64",
+            "type": "integer"
+          },
+          "granted": {
+            "description": "С действующими пакетами трафика",
+            "format": "int64",
+            "type": "integer"
+          },
+          "paying": {
+            "description": "С платежом, который ещё не применён, или пополнением на проверке",
+            "format": "int64",
+            "type": "integer"
+          },
+          "with_balance": {
+            "description": "С деньгами на балансе привязанного аккаунта",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active",
+          "with_balance",
+          "paying",
+          "granted"
+        ],
+        "type": "object"
+      },
       "BulkInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1286,6 +1318,111 @@
         },
         "required": [
           "affected"
+        ],
+        "type": "object"
+      },
+      "BulkPreviewOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "at_stake": {
+            "$ref": "#/components/schemas/BulkAtStake",
+            "description": "Только для delete: что удалится вместе с пользователями"
+          },
+          "changed": {
+            "description": "Скольких действие изменит",
+            "format": "int64",
+            "type": "integer"
+          },
+          "found": {
+            "description": "Сколько из них есть: к ним действие и применится (affected)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "missing": {
+            "description": "Сколько уже удалены",
+            "format": "int64",
+            "type": "integer"
+          },
+          "requested": {
+            "description": "Сколько разных пользователей в запросе",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sample": {
+            "description": "Первые 10 изменяемых, по id",
+            "items": {
+              "$ref": "#/components/schemas/BulkSample"
+            },
+            "type": "array"
+          },
+          "unchanged": {
+            "description": "Сколько уже такие: например, уже отключены",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requested",
+          "found",
+          "missing",
+          "changed",
+          "unchanged",
+          "sample"
+        ],
+        "type": "object"
+      },
+      "BulkSample": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_after": {
+            "description": "extend: новый конец срока",
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "folder_id": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "active",
+              "expiring",
+              "limited",
+              "expired",
+              "disabled"
+            ],
+            "type": "string"
+          },
+          "used": {
+            "description": "Израсходовано за период: reset начинает период заново",
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "user_name",
+          "state",
+          "expires_at",
+          "used",
+          "folder_id"
         ],
         "type": "object"
       },
@@ -1351,6 +1488,27 @@
           "renewed",
           "revenue_stars",
           "revenue_rub"
+        ],
+        "type": "object"
+      },
+      "CarryRules": {
+        "additionalProperties": false,
+        "properties": {
+          "cap_percent": {
+            "description": "Сколько можно перенести: процент квоты нового периода",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "on": {
+            "description": "Переносить остаток трафика периода в новый период при продлении и при переходе на следующий тариф. Тариф может решить по-своему",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "cap_percent"
         ],
         "type": "object"
       },
@@ -2230,6 +2388,10 @@
             "maxLength": 2000,
             "type": "string"
           },
+          "starts_on_connect": {
+            "description": "Срок начнётся с первого подключения; не задано — как у тарифа",
+            "type": "boolean"
+          },
           "tags": {
             "items": {
               "type": "string"
@@ -3015,11 +3177,12 @@
             "type": "integer"
           },
           "source": {
-            "description": "purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате",
+            "description": "purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате, carry — остаток трафика прошлого периода, перенесённый продлением или следующим тарифом",
             "enum": [
               "purchase",
               "admin",
-              "gift"
+              "gift",
+              "carry"
             ],
             "type": "string"
           }
@@ -3303,6 +3466,96 @@
         "required": [
           "kind",
           "url"
+        ],
+        "type": "object"
+      },
+      "InactiveOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "description": "Число дней, с которым составлен список",
+            "format": "int64",
+            "type": "integer"
+          },
+          "due": {
+            "description": "Сколько подписок удалится",
+            "format": "int64",
+            "type": "integer"
+          },
+          "items": {
+            "description": "Первые 200 по сроку, дольше всех кончившиеся первыми",
+            "items": {
+              "$ref": "#/components/schemas/InactiveView"
+            },
+            "type": "array"
+          },
+          "kept": {
+            "description": "Сколько правило достаёт, но оставит",
+            "format": "int64",
+            "type": "integer"
+          },
+          "on": {
+            "description": "Правило включено: следующий проход удалит тех, кого ничто не держит",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "days",
+          "due",
+          "kept",
+          "items"
+        ],
+        "type": "object"
+      },
+      "InactiveView": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "description": "Когда кончился срок",
+            "format": "date-time",
+            "type": "string"
+          },
+          "keep": {
+            "description": "Почему подписка останется: balance — деньги на балансе привязанного аккаунта, payment — платёж ещё не применён или пополнение ждёт проверки, grant — действуют пакеты трафика; пусто — удалится",
+            "enum": [
+              "",
+              "balance",
+              "payment",
+              "grant"
+            ],
+            "type": "string"
+          },
+          "online_at": {
+            "description": "Последнее подключение; null — не подключался",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tariff_id": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "user_name",
+          "tariff_id",
+          "expires_at",
+          "online_at",
+          "keep"
         ],
         "type": "object"
       },
@@ -3696,6 +3949,22 @@
           "kind",
           "secret_set",
           "links"
+        ],
+        "type": "object"
+      },
+      "Lifecycle": {
+        "additionalProperties": false,
+        "properties": {
+          "carry": {
+            "$ref": "#/components/schemas/CarryRules"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/RemovalRules"
+          }
+        },
+        "required": [
+          "carry",
+          "removal"
         ],
         "type": "object"
       },
@@ -4316,6 +4585,66 @@
           "label",
           "on",
           "row"
+        ],
+        "type": "object"
+      },
+      "NextTariffInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "tariff_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок на нём в днях (0 — бессрочно); не задан — первый срок тарифа",
+            "format": "int64",
+            "maximum": 3650,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tariff_id"
+        ],
+        "type": "object"
+      },
+      "NextTariffOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "switched": {
+            "description": "Срок уже кончился или кончится до следующего прохода: тариф применён сразу",
+            "type": "boolean"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserView"
+          }
+        },
+        "required": [
+          "user",
+          "switched"
+        ],
+        "type": "object"
+      },
+      "NextTariffView": {
+        "additionalProperties": false,
+        "properties": {
+          "tariff_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок на нём; null — первый срок тарифа",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "tariff_id",
+          "term_days"
         ],
         "type": "object"
       },
@@ -6406,6 +6735,10 @@
             "description": "Снять ограничение скорости",
             "type": "boolean"
           },
+          "starts_on_connect": {
+            "description": "true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана",
+            "type": "boolean"
+          },
           "tags": {
             "items": {
               "type": "string"
@@ -7609,6 +7942,27 @@
         },
         "required": [
           "limit",
+          "days"
+        ],
+        "type": "object"
+      },
+      "RemovalRules": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "description": "Через сколько дней после конца срока и последнего подключения",
+            "format": "int64",
+            "maximum": 3650,
+            "minimum": 7,
+            "type": "integer"
+          },
+          "on": {
+            "description": "Удалять неактивные подписки сами",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
           "days"
         ],
         "type": "object"
@@ -9253,6 +9607,15 @@
             "minimum": 1,
             "type": "integer"
           },
+          "carry_over": {
+            "description": "Перенос остатка трафика: inherit — как в правилах подписок, on, off. Не передан — без изменений (у нового тарифа — inherit)",
+            "enum": [
+              "inherit",
+              "on",
+              "off"
+            ],
+            "type": "string"
+          },
           "description": {
             "description": "Текст для покупателей, виден в боте и Mini App рядом со строкой из лимитов: чем тариф отличается, когда лимиты этого не показывают («с белыми списками»). Простой текст до 300 символов и до 5 строк; не передан или пустой — только строка из лимитов",
             "type": "string"
@@ -9349,6 +9712,10 @@
             "minimum": 1,
             "type": "integer"
           },
+          "starts_on_connect": {
+            "description": "Срок новой подписки начинается с первого подключения. Не передан — без изменений (у нового тарифа — нет)",
+            "type": "boolean"
+          },
           "terms": {
             "description": "Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений",
             "items": {
@@ -9380,6 +9747,15 @@
               "integer",
               "null"
             ]
+          },
+          "carry_over": {
+            "description": "Перенос остатка трафика в новый период при продлении и переходе на этот тариф: inherit — как в правилах подписок, on — переносить, off — нет",
+            "enum": [
+              "inherit",
+              "on",
+              "off"
+            ],
+            "type": "string"
           },
           "description": {
             "description": "Текст для покупателей: чем тариф отличается, когда лимиты этого не показывают; до 300 символов, до 5 строк, пустой — только строка из лимитов",
@@ -9478,6 +9854,10 @@
               "null"
             ]
           },
+          "starts_on_connect": {
+            "description": "Срок новой подписки на этом тарифе начинается с первого подключения, а не с создания",
+            "type": "boolean"
+          },
           "subscribers": {
             "description": "Сколько подписок выдано на этом тарифе",
             "format": "int64",
@@ -9520,7 +9900,9 @@
           "pools",
           "gifts",
           "subscribers",
-          "sort"
+          "sort",
+          "carry_over",
+          "starts_on_connect"
         ],
         "type": "object"
       },
@@ -10623,6 +11005,10 @@
           "name": {
             "type": "string"
           },
+          "next_tariff": {
+            "$ref": "#/components/schemas/NextTariffView",
+            "description": "Следующий тариф: включится сам, когда кончится срок; null — нет"
+          },
           "note": {
             "type": "string"
           },
@@ -10676,6 +11062,10 @@
               "integer",
               "null"
             ]
+          },
+          "starts_on_connect": {
+            "description": "Срок ждёт первого подключения: до него стоит на месте, expires_at уходит вперёд вместе с часами (обновляется раз в 10 минут), подписка показывает весь срок",
+            "type": "boolean"
           },
           "state": {
             "enum": [
@@ -10776,6 +11166,8 @@
           "source",
           "folder_id",
           "hidden",
+          "starts_on_connect",
+          "next_tariff",
           "created_at"
         ],
         "type": "object"
@@ -13475,6 +13867,123 @@
         "summary": "Скопировать подключение: те же настройки с новыми ключами, на ту же или другую ноду",
         "tags": [
           "inbounds"
+        ]
+      }
+    },
+    "/api/v1/lifecycle": {
+      "get": {
+        "operationId": "get-lifecycle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lifecycle"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Правила подписок: перенос остатка трафика и удаление неактивных",
+        "tags": [
+          "users"
+        ]
+      },
+      "put": {
+        "description": "Удаление неактивных меняет только сессия админа: ключу API и поддержке — 403 session_only / support_extended.",
+        "operationId": "update-lifecycle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Lifecycle"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lifecycle"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить правила подписок",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/lifecycle/inactive": {
+      "get": {
+        "operationId": "list-inactive-users",
+        "parameters": [
+          {
+            "description": "Посмотреть, кого достанет правило с этим числом дней; 0 — с сохранённым",
+            "explode": false,
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "description": "Посмотреть, кого достанет правило с этим числом дней; 0 — с сохранённым",
+              "format": "int64",
+              "maximum": 3650,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InactiveOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Кого достаёт удаление неактивных: пробный прогон, ничего не удаляет",
+        "tags": [
+          "users"
         ]
       }
     },
@@ -18901,6 +19410,47 @@
         ]
       }
     },
+    "/api/v1/users/bulk/preview": {
+      "post": {
+        "operationId": "bulk-users-preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkPreviewOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Что сделает массовое действие: без изменений, для подтверждения",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/v1/users/{id}": {
       "delete": {
         "operationId": "delete-user",
@@ -19561,6 +20111,93 @@
           }
         },
         "summary": "Шифрованная ссылка Happ на подписку пользователя",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/next-tariff": {
+      "delete": {
+        "operationId": "clear-next-tariff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Убрать следующий тариф",
+        "tags": [
+          "users"
+        ]
+      },
+      "put": {
+        "operationId": "set-next-tariff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NextTariffInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextTariffOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Следующий тариф: включится сам, когда кончится срок",
         "tags": [
           "users"
         ]

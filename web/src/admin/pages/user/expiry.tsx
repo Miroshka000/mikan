@@ -1,11 +1,11 @@
-import { Check } from "lucide-react";
+import { Check, Play } from "lucide-react";
 import { errorText, type Schemas, type User } from "../../../api/client";
 import { userActions, useUserMutation } from "../../../api/hooks";
 import { useToast } from "../../../components/toast";
 import { Button, Field } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
-import { dateLong, dateShort, days, expiryText, fromInputDate, inputDate, months } from "../../../lib/format";
+import { dateLong, dateShort, days, daysUntil, expiryText, fromInputDate, inputDate, months } from "../../../lib/format";
 import { Section } from "./section";
 import { Select } from "../../../components/select";
 
@@ -22,8 +22,15 @@ export function ExpirySection({ u }: { u: User }) {
       : [7, 30, 90, 365].map((n) => ({ label: n === 365 ? t("userDrawer.year") : days(n), body: { days: n } }));
   return (
     <Section title={t("userDrawer.expiry")} aside={u.billing_day != null ? t("userDrawer.billingAside", { d: u.billing_day }) : undefined}>
-      <div className="font-display text-lg font-medium tracking-tight">{u.expires_at ? t("users.until", { date: dateLong(u.expires_at) }) : t("userDrawer.forever")}</div>
-      {u.expires_at ? <div className={`exp-days ${e.tone}`}>{e.tone === "bad" ? e.text : t("userDrawer.leftDays", { text: e.text })}</div> : null}
+      {u.starts_on_connect && u.expires_at ? (
+        <WaitingTerm u={u} />
+      ) : (
+        <>
+          <div className="font-display text-lg font-medium tracking-tight">{u.expires_at ? t("users.until", { date: dateLong(u.expires_at) }) : t("userDrawer.forever")}</div>
+          {u.expires_at ? <div className={`exp-days ${e.tone}`}>{e.tone === "bad" ? e.text : t("userDrawer.leftDays", { text: e.text })}</div> : null}
+          <WaitOption u={u} />
+        </>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         {chips.map((c) => (
           <button
@@ -47,6 +54,54 @@ export function ExpirySection({ u }: { u: User }) {
         <ExactDateField u={u} />
       </div>
     </Section>
+  );
+}
+
+/** A term that waits for its first connection: its whole length, kept until then, and the
+ * admin's way to start it now. */
+function WaitingTerm({ u }: { u: User }) {
+  const toast = useToast();
+  const update = useUserMutation(userActions.update);
+  return (
+    <div className="panel-soft flex flex-wrap items-center justify-between gap-3 p-4">
+      <div className="min-w-0">
+        <div className="font-display text-lg font-medium tracking-tight">{t("userDrawer.waitTitle", { term: days(daysUntil(u.expires_at!)) })}</div>
+        <p className="mt-1 text-xs text-[var(--ink-500)]">{t("userDrawer.waitText")}</p>
+      </div>
+      <Button
+        size="sm"
+        loading={update.isPending}
+        onClick={() =>
+          update.mutate(
+            { id: u.id, body: { starts_on_connect: false } },
+            { onSuccess: (r) => toast.ok(t("userDrawer.waitStarted", { date: dateShort(r.expires_at!) })), onError: (x) => toast.error(errorText(x)) },
+          )
+        }
+      >
+        <Play size={16} aria-hidden /> {t("userDrawer.waitStart")}
+      </Button>
+    </div>
+  );
+}
+
+/** A subscription that never connected and has its term ahead may wait for its first
+ * connection: the admin made it, the client has not set the app up yet. */
+function WaitOption({ u }: { u: User }) {
+  const toast = useToast();
+  const update = useUserMutation(userActions.update);
+  const never = !u.online_at && u.total_up + u.total_down === 0;
+  if (!never || !u.expires_at || new Date(u.expires_at).getTime() <= Date.now()) return null;
+  return (
+    <button
+      type="button"
+      className="link-btn mt-2 text-xs"
+      disabled={update.isPending}
+      onClick={() =>
+        update.mutate({ id: u.id, body: { starts_on_connect: true } }, { onSuccess: () => toast.ok(t("userDrawer.waitSet")), onError: (x) => toast.error(errorText(x)) })
+      }
+    >
+      {t("userDrawer.waitOffer")}
+    </button>
   );
 }
 

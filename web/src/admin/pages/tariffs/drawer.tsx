@@ -55,6 +55,10 @@ type TariffForm = {
   devMax: string;
   devStars: string;
   devRub: string;
+  // The tariff's own part of the lifecycle: the carry-over over the panel's rule, and a term
+  // that starts at the first connection.
+  carry: Tariff["carry_over"];
+  waits: boolean;
 };
 
 /** The form of tariff tr; a new one's without. The one place that maps a tariff to the form. */
@@ -86,6 +90,8 @@ function formOf(tr: Tariff | null): TariffForm {
     devMax: String(tr?.extra_devices.max ?? 0),
     devStars: tr?.extra_devices.price_stars != null ? String(tr.extra_devices.price_stars) : "",
     devRub: tr?.extra_devices.price_rub != null ? String(tr.extra_devices.price_rub / 100) : "",
+    carry: tr?.carry_over ?? "inherit",
+    waits: tr?.starts_on_connect ?? false,
     more: (tr?.terms ?? []).slice(1).map((x) => ({
       key: nextKey++,
       days: tr?.billing_day != null ? (x.days ? String(termMonths(x.days)) : "0") : String(x.days),
@@ -99,7 +105,9 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
   const qc = useQueryClient();
   const toast = useToast();
   const [form, set, replace] = useFields(() => formOf(null));
-  const { name, gb, unlimited, duration, term, monthsN, billingDay, devices, devicesUnlimited, deviceMode, speed, speedUnlimited, reset, price, description, onSale, servers, groups, gifts, stars, rub, more, devMax, devStars, devRub } = form;
+  const { name, gb, unlimited, duration, term, monthsN, billingDay, devices, devicesUnlimited, deviceMode, speed, speedUnlimited, reset, price, description, onSale, servers, groups, gifts, stars, rub, more, devMax, devStars, devRub, carry, waits } = form;
+  // A term with an end is one a subscription can wait to start.
+  const ends = term === "day" ? Number(monthsN) > 0 : Number(duration) > 0;
   const allPools = usePools();
   // With selling off the sale block is hidden; its values stay as they were.
   const selling = usePaymentSettings().data?.enabled === true;
@@ -218,6 +226,8 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
         : { max: devMaxN, price_stars: devStars.trim() ? devStarsN : null, price_rub: devRub.trim() ? devRubN : null },
       // PUT replaces the tariff: keep its place in the list.
       sort: tariff && tariff !== "new" ? tariff.sort : undefined,
+      carry_over: carry,
+      starts_on_connect: waits && ends,
     });
   };
 
@@ -288,6 +298,7 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
             </div>
           )}
         </Field>
+        {ends ? <SwitchRow className="mb-4 py-0" label={t("tariffs.waits")} sub={t("tariffs.waitsSub")} checked={waits} onChange={set.waits} /> : null}
         {term === "day" ? (
           <Field label={t("tariffs.billingDay")} htmlFor="t-bday" hint={t("tariffs.billingDayHint")} error={errors.billing_day}>
             <div className="flex items-center gap-2">
@@ -330,6 +341,20 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
                 { value: "period", label: t("tariffs.resetEvery30") },
                 { value: "month_start", label: term === "day" && Number(billingDay) >= 1 && Number(billingDay) <= 31 ? t("tariffs.resetOnDayShort", { d: Number(billingDay) }) : t("tariffs.resetMonthStart") },
                 { value: "none", label: t("tariffs.resetNever") },
+              ]}
+            />
+          </Field>
+        ) : null}
+        {!unlimited ? (
+          <Field label={t("tariffs.carry")} hint={t("tariffs.carryHint")}>
+            <Segmented
+              label={t("tariffs.carry")}
+              value={carry}
+              onChange={set.carry}
+              options={[
+                { value: "inherit", label: t("tariffs.carryInherit") },
+                { value: "on", label: t("tariffs.carryOn") },
+                { value: "off", label: t("tariffs.carryOff") },
               ]}
             />
           </Field>
