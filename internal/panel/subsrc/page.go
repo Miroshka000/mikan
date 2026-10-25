@@ -1,4 +1,4 @@
-package subs
+package subsrc
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/subpage"
+	"mikan/internal/sub/serve"
 )
 
 // headPage is a page that takes extra markup for its <head> (server.SPA).
@@ -20,7 +21,7 @@ type headPage interface {
 // servePage sends the subscription page with what the admin made of it (subpage): its data,
 // the link preview and the admin's CSS. When that cannot be read the page goes as built,
 // in its default look, rather than not at all.
-func (h *Handler) servePage(w http.ResponseWriter, r *http.Request, cfg Config) {
+func (h *Handler) servePage(w http.ResponseWriter, r *http.Request, cfg serve.Config) {
 	hp, ok := h.page.(headPage)
 	if !ok || h.pages == nil {
 		h.page.ServeHTTP(w, r)
@@ -42,11 +43,11 @@ func (h *Handler) servePage(w http.ResponseWriter, r *http.Request, cfg Config) 
 
 // subRootURL is the subscription path's absolute address: the panel's own when it has
 // one, or the page's address without its last part (the token or "tg").
-func subRootURL(r *http.Request, cfg Config) string {
+func subRootURL(r *http.Request, cfg serve.Config) string {
 	if cfg.SubBase != "" {
 		return strings.TrimSuffix(cfg.SubBase, "/")
 	}
-	page := PageURL(r)
+	page := serve.PageURL(r)
 	if i := strings.LastIndex(page, "/"); i > len("https://") {
 		return page[:i]
 	}
@@ -103,19 +104,4 @@ func (h *Handler) doc(w http.ResponseWriter, r *http.Request, rest string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-cache")
 	_ = json.NewEncoder(w).Encode(d)
-}
-
-// linkPreviewBots are the User-Agents of the messengers and sites that fetch a pasted link
-// to show its preview.
-var linkPreviewBots = []string{"telegrambot", "whatsapp", "facebookexternalhit", "twitterbot", "slackbot", "discordbot", "vkshare", "skypeuripreview", "linkedinbot", "viber"}
-
-// LinkPreview says whether the request is a messenger building a link's preview.
-func LinkPreview(userAgent string) bool {
-	ua := strings.ToLower(userAgent)
-	for _, b := range linkPreviewBots {
-		if strings.Contains(ua, b) {
-			return true
-		}
-	}
-	return false
 }

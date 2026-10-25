@@ -17,7 +17,7 @@ These terms apply to mikan as a whole and to every copy and modified version of 
 ## Third-party code
 
 - **[mihomo](https://github.com/MetaCubeX/mihomo)**, GPL-3.0, by MetaCubeX and contributors: the proxy core mikan runs.
-- **[3x-ui](https://github.com/MHSanaei/3x-ui)**, GPL-3.0, by MHSanaei and contributors: parts of mikan are adapted from it, among them the local Happ crypt links (`internal/panel/subs/happcrypt.go`, after MHSanaei/3x-ui#6494, with the key from [Omegaplexx/hpwnr](https://github.com/Omegaplexx/hpwnr)).
+- **[3x-ui](https://github.com/MHSanaei/3x-ui)**, GPL-3.0, by MHSanaei and contributors: parts of mikan are adapted from it, among them the local Happ crypt links (`internal/panel/subsrc/happcrypt.go`, after MHSanaei/3x-ui#6494, with the key from [Omegaplexx/hpwnr](https://github.com/Omegaplexx/hpwnr)).
 - **Fonts:** Unbounded, Onest and JetBrains Mono, SIL Open Font License 1.1.
 
 The other libraries mikan builds with keep their own licenses, listed in `go.mod`, `web/package.json` and `installer/Cargo.toml`.

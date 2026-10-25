@@ -1,4 +1,4 @@
-package subs
+package subsrc
 
 import (
 	"context"
@@ -15,44 +15,6 @@ import (
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
-
-func TestHappSettingsValidation(t *testing.T) {
-	profile := base64.StdEncoding.EncodeToString([]byte(`{"Name":"RU direct","GlobalProxy":"true"}`))
-	for s, want := range map[string]bool{
-		"happ://routing/onadd/" + profile:        true,
-		"happ://routing/add/" + profile:          true,
-		"happ://routing/off":                     true,
-		"happ://routing/onadd/bm90IGpzb24=":      false, // "not json"
-		"happ://routing/onadd/":                  false,
-		"https://example.com/":                   false,
-		"happ://routing/onadd/" + profile + " x": false,
-	} {
-		if got := ValidHappRouting(s); got != want {
-			t.Errorf("ValidHappRouting(%.40q) = %v, want %v", s, got, want)
-		}
-	}
-	for s, want := range map[string]bool{"abc-123_X": true, "": false, "a b": false, "a\nb": false, strings.Repeat("a", 65): false} {
-		if got := ValidHappProviderID(s); got != want {
-			t.Errorf("ValidHappProviderID(%q) = %v", s, got)
-		}
-	}
-	if !IsHapp("Happ/3.6.0/Android/abc") || IsHapp("v2RayTun/5.1") || IsHapp("") {
-		t.Fatal("IsHapp")
-	}
-}
-
-func TestHappHeaders(t *testing.T) {
-	h := http.Header{}
-	happHeaders(h, Happ{Routing: "happ://routing/off", HideSettings: true})
-	if h.Get("routing") != "happ://routing/off" || h.Get("providerid") != "" || h.Get("hide-settings") != "" {
-		t.Fatalf("without a provider id Happ takes no provider headers: %v", h)
-	}
-	h = http.Header{}
-	happHeaders(h, Happ{ProviderID: "p1", HideSettings: true})
-	if h.Get("providerid") != "p1" || h.Get("hide-settings") != "1" || h.Get("routing") != "" {
-		t.Fatalf("provider headers: %v", h)
-	}
-}
 
 // The local crypt link carries the address the way the app opens it: decrypted with the
 // key pair's private half, it is the address, byte for byte.

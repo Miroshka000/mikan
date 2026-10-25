@@ -1,4 +1,4 @@
-package subs
+package subsrc
 
 import (
 	"bytes"
@@ -34,6 +34,12 @@ import (
 // ErrHappLink: no crypt link now; the caller shows no Happ button rather than the plain
 // address it was told to hide.
 var ErrHappLink = errors.New("happ_link")
+
+// How the crypt link is made (Config.HappCrypt).
+const (
+	HappCryptAPI   = "api"   // by Happ's own service, the panel itself when it is down
+	HappCryptLocal = "local" // by the panel itself
+)
 
 // HappCryptAPIURL is Happ's own service (happ.su/main/dev-docs/crypto-link).
 const HappCryptAPIURL = "https://crypto.happ.su/api-v2.php"

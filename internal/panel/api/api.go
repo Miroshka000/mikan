@@ -38,7 +38,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/panel/support"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbackup"
@@ -82,11 +82,11 @@ type Deps struct {
 	// CheckCerts is «Проверить сертификат»; nil in development.
 	CheckCerts func(ctx context.Context) (certcheck.CertReport, error)
 	// RoutesPreview renders a Clash profile with routing in place of the saved one
-	// (subs.Handler.Preview); nil: no preview.
-	RoutesPreview func(ctx context.Context, req subs.PreviewRequest) ([]byte, error)
-	// CheckTemplate checks an own Clash profile (subs.Handler.CheckTemplate); nil: unchecked.
+	// (subsrc.Handler.Preview); nil: no preview.
+	RoutesPreview func(ctx context.Context, req subsrc.PreviewRequest) ([]byte, error)
+	// CheckTemplate checks an own Clash profile (subsrc.Handler.CheckTemplate); nil: unchecked.
 	CheckTemplate func(ctx context.Context, src string) error
-	// HappLink is the Happ crypt link of a user's subscription (subs.Handler.HappLink); nil: none.
+	// HappLink is the Happ crypt link of a user's subscription (subsrc.Handler.HappLink); nil: none.
 	HappLink func(ctx context.Context, u db.User) (string, error)
 	// Nodes is the live side of the nodes; nil when the panel runs without them.
 	Nodes NodeRuntime

@@ -6,7 +6,7 @@ import (
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
-	"mikan/internal/panel/subs"
+	"mikan/internal/sub/routing"
 )
 
 // settingField is one field of PATCH /settings, declared once: whether only the session
@@ -55,7 +55,7 @@ var settingFields = []settingField{
 	custom("sub_rules", true, func(b *patchSettingsBody) *string { return b.SubRules }, func(ctx context.Context, set *settings.Settings, v string) error {
 		return settings.Set(ctx, set, settings.KeyRules, strings.TrimRight(v, " \n\r\t"))
 	}),
-	value("sub_routes", settings.KeyRoutes, true, func(b *patchSettingsBody) *subs.Routes { return b.SubRoutes }),
+	value("sub_routes", settings.KeyRoutes, true, func(b *patchSettingsBody) *routing.Routes { return b.SubRoutes }),
 	custom("sub_template", true, func(b *patchSettingsBody) *string { return b.SubTemplate }, func(ctx context.Context, set *settings.Settings, v string) error {
 		if strings.TrimSpace(v) == "" {
 			v = "" // blank: back to the built-in profile

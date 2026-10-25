@@ -1,4 +1,4 @@
-package subs
+package subsrc
 
 import (
 	"net/http"
@@ -8,6 +8,7 @@ import (
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/sub/serve"
 )
 
 // Legacy serves the subscription links of the panel users were imported from: the old
@@ -60,9 +61,9 @@ func (h *Handler) legacyUser(r *http.Request, token string) (db.User, bool) {
 func legacyFormat(clientType string) string {
 	switch strings.ToLower(clientType) {
 	case "clash", "clash-meta", "clash_meta", "clashmeta", "mihomo", "stash":
-		return "clash"
+		return serve.FormatClash
 	case "v2ray", "links", "links-base64", "links_base64", "base64", "xray-base64", "xray_base64":
-		return "uri"
+		return serve.FormatURI
 	}
 	return ""
 }

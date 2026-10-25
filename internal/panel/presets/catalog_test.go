@@ -1,10 +1,11 @@
-package subs
+package presets_test
 
 import (
 	"testing"
 
 	"mikan/internal/panel/presets"
 	"mikan/internal/proto"
+	"mikan/internal/sub/apps"
 )
 
 // A preset's catalog entry says what its generated template already says: its type, its
@@ -12,7 +13,7 @@ import (
 // use it, which the UI marks "Clash only". The entry is written by hand for the UI; this
 // keeps the two from drifting apart.
 func TestPresetsMatchTheirTemplates(t *testing.T) {
-	others := []App{{Family: FamilyXray}, {Family: FamilySingBox}, {Family: FamilyOther}}
+	others := []apps.App{{Family: apps.FamilyXray}, {Family: apps.FamilySingBox}, {Family: apps.FamilyOther}}
 	for _, p := range presets.All {
 		if p.ID == presets.Custom {
 			continue
@@ -29,7 +30,7 @@ func TestPresetsMatchTheirTemplates(t *testing.T) {
 			t.Errorf("%s: catalog says %s/%s shared=%v, the template is %s/%s shared=%v", p.ID, p.Type, p.Network, p.Shared, tpl.Type(), tpl.Network(), proto.Shared(tpl))
 		}
 		needs := proto.NeedsOf(tpl)
-		if !(App{Family: FamilyMihomo, Core: Version{9, 9, 9}}).Supports(needs) {
+		if !(apps.App{Family: apps.FamilyMihomo, Core: apps.Version{9, 9, 9}}).Supports(needs) {
 			t.Errorf("%s: a current mihomo app cannot use it", p.ID)
 		}
 		clashOnly := true

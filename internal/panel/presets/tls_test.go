@@ -1,15 +1,43 @@
-package subs
+package presets_test
 
 import (
+	"context"
+	"encoding/json"
 	"net/url"
 	"testing"
 
 	"mikan/internal/panel/presets"
 	"mikan/internal/proto"
+	"mikan/internal/sub/apps"
 	builder "mikan/internal/sub/build"
 	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
+	"mikan/internal/sub/singbox"
 	"mikan/internal/sub/xray"
 )
+
+// singboxTLS is the tls of c's outbound in the sing-box profile an app gets.
+func singboxTLS(t *testing.T, c model.Proxy) (map[string]any, bool) {
+	t.Helper()
+	body, err := singbox.Render(context.Background(), mihomo.Profile{Proxies: []model.Proxy{c}}, model.GroupNames{}.WithDefaults(""), routing.DefaultMode, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Outbounds []map[string]any `json:"outbounds"`
+	}
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range cfg.Outbounds {
+		if o["tag"] == c.Name {
+			tls, ok := o["tls"].(map[string]any)
+			return tls, ok
+		}
+	}
+	return nil, false
+}
 
 // VLESS TLS runs on the node certificate: the listener gets the certificate files and no
 // REALITY, clients verify the panel's domain like any website, and a self-signed
@@ -55,21 +83,22 @@ func TestVLESSTLSPresets(t *testing.T) {
 		if m["tls"] != true || m["servername"] != "panel.example.com" || m["reality-opts"] != nil || m["fingerprint"] != nil || m["skip-cert-verify"] != nil {
 			t.Fatalf("%s mihomo: %v", id, m)
 		}
-		sb, ok := singboxTLS(m)
-		if !ok || sb["server_name"] != "panel.example.com" || sb["reality"] != nil || sb["insecure"] != nil {
-			t.Fatalf("%s sing-box tls: %v", id, sb)
-		}
-
 		needs := proto.NeedsOf(tpl)
-		xrayApps, singbox := (App{Family: FamilyXray}).Supports(needs), (App{Family: FamilySingBox}).Supports(needs)
+		xrayApps, singboxApps := (apps.App{Family: apps.FamilyXray}).Supports(needs), (apps.App{Family: apps.FamilySingBox}).Supports(needs)
+		// sing-box apps get the outbound only where they carry its transport.
+		if singboxApps {
+			if sb, ok := singboxTLS(t, c); !ok || sb["server_name"] != "panel.example.com" || sb["reality"] != nil || sb["insecure"] != nil {
+				t.Fatalf("%s sing-box tls: %v", id, sb)
+			}
+		}
 		switch id {
 		case presets.PresetTLSXHTTP:
-			if q.Get("type") != "xhttp" || q.Get("path") == "" || q.Get("flow") != "" || !xrayApps || singbox {
-				t.Fatalf("xhttp: %s xray=%v sing-box=%v", link, xrayApps, singbox)
+			if q.Get("type") != "xhttp" || q.Get("path") == "" || q.Get("flow") != "" || !xrayApps || singboxApps {
+				t.Fatalf("xhttp: %s xray=%v sing-box=%v", link, xrayApps, singboxApps)
 			}
 		case presets.PresetTLSVision:
-			if q.Get("type") != "tcp" || q.Get("flow") != "xtls-rprx-vision" || !xrayApps || !singbox {
-				t.Fatalf("vision: %s xray=%v sing-box=%v", link, xrayApps, singbox)
+			if q.Get("type") != "tcp" || q.Get("flow") != "xtls-rprx-vision" || !xrayApps || !singboxApps {
+				t.Fatalf("vision: %s xray=%v sing-box=%v", link, xrayApps, singboxApps)
 			}
 			if us := l["users"].([]map[string]any); us[0]["flow"] != "xtls-rprx-vision" {
 				t.Fatalf("vision users: %v", us)

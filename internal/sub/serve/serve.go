@@ -236,7 +236,7 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
 	// The values are worked out only when a title or an announcement can use them.
 	var vars map[string]string
 	if cfg.Title != "" || cfg.Announce != "" || cfg.InactiveServer && cfg.InactiveText != "" {
-		vars = Values(u, h.bound(ctx, sub, cfg), cfg, h.now())
+		vars = Values(u, bound(ctx, sub, cfg), cfg, h.now())
 		if cfg.Announce != "" {
 			cfg.Announce = fillAppAnnounce(cfg.Announce, vars, ua)
 		}
@@ -338,9 +338,18 @@ func (h *Handler) profileFailed(w http.ResponseWriter, cfg Config, format string
 	internalError(w)
 }
 
+// Announcement is cfg's announcement as the subscription page and the Mini App show it to
+// u, the user of sub: filled with the user's values; "" without one.
+func Announcement(ctx context.Context, sub Subscription, u User, cfg Config, now time.Time) string {
+	if cfg.Announce == "" {
+		return ""
+	}
+	return FillAnnounce(cfg.Announce, Values(u, bound(ctx, sub, cfg), cfg, now))
+}
+
 // bound counts the devices bound to the subscription for {devices}: -1 when the title and
 // the announcement do not use it or binding is off.
-func (h *Handler) bound(ctx context.Context, sub Subscription, cfg Config) int64 {
+func bound(ctx context.Context, sub Subscription, cfg Config) int64 {
 	if !cfg.Binding || !wantsDevices(cfg.Title, cfg.Announce) {
 		return -1
 	}

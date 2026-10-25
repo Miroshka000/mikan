@@ -29,7 +29,8 @@ var codeSources = []struct {
 	{"internal/proto", []*regexp.Regexp{failCode, structCode}},
 	{"internal/panel/presets", []*regexp.Regexp{failCode, structCode}},
 	{"internal/panel/warp", []*regexp.Regexp{structCode}},
-	{"internal/panel/subs", []*regexp.Regexp{structCode}},
+	{"internal/sub", []*regexp.Regexp{structCode}},
+	{"internal/panel/subsrc", []*regexp.Regexp{structCode}},
 	// billing.errCode keeps a provider's refusal in payments.error, for the history.
 	{"internal/panel/billing", []*regexp.Regexp{structCode}},
 	{"internal/panel/addons", []*regexp.Regexp{structCode}},
@@ -47,10 +48,10 @@ var codesByText = []string{
 	// billing.errCode: payments.error of a paid payment the panel could not apply yet,
 	// and billing.refundTrial for a paid trial it may neither give nor refund.
 	"addon_unreachable", "no_slots", "timeout", "user_gone", "package_gone", "trial_refund_failed", "trial_refund_manual",
-	// subs.Routes.Check, as a detail's Message.
+	// routing.Routes.Check, as a detail's Message.
 	"routes_service", "routes_target", "routes_direct", "routes_dns",
 	"routes_lists_many", "routes_list_name", "routes_list_url", "routes_list_behavior", "routes_list_format", "routes_servers",
-	// subs.TemplateError, as a detail's Message.
+	// mihomo.TemplateError, as a detail's Message.
 	"template_yaml", "template_empty", "template_groups", "template_group_name", "template_group_dup", "template_group_member",
 	"template_rule", "template_rule_target", "template_rule_set",
 	// checkCA, as a detail's Message.

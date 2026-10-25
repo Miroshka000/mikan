@@ -36,12 +36,12 @@ const (
 	KeyACMECA      = "acme_ca"
 	KeyACMEEABKID  = "acme_eab_kid"
 	KeyACMEEABHMAC = "acme_eab_hmac"
-	KeyGroupMain   = "sub_group_main" // subscription group names, see subs.Groups
+	KeyGroupMain   = "sub_group_main" // subscription group names, see model.GroupNames (internal/sub)
 	KeyGroupAuto   = "sub_group_auto"
-	KeyRouting     = "sub_routing"  // subs.Routing
-	KeyRules       = "sub_rules"    // the admin's own Clash rules, as typed (subs.ParseRules)
-	KeyRoutes      = "sub_routes"   // services, direct apps and DNS of the profiles (subs.Routes)
-	KeyTemplate    = "sub_template" // the admin's own Clash profile (subs.Template); empty: none
+	KeyRouting     = "sub_routing"  // routing.Mode (internal/sub)
+	KeyRules       = "sub_rules"    // the admin's own Clash rules, as typed (routing.ParseRules)
+	KeyRoutes      = "sub_routes"   // services, direct apps and DNS of the profiles (routing.Routes)
+	KeyTemplate    = "sub_template" // the admin's own Clash profile (mihomo.Template); empty: none
 	// KeyFingerprint is the uTLS profile clients get where an inbound sets none
 	// (proto.Fingerprints); unset means proto.DefaultFingerprint.
 	KeyFingerprint = "client_fingerprint"
@@ -93,10 +93,10 @@ const (
 	// for maintenance or news; empty: none.
 	KeyAnnounce    = "sub_announce"
 	KeyAnnounceURL = "sub_announce_url"
-	// KeySubTitle is the profile's name in the apps (subs.Config.Title); empty: the brand.
+	// KeySubTitle is the profile's name in the apps (serve.Config.Title); empty: the brand.
 	KeySubTitle = "sub_title"
 	// A subscription that cannot connect gets one notice in place of its servers
-	// (subs.Config.InactiveServer), with the admin's words or the built-in ones.
+	// (serve.Config.InactiveServer), with the admin's words or the built-in ones.
 	KeyInactiveServer = "sub_inactive_server"
 	// KeySiteTemplate is the built-in front page a stranger sees at the panel's address
 	// (frontpage.Templates); "" for none.
@@ -107,11 +107,11 @@ const (
 	KeyTrafficDetailDays = "traffic_detail_days"
 	KeyInactiveText      = "sub_inactive_text"
 	// App branding: the brand, logo and accent colour go to the apps that read operator
-	// headers (subs.OperatorHeaders); off by default.
+	// headers (serve.OperatorHeaders); off by default.
 	KeyAppBranding = "app_branding"
 	KeyBrandAccent = "brand_accent"   // #RRGGBB, empty: the app's own
 	KeyBrandLogo   = "brand_logo_url" // https, empty: the app's own
-	// Happ (subs.Happ): a routing profile link, the happ-proxy.com provider id and what
+	// Happ (serve.Happ): a routing profile link, the happ-proxy.com provider id and what
 	// needs it, and how the page's Happ button hides the address ("", "api", "local").
 	KeyHappRouting  = "happ_routing"
 	KeyHappProvider = "happ_provider_id"

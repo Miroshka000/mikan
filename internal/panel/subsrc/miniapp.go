@@ -1,4 +1,4 @@
-package subs
+package subsrc
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func (h *Handler) miniApp(w http.ResponseWriter, r *http.Request, rest string) {
 		hd.Set("Content-Security-Policy", strings.Replace(hd.Get("Content-Security-Policy"), "frame-ancestors 'none'", "frame-ancestors https://web.telegram.org", 1))
 		hd.Del("X-Frame-Options")
 		cfg, _ := h.cfg(r.Context())
-		h.servePage(w, r, cfg)
+		h.servePage(w, r, cfg.Config)
 	case r.Method == http.MethodPost && rest == "session" && sameOrigin(r):
 		h.miniAppSession(w, r)
 	case r.Method == http.MethodPost && rest == "reissue" && sameOrigin(r) && h.reissuer != nil:
