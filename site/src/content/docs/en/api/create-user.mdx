@@ -122,6 +122,8 @@ The plan gives the traffic limit, the number of devices, the speed, the rule tha
 
 With the same key you can then [extend](/mikan/en/api/reference/operations/extend-user/) the term, [add traffic](/mikan/en/api/reference/operations/grant-traffic/), [reissue the link](/mikan/en/api/reference/operations/reissue-user/) or reset the traffic. The full list of methods is in the [reference](/mikan/en/api/reference/).
 
+For a service to learn of new users, payments and the end of a term at once, instead of polling the API, connect [webhooks](/mikan/en/api/webhooks/): the panel sends an event to your address by itself, `user.created` among them for every user that is made.
+
 ## If it did not work
 
 | Answer | What it means |

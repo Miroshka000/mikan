@@ -122,6 +122,8 @@ print(created.parsed.id, created.parsed.sub_url)
 
 Дальше тем же ключом можно [продлить](/mikan/api/reference/operations/extend-user/) срок, [начислить трафик](/mikan/api/reference/operations/grant-traffic/), [перевыпустить ссылку](/mikan/api/reference/operations/reissue-user/) или сбросить трафик. Полный список методов в [справочнике](/mikan/api/reference/).
 
+Чтобы сервис узнавал о новых пользователях, оплатах и конце срока сразу, а не опрашивал API, подключите [webhooks](/mikan/api/webhooks/): панель сама пришлёт на ваш адрес событие, в том числе `user.created` для каждого созданного пользователя.
+
 ## Если не получилось
 
 | Ответ | Что значит |
