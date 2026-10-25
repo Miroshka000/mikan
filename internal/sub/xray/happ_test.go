@@ -1,13 +1,16 @@
 package xray
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 
+	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/routing"
+	"mikan/internal/sub/subtest"
 )
 
 func TestValidHappRouting(t *testing.T) {
@@ -89,4 +92,40 @@ func TestHappRoutingOf(t *testing.T) {
 	if all := decodeHapp(t, HappRoutingOf("VPN", []string{"MATCH,VPN"})); all.GlobalProxy != "true" || !slices.Equal(all.DirectSites, []string{"geosite:private"}) {
 		t.Fatalf("all through the proxy: %+v", all)
 	}
+}
+
+// The Happ routing profile the settings of every user make in every mode, and the own Clash
+// profile's, decoded (subtest has the golden files' story): the panel makes one for all of
+// its users.
+func TestGoldenHappRouting(t *testing.T) {
+	for _, v := range subtest.Variants {
+		for _, mode := range subtest.Modes {
+			t.Run(v.Name+"/"+string(mode), func(t *testing.T) {
+				goldenHapp(t, v.Name+"_"+string(mode)+".happ.json", happRouting(v, mode, ""))
+			})
+		}
+		if !strings.HasPrefix(v.Name, "single") { // the template names the second node's group
+			t.Run(v.Name+"/template", func(t *testing.T) {
+				goldenHapp(t, v.Name+".template.happ.json", happRouting(v, routing.All, subtest.OwnTemplate))
+			})
+		}
+	}
+}
+
+// happRouting is the routing link of the variant's settings, as serve makes it.
+func happRouting(v subtest.Variant, m routing.Mode, src string) string {
+	u := v.User()
+	p := mihomo.Profile{Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
+	return HappRoutingOf("VPN", mihomo.Rules(p, v.Groups.WithDefaults(u.Lang), m, src))
+}
+
+func goldenHapp(t *testing.T, file, link string) {
+	t.Helper()
+	payload, ok := strings.CutPrefix(link, "happ://routing/onadd/")
+	raw, err := base64.StdEncoding.DecodeString(payload)
+	var out bytes.Buffer
+	if !ok || err != nil || json.Indent(&out, raw, "", "  ") != nil {
+		t.Fatalf("not a routing link: %s", link)
+	}
+	subtest.Golden(t, file, append(out.Bytes(), '\n'))
 }
