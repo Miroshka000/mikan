@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"mikan/internal/proto"
@@ -67,7 +68,7 @@ type User struct {
 	Direct []string // the panel's and the nodes' hosts
 	// Rules are the admin's own Clash rules, before a core leaves out the ones an app's
 	// core would not parse.
-	Rules  []string
+	Rules  []routing.Rule
 	Routes routing.Routes
 	Lang   string
 }
@@ -183,7 +184,17 @@ func Routes() routing.Routes {
 
 // Rules are the admin's own Clash rules; the DOMAIN-WILDCARD one is younger than the cores
 // of some apps.
-var Rules = []string{"DOMAIN-SUFFIX,sber.ru,DIRECT", "DOMAIN-WILDCARD,*.tinkoff.ru,DIRECT", "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve"}
+var Rules = ParseRules("DOMAIN-SUFFIX,sber.ru,DIRECT", "DOMAIN-WILDCARD,*.tinkoff.ru,DIRECT", "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve")
+
+// ParseRules are the admin's rules of the lines, to the groups of the default names; a line
+// that does not parse is a mistake of the test.
+func ParseRules(lines ...string) []routing.Rule {
+	rules, err := routing.ParseRules(strings.Join(lines, "\n"), model.GroupNames{}.WithDefaults(""))
+	if err != nil {
+		panic(err)
+	}
+	return rules
+}
 
 // Modes are the routing modes every profile is rendered in.
 var Modes = []routing.Mode{routing.All, routing.RUDirect, routing.Blocked}

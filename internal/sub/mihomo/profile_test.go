@@ -343,7 +343,7 @@ func TestNothingToServeIsAnError(t *testing.T) {
 // A rule type younger than an app's core would fail its whole profile: those go only to
 // mihomo apps that name a core with them.
 func TestRulesFor(t *testing.T) {
-	rules := []string{"DOMAIN-SUFFIX,a.com,DIRECT", "DOMAIN-WILDCARD,*.b.com,PROXY", "IP-ASN,13335,PROXY", "GEOSITE,youtube,PROXY"}
+	rules := subtest.ParseRules("DOMAIN-SUFFIX,a.com,DIRECT", "DOMAIN-WILDCARD,*.b.com,PROXY", "IP-ASN,13335,PROXY", "GEOSITE,youtube,PROXY")
 	for ua, want := range map[string]int{
 		"mihomo/1.19.31":     4,
 		"mihomo/1.19.11":     3, // no DOMAIN-WILDCARD before 1.19.12
@@ -352,7 +352,7 @@ func TestRulesFor(t *testing.T) {
 		"Stash/3.0":          2,
 	} {
 		if got := RulesFor(rules, apps.DetectApp(ua)); len(got) != want {
-			t.Errorf("%s: %q", ua, got)
+			t.Errorf("%s: %v", ua, got)
 		}
 	}
 	if got := RulesFor(rules[:1], apps.DetectApp("Stash/3.0")); &got[0] != &rules[0] {

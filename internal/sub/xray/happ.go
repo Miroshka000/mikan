@@ -1,14 +1,12 @@
 package xray
 
 import (
-	_ "embed"
 	"encoding/base64"
 	"encoding/json"
 	"net/netip"
 	"strings"
-	"sync"
 
-	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/routing"
 )
 
 // HappRoutingAuto as Happ's routing (settings.KeyHappRouting): the panel makes the routing
@@ -47,34 +45,6 @@ func ValidHappRouting(s string) bool {
 	return false
 }
 
-// The geodata Happ downloads for it: runetfreedom's, made for Xray in Russia, with the
-// categories of mihomo's (MetaCubeX) and ru-blocked. Pinned to the release whose
-// categories are listed in happ/: a category the file lacks fails Happ's whole routing.
-const (
-	happRelease = "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/download/202610071030/"
-	happGeosite = happRelease + "geosite.dat"
-	happGeoip   = happRelease + "geoip.dat"
-)
-
-var (
-	//go:embed happ/geosite.txt
-	happSitesList string
-	//go:embed happ/geoip.txt
-	happIPsList string
-	happNames   = sync.OnceValue(func() [2]map[string]bool {
-		read := func(s string) map[string]bool {
-			m := map[string]bool{}
-			for _, l := range strings.Split(s, "\n") {
-				if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
-					m[l] = true
-				}
-			}
-			return m
-		}
-		return [2]map[string]bool{read(happSitesList), read(happIPsList)}
-	})
-)
-
 // happProfile is Happ's routing profile (happ.su/main/dev-docs).
 type happProfile struct {
 	Name              string            `json:"Name"`
@@ -105,24 +75,23 @@ type happProfile struct {
 // HappRoutingOf turns Clash rules into Happ's routing link: a site or IP goes to the list
 // of the first rule that takes it (mihomo's first match), MATCH decides the rest.
 func HappRoutingOf(name string, rules []string) string {
-	names := happNames()
 	r := happProfile{Name: name, GlobalProxy: "true", UseChunkFiles: "true",
 		RemoteDNS: "1.1.1.1", RemoteDNSType: "DoH", RemoteDNSDomain: "https://1.1.1.1/dns-query", RemoteDNSIP: "1.1.1.1",
 		DomesticDNS: "77.88.8.8", DomesticDNSType: "DoH", DomesticDNSDomain: "https://77.88.8.8/dns-query", DomesticDNSIP: "77.88.8.8",
-		GeoipURL: happGeoip, GeositeURL: happGeosite, DNSHosts: map[string]string{},
+		GeoipURL: routing.RunetfreedomGeoIP, GeositeURL: routing.RunetfreedomGeosite, DNSHosts: map[string]string{},
 		// The profile sends the blocked and the proxied ahead of the direct.
 		RouteOrder: "block-proxy-direct", DomainStrategy: "IPIfNonMatch", FakeDNS: "false",
 		DirectSites: []string{}, DirectIP: []string{}, ProxySites: []string{}, ProxyIP: []string{}, BlockSites: []string{}, BlockIP: []string{}}
 	seen := map[string]bool{}
 	for _, rule := range rules {
-		typ, target, _ := mihomo.RuleParts(rule)
+		typ, target, _ := routing.RuleParts(rule)
 		if typ == "MATCH" {
 			if target == "DIRECT" {
 				r.GlobalProxy = "false"
 			}
 			break // nothing after it is reached
 		}
-		f := mihomo.SplitRule(rule)
+		f := routing.SplitRule(rule)
 		if typ == "" || len(f) < 3 {
 			continue
 		}
@@ -136,14 +105,14 @@ func HappRoutingOf(name string, rules []string) string {
 		case "DOMAIN-KEYWORD":
 			sites = []string{"keyword:" + value}
 		case "GEOSITE":
-			if v := strings.ToLower(value); names[0][v] {
+			if v := strings.ToLower(value); routing.RunetfreedomHas("geosite", v) {
 				sites = []string{"geosite:" + v}
 			}
 		case "GEOIP":
 			switch v := strings.ToLower(value); {
 			case v == "lan":
 				ips = []string{"geoip:private"}
-			case names[1][v]:
+			case routing.RunetfreedomHas("geoip", v):
 				ips = []string{"geoip:" + v}
 			}
 		case "IP-CIDR", "IP-CIDR6":
@@ -152,8 +121,7 @@ func HappRoutingOf(name string, rules []string) string {
 			}
 		case "RULE-SET":
 			// The panel's own lists, by the geodata categories nearest to them.
-			x := happLists[value]
-			sites, ips = x[0], x[1]
+			sites, ips = routing.RunetfreedomList(value)
 		}
 		var list *[2]*[]string
 		switch {
@@ -178,19 +146,6 @@ func HappRoutingOf(name string, rules []string) string {
 	}
 	b, _ := json.Marshal(r)
 	return "happ://routing/onadd/" + base64.StdEncoding.EncodeToString(b)
-}
-
-// happLists are the geodata categories of the panel's rule lists (routing.Services,
-// routing.DirectSets, routing.BlockedLists): sites, then IPs. Lists of apps have none.
-var happLists = map[string][2][]string{
-	"mikan-blocked":     {{"geosite:ru-blocked"}, {"geoip:ru-blocked"}},
-	"mikan-ru-sites":    {{"geosite:category-ru", "geosite:ru-available-only-inside"}, nil},
-	"mikan-ru-keywords": {{"geosite:category-ru"}, nil},
-	"mikan-ru-core":     {{"geosite:category-ru"}, nil},
-	"mikan-telegram-ip": {nil, {"geoip:telegram"}},
-	"mikan-ai":          {{"geosite:category-ai-!cn"}, nil},
-	"mikan-gemini":      {{"geosite:google-gemini"}, nil},
-	"mikan-games":       {{"geosite:category-games"}, nil},
 }
 
 // IncyLink is a Happ routing link in INCY's own scheme: INCY takes any, its own is safest.

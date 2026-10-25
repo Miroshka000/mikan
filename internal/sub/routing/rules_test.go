@@ -10,6 +10,12 @@ import (
 
 var testGroups = model.GroupNames{Main: "Мой VPN", Auto: "Быстрый"}
 
+// clash is r as the Clash profile of testGroups writes it.
+func clash(r Rule) string {
+	name := map[TargetKind]string{ToMain: testGroups.Main, ToAlias: model.AliasGroup, ToAuto: testGroups.Auto, ToDirect: "DIRECT", ToReject: "REJECT", ToDrop: "REJECT-DROP"}
+	return r.Clash(name[r.To.Kind])
+}
+
 func TestParseRules(t *testing.T) {
 	text := strings.Join([]string{
 		"# banks go direct",
@@ -33,8 +39,14 @@ func TestParseRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rules) != 14 || rules[0] != "DOMAIN-SUFFIX,sber.ru,DIRECT" || rules[6] != "GEOIP,telegram,PROXY,no-resolve" {
-		t.Fatalf("rules: %q", rules)
+	if len(rules) != 14 || clash(rules[0]) != "DOMAIN-SUFFIX,sber.ru,DIRECT" || clash(rules[6]) != "GEOIP,telegram,PROXY,no-resolve" {
+		t.Fatalf("rules: %v", rules)
+	}
+	// Each target is the kind of it, the groups by their names as they are.
+	for i, want := range map[int]TargetKind{1: ToMain, 2: ToAlias, 3: ToAuto, 4: ToReject, 5: ToDrop} {
+		if rules[i].To.Kind != want {
+			t.Errorf("%s: target %v, want %v", clash(rules[i]), rules[i].To.Kind, want)
+		}
 	}
 
 	for line, code := range map[string]string{
@@ -77,8 +89,8 @@ func TestParseRules(t *testing.T) {
 func TestServedRules(t *testing.T) {
 	text := "DOMAIN-SUFFIX,sber.ru,DIRECT\nDOMAIN,old.example.com,Старая группа\nGEOSITE,youtube,PROXY"
 	rules := ServedRules(text, testGroups)
-	if len(rules) != 2 || rules[1] != "GEOSITE,youtube,PROXY" {
-		t.Fatalf("served: %q", rules)
+	if len(rules) != 2 || clash(rules[1]) != "GEOSITE,youtube,PROXY" {
+		t.Fatalf("served: %v", rules)
 	}
 	if again := ServedRules(text, testGroups); &again[0] != &rules[0] {
 		t.Fatal("the same text is parsed again instead of cached")

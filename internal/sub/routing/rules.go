@@ -13,7 +13,8 @@ import (
 
 // The admin's own Clash rules: one per line, TYPE,VALUE,TARGET with no-resolve where mihomo
 // takes it, "#" comments and blank lines allowed. They go before the built-in routing in
-// every Clash profile. One rule mihomo cannot parse fails the whole profile in every
+// every profile, read into Rule: each core writes them its own way, and leaves out what it
+// has no counterpart for. One rule mihomo cannot parse fails the whole profile in every
 // app, so each line is checked when saved and again before it is served.
 
 const (
@@ -69,10 +70,10 @@ func RuleTargets(g model.GroupNames) []string {
 	return append(append([]string{}, builtinTargets...), model.AliasGroup, g.Main, g.Auto)
 }
 
-// ParseRules checks the admin's text line by line and returns the rules as the profile
-// writes them: types and built-in policies in upper case, spaces around commas gone.
-func ParseRules(text string, g model.GroupNames) ([]string, error) {
-	var out []string
+// ParseRules checks the admin's text line by line and returns the rules: types in upper
+// case, spaces around commas gone, the target as one of RuleTargets.
+func ParseRules(text string, g model.GroupNames) ([]Rule, error) {
+	var out []Rule
 	for i, raw := range strings.Split(text, "\n") {
 		line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -93,49 +94,54 @@ func ParseRules(text string, g model.GroupNames) ([]string, error) {
 	return out, nil
 }
 
-func parseRule(line string, g model.GroupNames) (string, string) {
+func parseRule(line string, g model.GroupNames) (Rule, string) {
 	f := strings.Split(line, ",")
 	for i := range f {
 		f[i] = strings.TrimSpace(f[i])
 	}
 	if len(f) < 3 || len(f) > 4 {
-		return "", "rule_format"
+		return Rule{}, "rule_format"
 	}
 	typ := strings.ToUpper(f[0])
 	kind, ok := ruleKinds[typ]
 	if !ok {
-		return "", "rule_type"
+		return Rule{}, "rule_type"
 	}
 	if !validValue(kind, typ, f[1]) {
-		return "", "rule_value"
+		return Rule{}, "rule_value"
 	}
-	target := ""
-	for _, t := range RuleTargets(g) {
-		if f[2] == t || slicesContainsFold(builtinTargets, t) && strings.EqualFold(f[2], t) {
-			target = t
-			break
-		}
+	to, ok := ruleTarget(f[2], g)
+	if !ok {
+		return Rule{}, "rule_target"
 	}
-	if target == "" {
-		return "", "rule_target"
-	}
-	out := typ + "," + f[1] + "," + target
+	m := Match{Type: typ, Value: f[1]}
 	if len(f) == 4 {
 		if !strings.EqualFold(f[3], "no-resolve") || !noResolve[typ] {
-			return "", "rule_option"
+			return Rule{}, "rule_option"
 		}
-		out += ",no-resolve"
+		m.NoResolve = true
 	}
-	return out, ""
+	return Rule{When: []Match{m}, To: to}, ""
 }
 
-func slicesContainsFold(list []string, s string) bool {
-	for _, x := range list {
-		if strings.EqualFold(x, s) {
-			return true
-		}
+// ruleTarget is the target the admin typed: a built-in policy in any case, a group by its
+// name as it is, PROXY ahead of the main group so that a rule to PROXY stays to PROXY.
+func ruleTarget(s string, g model.GroupNames) (Target, bool) {
+	switch {
+	case strings.EqualFold(s, "DIRECT"):
+		return Target{Kind: ToDirect}, true
+	case strings.EqualFold(s, "REJECT"):
+		return Target{Kind: ToReject}, true
+	case strings.EqualFold(s, "REJECT-DROP"):
+		return Target{Kind: ToDrop}, true
+	case s == model.AliasGroup:
+		return Target{Kind: ToAlias}, true
+	case s == g.Main:
+		return Target{Kind: ToMain}, true
+	case s == g.Auto:
+		return Target{Kind: ToAuto}, true
 	}
-	return false
+	return Target{}, false
 }
 
 func validValue(kind ruleKind, typ, v string) bool {
@@ -203,12 +209,12 @@ func printable(s string) bool {
 var ruleCache struct {
 	sync.Mutex
 	key   string
-	rules []string
+	rules []Rule
 }
 
 // ServedRules are the saved rules as profiles carry them. Lines that no longer parse (a
 // group renamed since) are left out rather than failing every profile.
-func ServedRules(text string, g model.GroupNames) []string {
+func ServedRules(text string, g model.GroupNames) []Rule {
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
@@ -218,7 +224,7 @@ func ServedRules(text string, g model.GroupNames) []string {
 	if ruleCache.key == key {
 		return ruleCache.rules
 	}
-	var out []string
+	var out []Rule
 	for _, line := range strings.Split(text, "\n") {
 		if rules, err := ParseRules(line, g); err == nil && len(out)+len(rules) <= MaxRules {
 			out = append(out, rules...)

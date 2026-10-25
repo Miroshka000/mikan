@@ -80,7 +80,7 @@ type Config struct {
 	Direct  []string     // the panel's and nodes' hosts: kept out of the tunnel
 	Groups  model.GroupNames
 	Mode    routing.Mode
-	Rules   []string       // the admin's own Clash rules, checked (routing.ServedRules)
+	Rules   []routing.Rule // the admin's own Clash rules, checked (routing.ServedRules)
 	Routes  routing.Routes // services, direct apps and DNS (settings.KeyRoutes)
 	// Template is the admin's own Clash profile (settings.KeyTemplate); it takes the place
 	// of Groups, Mode, Rules and Routes for mihomo apps. "": none.

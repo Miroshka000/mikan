@@ -82,8 +82,9 @@ func TestSingBox(t *testing.T) {
 	lists(t)
 	prof := profileOf(subtest.TwoNodes())
 	prof.Direct = []string{"203.0.113.7"}
-	prof.Rules = []string{"DOMAIN-SUFFIX,sber.ru,DIRECT", "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT"}
-	prof.Routes = routing.Routes{Services: map[string]string{"youtube": routing.TargetVPN, "ads": routing.TargetBlock}, Direct: []string{"ru"}}
+	prof.Rules = subtest.ParseRules("DOMAIN-SUFFIX,sber.ru,DIRECT")
+	prof.Routes = routing.Routes{Services: map[string]string{"youtube": routing.TargetVPN, "ads": routing.TargetBlock}, Direct: []string{"ru"},
+		Tune: routing.Tune{BlockQUIC: true}}
 	c := renderSingBox(t, prof, routing.RUDirect, "")
 
 	if len(c.Inbounds) != 1 || c.Inbounds[0]["type"] != "tun" {

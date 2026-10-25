@@ -316,7 +316,7 @@ func checkFilled(cfg map[string]any, p Profile) error {
 	rules, _ := cfg["rules"].([]any)
 	for i, x := range rules[len(directRules(p.Direct)):] {
 		r := str(x)
-		typ, target, set := RuleParts(r)
+		typ, target, set := routing.RuleParts(r)
 		switch {
 		case typ == "":
 			return templateErr("template_rule", strconv.Itoa(i+1))
@@ -334,47 +334,6 @@ func checkFilled(cfg map[string]any, p Profile) error {
 		}
 	}
 	return nil
-}
-
-// RuleParts reads a Clash rule's type, its target and the rule list it uses ("" when
-// none). Logic rules (AND, OR, NOT) hold commas in brackets; the target is the last field
-// but a trailing no-resolve or src.
-func RuleParts(r string) (typ, target, set string) {
-	fields := SplitRule(r)
-	for len(fields) > 2 && (fields[len(fields)-1] == "no-resolve" || fields[len(fields)-1] == "src") {
-		fields = fields[:len(fields)-1]
-	}
-	if len(fields) < 2 {
-		return "", "", ""
-	}
-	typ, target = strings.TrimSpace(fields[0]), strings.TrimSpace(fields[len(fields)-1])
-	if typ == "RULE-SET" && len(fields) == 3 {
-		set = strings.TrimSpace(fields[1])
-	}
-	if typ == "MATCH" && len(fields) != 2 || typ != "MATCH" && len(fields) < 3 {
-		return "", "", ""
-	}
-	return typ, target, set
-}
-
-// SplitRule splits a Clash rule on the commas outside brackets.
-func SplitRule(r string) []string {
-	var out []string
-	depth, start := 0, 0
-	for i, c := range r {
-		switch c {
-		case '(':
-			depth++
-		case ')':
-			depth--
-		case ',':
-			if depth == 0 {
-				out = append(out, r[start:i])
-				start = i + 1
-			}
-		}
-	}
-	return append(out, r[start:])
 }
 
 // Starter is the template of the profile Render makes for p with g and m: the start of an

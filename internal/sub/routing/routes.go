@@ -41,14 +41,6 @@ type RouteList struct {
 // MaxLists bounds the admin's own lists: each is a download for every app.
 const MaxLists = 30
 
-// Servers is how the apps pick a server. The zero value is the profile as it was: a group
-// per country, the fastest picked every five minutes.
-type Servers struct {
-	NoCountries bool   `json:"no_countries,omitempty"` // no group per node
-	Auto        string `json:"auto,omitempty"`         // "" the fastest (url-test), "fallback" the first that works
-	Interval    int    `json:"interval,omitempty"`     // seconds between checks; 0: 300
-}
-
 // Tune holds the finer settings of the profile.
 type Tune struct {
 	// BlockQUIC sends UDP to port 443 nowhere: browsers and YouTube fall back to TCP, which
@@ -275,8 +267,8 @@ func (r Routes) Check(nodeExists func(int64) bool) error {
 	if err := checkLists(r.Lists, target); err != nil {
 		return err
 	}
-	if s := r.Servers; s.Auto != "" && s.Auto != "fallback" || s.Interval != 0 && (s.Interval < 30 || s.Interval > 86400) {
-		return errors.New("routes_servers")
+	if err := r.Servers.check(); err != nil {
+		return err
 	}
 	for _, id := range r.Direct {
 		if _, ok := DirectSetByID(id); !ok {

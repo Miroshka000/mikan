@@ -366,7 +366,7 @@ func singboxRules(rules []any, tags map[string]bool, sets *singboxSets) ([]map[s
 	var out []map[string]any
 	for _, x := range rules {
 		rule := str(x)
-		typ, target, _ := mihomo.RuleParts(rule)
+		typ, target, _ := routing.RuleParts(rule)
 		to, ok := singboxTarget(target, tags)
 		if typ == "MATCH" {
 			if ok && to["outbound"] != nil {
@@ -390,7 +390,7 @@ func singboxRules(rules []any, tags map[string]bool, sets *singboxSets) ([]map[s
 // match is a Clash rule's condition as route rules (several for a list of both domains
 // and processes); none for a rule sing-box has no counterpart for.
 func (s *singboxSets) match(rule string) []map[string]any {
-	f := mihomo.SplitRule(rule)
+	f := routing.SplitRule(rule)
 	typ := strings.TrimSpace(f[0])
 	if len(f) < 3 {
 		return nil
@@ -432,7 +432,7 @@ func (s *singboxSets) match(rule string) []map[string]any {
 	case "AND":
 		// AND,((NETWORK,UDP),(DST-PORT,443)),… : each part a plain condition.
 		var parts []map[string]any
-		for _, part := range mihomo.SplitRule(strings.TrimSuffix(strings.TrimPrefix(value, "("), ")")) {
+		for _, part := range routing.SplitRule(strings.TrimSuffix(strings.TrimPrefix(value, "("), ")")) {
 			p := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(part), "("), ")")
 			m := s.match(p + ",x")
 			if len(m) != 1 {

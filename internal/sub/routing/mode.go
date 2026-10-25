@@ -1,7 +1,8 @@
 // Package routing is the panel's routing of subscriptions, apart from any core: the mode,
 // where each service goes, the lists and the apps past the tunnel, the admin's own rules
 // and DNS, the catalogs of services and lists, and the checks that keep a setting from
-// breaking the profiles.
+// breaking the profiles. Intent is all of it as every core reads it, and BuildGroups the
+// groups of the built-in profile; the geodata each core's apps download is in catalog.go.
 package routing
 
 // Mode is how the apps split traffic between the tunnel and the direct path.

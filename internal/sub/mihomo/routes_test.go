@@ -45,7 +45,7 @@ func renderRouted(t *testing.T, prof Profile, m routing.Mode) (routedProfile, []
 // back on.
 func TestRoutesInProfile(t *testing.T) {
 	prof := profileOf(subtest.TwoNodes())
-	prof.Rules = []string{"DOMAIN-SUFFIX,sber.ru,DIRECT"}
+	prof.Rules = subtest.ParseRules("DOMAIN-SUFFIX,sber.ru,DIRECT")
 	prof.Routes = routing.Routes{
 		Services: map[string]string{"youtube": routing.TargetVPN, "ads": routing.TargetBlock, "torrents": routing.TargetDirect, "ai": subtest.NodeTarget(2)},
 		Direct:   []string{"ru"},
@@ -184,7 +184,7 @@ func TestServerChoice(t *testing.T) {
 // QUIC blocked ahead of the admin's rules, the sniffer, and DNS without fake addresses.
 func TestTune(t *testing.T) {
 	prof := profileOf(subtest.Defaults(""))
-	prof.Rules = []string{"DOMAIN-SUFFIX,sber.ru,DIRECT"}
+	prof.Rules = subtest.ParseRules("DOMAIN-SUFFIX,sber.ru,DIRECT")
 	prof.Routes.Tune = routing.Tune{BlockQUIC: true, Sniffer: true, RealIP: true}
 	cfg, raw := renderRouted(t, prof, routing.RUDirect)
 	quic, own := slices.Index(cfg.Rules, "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT"), slices.Index(cfg.Rules, "DOMAIN-SUFFIX,sber.ru,DIRECT")

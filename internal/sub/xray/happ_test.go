@@ -67,7 +67,7 @@ func TestHappRoutingOf(t *testing.T) {
 		"MATCH,DIRECT",
 		"MATCH,REJECT",
 	}))
-	if p.GlobalProxy != "false" || p.Name != "VPN" || !strings.HasPrefix(p.GeositeURL, happRelease) {
+	if p.GlobalProxy != "false" || p.Name != "VPN" || p.GeositeURL != routing.RunetfreedomGeosite {
 		t.Fatalf("profile: %+v", p)
 	}
 	want := map[string][]string{
@@ -88,31 +88,5 @@ func TestHappRoutingOf(t *testing.T) {
 	}
 	if all := decodeHapp(t, HappRoutingOf("VPN", []string{"MATCH,VPN"})); all.GlobalProxy != "true" || !slices.Equal(all.DirectSites, []string{"geosite:private"}) {
 		t.Fatalf("all through the proxy: %+v", all)
-	}
-}
-
-// Every category the panel's own routing can send is in the pinned geodata: one that is
-// not would fail Happ's whole routing.
-func TestHappKnowsThePanelsCategories(t *testing.T) {
-	names := happNames()
-	for _, s := range routing.Services {
-		for _, m := range s.Rules {
-			if m.Type == "GEOSITE" && !names[0][m.Value] || m.Type == "GEOIP" && !names[1][m.Value] {
-				t.Errorf("%s: %s,%s", s.ID, m.Type, m.Value)
-			}
-		}
-	}
-	for list, x := range happLists {
-		for _, v := range append(append([]string{}, x[0]...), x[1]...) {
-			cat := strings.SplitN(v, ":", 2)
-			if cat[0] == "geosite" && !names[0][cat[1]] || cat[0] == "geoip" && !names[1][cat[1]] {
-				t.Errorf("%s: %s", list, v)
-			}
-		}
-	}
-	for _, c := range []string{"category-ru", "ru-blocked", "private"} {
-		if !names[0][c] {
-			t.Errorf("geosite %s", c)
-		}
 	}
 }
