@@ -12,7 +12,7 @@ import (
 	"mikan/internal/panel/secure"
 )
 
-// The headers of a delivery (site/src/content/docs/operations/webhooks.mdx tells a receiver
+// The headers of a delivery (site/src/content/docs/api/webhooks.mdx tells a receiver
 // how to check them). The signature covers the timestamp and the body together, so a captured
 // delivery can neither be given another body nor be replayed under a later time; each attempt
 // is signed anew, so a retry hours later still carries a timestamp that is fresh.

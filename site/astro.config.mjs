@@ -138,7 +138,7 @@ export default defineConfig({
 				{
 					label: 'Справка',
 					translations: { en: 'Reference' },
-					items: [{ slug: 'api' }, { slug: 'faq' }, { slug: 'changelog' }, { slug: 'support' }, { slug: 'support/paid' }],
+					items: [{ slug: 'api' }, { slug: 'api/webhooks' }, { slug: 'faq' }, { slug: 'changelog' }, { slug: 'support' }, { slug: 'support/paid' }],
 				},
 			],
 			plugins: [starlightLinksValidator({ errorOnLocalLinks: true })],

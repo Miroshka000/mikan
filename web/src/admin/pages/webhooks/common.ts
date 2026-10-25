@@ -13,7 +13,7 @@ export const webhookKeys = {
 };
 
 /** The docs site's page on webhooks: what a delivery carries and how a receiver checks its signature. */
-export const docsPage = () => `https://miroshka000.github.io/mikan/${getLocale() === "en" ? "en/" : ""}operations/webhooks/`;
+export const docsPage = () => `https://miroshka000.github.io/mikan/${getLocale() === "en" ? "en/" : ""}api/webhooks/`;
 
 /** Why a delivery failed, in words, with the status the receiver answered when it did. */
 export function failureText(code: string | undefined, status: number): string {
