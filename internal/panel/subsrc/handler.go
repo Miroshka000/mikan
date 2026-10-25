@@ -46,6 +46,8 @@ type Config struct {
 	Legacy panelimport.Verifier
 	// Tariffs names the tariffs, for {tariff} in the title and the notices.
 	Tariffs map[int64]string
+	// LogDays is how long the request log is kept; 0: the requests are not logged.
+	LogDays int
 }
 
 // Binder hands devices their keys (domain.Devices).
@@ -272,6 +274,9 @@ type Info struct {
 	// HappLink is the Happ button's crypt link: the app opens the subscription without
 	// showing its address. Absent: the plain happ://add/ link.
 	HappLink string `json:"happ_link,omitempty"`
+	// BlockedApps are the apps of the page's catalog the admin turned away (apps.Catalog
+	// ids): they would get a stub, so "Connect a device" does not offer them.
+	BlockedApps []string `json:"blocked_apps,omitempty"`
 }
 
 // DeviceItem is a bound device as the subscription page lists it.
@@ -302,7 +307,7 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, sub *subscrip
 	}
 	reach := sub.reach
 	out := Info{Name: u.Name, Brand: cfg.Brand, SupportURL: cfg.SupportURL, State: string(user.State), UsedUp: u.UsedUp, UsedDown: u.UsedDown,
-		Binding: cfg.Binding, Bound: []DeviceItem{}}
+		Binding: cfg.Binding, Bound: []DeviceItem{}, BlockedApps: cfg.Responses.BlockedIDs()}
 	if u.TrafficLimit.Valid {
 		out.Extra = user.Grants
 	}

@@ -24,7 +24,10 @@ func (h *Handler) stub(w http.ResponseWriter, cfg Config, format string, reason 
 	}
 	var ue *UnboundError
 	var ie *inactiveError
+	var un *unsupportedError
 	switch {
+	case errors.As(reason, &un):
+		name = un.text
 	case errors.Is(reason, model.ErrNoProxies):
 		// Nothing this app can use, or every server of the subscription is switched off: a
 		// profile with an empty group would be refused by the app as a whole.

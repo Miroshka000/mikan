@@ -470,6 +470,10 @@ type SubAsset struct {
 	UpdatedAt   int64
 }
 
+type SubBlockedApp struct {
+	App string
+}
+
 type SubDoc struct {
 	ID        int64
 	Title     string
@@ -486,6 +490,26 @@ type SubFetch struct {
 	UserID    int64
 	Ip        string
 	FetchedAt int64
+}
+
+type SubLog struct {
+	ID      int64
+	UserID  int64
+	At      int64
+	Ip      string
+	Agent   string
+	App     string
+	Rule    string
+	Format  string
+	Outcome string
+}
+
+type SubRule struct {
+	Position int64
+	Name     string
+	Enabled  bool
+	Cond     string
+	Action   string
 }
 
 type SupportGrant struct {

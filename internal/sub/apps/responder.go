@@ -228,3 +228,17 @@ func (c cond) holds(h http.Header) bool {
 	}
 	return ok != c.not
 }
+
+// BlockedIDs are the ids of the blocked apps, in the catalog's order.
+func (r *Responder) BlockedIDs() []string {
+	var out []string
+	if r == nil {
+		return out
+	}
+	for _, k := range Catalog {
+		if r.blocked[k.ID] {
+			out = append(out, k.ID)
+		}
+	}
+	return out
+}
