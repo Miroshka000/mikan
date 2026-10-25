@@ -63,7 +63,7 @@ func configOf(p Profile, g model.GroupNames, m routing.Mode) map[string]any {
 	proxies := make([]map[string]any, len(ps))
 	names := make([]string, len(ps))
 	for i, x := range ps {
-		proxies[i], names[i] = Proxy(x), x.Name
+		proxies[i], names[i] = p.proxy(x), x.Name
 	}
 	var countries []map[string]any
 	if !p.Routes.Servers.NoCountries {

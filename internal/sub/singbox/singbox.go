@@ -36,6 +36,14 @@ import (
 // Since is the first sing-box with the config's shape.
 var Since = apps.Version{1, 12, 0}
 
+// The keepalive of a gRPC transport: an idle connection is pinged after grpcIdleTimeout and
+// given up when no answer comes within grpcPingTimeout, so that the app does not go on
+// sending into one a middlebox cut while it was silent.
+const (
+	grpcIdleTimeout = "15s"
+	grpcPingTimeout = "10s"
+)
+
 // Render is the sing-box config of p: of the own Clash profile src when there is one (and
 // it renders for p), of the built-in one otherwise.
 func Render(ctx context.Context, p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) ([]byte, error) {
@@ -192,7 +200,7 @@ func singboxOutbound(m map[string]any) (map[string]any, bool) {
 		}
 		o["transport"] = t
 	case "grpc":
-		o["transport"] = map[string]any{"type": "grpc", "service_name": str(anyMap(m["grpc-opts"])["grpc-service-name"])}
+		o["transport"] = map[string]any{"type": "grpc", "service_name": str(anyMap(m["grpc-opts"])["grpc-service-name"]), "idle_timeout": grpcIdleTimeout, "ping_timeout": grpcPingTimeout}
 	default:
 		return nil, false // XHTTP, HTTP/2 and the like
 	}

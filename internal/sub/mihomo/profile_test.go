@@ -391,3 +391,35 @@ func TestRulesInProfile(t *testing.T) {
 		t.Fatalf("the panel's host must come before the admin's rules: %q", cfg.Rules)
 	}
 }
+
+// An idle gRPC connection is pinged, so that the app does not stay on one a middlebox cut
+// while it was silent; Stash's profile, the built-in one and the own one, goes without.
+func TestGRPCKeepalive(t *testing.T) {
+	grpc := model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID, Transport: &model.Transport{Network: "grpc", Service: "api"}}
+	if o := Proxy(grpc)["grpc-opts"].(map[string]any); o["ping-interval"] != 15 || o["grpc-service-name"] != "api" {
+		t.Fatalf("grpc-opts: %v", o)
+	}
+	for _, app := range []apps.App{{Family: apps.FamilyMihomo}, {Family: apps.FamilyStash}} {
+		p := Profile{Proxies: []model.Proxy{grpc}, App: app}
+		built, err := Config(p, model.GroupNames{}, routing.DefaultMode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		own, _, err := TemplateConfig(p, subtest.OwnTemplate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, cfg := range map[string]map[string]any{"built-in": built, "own": own} {
+			var opts map[string]any
+			switch ps := cfg["proxies"].(type) {
+			case []map[string]any:
+				opts = ps[0]["grpc-opts"].(map[string]any)
+			case []any:
+				opts = ps[len(ps)-1].(map[string]any)["grpc-opts"].(map[string]any)
+			}
+			if _, ok := opts["ping-interval"]; ok == (app.Family == apps.FamilyStash) {
+				t.Errorf("%s, %s profile: grpc-opts %v", app.Family, name, opts)
+			}
+		}
+	}
+}

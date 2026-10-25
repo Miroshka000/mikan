@@ -172,3 +172,16 @@ func TestSingBoxModes(t *testing.T) {
 		t.Fatalf("a closed group stays a member: %v", net)
 	}
 }
+
+// An idle gRPC connection is pinged after a while and given up when no answer comes, so
+// that the app does not stay on one a middlebox cut while it was silent.
+func TestGRPCKeepalive(t *testing.T) {
+	o, ok := singboxOutbound(mihomo.Proxy(model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
+		Transport: &model.Transport{Network: "grpc", Service: "api"}}))
+	if !ok {
+		t.Fatal("no outbound")
+	}
+	if tr := o["transport"].(map[string]any); tr["type"] != "grpc" || tr["service_name"] != "api" || tr["idle_timeout"] != "15s" || tr["ping_timeout"] != "10s" {
+		t.Fatalf("transport: %v", tr)
+	}
+}

@@ -3,12 +3,20 @@
 // Clash profile, and Stash's flavor of it.
 package mihomo
 
-import "mikan/internal/sub/model"
+import (
+	"mikan/internal/sub/apps"
+	"mikan/internal/sub/model"
+)
 
 // defaultReuse makes mihomo reuse a few HTTP/2 connections for XHTTP (Xray clients do this
 // by default). Without it every app connection is a fresh TLS handshake, and bursts of
 // those get the server's port frozen by the RU DPI.
 var defaultReuse = map[string]any{"max-concurrency": "16-32", "h-max-request-times": "600-900", "h-max-reusable-secs": "1800-3000"}
+
+// grpcPingInterval is how often, in seconds, the app pings an idle gRPC connection: a
+// middlebox on the way cuts a connection that stays silent, and the app would go on sending
+// into it. Stash documents no such option, and its profile goes without (Profile.proxy).
+const grpcPingInterval = 15
 
 // Proxy is p as a mihomo proxy.
 func Proxy(p model.Proxy) map[string]any {
@@ -156,7 +164,7 @@ func transport(y map[string]any, tr *model.Transport) {
 		}
 		y["network"], y["xhttp-opts"] = "xhttp", opts
 	case "grpc":
-		y["network"], y["grpc-opts"] = "grpc", map[string]any{"grpc-service-name": tr.Service}
+		y["network"], y["grpc-opts"] = "grpc", map[string]any{"grpc-service-name": tr.Service, "ping-interval": grpcPingInterval}
 	case "ws":
 		opts := map[string]any{"path": tr.Path}
 		if tr.Host != "" {
@@ -166,4 +174,13 @@ func transport(y map[string]any, tr *model.Transport) {
 	default:
 		y["network"] = "tcp"
 	}
+}
+
+// proxy is x as the app of p takes it: Proxy, without the gRPC ping interval for Stash.
+func (p Profile) proxy(x model.Proxy) map[string]any {
+	y := Proxy(x)
+	if o, ok := y["grpc-opts"].(map[string]any); ok && p.App.Family == apps.FamilyStash {
+		delete(o, "ping-interval")
+	}
+	return y
 }

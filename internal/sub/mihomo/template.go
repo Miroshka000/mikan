@@ -104,7 +104,7 @@ func fillTemplate(cfg map[string]any, p Profile) ([]model.Proxy, error) {
 		if taken[x.Name] {
 			continue // the template's own proxy of that name stays
 		}
-		proxies = append(proxies, Proxy(x))
+		proxies = append(proxies, p.proxy(x))
 		names = append(names, x)
 	}
 	cfg["proxies"] = proxies
