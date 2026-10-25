@@ -7,8 +7,9 @@ package events
 // subscriber asks the Panel API with the permission for it.
 //
 // Delivery is at least once, by pull (GET /events) or push (POST /v2/events), in id order.
-// A deleted subscription's devices are not told unbound (there is no event for the deletion
-// itself): an addon that keeps a copy of a subscriber asks the Panel API when it needs it.
+// A deleted subscription's devices are not told unbound, and the admin's own deletion has no
+// event (the panel's removal of an inactive one is UserRemoved): an addon that keeps a copy
+// of a subscriber asks the Panel API when it needs it.
 
 // Types of events.
 const (
@@ -19,6 +20,9 @@ const (
 	UserGranted  = "user.granted"
 	UserExpiring = "user.expiring"
 	UserExpired  = "user.expired"
+	UserStarted  = "user.started"
+	UserSwitched = "user.switched"
+	UserRemoved  = "user.removed"
 	Traffic90    = "traffic.90"
 	Traffic100   = "traffic.100"
 
@@ -76,6 +80,43 @@ type Granted struct {
 	PoolID int64  `json:"pool_id,omitempty"`
 	Addon  string `json:"addon"`
 }
+
+// Started is the data of UserStarted: a subscription whose term waited for its first
+// connection has it running now. The envelope's user_id is the subscription, tg_id the
+// account linked to it.
+type Started struct {
+	ExpiresAt int64  `json:"expires_at,omitempty"` // unix seconds: when the term ends now; 0: never
+	By        string `json:"by"`                   // StartedByConnection | StartedByAdmin
+}
+
+// What started a term that waited.
+const (
+	StartedByConnection = "connection" // the subscription's first counted traffic
+	StartedByAdmin      = "admin"      // the admin started it, or gave it an end of their own
+)
+
+// Switched is the data of UserSwitched: the next tariff the admin set for a subscription took
+// over as its term ended, with a term of its own from that end and a new traffic period. The
+// envelope's user_id is the subscription, tg_id the account linked to it.
+type Switched struct {
+	TariffID     int64 `json:"tariff_id"`
+	FromTariffID int64 `json:"from_tariff_id,omitempty"`
+	ExpiresAt    int64 `json:"expires_at,omitempty"` // unix seconds: when the new term ends; 0: never
+	Carried      int64 `json:"carried,omitempty"`    // bytes of the old period's traffic the new one took on
+}
+
+// Removed is the data of UserRemoved: the panel removed a subscription by the admin's rules.
+// The envelope's user_id is the subscription, which the Panel API no longer knows, tg_id the
+// account that was linked to it.
+type Removed struct {
+	By        string `json:"by"`                  // RemovedInactive
+	ExpiredAt int64  `json:"expired_at"`          // unix seconds: when its term ended
+	OnlineAt  int64  `json:"online_at,omitempty"` // unix seconds: its last connection; 0: never
+	Days      int    `json:"days"`                // how many days the rules let pass after both
+}
+
+// RemovedInactive: the term ended so many days ago, and no connection came since.
+const RemovedInactive = "inactive"
 
 // Trial is the data of TrialStarted: a subscription made as an account's trial (free, or
 // bought: a paid trial also has its PaymentPaid, kind trial). The envelope's user_id is the
@@ -170,6 +211,12 @@ var Docs = []Doc{
 	{UserExpiring, "A subscription ends in 3 or 1 days (the admin's switches decide which are told).",
 		Notice{Days: 3, ExpiresAt: 1_800_000_000}},
 	{UserExpired, "A subscription ended.", Notice{ExpiresAt: 1_800_000_000}},
+	{UserStarted, "A subscription whose term waited for its first connection started it: by that connection, or by the admin.",
+		Started{ExpiresAt: 1_802_592_000, By: StartedByConnection}},
+	{UserSwitched, "The next tariff set for a subscription took over as its term ended: a new term from that end and a new traffic period.",
+		Switched{TariffID: 3, FromTariffID: 2, ExpiresAt: 1_802_592_000, Carried: 10_737_418_240}},
+	{UserRemoved, "The panel removed a subscription by the admin's rules: its term ended so many days ago and it has not connected since.",
+		Removed{By: RemovedInactive, ExpiredAt: 1_790_000_000, OnlineAt: 1_789_000_000, Days: 30}},
 	{Traffic90, "A subscription used 90% of its traffic.", Notice{PeriodFrom: 1_790_000_000}},
 	{Traffic100, "A subscription used all of its traffic.", Notice{PeriodFrom: 1_790_000_000}},
 	{TrialStarted, "An account took its trial.", Trial{TariffID: 3}},
