@@ -5,7 +5,7 @@ import { useToast } from "../../../components/toast";
 import { Button, Field } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
-import { dateLong, dateShort, days, daysUntil, expiryText, fromInputDate, inputDate, months } from "../../../lib/format";
+import { dateLong, dateShort, days, expiryText, fromInputDate, inputDate, months, waitingDays } from "../../../lib/format";
 import { Section } from "./section";
 import { Select } from "../../../components/select";
 
@@ -65,7 +65,7 @@ function WaitingTerm({ u }: { u: User }) {
   return (
     <div className="panel-soft flex flex-wrap items-center justify-between gap-3 p-4">
       <div className="min-w-0">
-        <div className="font-display text-lg font-medium tracking-tight">{t("userDrawer.waitTitle", { term: days(daysUntil(u.expires_at!)) })}</div>
+        <div className="font-display text-lg font-medium tracking-tight">{t("userDrawer.waitTitle", { term: days(waitingDays(u.expires_at!)) })}</div>
         <p className="mt-1 text-xs text-[var(--ink-500)]">{t("userDrawer.waitText")}</p>
       </div>
       <Button

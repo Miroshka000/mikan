@@ -12,7 +12,7 @@ import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
 import { Avatar, Bar, Button, EmptyState, PageHeader, Skeleton, StatePill } from "../../components/ui";
 import { t, useLocale } from "../../i18n";
-import { bytes, dateShort, days, daysUntil, expiryText, num } from "../../lib/format";
+import { bytes, dateShort, days, expiryText, num, waitingDays } from "../../lib/format";
 import { useMediaQuery } from "../../lib/media";
 import { pagedItems } from "../../lib/paging";
 import { useUrlSearchText } from "../../lib/url-search";
@@ -388,7 +388,7 @@ function Expiry({ u }: { u: User }) {
     return (
       <>
         <div className="font-medium">{t("users.waits")}</div>
-        <div className="exp-days">{t("users.waitsTerm", { term: days(daysUntil(u.expires_at)) })}</div>
+        <div className="exp-days">{t("users.waitsTerm", { term: days(waitingDays(u.expires_at)) })}</div>
       </>
     );
   }
