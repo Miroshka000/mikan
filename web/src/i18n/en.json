@@ -2972,7 +2972,6 @@
     "rotate": "New secret",
     "rotateTitle": "Make a new secret for “{name}”?",
     "rotateText": "The old secret stops signing at once. Give the new one to the receiver: the events it refuses until then are sent again, none is lost.",
-    "rotated": "New secret made",
     "madeTitle": "Signing secret",
     "madeOnce": "Copy the secret now: the panel will not show it again, only its last characters.",
     "madeDone": "I saved the secret",
