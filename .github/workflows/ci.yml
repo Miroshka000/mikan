@@ -55,6 +55,27 @@ jobs:
           pnpm lint
           pnpm test
           pnpm build
+      # web/src/api/openapi.json is what the admin's types (schema.d.ts), the SDKs (sdk/) and
+      # the docs' API reference are made from, and it is exported with the panel's own
+      # command. It must say what the code says: a change of the API that leaves it behind
+      # fails here, with the difference and the commands that bring it up to date. The
+      # build above made web/dist, which the command's package embeds.
+      - name: openapi.json is what the code exports
+        run: |
+          go run ./cmd/mikan openapi > "$RUNNER_TEMP/openapi.json"
+          if ! diff -u web/src/api/openapi.json "$RUNNER_TEMP/openapi.json" > "$RUNNER_TEMP/openapi.diff"; then
+            head -n 80 "$RUNNER_TEMP/openapi.diff"
+            echo "::error file=web/src/api/openapi.json::The API changed and openapi.json did not follow. Run: go run ./cmd/mikan openapi > web/src/api/openapi.json, then pnpm api in web/, and commit both."
+            exit 1
+          fi
+      - name: schema.d.ts is what openapi.json generates
+        working-directory: web
+        run: |
+          pnpm api
+          if ! git diff --exit-code -- src/api/schema.d.ts; then
+            echo "::error file=web/src/api/schema.d.ts::schema.d.ts does not follow openapi.json. Run pnpm api in web/ and commit it."
+            exit 1
+          fi
       # The repository key is trusted only with the fingerprint the PostgreSQL project
       # publishes (wiki.postgresql.org/wiki/Apt), and only as the one key in the file.
       - name: PostgreSQL 18 backup tools
