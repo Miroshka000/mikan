@@ -1,0 +1,7 @@
+# What the build runs with: the generator and the tools that build the package. The pins
+# are in requirements.txt, with hashes: regenerate it after a change here, from the repo root:
+#   docker run --rm -v "$PWD/sdk/python:/work" -w /work python:3.13-slim sh -c \
+#     'pip install -q uv==0.13.5 && uv pip compile requirements.in --universal --generate-hashes --exclude-newer 2026-10-11T00:00:00Z -o requirements.txt'
+openapi-python-client==0.29.1
+build==1.6.1
+hatchling==1.32.4
