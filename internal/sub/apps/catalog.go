@@ -8,21 +8,21 @@ import "strings"
 type Known struct {
 	// ID is what the admin's list keeps: lowercase letters and digits, never renamed. The
 	// subscription page's catalog (web/src/sub/apps.ts) names its apps by the same ids.
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Family Family `json:"family"`
+	ID     string
+	Name   string
+	Family Family
 	// Generic stands for every app of the family that has no entry of its own.
-	Generic bool `json:"generic,omitempty"`
+	Generic bool
 	// Words are the lowercase fragments the User-Agent holds, Prefixes the ones it starts with.
-	Words    []string `json:"-"`
-	Prefixes []string `json:"-"`
+	Words    []string
+	Prefixes []string
 }
 
 // Catalog lists the known apps in the order the admin panel shows them, a family at a time.
 // Identify tries the apps with an entry of their own before the generic ones, and within
 // each in this order: Hiddify says "like ClashMeta" and Koala Clash holds "clash" too, so
 // the app is told before the core it is built on, and DetectApp agrees with it on the
-// family (apps_test.go checks every entry).
+// family (rules_test.go checks every entry).
 var Catalog = []Known{
 	{ID: "mikan", Name: "Mikan", Family: FamilyMihomo, Words: []string{"mikan"}},
 	{ID: "kabosu", Name: "Kabosu", Family: FamilyMihomo, Words: []string{"kabosu"}},

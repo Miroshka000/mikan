@@ -149,9 +149,6 @@ func (r *Responder) first(rules []compiled, h http.Header, d *Decision) bool {
 	return false
 }
 
-// Blocked says whether the app with this id is on the list.
-func (r *Responder) Blocked(id string) bool { return r != nil && r.blocked[id] }
-
 // group, cond: Group and Cond with their regular expressions compiled.
 type group struct {
 	or     bool

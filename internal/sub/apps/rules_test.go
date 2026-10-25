@@ -256,9 +256,6 @@ func TestBlockedApps(t *testing.T) {
 	if d := r.Decide(hdr("User-Agent", "INCY/2.1.0")); d.Rule != "" || d.Responds() != RespondServe {
 		t.Errorf("an allowed app: %+v", d)
 	}
-	if !r.Blocked("happ") || r.Blocked("incy") || (*Responder)(nil).Blocked("happ") {
-		t.Error("Blocked")
-	}
 	// A rule of the admin's answers before the list does: it is the more particular.
 	over := responder(t, Policy{Blocked: []string{"happ"}, Rules: []Rule{rule("happ ios", allOf(uaIs(OpContains, "happ", false)), Action{Respond: RespondServe, SkipHWID: true})}})
 	if d := over.Decide(hdr("User-Agent", "Happ/3.4.1")); d.Rule != "happ ios" || !d.Action.SkipHWID {

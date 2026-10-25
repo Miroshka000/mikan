@@ -116,16 +116,16 @@ function GroupBox({
   const setCond = (i: number, patch: Partial<Cond>) => onConds(conds.map((c, j) => (j === i ? { ...c, ...patch } : c)));
   const body = (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={`${id}-op`} className="text-[13px] font-medium text-[var(--ink-600)]">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <label htmlFor={`${id}-op`} className="basis-full text-[13px] font-medium text-[var(--ink-600)] sm:basis-auto">
           {nested ? t("settings.subRules.groupOf") : t("settings.subRules.conditions")}
         </label>
-        <Select id={`${id}-op`} className="input w-[220px]" value={op} onChange={(e) => onOp(e.target.value as Group["op"])}>
+        <Select id={`${id}-op`} className="input min-w-[160px] flex-1 sm:max-w-[280px]" value={op} onChange={(e) => onOp(e.target.value as Group["op"])}>
           <option value="and">{t("settings.subRules.opAnd")}</option>
           <option value="or">{t("settings.subRules.opOr")}</option>
         </Select>
         {onRemove ? (
-          <Button size="sm" variant="ghost" className="ml-auto" aria-label={t("settings.subRules.removeGroup")} title={t("settings.subRules.removeGroup")} onClick={onRemove}>
+          <Button size="sm" variant="ghost" className="ml-auto shrink-0" aria-label={t("settings.subRules.removeGroup")} title={t("settings.subRules.removeGroup")} onClick={onRemove}>
             <X size={16} aria-hidden />
           </Button>
         ) : null}
@@ -135,12 +135,13 @@ function GroupBox({
           const where = `${at}.conds[${i}]`;
           const error = errors[`${where}.value`] ?? errors[`${where}.header`] ?? errors[`${where}.op`] ?? errors[where];
           return (
-            <li key={i} className="flex flex-wrap items-center gap-2">
+            // A phone gets the header on the first line and the comparison and the value under it; wider, one line.
+            <li key={i} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[auto_148px_136px_minmax(0,1fr)_auto]">
               <button type="button" className="chip-btn" aria-pressed={!!c.not} title={t("settings.subRules.notHint")} onClick={() => setCond(i, { not: !c.not })}>
                 {t("settings.subRules.not")}
               </button>
-              <input className="input mono w-[148px]" list={HEADER_LIST} value={c.header} maxLength={64} spellCheck={false} autoCapitalize="off" aria-label={t("settings.subRules.header")} aria-invalid={!!errors[`${where}.header`]} onChange={(e) => setCond(i, { header: e.target.value })} />
-              <Select className="input w-[136px]" value={c.op} aria-label={t("settings.subRules.compare")} onChange={(e) => setCond(i, { op: e.target.value as Cond["op"] })}>
+              <input className="input mono min-w-0" list={HEADER_LIST} value={c.header} maxLength={64} spellCheck={false} autoCapitalize="off" aria-label={t("settings.subRules.header")} aria-invalid={!!errors[`${where}.header`]} onChange={(e) => setCond(i, { header: e.target.value })} />
+              <Select className="input col-span-3 sm:col-span-1 sm:col-start-3 sm:row-start-1" value={c.op} aria-label={t("settings.subRules.compare")} onChange={(e) => setCond(i, { op: e.target.value as Cond["op"] })}>
                 {OPS.map((o) => (
                   <option key={o} value={o}>
                     {t(`settings.subRules.op.${o}`)}
@@ -148,7 +149,7 @@ function GroupBox({
                 ))}
               </Select>
               <input
-                className="input mono min-w-[148px] flex-1"
+                className="input mono col-span-3 min-w-0 sm:col-span-1 sm:col-start-4 sm:row-start-1"
                 value={c.value}
                 maxLength={limits.value}
                 spellCheck={false}
@@ -159,11 +160,11 @@ function GroupBox({
                 aria-invalid={!!errors[`${where}.value`]}
                 onChange={(e) => setCond(i, { value: e.target.value })}
               />
-              <Button size="sm" variant="ghost" aria-label={t("settings.subRules.removeCond")} title={t("settings.subRules.removeCond")} disabled={nested && conds.length === 1} onClick={() => onConds(conds.filter((_, j) => j !== i))}>
+              <Button size="sm" variant="ghost" className="col-start-3 row-start-1 sm:col-start-5" aria-label={t("settings.subRules.removeCond")} title={t("settings.subRules.removeCond")} disabled={nested && conds.length === 1} onClick={() => onConds(conds.filter((_, j) => j !== i))}>
                 <X size={16} aria-hidden />
               </Button>
               {error ? (
-                <p className="basis-full text-xs text-[var(--berry-600)]" role="alert">
+                <p className="col-span-full text-xs text-[var(--berry-600)]" role="alert">
                   {error}
                 </p>
               ) : null}

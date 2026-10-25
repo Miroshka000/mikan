@@ -229,7 +229,7 @@ function RuleCard({
         <Switch checked={rule.enabled} label={t("settings.subRules.enabled", { name: rule.name })} onChange={(enabled) => onChange({ ...rule, enabled })} />
         <button type="button" className={`min-w-0 flex-1 basis-40 text-left ${rule.enabled ? "" : "opacity-60"}`} aria-expanded={open} aria-controls={id} onClick={onToggle}>
           <span className="block truncate text-[14px] font-medium">{rule.name || t("settings.subRules.unnamed")}</span>
-          <span className="block truncate text-xs text-[var(--ink-500)]">{summary(rule)}</span>
+          <span className="line-clamp-2 text-xs break-words text-[var(--ink-500)]">{summary(rule)}</span>
         </button>
         {fires ? <Pill tone="ok">{t("settings.subRules.fires")}</Pill> : null}
         {wrong && !open ? <Pill tone="bad">{t("settings.subRules.hasError")}</Pill> : null}

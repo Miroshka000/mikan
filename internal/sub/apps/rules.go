@@ -112,7 +112,7 @@ const (
 	MaxText    = 200
 	// MaxHeaderValue is how much of a request header a condition reads: a client may send
 	// a megabyte, and the rules must not be a way to make the panel read it again and again.
-	MaxHeaderValue = 4096
+	MaxHeaderValue = 2048
 )
 
 // CheckOpts tells Check what only its caller knows.
@@ -246,7 +246,7 @@ func (a Action) check(path string, opts CheckOpts) error {
 	if a.takes(RespondStub) && (utf8.RuneCountInString(a.Text) > MaxText || hasControl(a.Text)) {
 		return bad(path+".text", "resp_text", "")
 	}
-	if a.takes(RespondHTML) && (strings.TrimSpace(a.HTML) == "" || len(a.HTML) > MaxHTML) {
+	if a.takes(RespondHTML) && (strings.TrimSpace(a.HTML) == "" || utf8.RuneCountInString(a.HTML) > MaxHTML) {
 		return bad(path+".html", "resp_html", "")
 	}
 	if !a.takes(RespondServe, RespondStub, Respond403, Respond404, RespondHTML) {
