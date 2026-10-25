@@ -194,7 +194,7 @@ func TestFirstMatchDecides(t *testing.T) {
 		rule("second", allOf(uaIs(OpContains, "happ", false)), Action{Respond: RespondDrop}),
 	}})
 	d := r.Decide(hdr("User-Agent", "Happ/3.4.1"))
-	if d.Rule != "first" || d.Responds() != Respond403 || d.App.ID != "happ" {
+	if d.Rule != "first" || d.Position != 2 || d.Responds() != Respond403 || d.App.ID != "happ" {
 		t.Errorf("%+v", d)
 	}
 	if d := r.Decide(hdr("User-Agent", "INCY/2")); d.Rule != "" || d.Responds() != RespondServe || d.App.ID != "incy" {

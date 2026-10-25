@@ -56,7 +56,7 @@ func TestRulesKeepTheirOrderAndContent(t *testing.T) {
 		testRule("c", apps.Action{Respond: apps.RespondServe, Format: serve.FormatClash, SkipHWID: true}),
 	}
 	want[2].Enabled = false
-	if err := SaveRules(ctx, st, want); err != nil {
+	if err := SaveRules(ctx, st.Q, want); err != nil {
 		t.Fatal(err)
 	}
 	got, err := LoadRules(ctx, st.Q)
@@ -70,13 +70,13 @@ func TestRulesKeepTheirOrderAndContent(t *testing.T) {
 		t.Errorf("got %+v\nwant %+v", got, want)
 	}
 	// Saving again replaces: nothing of the old list stays.
-	if err := SaveRules(ctx, st, want[1:2]); err != nil {
+	if err := SaveRules(ctx, st.Q, want[1:2]); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := LoadRules(ctx, st.Q); len(got) != 1 || got[0].Name != "b" {
 		t.Errorf("%+v", got)
 	}
-	if err := SaveRules(ctx, st, nil); err != nil {
+	if err := SaveRules(ctx, st.Q, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := LoadRules(ctx, st.Q); err != nil || len(got) != 0 {
@@ -87,7 +87,7 @@ func TestRulesKeepTheirOrderAndContent(t *testing.T) {
 func TestBlockedAppsAreSortedAndOnce(t *testing.T) {
 	ctx := context.Background()
 	st := openStore(t)
-	if err := SaveBlocked(ctx, st, []string{"incy", "happ", "incy"}); err != nil {
+	if err := SaveBlocked(ctx, st.Q, []string{"incy", "happ", "incy"}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := LoadBlocked(ctx, st.Q); err != nil || !reflect.DeepEqual(got, []string{"happ", "incy"}) {
@@ -102,7 +102,7 @@ func TestLoadPolicyLeavesBadRowsOut(t *testing.T) {
 	st := openStore(t)
 	set := settings.New(st.Q)
 	good := testRule("good", apps.Action{Respond: apps.Respond403})
-	if err := SaveRules(ctx, st, []apps.Rule{good}); err != nil {
+	if err := SaveRules(ctx, st.Q, []apps.Rule{good}); err != nil {
 		t.Fatal(err)
 	}
 	cond, _ := json.Marshal(good.When)
@@ -116,7 +116,7 @@ func TestLoadPolicyLeavesBadRowsOut(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := SaveBlocked(ctx, st, []string{"happ"}); err != nil {
+	if err := SaveBlocked(ctx, st.Q, []string{"happ"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.Q.InsertBlockedApp(ctx, "gone-from-the-catalog"); err != nil {

@@ -330,3 +330,7 @@ func printable(s string) bool {
 	}
 	return true
 }
+
+// ValidHeaderName says whether s can name a header: what a condition and a rule's header
+// may be called.
+func ValidHeaderName(s string) bool { return headerName.MatchString(s) }

@@ -56,6 +56,9 @@ type Decision struct {
 	// Rule is what decided: the admin's rule by its name, a built-in one (RuleSSR, RuleOld),
 	// RuleApps, or empty when nothing did and the request is served as usual.
 	Rule string
+	// Position is the 1-based place in the admin's list of the rule that decided; 0 when
+	// no rule of the admin's did.
+	Position int
 	// Action is what to do; its zero value serves as usual.
 	Action Action
 	// Install names the apps a stub sends the visitor to: the recommended ones the admin
@@ -83,6 +86,7 @@ type Responder struct {
 
 type compiled struct {
 	label  string
+	pos    int // 1-based place in the admin's list; 0 for a built-in rule
 	when   group
 	action Action
 }
@@ -93,12 +97,13 @@ func NewResponder(p Policy) (*Responder, error) {
 	for _, id := range p.Blocked {
 		r.blocked[id] = true
 	}
-	for _, rule := range p.Rules {
+	for i, rule := range p.Rules {
 		c, err := compileRule(rule.Name, rule)
 		if err != nil {
 			return nil, err
 		}
 		if rule.Enabled {
+			c.pos = i + 1
 			r.rules = append(r.rules, c)
 		}
 	}
@@ -137,7 +142,7 @@ func (r *Responder) Decide(h http.Header) Decision {
 func (r *Responder) first(rules []compiled, h http.Header, d *Decision) bool {
 	for _, c := range rules {
 		if c.when.holds(h) {
-			d.Rule, d.Action = c.label, c.action
+			d.Rule, d.Position, d.Action = c.label, c.pos, c.action
 			return true
 		}
 	}

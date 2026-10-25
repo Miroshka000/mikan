@@ -51,6 +51,9 @@ var codesByText = []string{
 	// routing.Routes.Check, as a detail's Message.
 	"routes_service", "routes_target", "routes_direct", "routes_dns",
 	"routes_lists_many", "routes_list_name", "routes_list_url", "routes_list_behavior", "routes_list_format", "routes_servers",
+	// apps.CheckError, as a detail's Message: the response rules of the subscription.
+	"rules_many", "rule_name", "rule_group_op", "rule_conds", "rule_group_empty", "rule_groups", "rule_header", "rule_value", "rule_value_empty", "rule_regex",
+	"rule_op", "rule_respond", "rule_format", "rule_template", "rule_text", "rule_html", "rule_headers_many", "rule_header_name", "rule_header_value",
 	// mihomo.TemplateError, as a detail's Message.
 	"template_yaml", "template_empty", "template_groups", "template_group_name", "template_group_dup", "template_group_member",
 	"template_rule", "template_rule_target", "template_rule_set",

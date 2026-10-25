@@ -305,6 +305,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerImport()
 	h.registerSettings()
 	h.registerSubPage()
+	h.registerSubRules()
 	h.registerRoutes()
 	h.registerCerts()
 	h.registerSubDomain()

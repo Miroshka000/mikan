@@ -68,6 +68,8 @@ var settingFields = []settingField{
 	text("sub_title", settings.KeySubTitle, true, func(b *patchSettingsBody) *string { return b.SubTitle }),
 	value("sub_inactive_server", settings.KeyInactiveServer, true, func(b *patchSettingsBody) *bool { return b.InactiveServer }),
 	text("sub_inactive_text", settings.KeyInactiveText, true, func(b *patchSettingsBody) *string { return b.InactiveText }),
+	// The log keeps addresses and apps of the subscribers: how long, or none at all, is the admin's call.
+	value("sub_log_days", settings.KeySubLogDays, true, func(b *patchSettingsBody) *int { return b.SubLogDays }),
 	text("site_template", settings.KeySiteTemplate, true, func(b *patchSettingsBody) *string { return b.SiteTemplate }),
 	text("sub_announce", settings.KeyAnnounce, true, func(b *patchSettingsBody) *string { return b.Announce }),
 	text("sub_announce_url", settings.KeyAnnounceURL, true, func(b *patchSettingsBody) *string { return b.AnnounceURL }),

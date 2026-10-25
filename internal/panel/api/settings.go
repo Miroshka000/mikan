@@ -39,6 +39,7 @@ type SettingsView struct {
 	AppBranding    bool   `json:"app_branding" doc:"Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки"`
 	InactiveServer bool   `json:"sub_inactive_server" doc:"Подписка, которая не может подключиться (кончился срок или трафик, отключена), получает вместо серверов одну запись с объяснением"`
 	InactiveText   string `json:"sub_inactive_text" doc:"Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки"`
+	SubLogDays     int    `json:"sub_log_days" doc:"Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен"`
 	SiteTemplate   string `json:"site_template" enum:",maintenance,cats" doc:"Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер"`
 	SiteOwn        bool   `json:"site_own" doc:"В data/panel/www есть своя страница: шаблон не действует"`
 	BrandAccent    string `json:"brand_accent" doc:"Цвет бренда #RRGGBB; пусто — цвет приложения"`
@@ -109,6 +110,7 @@ type patchSettingsBody = struct {
 	AppBranding    *bool                `json:"app_branding,omitempty"`
 	InactiveServer *bool                `json:"sub_inactive_server,omitempty"`
 	InactiveText   *string              `json:"sub_inactive_text,omitempty" maxLength:"120"`
+	SubLogDays     *int                 `json:"sub_log_days,omitempty" minimum:"0" maximum:"90"`
 	SiteTemplate   *string              `json:"site_template,omitempty" enum:",maintenance,cats"`
 	BrandAccent    *string              `json:"brand_accent,omitempty" maxLength:"7" doc:"#RRGGBB или пусто"`
 	BrandLogoURL   *string              `json:"brand_logo_url,omitempty" maxLength:"500" doc:"https://… или пусто"`
@@ -262,6 +264,7 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 		return v, err
 	}
 	get(settings.KeyInactiveText, &v.InactiveText)
+	v.SubLogDays = subsrc.LogDays(ctx, h.d.Settings)
 	get(settings.KeySiteTemplate, &v.SiteTemplate)
 	if h.d.DataDir != "" {
 		v.SiteOwn = server.HasOwnSite(filepath.Join(h.d.DataDir, "www"))

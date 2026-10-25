@@ -1795,6 +1795,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sub-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Известные приложения: какие получают серверы */
+        get: operations["get-sub-apps"];
+        /** Заблокировать или разрешить приложения */
+        put: operations["put-sub-apps"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sub-docs": {
         parameters: {
             query?: never;
@@ -1880,6 +1898,44 @@ export interface paths {
         post?: never;
         /** Убрать логотип или фон страницы подписки */
         delete: operations["delete-sub-page-image"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Правила ответа на запрос подписки */
+        get: operations["get-sub-rules"];
+        /** Сохранить правила ответа на запрос подписки */
+        put: operations["put-sub-rules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-rules/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Какое правило сработает на такой запрос
+         * @description Ничего не меняет: правила можно передать ещё не сохранёнными.
+         */
+        post: operations["test-sub-rules"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2742,6 +2798,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/sub-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Журнал запросов подписки пользователя */
+        get: operations["user-sub-log"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/telegram": {
         parameters: {
             query?: never;
@@ -2812,6 +2885,17 @@ export interface components {
             prefix: string;
             /** @enum {string} */
             scope: "read" | "full";
+        };
+        Action: {
+            format?: string;
+            headers?: components["schemas"]["Header"][];
+            html?: string;
+            /** @enum {string} */
+            respond: "serve" | "stub" | "403" | "404" | "html" | "drop";
+            skip_hwid?: boolean;
+            /** Format: int64 */
+            template?: number;
+            text?: string;
         };
         AddSourceInputBody: {
             /** @description Публичный ключ автора, ed25519 в base64, если админ знает его заранее: источник принимается, только если подписан им */
@@ -3474,6 +3558,13 @@ export interface components {
             /** @description SNI для клиентов; пусто — как обычно */
             sni: string;
         };
+        Cond: {
+            header: string;
+            not?: boolean;
+            /** @enum {string} */
+            op: "equals" | "contains" | "regex";
+            value: string;
+        };
         Config: {
             /** @description Кнопки главного меню по порядку */
             buttons: components["schemas"]["MenuButton"][];
@@ -3902,6 +3993,12 @@ export interface components {
              */
             source: "purchase" | "admin" | "gift";
         };
+        Group: {
+            conds: components["schemas"]["Cond"][];
+            groups: components["schemas"]["Inner"][];
+            /** @enum {string} */
+            op: "and" | "or";
+        };
         GroupInTariff: {
             /** @enum {string} */
             mode: "main" | "own" | "unlimited" | "closed";
@@ -3924,6 +4021,10 @@ export interface components {
         HappLinkOutputBody: {
             /** @description happ://crypt5/…: Happ открывает подписку, не показывая её адрес; пусто — шифрованная ссылка выключена */
             link: string;
+        };
+        Header: {
+            name: string;
+            value: string;
         };
         HostItem: {
             detail: string;
@@ -4079,6 +4180,11 @@ export interface components {
             enabled: boolean;
             /** @description Сети и адреса. Другие ноды панели (каскад) проверку не проходят: их пускают всегда */
             networks: string[];
+        };
+        Inner: {
+            conds: components["schemas"]["Cond"][];
+            /** @enum {string} */
+            op: "and" | "or";
         };
         JobState: {
             /** Format: int64 */
@@ -5072,6 +5178,8 @@ export interface components {
             sub_group_main?: string;
             sub_inactive_server?: boolean;
             sub_inactive_text?: string;
+            /** Format: int64 */
+            sub_log_days?: number;
             /**
              * Format: int64
              * @description Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать
@@ -5486,6 +5594,12 @@ export interface components {
             /** Format: int64 */
             successful_activations: number;
         };
+        PutSubAppsInputBody: {
+            /** @description Идентификаторы заблокированных приложений из списка */
+            blocked: string[];
+            /** @description Один ряд текста: приложение показывает его вместо серверов */
+            text: string;
+        };
         PutSubImageInputBody: {
             /** @description Картинка в base64: PNG, JPEG или WebP; логотип до 512 КБ, фон до 2 МБ. SVG не принимается */
             data: string;
@@ -5495,6 +5609,10 @@ export interface components {
             /** @description #RRGGBB или пусто */
             brand_accent?: string;
             config: components["schemas"]["Page"];
+        };
+        PutSubRulesInputBody: {
+            builtin: boolean;
+            rules: components["schemas"]["Rule"][];
         };
         PutTrafficDetailInputBody: {
             /** Format: int64 */
@@ -5714,6 +5832,12 @@ export interface components {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
         };
+        Rule: {
+            do: components["schemas"]["Action"];
+            enabled: boolean;
+            name: string;
+            when: components["schemas"]["Group"];
+        };
         RussiaPort: {
             /** @description api или имя подключения */
             name: string;
@@ -5904,6 +6028,11 @@ export interface components {
             sub_inactive_text: string;
             /**
              * Format: int64
+             * @description Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен
+             */
+            sub_log_days: number;
+            /**
+             * Format: int64
              * @description Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае
              */
             sub_port: number;
@@ -6048,6 +6177,22 @@ export interface components {
             /** @description Сертификат публично доверенный для адреса панели */
             trusted?: boolean;
         };
+        SubAppView: {
+            blocked: boolean;
+            /** @enum {string} */
+            family: "mihomo" | "xray" | "singbox" | "stash" | "other";
+            /** @description Остальные приложения этого семейства, у которых нет своей строки */
+            generic: boolean;
+            id: string;
+            name: string;
+        };
+        SubAppsView: {
+            apps: components["schemas"]["SubAppView"][];
+            /** @description Что увидит заблокированное приложение: свой текст или встроенный на языке панели */
+            preview: string;
+            /** @description Свой текст записи заблокированного приложения; пусто — встроенный */
+            text: string;
+        };
         SubDocBody: {
             /** @description Markdown: заголовки #, списки, **жирный**, *курсив*, код в обратных кавычках, [ссылки](https://…), картинки ![](https://…) */
             body: string;
@@ -6074,6 +6219,22 @@ export interface components {
         SubDocsOutputBody: {
             items: components["schemas"]["SubDocView"][];
         };
+        SubLogItem: {
+            /** @description User-Agent */
+            agent: string;
+            /** @description Идентификатор известного приложения; пусто — неизвестное */
+            app: string;
+            app_name: string;
+            /** Format: date-time */
+            at: string;
+            /** @description Формат ответа; пусто — запрос отклонён правилом */
+            format: string;
+            ip: string;
+            /** @enum {string} */
+            outcome: "served" | "stub" | "blocked" | "dropped";
+            /** @description Что решило: имя правила, builtin:ssr, builtin:old, apps; пусто — ничего */
+            rule: string;
+        };
         SubPageView: {
             background?: components["schemas"]["PageAsset"];
             /** @description Название бренда (settings.brand) */
@@ -6084,6 +6245,58 @@ export interface components {
             /** @description Страница по умолчанию — к ней ведёт «Сбросить» */
             defaults: components["schemas"]["Page"];
             logo?: components["schemas"]["PageAsset"];
+        };
+        SubRuleLimits: {
+            /** Format: int64 */
+            conds: number;
+            /** Format: int64 */
+            groups: number;
+            /** Format: int64 */
+            headers: number;
+            /** Format: int64 */
+            html: number;
+            /** Format: int64 */
+            name: number;
+            /** Format: int64 */
+            rules: number;
+            /** Format: int64 */
+            text: number;
+            /** Format: int64 */
+            value: number;
+        };
+        SubRuleTest: {
+            /** @description Известное приложение по User-Agent; пусто — неизвестное */
+            app_id: string;
+            app_name: string;
+            /** @description Формат профиля или заглушки; пусто, когда профиля в ответе нет */
+            format: string;
+            /** @description Заголовки, которые добавляет правило */
+            headers: components["schemas"]["Header"][];
+            /**
+             * Format: int64
+             * @description Место сработавшего правила в списке, с 1; 0 — сработало не правило из списка
+             */
+            position: number;
+            /** @enum {string} */
+            respond: "serve" | "stub" | "403" | "404" | "html" | "drop";
+            /** @description Что решило: имя правила, builtin:ssr, builtin:old, apps (список приложений); пусто — ничего, ответ как обычно */
+            rule: string;
+            skip_hwid: boolean;
+            /**
+             * Format: int64
+             * @description Код ответа; 0 — соединение закрыто без ответа
+             */
+            status: number;
+            /** @description Текст заглушки */
+            text: string;
+        };
+        SubRulesView: {
+            /** @description Встроенные правила включены: ShadowsocksR и брошенные приложения Clash получают заглушку */
+            builtin: boolean;
+            /** @description Форматы, которые правило может навязать */
+            formats: string[];
+            limits: components["schemas"]["SubRuleLimits"];
+            rules: components["schemas"]["Rule"][];
         };
         SupportEnterInputBody: {
             /** @description Токен из ссылки доступа (после #) */
@@ -6419,6 +6632,16 @@ export interface components {
              */
             price_stars: number | null;
         };
+        TestSubRulesInputBody: {
+            /** @description Встроенные правила вместо сохранённого выбора */
+            builtin?: boolean;
+            /** @description Остальные заголовки запроса: X-Device-Os, Accept, свои */
+            headers: components["schemas"]["Header"][];
+            /** @description Правила вместо сохранённых: проверить, пока они не сохранены */
+            rules?: components["schemas"]["Rule"][];
+            /** @description User-Agent приложения */
+            user_agent: string;
+        };
         Texts: {
             /** @description Экран обязательной подписки на канал, вместо меню; {brand}: название сервиса */
             channel: string;
@@ -6696,6 +6919,15 @@ export interface components {
             items: components["schemas"]["SiteBytes"][];
             /** Format: int64 */
             keep_days: number;
+        };
+        UserSubLogOutputBody: {
+            /**
+             * Format: int64
+             * @description Сколько дней хранится журнал; 0 — журнал выключен
+             */
+            days: number;
+            /** @description Новые сверху */
+            items: components["schemas"]["SubLogItem"][];
         };
         UserView: {
             /**
@@ -11045,6 +11277,68 @@ export interface operations {
             };
         };
     };
+    "get-sub-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubAppsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-sub-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSubAppsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubAppsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-sub-docs": {
         parameters: {
             query?: never;
@@ -11354,6 +11648,101 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sub-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubRulesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-sub-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSubRulesInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubRulesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "test-sub-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestSubRulesInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubRuleTest"];
+                };
             };
             /** @description Error */
             default: {
@@ -13352,6 +13741,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserSitesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-sub-log": {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSubLogOutputBody"];
                 };
             };
             /** @description Error */

@@ -70,29 +70,27 @@ func ruleOf(r db.SubRule) (apps.Rule, error) {
 	return rule.Clean(), nil
 }
 
-// SaveRules replaces the response rules with these, in this order. They must have passed
-// apps.CheckRules.
-func SaveRules(ctx context.Context, st *store.Store, rules []apps.Rule) error {
-	return st.TxRC(ctx, func(q *db.Queries) error {
-		if err := q.DeleteSubRules(ctx); err != nil {
+// SaveRules replaces the response rules with these, in this order; the caller's
+// transaction makes it one change. They must have passed apps.CheckRules.
+func SaveRules(ctx context.Context, q *db.Queries, rules []apps.Rule) error {
+	if err := q.DeleteSubRules(ctx); err != nil {
+		return err
+	}
+	for i, r := range rules {
+		r = r.Clean()
+		cond, err := json.Marshal(r.When)
+		if err != nil {
 			return err
 		}
-		for i, r := range rules {
-			r = r.Clean()
-			cond, err := json.Marshal(r.When)
-			if err != nil {
-				return err
-			}
-			action, err := json.Marshal(r.Do)
-			if err != nil {
-				return err
-			}
-			if err := q.InsertSubRule(ctx, db.InsertSubRuleParams{Position: int64(i), Name: r.Name, Enabled: r.Enabled, Cond: string(cond), Action: string(action)}); err != nil {
-				return err
-			}
+		action, err := json.Marshal(r.Do)
+		if err != nil {
+			return err
 		}
-		return nil
-	})
+		if err := q.InsertSubRule(ctx, db.InsertSubRuleParams{Position: int64(i), Name: r.Name, Enabled: r.Enabled, Cond: string(cond), Action: string(action)}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // LoadBlocked reads the ids of the blocked apps.
@@ -100,19 +98,18 @@ func LoadBlocked(ctx context.Context, q *db.Queries) ([]string, error) {
 	return q.ListBlockedApps(ctx)
 }
 
-// SaveBlocked replaces the blocked apps with these ids, which must be known ones.
-func SaveBlocked(ctx context.Context, st *store.Store, ids []string) error {
-	return st.TxRC(ctx, func(q *db.Queries) error {
-		if err := q.DeleteBlockedApps(ctx); err != nil {
+// SaveBlocked replaces the blocked apps with these ids, which must be known ones, in the
+// caller's transaction.
+func SaveBlocked(ctx context.Context, q *db.Queries, ids []string) error {
+	if err := q.DeleteBlockedApps(ctx); err != nil {
+		return err
+	}
+	for _, id := range slices.Compact(slices.Sorted(slices.Values(ids))) {
+		if err := q.InsertBlockedApp(ctx, id); err != nil {
 			return err
 		}
-		for _, id := range slices.Compact(slices.Sorted(slices.Values(ids))) {
-			if err := q.InsertBlockedApp(ctx, id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	}
+	return nil
 }
 
 // LoadPolicy is what the admin decided about requests, as the profiles are served by it.
