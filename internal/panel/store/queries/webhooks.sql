@@ -1,7 +1,7 @@
 -- name: CreateWebhook :one
 -- A new endpoint starts at the end of the feed: it is told what happens from now on, not what
 -- the feed still holds of the week before.
-INSERT INTO webhook_endpoints (name, url, secret, events, enabled, allow_local, last_id, created_at, updated_at)
+INSERT INTO webhook_endpoints (name, url, secret, events, enabled, allow_local, last_id, created_at, secret_at)
 VALUES ($1, $2, $3, $4, $5, $6, (SELECT COALESCE(max(id), 0) FROM addon_events), $7, $7)
 RETURNING *;
 
@@ -16,12 +16,12 @@ SELECT count(*) FROM webhook_endpoints;
 
 -- name: UpdateWebhook :one
 UPDATE webhook_endpoints
-SET name = $2, url = $3, events = $4, enabled = $5, allow_local = $6, updated_at = $7
+SET name = $2, url = $3, events = $4, enabled = $5, allow_local = $6
 WHERE id = $1
 RETURNING *;
 
 -- name: SetWebhookSecret :one
-UPDATE webhook_endpoints SET secret = $2, updated_at = $3 WHERE id = $1
+UPDATE webhook_endpoints SET secret = $2, secret_at = $3 WHERE id = $1
 RETURNING *;
 
 -- name: DeleteWebhook :execrows
@@ -29,7 +29,6 @@ DELETE FROM webhook_endpoints WHERE id = $1;
 
 -- name: AckWebhook :exec
 -- The cursor only moves forward: a late ack of an older event does not send the rest again.
--- updated_at is left alone, it is the admin's edits that cut a worker's pause short.
 UPDATE webhook_endpoints SET last_id = GREATEST(last_id, sqlc.arg(last_id)::BIGINT) WHERE id = sqlc.arg(id);
 
 -- name: SkipWebhookHistory :exec

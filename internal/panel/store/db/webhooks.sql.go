@@ -22,7 +22,6 @@ type AckWebhookParams struct {
 }
 
 // The cursor only moves forward: a late ack of an older event does not send the rest again.
-// updated_at is left alone, it is the admin's edits that cut a worker's pause short.
 func (q *Queries) AckWebhook(ctx context.Context, arg AckWebhookParams) error {
 	_, err := q.db.ExecContext(ctx, ackWebhook, arg.LastID, arg.ID)
 	return err
@@ -40,9 +39,9 @@ func (q *Queries) CountWebhooks(ctx context.Context) (int64, error) {
 }
 
 const createWebhook = `-- name: CreateWebhook :one
-INSERT INTO webhook_endpoints (name, url, secret, events, enabled, allow_local, last_id, created_at, updated_at)
+INSERT INTO webhook_endpoints (name, url, secret, events, enabled, allow_local, last_id, created_at, secret_at)
 VALUES ($1, $2, $3, $4, $5, $6, (SELECT COALESCE(max(id), 0) FROM addon_events), $7, $7)
-RETURNING id, name, url, secret, events, enabled, allow_local, last_id, created_at, updated_at
+RETURNING id, name, url, secret, events, enabled, allow_local, last_id, created_at, secret_at
 `
 
 type CreateWebhookParams struct {
@@ -78,7 +77,7 @@ func (q *Queries) CreateWebhook(ctx context.Context, arg CreateWebhookParams) (W
 		&i.AllowLocal,
 		&i.LastID,
 		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.SecretAt,
 	)
 	return i, err
 }
@@ -131,7 +130,7 @@ func (q *Queries) FailWebhookRetriesOutside(ctx context.Context, arg FailWebhook
 }
 
 const getWebhook = `-- name: GetWebhook :one
-SELECT id, name, url, secret, events, enabled, allow_local, last_id, created_at, updated_at FROM webhook_endpoints WHERE id = $1
+SELECT id, name, url, secret, events, enabled, allow_local, last_id, created_at, secret_at FROM webhook_endpoints WHERE id = $1
 `
 
 func (q *Queries) GetWebhook(ctx context.Context, id int64) (WebhookEndpoint, error) {
@@ -147,7 +146,7 @@ func (q *Queries) GetWebhook(ctx context.Context, id int64) (WebhookEndpoint, er
 		&i.AllowLocal,
 		&i.LastID,
 		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.SecretAt,
 	)
 	return i, err
 }
@@ -247,7 +246,7 @@ func (q *Queries) ListWebhookDeliveries(ctx context.Context, arg ListWebhookDeli
 }
 
 const listWebhooks = `-- name: ListWebhooks :many
-SELECT id, name, url, secret, events, enabled, allow_local, last_id, created_at, updated_at FROM webhook_endpoints ORDER BY id
+SELECT id, name, url, secret, events, enabled, allow_local, last_id, created_at, secret_at FROM webhook_endpoints ORDER BY id
 `
 
 func (q *Queries) ListWebhooks(ctx context.Context) ([]WebhookEndpoint, error) {
@@ -269,7 +268,7 @@ func (q *Queries) ListWebhooks(ctx context.Context) ([]WebhookEndpoint, error) {
 			&i.AllowLocal,
 			&i.LastID,
 			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.SecretAt,
 		); err != nil {
 			return nil, err
 		}
@@ -330,18 +329,18 @@ func (q *Queries) RecordWebhookAttempt(ctx context.Context, arg RecordWebhookAtt
 }
 
 const setWebhookSecret = `-- name: SetWebhookSecret :one
-UPDATE webhook_endpoints SET secret = $2, updated_at = $3 WHERE id = $1
-RETURNING id, name, url, secret, events, enabled, allow_local, last_id, created_at, updated_at
+UPDATE webhook_endpoints SET secret = $2, secret_at = $3 WHERE id = $1
+RETURNING id, name, url, secret, events, enabled, allow_local, last_id, created_at, secret_at
 `
 
 type SetWebhookSecretParams struct {
-	ID        int64
-	Secret    string
-	UpdatedAt int64
+	ID       int64
+	Secret   string
+	SecretAt int64
 }
 
 func (q *Queries) SetWebhookSecret(ctx context.Context, arg SetWebhookSecretParams) (WebhookEndpoint, error) {
-	row := q.db.QueryRowContext(ctx, setWebhookSecret, arg.ID, arg.Secret, arg.UpdatedAt)
+	row := q.db.QueryRowContext(ctx, setWebhookSecret, arg.ID, arg.Secret, arg.SecretAt)
 	var i WebhookEndpoint
 	err := row.Scan(
 		&i.ID,
@@ -353,7 +352,7 @@ func (q *Queries) SetWebhookSecret(ctx context.Context, arg SetWebhookSecretPara
 		&i.AllowLocal,
 		&i.LastID,
 		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.SecretAt,
 	)
 	return i, err
 }
@@ -376,9 +375,9 @@ func (q *Queries) SkipWebhookHistory(ctx context.Context, id int64) error {
 
 const updateWebhook = `-- name: UpdateWebhook :one
 UPDATE webhook_endpoints
-SET name = $2, url = $3, events = $4, enabled = $5, allow_local = $6, updated_at = $7
+SET name = $2, url = $3, events = $4, enabled = $5, allow_local = $6
 WHERE id = $1
-RETURNING id, name, url, secret, events, enabled, allow_local, last_id, created_at, updated_at
+RETURNING id, name, url, secret, events, enabled, allow_local, last_id, created_at, secret_at
 `
 
 type UpdateWebhookParams struct {
@@ -388,7 +387,6 @@ type UpdateWebhookParams struct {
 	Events     []string
 	Enabled    bool
 	AllowLocal bool
-	UpdatedAt  int64
 }
 
 func (q *Queries) UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (WebhookEndpoint, error) {
@@ -399,7 +397,6 @@ func (q *Queries) UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (W
 		pq.Array(arg.Events),
 		arg.Enabled,
 		arg.AllowLocal,
-		arg.UpdatedAt,
 	)
 	var i WebhookEndpoint
 	err := row.Scan(
@@ -412,7 +409,7 @@ func (q *Queries) UpdateWebhook(ctx context.Context, arg UpdateWebhookParams) (W
 		&i.AllowLocal,
 		&i.LastID,
 		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.SecretAt,
 	)
 	return i, err
 }

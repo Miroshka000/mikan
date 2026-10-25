@@ -761,5 +761,5 @@ type WebhookEndpoint struct {
 	AllowLocal bool
 	LastID     int64
 	CreatedAt  int64
-	UpdatedAt  int64
+	SecretAt   int64
 }
