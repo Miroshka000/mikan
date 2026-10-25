@@ -259,7 +259,7 @@ func Validate(t Template, o Options) error {
 		}
 	}
 	if ext.Flow != "" {
-		if typ != "vless" || ext.Flow != "xtls-rprx-vision" || transport(t) != "tcp" {
+		if typ != "vless" || ext.Flow != "xtls-rprx-vision" || Transport(t) != "tcp" {
 			return fail("config_flow", extKey+".flow")
 		}
 	}
@@ -314,8 +314,9 @@ func Validate(t Template, o Options) error {
 	return validateExtra(t, o)
 }
 
-// transport is what a client dials over the secured channel.
-func transport(t Template) string {
+// Transport is what a VLESS or Trojan client dials over the secured channel: tcp, xhttp,
+// grpc or ws.
+func Transport(t Template) string {
 	switch {
 	case t["xhttp-config"] != nil:
 		return "xhttp"

@@ -1,7 +1,6 @@
 package proto
 
 import (
-	"net/url"
 	"testing"
 )
 
@@ -18,17 +17,6 @@ func TestSetClientEndpoint(t *testing.T) {
 	}
 	if err := Validate(got, Options{}); err != nil {
 		t.Fatal(err)
-	}
-	cl, err := ClientConfig(got, ClientInput{Name: "X", Host: "203.0.113.7", Port: 8444, SNI: "node.example.com", Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	u, _ := url.Parse(cl.URI)
-	if u.Host != "vpn.example.com:443" || u.Query().Get("sni") != "trojan.example.com" {
-		t.Fatalf("link: %s", cl.URI)
-	}
-	if cl.Mihomo["server"] != "vpn.example.com" || cl.Mihomo["port"] != 443 || cl.Mihomo["sni"] != "trojan.example.com" {
-		t.Fatalf("profile: %v", cl.Mihomo)
 	}
 
 	// Clearing all three keeps the other overrides.
@@ -62,13 +50,9 @@ func TestSetClientEndpoint(t *testing.T) {
 			t.Errorf("%+v: %q, want %q", c, got, c.code)
 		}
 	}
-	// An IPv6 proxy address is bracketed in links.
-	if err := SetClientEndpoint(tpl, "2001:db8::1", 443, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	cl, _ = ClientConfig(tpl, ClientInput{Name: "X", Host: "203.0.113.7", Port: 8444, Slot: slots[0]})
-	if u, _ := url.Parse(cl.URI); u.Host != "[2001:db8::1]:443" {
-		t.Fatalf("ipv6: %s", cl.URI)
+	// An IPv6 proxy address is one too.
+	if err := SetClientEndpoint(tpl, "2001:db8::1", 443, "", ""); err != nil || tpl.Ext().Client.Server != "2001:db8::1" {
+		t.Fatalf("ipv6: %v %+v", err, tpl.Ext().Client)
 	}
 }
 
@@ -90,27 +74,19 @@ func TestClientSNIByProtocol(t *testing.T) {
 	}
 }
 
-// A port of the client side's own is the one clients dial: the node's hopping range would
-// point past the proxy.
-func TestClientPortDropsHopping(t *testing.T) {
-	in := ClientInput{Name: "X", Host: "203.0.113.7", Port: 20000, PortSpec: "20000-20100", SNI: "vpn.example.com", Slot: slots[0]}
-	hy2 := mustParse(t, "type: hysteria2\n")
-	cl, err := ClientConfig(hy2, in)
-	if err != nil {
-		t.Fatal(err)
+// Only VLESS and Trojan over WebSocket or XHTTP send an HTTP Host of the client side's own.
+func TestClientHostByProtocol(t *testing.T) {
+	for src, want := range map[string]bool{
+		"type: vless\nws-path: /w\nmikan: {tls: node}\n":                               true,
+		"type: vless\nxhttp-config: {path: /x, mode: packet-up}\nmikan: {tls: node}\n": true,
+		"type: trojan\nmikan: {tls: node}\n":                                           false,
+		"type: hysteria2\n":                                                            false,
+	} {
+		if got := ClientHost(mustParse(t, src)); got != want {
+			t.Errorf("%q: %v, want %v", src, got, want)
+		}
 	}
-	if cl.Mihomo["ports"] != "20000-20100" {
-		t.Fatalf("hopping without an override: %v", cl.Mihomo)
-	}
-	if err := SetClientEndpoint(hy2, "", 443, "", ""); err != nil {
-		t.Fatal(err)
-	}
-	cl, err = ClientConfig(hy2, in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	u, _ := url.Parse(cl.URI)
-	if cl.Mihomo["ports"] != nil || u.Query().Has("mport") || cl.Mihomo["port"] != 443 {
-		t.Fatalf("override: %s %v", cl.URI, cl.Mihomo)
+	if code(SetClientEndpoint(mustParse(t, "type: hysteria2\n"), "", 0, "", "h.example.com")) != "config_client_host" {
+		t.Fatal("Hysteria2 sends no HTTP Host")
 	}
 }

@@ -6,6 +6,9 @@ import (
 
 	"mikan/internal/panel/presets"
 	"mikan/internal/proto"
+	builder "mikan/internal/sub/build"
+	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/xray"
 )
 
 // VLESS TLS runs on the node certificate: the listener gets the certificate files and no
@@ -34,20 +37,21 @@ func TestVLESSTLSPresets(t *testing.T) {
 			t.Fatalf("%s listener: %v", id, l)
 		}
 
-		c, err := proto.ClientConfig(tpl, proto.ClientInput{Name: "N", Host: "panel.example.com", Port: 2443, PortSpec: "2443", SNI: "panel.example.com", Slot: slot})
+		c, err := builder.Proxy(tpl, builder.Input{Name: "N", Host: "panel.example.com", Port: 2443, PortSpec: "2443", SNI: "panel.example.com", Keys: slot})
 		if err != nil {
 			t.Fatalf("%s: %v", id, err)
 		}
-		u, err := url.Parse(c.URI)
+		link := xray.Link(c)
+		u, err := url.Parse(link)
 		if err != nil {
 			t.Fatal(err)
 		}
 		q := u.Query()
 		if u.Scheme != "vless" || q.Get("security") != "tls" || q.Get("sni") != "panel.example.com" || q.Get("fp") != proto.DefaultFingerprint ||
 			q.Get("pbk") != "" || q.Get("insecure") != "" || q.Get("allowInsecure") != "" || q.Get("pcs") != "" {
-			t.Fatalf("%s link: %s", id, c.URI)
+			t.Fatalf("%s link: %s", id, link)
 		}
-		m := c.Mihomo
+		m := mihomo.Proxy(c)
 		if m["tls"] != true || m["servername"] != "panel.example.com" || m["reality-opts"] != nil || m["fingerprint"] != nil || m["skip-cert-verify"] != nil {
 			t.Fatalf("%s mihomo: %v", id, m)
 		}
@@ -57,15 +61,15 @@ func TestVLESSTLSPresets(t *testing.T) {
 		}
 
 		needs := proto.NeedsOf(tpl)
-		xray, singbox := (App{Family: FamilyXray}).Supports(needs), (App{Family: FamilySingBox}).Supports(needs)
+		xrayApps, singbox := (App{Family: FamilyXray}).Supports(needs), (App{Family: FamilySingBox}).Supports(needs)
 		switch id {
 		case presets.PresetTLSXHTTP:
-			if q.Get("type") != "xhttp" || q.Get("path") == "" || q.Get("flow") != "" || !xray || singbox {
-				t.Fatalf("xhttp: %s xray=%v sing-box=%v", c.URI, xray, singbox)
+			if q.Get("type") != "xhttp" || q.Get("path") == "" || q.Get("flow") != "" || !xrayApps || singbox {
+				t.Fatalf("xhttp: %s xray=%v sing-box=%v", link, xrayApps, singbox)
 			}
 		case presets.PresetTLSVision:
-			if q.Get("type") != "tcp" || q.Get("flow") != "xtls-rprx-vision" || !xray || !singbox {
-				t.Fatalf("vision: %s xray=%v sing-box=%v", c.URI, xray, singbox)
+			if q.Get("type") != "tcp" || q.Get("flow") != "xtls-rprx-vision" || !xrayApps || !singbox {
+				t.Fatalf("vision: %s xray=%v sing-box=%v", link, xrayApps, singbox)
 			}
 			if us := l["users"].([]map[string]any); us[0]["flow"] != "xtls-rprx-vision" {
 				t.Fatalf("vision users: %v", us)
@@ -73,13 +77,13 @@ func TestVLESSTLSPresets(t *testing.T) {
 		}
 
 		// No public certificate: the self-signed one is pinned where each app reads a pin.
-		c, err = proto.ClientConfig(tpl, proto.ClientInput{Name: "N", Host: "203.0.113.7", Port: 2443, PortSpec: "2443", PinSHA256: "ab12", Slot: slot})
+		c, err = builder.Proxy(tpl, builder.Input{Name: "N", Host: "203.0.113.7", Port: 2443, PortSpec: "2443", PinSHA256: "ab12", Keys: slot})
 		if err != nil {
 			t.Fatal(err)
 		}
-		u, _ = url.Parse(c.URI)
-		if u.Query().Get("pcs") != "ab12" || c.Mihomo["fingerprint"] != "ab12" {
-			t.Fatalf("%s pinned: %s %v", id, c.URI, c.Mihomo)
+		u, _ = url.Parse(xray.Link(c))
+		if u.Query().Get("pcs") != "ab12" || mihomo.Proxy(c)["fingerprint"] != "ab12" {
+			t.Fatalf("%s pinned: %s %v", id, xray.Link(c), mihomo.Proxy(c))
 		}
 	}
 }

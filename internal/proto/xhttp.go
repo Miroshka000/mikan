@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"math/big"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -166,6 +167,85 @@ func xhttpClient(t Template) map[string]any {
 	cl, _ := ext["client"].(map[string]any)
 	x, _ := cl["xhttp"].(map[string]any)
 	return x
+}
+
+// xhttpShared are the xhttp-config keys both ends read (mihomo v1.19.31 XHTTPConfig and
+// XHTTPOptions), with their names in the "extra" of an Xray share link.
+var xhttpShared = []struct{ mihomo, xray string }{
+	{"x-padding-bytes", "xPaddingBytes"}, {"x-padding-obfs-mode", "xPaddingObfsMode"},
+	{"x-padding-key", "xPaddingKey"}, {"x-padding-header", "xPaddingHeader"},
+	{"x-padding-placement", "xPaddingPlacement"}, {"x-padding-method", "xPaddingMethod"},
+	{"uplink-http-method", "uplinkHTTPMethod"},
+	{"session-placement", "sessionIDPlacement"}, {"session-key", "sessionIDKey"}, // Xray's own names; mihomo reads both
+	{"seq-placement", "seqPlacement"}, {"seq-key", "seqKey"},
+	{"uplink-data-placement", "uplinkDataPlacement"}, {"uplink-data-key", "uplinkDataKey"},
+	{"uplink-chunk-size", "uplinkChunkSize"}, {"sc-max-each-post-bytes", "scMaxEachPostBytes"},
+}
+
+// XHTTPSetting is one XHTTP setting the apps send, under the name each core that speaks
+// XHTTP gives it.
+type XHTTPSetting struct {
+	Mihomo, Xray string
+	// Value is as the template holds it: a string, a number or a bool, which the cores
+	// read alike.
+	Value any
+}
+
+// XHTTPClient is what the apps of an XHTTP template send past its path, mode and host:
+// the server's settings both ends must agree on, the apps' own over them (their upload,
+// the pause between uploads, the table of session ids), and the apps' own connection
+// reuse (xmux), nil when the template sets none. A reuse of the template's own that
+// names no key the cores know is empty, not nil: it still replaces the cores' default.
+func XHTTPClient(t Template) (settings, reuse []XHTTPSetting) {
+	set := func(mihomo, xray string, v any) {
+		s := XHTTPSetting{Mihomo: mihomo, Xray: xray, Value: v}
+		if i := slices.IndexFunc(settings, func(o XHTTPSetting) bool { return o.Mihomo == mihomo }); i >= 0 {
+			settings[i] = s
+			return
+		}
+		settings = append(settings, s)
+	}
+	// Padding, session and uplink settings must match on both ends: a client on the
+	// defaults gets "400 invalid xpadding" from a node with its own x-padding-bytes.
+	x := t.section("xhttp-config")
+	for _, k := range xhttpShared {
+		if v, ok := x[k.mihomo]; ok && v != nil {
+			set(k.mihomo, k.xray, v)
+		}
+	}
+	cl := xhttpClient(t)
+	if cl == nil {
+		return settings, nil
+	}
+	// The admin's own reuse settings replace the panel's: they are one setting, and
+	// max-connections cannot go with the default max-concurrency.
+	if own, _ := cl["xmux"].(map[string]any); len(own) > 0 {
+		reuse = []XHTTPSetting{}
+		for _, k := range xmuxKeys {
+			if v := scalar(own[k.mihomo]); v != "" {
+				reuse = append(reuse, XHTTPSetting{Mihomo: k.mihomo, Xray: k.xray, Value: v})
+			}
+		}
+	}
+	// The apps' own upload, over the server's (a CDN that passes only GET).
+	for _, k := range xhttpClientUplink {
+		if v := scalar(cl[k.mihomo]); v != "" {
+			set(k.mihomo, k.xray, v)
+		}
+	}
+	if v := scalar(cl["sc-min-posts-interval-ms"]); v != "" {
+		set("sc-min-posts-interval-ms", "scMinPostsIntervalMs", v)
+	}
+	// Without a length Xray finds the table "too small" where mihomo draws 16-32.
+	if v := scalar(cl["session-table"]); v != "" {
+		l := scalar(cl["session-length"])
+		if l == "" {
+			l = defaultSessionLength
+		}
+		set("session-table", "sessionIDTable", v)
+		set("session-length", "sessionIDLength", l)
+	}
+	return settings, reuse
 }
 
 // SetXHTTP writes x over the template's XHTTP settings: every field, so an empty one goes

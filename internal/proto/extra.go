@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"net"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -42,10 +41,10 @@ func Shared(t Template) bool {
 // carry the user's identity (EIH), ChaCha20 does not.
 func ssMultiUser(t Template) bool { return strings.HasPrefix(t.str("cipher"), "2022-blake3-aes-") }
 
-// ssUserKey is a user's own Shadowsocks-2022 key (uPSK) for the cipher, made from the slot's
+// SSUserKey is a user's own Shadowsocks-2022 key (uPSK) for the cipher, made from the slot's
 // secret: the panel gives it to the user's apps and the node to its listener, and neither
 // stores it.
-func ssUserKey(cipher, secret string) string {
+func SSUserKey(cipher, secret string) string {
 	sum := sha256.Sum256([]byte("mikan/ss2022/" + secret))
 	return base64.StdEncoding.EncodeToString(sum[:ssCiphers[cipher]])
 }
@@ -139,12 +138,13 @@ func listenerExtra(t Template, l map[string]any) {
 		l["transport"] = "TCP"
 	case "snell":
 		// UDP goes inside the Snell stream (v3 on): no UDP port.
-		v := snellVersionOf(t)
+		v := SnellVersion(t)
 		l["version"], l["udp"] = v, v >= 3
 	}
 }
 
-func snellVersionOf(t Template) int {
+// SnellVersion is the Snell version both ends speak: the template's, or snellVersion.
+func SnellVersion(t Template) int {
 	if n, ok := toInt(t["version"]); ok && n > 0 {
 		return n
 	}
@@ -165,78 +165,6 @@ func toInt(v any) (int, bool) {
 	return 0, false
 }
 
-// finishExtra builds the client side of the newer types. Their share links are not a
-// common format, so only mihomo profiles carry them; Shadowsocks has an ss:// link.
-func (c *clientBuilder) finishExtra() (Client, bool) {
-	s := c.in.Slot
-	switch c.t.Type() {
-	case "trusttunnel":
-		c.y["username"], c.y["password"], c.y["udp"] = s.Name, s.Secret, true
-		return Client{Mihomo: c.y}, true
-	case "shadowquic":
-		up := c.t.section("jls-upstream")
-		sni := c.ext.Client.SNI
-		if sni == "" {
-			sni = str(up["sni"])
-		}
-		if sni == "" {
-			sni, _, _ = net.SplitHostPort(str(up["addr"]))
-		}
-		alpn := strings1(c.t["alpn"])
-		if len(alpn) == 0 {
-			alpn = []string{"h3"}
-		}
-		c.y["username"], c.y["password"], c.y["sni"], c.y["alpn"], c.y["udp"] = s.Name, s.Secret, sni, alpn, true
-		return Client{Mihomo: c.y}, true
-	case "mieru":
-		// The Citrus server knows who sends UDP over Mieru (mihomo's did not).
-		c.y["transport"], c.y["username"], c.y["password"], c.y["udp"] = "TCP", s.Name, s.Secret, true
-		return Client{Mihomo: c.y}, true
-	case "shadowsocks":
-		cipher, key := c.t.str("cipher"), c.t.str("password")
-		if ssMultiUser(c.t) && !c.in.SSOneKey {
-			key += ":" + ssUserKey(cipher, s.Secret)
-		}
-		// UDP goes inside the TCP stream (UDP over TCP, v2): the listener has no UDP port.
-		c.y["type"], c.y["cipher"], c.y["password"], c.y["udp"] = "ss", cipher, key, true
-		c.y["udp-over-tcp"], c.y["udp-over-tcp-version"] = true, 2
-		// SIP002 for 2022 methods: "method:key" percent-encoded, not base64.
-		return Client{Mihomo: c.y, URI: "ss://" + url.UserPassword(cipher, key).String() + "@" + c.addr() + "#" + url.PathEscape(c.in.Name)}, true
-	case "sudoku":
-		c.y["key"] = c.t.str("key")
-		c.y["aead-method"] = "chacha20-poly1305"
-		if m := c.t.str("aead-method"); m != "" {
-			c.y["aead-method"] = m
-		}
-		for _, k := range []string{"padding-min", "padding-max"} {
-			if n, ok := toInt(c.t[k]); ok {
-				c.y[k] = n
-			}
-		}
-		if tt := c.t.str("table-type"); tt != "" {
-			c.y["table-type"] = tt
-		}
-		// The downlink mode must match the node's, or the client cannot read its replies.
-		if p, ok := c.t["enable-pure-downlink"].(bool); ok {
-			c.y["enable-pure-downlink"] = p
-		}
-		if h := c.t.section("httpmask"); h != nil {
-			c.y["httpmask"] = clone(h)
-		}
-		c.y["udp"] = true
-		return Client{Mihomo: c.y}, true
-	case "snell":
-		// Snell carries UDP from v3 on.
-		v := snellVersionOf(c.t)
-		c.y["psk"], c.y["version"], c.y["udp"] = c.t.str("psk"), v, v >= 3
-		if o := c.t.section("obfs-opts"); o != nil {
-			c.y["obfs-opts"] = clone(o)
-		}
-		return Client{Mihomo: c.y}, true
-	}
-	return Client{}, false
-}
-
 // Needs is what a client app must support to use an inbound.
 type Needs struct {
 	Type       string // listener type
@@ -251,7 +179,7 @@ func NeedsOf(t Template) Needs {
 	n := Needs{Type: t.Type()}
 	switch n.Type {
 	case "vless", "trojan":
-		n.Transport = transport(t)
+		n.Transport = Transport(t)
 	}
 	n.Encryption = n.Type == "vless" && t.hasEncryption()
 	n.Gecko = n.Type == "hysteria2" && t.str("obfs") == ObfsGecko

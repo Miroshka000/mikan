@@ -15,6 +15,9 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/proto"
+	builder "mikan/internal/sub/build"
+	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/xray"
 	"mikan/internal/textutil"
 )
 
@@ -210,14 +213,14 @@ func build(p Profile) ([]proxy, error) {
 			for i := 2; used[name]; i++ {
 				name = base + " " + strconv.Itoa(i)
 			}
-			c, err := proto.ClientConfig(t, proto.ClientInput{Name: name, Host: n.Endpoint.Host, Port: port, PortSpec: spec,
-				SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Slot: slot, SSOneKey: n.SSOneKey})
+			c, err := builder.Proxy(t, builder.Input{Name: name, Host: n.Endpoint.Host, Port: port, PortSpec: spec,
+				SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Keys: slot, SSOneKey: n.SSOneKey})
 			if err != nil {
 				p.skip(in, err)
 				continue
 			}
 			used[name] = true
-			out = append(out, proxy{name: name, node: n.ID, pool: in.PoolID.Int64, uri: c.URI, yaml: c.Mihomo})
+			out = append(out, proxy{name: name, node: n.ID, pool: in.PoolID.Int64, uri: xray.Link(c), yaml: mihomo.Proxy(c)})
 		}
 	}
 	return out, nil
