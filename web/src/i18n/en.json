@@ -4647,6 +4647,7 @@
       "folder": "Client folders",
       "import": "Import",
       "inbound": "Protocols",
+      "lifecycle": "Subscription rules",
       "node": "Nodes",
       "package": "Traffic packages",
       "payment": "Payments",
@@ -4701,7 +4702,14 @@
         "delete": "Client deleted",
         "extend": "Subscription extended",
         "reissue": "Subscription link replaced",
-        "reset_traffic": "Client traffic reset"
+        "reset_traffic": "Client traffic reset",
+        "switch_tariff": "Moved to the next plan",
+        "next_tariff": "Next plan set",
+        "next_tariff_clear": "Next plan removed",
+        "remove_inactive": "Inactive subscription deleted"
+      },
+      "lifecycle": {
+        "update": "Subscription rules changed"
       },
       "node": {
         "create": "Node added",
