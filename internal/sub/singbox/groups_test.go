@@ -8,6 +8,7 @@ import (
 
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
+	"mikan/internal/sub/subtest"
 )
 
 // What sing-box has no group for becomes the nearest, and the preview is told: a fallback
@@ -121,5 +122,17 @@ func TestDomainResolver(t *testing.T) {
 	plain, _ := dnsOf(routing.Resolvers{Nameserver: []string{"1.1.1.1"}}, nil, &sets)
 	if raw, _ := json.Marshal(plain["servers"]); strings.Contains(string(raw), "bootstrap") {
 		t.Fatalf("no domain, no bootstrap: %s", raw)
+	}
+}
+
+// The sing-box apps' own balance goes over the common one; the Clash apps' leaves it be.
+func TestSingBoxBalance(t *testing.T) {
+	lists(t)
+	prof := profileOf(subtest.TwoNodes())
+	prof.Routes.Servers = routing.Servers{Interval: 120, SingBox: routing.SingBoxServers{Interval: 600, Tolerance: 80}, Mihomo: routing.MihomoServers{Type: "load-balance"}}
+	c := renderSingBox(t, prof, routing.All, "")
+	auto := outbound(c, "Авто")
+	if auto["type"] != "urltest" || auto["interval"] != "600s" || auto["tolerance"] != float64(80) {
+		t.Fatalf("auto: %v", auto)
 	}
 }

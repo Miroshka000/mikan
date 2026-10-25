@@ -48,7 +48,7 @@ func configOf(p Profile, g model.GroupNames, m routing.Mode) map[string]any {
 		in = in.Plain()
 	}
 	routes := p.taken(in.Routes)
-	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.Balance(), routes, p.Lang)
+	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.MihomoBalance(), routes, p.Lang)
 	proxies := make([]map[string]any, len(p.Proxies))
 	for i, x := range p.Proxies {
 		proxies[i] = p.proxy(x)

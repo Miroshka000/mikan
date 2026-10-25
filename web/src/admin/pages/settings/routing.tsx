@@ -12,6 +12,7 @@ import { t, useLocale } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { ExitDnsFields, exitDnsDraftOf, useSaveExitDns, type ExitDnsDraft } from "./exit-dns";
 import { RulesEditor } from "./rules";
+import { CoreBalance, tidyServers } from "./balance";
 import { useSaveSettings } from "./shared";
 import { TemplateCard } from "./template";
 import { Select } from "../../../components/select";
@@ -65,7 +66,9 @@ function tidy(r: Routes): Routes {
   if (!Object.keys(out.services ?? {}).length) delete out.services;
   if (!out.direct?.length) delete out.direct;
   if (!out.lists?.length) delete out.lists;
-  if (!out.servers?.auto && !out.servers?.interval && !out.servers?.no_countries) delete out.servers;
+  if (out.servers) out.servers = tidyServers(out.servers);
+  const s = out.servers;
+  if (!s?.auto && !s?.interval && !s?.no_countries && !s?.mihomo && !s?.singbox && !s?.xray) delete out.servers;
   if (!out.tune?.block_quic && !out.tune?.sniffer && !out.tune?.real_ip) delete out.tune;
   if (!out.dns?.nameserver?.length && !out.dns?.proxy_server_nameserver?.length && !out.dns?.policy?.length) delete out.dns;
   return out;
@@ -87,8 +90,9 @@ function parsePolicy(text: string): NonNullable<DNS["policy"]> {
 const policyText = (p: DNS["policy"]) => (p ?? []).map((x) => `${x.match}: ${x.servers.join(", ")}`).join("\n");
 const dnsTextOf = (dns: DNS | undefined) => ({ nameserver: (dns?.nameserver ?? []).join("\n"), proxy: (dns?.proxy_server_nameserver ?? []).join("\n"), policy: policyText(dns?.policy) });
 
-/** The refusal of the server groups' settings; every other one of sub_routes is the lists'. */
-const serversRefused = (e: ApiError | null) => e?.codes.sub_routes === "routes_servers";
+/** The refusal of the server groups' settings, the common ones' or a core's (routes_servers_xray);
+ * every other one of sub_routes is the lists'. */
+const serversRefused = (e: ApiError | null) => (e?.codes.sub_routes ?? "").startsWith("routes_servers");
 
 /** The part a refusal of the server names, so a save from another part shows where it went wrong. */
 function partOf(e: ApiError): RoutingPart | null {
@@ -199,7 +203,9 @@ export function RoutingSection({ s, part, onPart }: { s: Schemas["SettingsView"]
           </Card>
         </>
       ) : null}
-      {part === "advanced" ? <AdvancedPart routes={routes} setRoutes={setRoutes} error={serversRefused(apiErr) ? errors.sub_routes : undefined} /> : null}
+      {part === "advanced" ? (
+        <AdvancedPart routes={routes} setRoutes={setRoutes} error={serversRefused(apiErr) ? errors.sub_routes : undefined} ofCore={apiErr?.codes.sub_routes !== "routes_servers"} />
+      ) : null}
       {part === "yaml" ? <TemplateCard s={s} text={yaml} setText={setYaml} starter={starter} /> : null}
 
       {part !== "yaml" ? <p className="px-1 text-xs text-[var(--ink-500)]">{t("settings.routesNote")}</p> : null}
@@ -419,8 +425,9 @@ function DeviceDns({ text, onPreset, onText }: { text: ReturnType<typeof dnsText
   );
 }
 
-/** How the server groups look in the apps, and the switches for experts. */
-function AdvancedPart({ routes, setRoutes, error }: { routes: Routes; setRoutes: SetRoutes; error?: string }) {
+/** How the server groups look in the apps, each core's own balance, and the switches for
+ * experts. error is a refusal of the servers' settings, ofCore of a core's own. */
+function AdvancedPart({ routes, setRoutes, error, ofCore }: { routes: Routes; setRoutes: SetRoutes; error?: string; ofCore: boolean }) {
   const servers = routes.servers ?? {};
   const setServers = (patch: Partial<NonNullable<Routes["servers"]>>) => setRoutes((r) => ({ ...r, servers: { ...(r.servers ?? {}), ...patch } }));
   const tune = routes.tune ?? {};
@@ -449,13 +456,14 @@ function AdvancedPart({ routes, setRoutes, error }: { routes: Routes; setRoutes:
           </Select>
         </Field>
         <SwitchRow label={t("settings.routesCountries")} sub={t("settings.routesCountriesSub")} checked={!servers.no_countries} onChange={(v) => setServers({ no_countries: v ? undefined : true })} />
-        {error ? (
+        {error && !ofCore ? (
           <p className="mt-3 text-xs text-[var(--berry-600)]" role="alert">
             {error}
           </p>
         ) : null}
       </Card>
-      <Card title={t("settings.routesTune")} sub={t("common.forExperts")} i={2}>
+      <CoreBalance servers={servers} setServers={setServers} error={ofCore ? error : undefined} />
+      <Card title={t("settings.routesTune")} sub={t("common.forExperts")} i={3}>
         <SwitchRow label={t("settings.routesQuic")} sub={t("settings.routesQuicSub")} checked={!!tune.block_quic} onChange={(v) => setTune({ block_quic: v || undefined })} />
         <SwitchRow label={t("settings.routesSniffer")} sub={t("settings.routesSnifferSub")} checked={!!tune.sniffer} onChange={(v) => setTune({ sniffer: v || undefined })} />
         <SwitchRow label={t("settings.routesRealIP")} sub={t("settings.routesRealIPSub")} checked={!!tune.real_ip} onChange={(v) => setTune({ real_ip: v || undefined })} />

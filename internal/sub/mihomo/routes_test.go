@@ -181,6 +181,23 @@ func TestServerChoice(t *testing.T) {
 	}
 }
 
+// The Clash apps' own balance goes over the common one: the kind of the automatic choice,
+// the interval and the tolerance of the groups that test; the other cores' leave it be.
+func TestMihomoBalance(t *testing.T) {
+	prof := profileOf(subtest.TwoNodes())
+	prof.Routes.Servers = routing.Servers{Auto: "fallback", Interval: 120, Mihomo: routing.MihomoServers{Type: "load-balance", Interval: 600, Tolerance: 150},
+		SingBox: routing.SingBoxServers{Interval: 60}}
+	_, raw := renderRouted(t, prof, routing.All)
+	for _, want := range []string{"name: Авто\n    type: load-balance", "interval: 600", "tolerance: 150"} {
+		if !strings.Contains(string(raw), want) {
+			t.Errorf("no %q:\n%s", want, raw)
+		}
+	}
+	if strings.Contains(string(raw), "interval: 120") || strings.Contains(string(raw), "interval: 60\n") {
+		t.Fatalf("the common or another core's interval:\n%s", raw)
+	}
+}
+
 // QUIC blocked ahead of the admin's rules, the sniffer, and DNS without fake addresses.
 func TestTune(t *testing.T) {
 	prof := profileOf(subtest.Defaults(""))

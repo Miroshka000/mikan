@@ -4358,6 +4358,23 @@ export interface components {
             /** @description Для action=url: https:// или tg:// */
             url?: string;
         };
+        MihomoServers: {
+            /**
+             * Format: int64
+             * @description Секунды между проверками, 30–86400; 0 — общая настройка
+             */
+            interval?: number;
+            /**
+             * Format: int64
+             * @description Миллисекунды: на сервер быстрее меньше чем на столько не переключаться, 0–5000; 0 — 50
+             */
+            tolerance?: number;
+            /**
+             * @description Автовыбор в приложениях Clash: url-test — самый быстрый, fallback — первый рабочий, load-balance — нагрузка по всем
+             * @enum {string}
+             */
+            type?: "url-test" | "fallback" | "load-balance";
+        };
         NodeCertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
             cert: string;
@@ -5745,7 +5762,10 @@ export interface components {
             auto?: string;
             /** Format: int64 */
             interval?: number;
+            mihomo?: components["schemas"]["MihomoServers"];
             no_countries?: boolean;
+            singbox?: components["schemas"]["SingBoxServers"];
+            xray?: components["schemas"]["XrayServers"];
         };
         ServersBody: {
             /** @description Все серверы; false — только выбранные, хотя бы одна нода или протокол */
@@ -5927,6 +5947,18 @@ export interface components {
             support_url: string;
             /** @description Искать сайты маскировки REALITY не только в /24 ноды, но и в соседних /24 её /16, до 20 найденных сайтов или 2 минут. Много подключений: хостер может принять это за сканирование сети */
             wide_sni_scan: boolean;
+        };
+        SingBoxServers: {
+            /**
+             * Format: int64
+             * @description Секунды между проверками, 30–86400; 0 — общая настройка
+             */
+            interval?: number;
+            /**
+             * Format: int64
+             * @description Миллисекунды, 0–5000; 0 — 50
+             */
+            tolerance?: number;
         };
         SiteBytes: {
             /** Format: int64 */
@@ -6933,6 +6965,40 @@ export interface components {
             xmux_max_concurrency?: string;
             /** @description Соединений сразу; взаимоисключается с потоками */
             xmux_max_connections?: string;
+        };
+        XrayServers: {
+            /**
+             * Format: int64
+             * @description leastLoad: из скольких лучших серверов выбирать, 1–100
+             */
+            expected?: number;
+            /**
+             * Format: int64
+             * @description Секунды между проверками, 30–86400; 0 — общая настройка
+             */
+            interval?: number;
+            /**
+             * Format: int64
+             * @description leastLoad: миллисекунды, дольше которых сервер не берётся, 1–60000
+             */
+            max_rtt?: number;
+            /** @description Адрес проверки серверов (http или https); пусто — общий */
+            probe_url?: string;
+            /**
+             * Format: int64
+             * @description leastLoad: сколько последних проверок учитывать, 1–100
+             */
+            sampling?: number;
+            /**
+             * @description Стратегия балансировщика; пусто — по виду группы (самый быстрый — leastPing)
+             * @enum {string}
+             */
+            strategy?: "leastPing" | "leastLoad" | "random" | "roundRobin";
+            /**
+             * Format: double
+             * @description leastLoad: доля неудачных проверок, с которой сервер ещё годится, 0–1
+             */
+            tolerance?: number;
         };
     };
     responses: never;

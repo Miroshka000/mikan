@@ -4319,6 +4319,31 @@
         ],
         "type": "object"
       },
+      "MihomoServers": {
+        "additionalProperties": false,
+        "properties": {
+          "interval": {
+            "description": "Секунды между проверками, 30–86400; 0 — общая настройка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tolerance": {
+            "description": "Миллисекунды: на сервер быстрее меньше чем на столько не переключаться, 0–5000; 0 — 50",
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Автовыбор в приложениях Clash: url-test — самый быстрый, fallback — первый рабочий, load-balance — нагрузка по всем",
+            "enum": [
+              "url-test",
+              "fallback",
+              "load-balance"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "NodeCertInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -8082,8 +8107,17 @@
             "format": "int64",
             "type": "integer"
           },
+          "mihomo": {
+            "$ref": "#/components/schemas/MihomoServers"
+          },
           "no_countries": {
             "type": "boolean"
+          },
+          "singbox": {
+            "$ref": "#/components/schemas/SingBoxServers"
+          },
+          "xray": {
+            "$ref": "#/components/schemas/XrayServers"
           }
         },
         "type": "object"
@@ -8571,6 +8605,22 @@
           "happ_hide_settings",
           "happ_crypt"
         ],
+        "type": "object"
+      },
+      "SingBoxServers": {
+        "additionalProperties": false,
+        "properties": {
+          "interval": {
+            "description": "Секунды между проверками, 30–86400; 0 — общая настройка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tolerance": {
+            "description": "Миллисекунды, 0–5000; 0 — 50",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
         "type": "object"
       },
       "SiteBytes": {
@@ -11151,6 +11201,52 @@
           "xmux_max_connections": {
             "description": "Соединений сразу; взаимоисключается с потоками",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "XrayServers": {
+        "additionalProperties": false,
+        "properties": {
+          "expected": {
+            "description": "leastLoad: из скольких лучших серверов выбирать, 1–100",
+            "format": "int64",
+            "type": "integer"
+          },
+          "interval": {
+            "description": "Секунды между проверками, 30–86400; 0 — общая настройка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_rtt": {
+            "description": "leastLoad: миллисекунды, дольше которых сервер не берётся, 1–60000",
+            "format": "int64",
+            "type": "integer"
+          },
+          "probe_url": {
+            "description": "Адрес проверки серверов (http или https); пусто — общий",
+            "maxLength": 500,
+            "type": "string"
+          },
+          "sampling": {
+            "description": "leastLoad: сколько последних проверок учитывать, 1–100",
+            "format": "int64",
+            "type": "integer"
+          },
+          "strategy": {
+            "description": "Стратегия балансировщика; пусто — по виду группы (самый быстрый — leastPing)",
+            "enum": [
+              "leastPing",
+              "leastLoad",
+              "random",
+              "roundRobin"
+            ],
+            "type": "string"
+          },
+          "tolerance": {
+            "description": "leastLoad: доля неудачных проверок, с которой сервер ещё годится, 0–1",
+            "format": "double",
+            "type": "number"
           }
         },
         "type": "object"

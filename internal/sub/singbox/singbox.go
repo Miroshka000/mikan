@@ -120,7 +120,7 @@ func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode) plan {
 			routes = append(routes, r)
 		}
 	}
-	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.Balance(), routes, p.Lang)
+	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.SingBoxBalance(), routes, p.Lang)
 	pl := plan{groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
 	for _, x := range p.Proxies {
 		pl.proxies = append(pl.proxies, mihomo.Proxy(x))
