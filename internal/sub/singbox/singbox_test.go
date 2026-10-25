@@ -48,6 +48,10 @@ func lists(t *testing.T) {
 			return []string{"DOMAIN-SUFFIX,gosuslugi.ru", "DOMAIN-SUFFIX,sberbank.ru"}, nil
 		case strings.HasSuffix(src, "clV2_provider.yaml"):
 			return []string{"DOMAIN-SUFFIX,instagram.com", "IP-CIDR,149.154.160.0/20,no-resolve"}, nil
+		case strings.HasSuffix(src, "/ru.yaml"):
+			return []string{"+.gosuslugi.ru", "ya.ru", "*.wildcard.ru"}, nil
+		case strings.HasSuffix(src, "/ru.txt"):
+			return []string{"5.8.0.0/16", "not an address"}, nil
 		}
 		return []string{"DOMAIN-KEYWORD,example"}, nil
 	}

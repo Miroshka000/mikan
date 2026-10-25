@@ -11,6 +11,7 @@
     ],
     "servers": [
       {
+        "domain_resolver": "bootstrap",
         "server": "dns.alidns.com",
         "tag": "remote",
         "type": "https"
@@ -23,6 +24,11 @@
       {
         "server": "223.5.5.5",
         "tag": "policy-0",
+        "type": "udp"
+      },
+      {
+        "server": "1.1.1.1",
+        "tag": "bootstrap",
         "type": "udp"
       }
     ],
@@ -205,7 +211,7 @@
         "rules": [
           {
             "ip_cidr": [
-              "DOMAIN-KEYWORD,example"
+              "5.8.0.0/16"
             ]
           }
         ],

@@ -176,7 +176,10 @@
         "rules": [
           {
             "domain": [
-              "DOMAIN-KEYWORD,example"
+              "ya.ru"
+            ],
+            "domain_suffix": [
+              "gosuslugi.ru"
             ]
           }
         ],

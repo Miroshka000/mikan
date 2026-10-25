@@ -277,19 +277,7 @@
         ]
       },
       {
-        "action": "reject",
-        "rule_set": [
-          "list-mikan-blocked"
-        ]
-      },
-      {
         "outbound": "VPN",
-        "rule_set": [
-          "list-mikan-blocked-apps"
-        ]
-      },
-      {
-        "action": "reject",
         "rule_set": [
           "list-mikan-blocked-apps"
         ]
