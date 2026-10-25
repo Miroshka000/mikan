@@ -23,6 +23,7 @@ import { SubDomainCard } from "./sub-domain";
 import { SiteCard } from "./site";
 import { HappCard } from "./happ";
 import { SubPageSettings, type SubPagePart } from "./sub-page";
+import { WebhooksCard } from "./webhooks-link";
 
 type Tab = SettingsSearch["tab"];
 
@@ -118,6 +119,7 @@ export function SettingsPage() {
                     <SiteCard s={s} />
                     <CertificateCard s={s} />
                     <ApiCard />
+                    <WebhooksCard />
                   </>
                 )
               ) : tab === "support" ? (
