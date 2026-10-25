@@ -1,0 +1,252 @@
+---
+title: Subscription specification
+description: "Every header and field mikan reads from an app's request and sends with a subscription: meaning, format and examples. For app authors and for services that serve subscriptions of their own."
+---
+
+This page describes everything mikan reads from a subscription request and sends in the answer: headers, a URL parameter and fields. It is for authors of apps who want to show the term, traffic, an announcement and device places, and for anyone building a subscription service with the same behaviour. What each setting turns on is in [Subscription page and apps](/mikan/en/subscriptions/page/), [Happ](/mikan/en/subscriptions/happ/) and [Plans and users](/mikan/en/billing/plans/#devices).
+
+HTTP header names are case-insensitive, so read them without regard to case. They are written here the way the apps' documents name them. A value of the form `base64:` followed by a string is base64 (the standard alphabet, with `=`) of text in UTF-8.
+
+## Request
+
+A subscription is served at the link the panel gives the client, on `GET`. A `HEAD` request returns the headers of the term, traffic, page, announcement, binding, branding and Happ without a body: this is how apps learn the term and traffic. `Content-Type`, `Content-Disposition`, `X-Mikan-Groups` and the reason headers of a notice in place of the servers are not on it, and on `HEAD` the panel neither binds a device nor hands out keys.
+
+What the panel reads from the request:
+
+| From | Field | Meaning |
+|---|---|---|
+| header | `User-Agent` | The app and the version of its core, see [The app](#the-app). Recorded in the device's card as the app, up to 120 characters |
+| URL parameter | `format` | The format of the answer, explicitly, see [Answer format](#answer-format) |
+| header | `Accept` | `text/html` from an app the panel does not know gives the subscription page |
+| header | `X-Hwid` | The device ID, see [Device](#device) |
+| header | `X-Device-Os` | The device's system, for example `Android`, `iOS`, `Windows`. Up to 40 characters |
+| header | `X-Ver-Os` | The system's version, up to 40 characters |
+| header | `X-Device-Model` | The device's model, up to 60 characters |
+| header | `X-Mikan-Features` | What the Mikan app can show, see [Server groups for the Mikan app](#server-groups-for-the-mikan-app) |
+
+The panel reads no other headers. For example, it has no use for `x-app-version`: the app and the version of its core come from `User-Agent`. The device values are stripped of control characters and cut to their length.
+
+### The app
+
+The panel gives an app only the protocols it can run, and tells it by `User-Agent`, regardless of case. The check goes from the top down, by the first match:
+
+| App | `User-Agent` | Format |
+|---|---|---|
+| Stash | starts with `stash` | Clash |
+| Hiddify and apps on sing-box | contains `hiddify`, `karing`, `sing-box`, `singbox`, `nekobox`, `nekoray`, `husi`, `throne`, `deskbox` or `inhive`; starts with `sfa`, `sfi`, `sfm` or `sft` | links; the official sing-box apps (`sfa`, `sfi`, `sfm`, `sft`) that name a core of `sing-box 1.12.0` or newer get a whole sing-box config |
+| Apps on mihomo | contains `mihomo`, `clash`, `koala`, `kabosu`, `verge`, `prizrak`, `flowvy`, `murge` or `rabbit` | Clash |
+| Apps on Xray | contains `happ`, `v2raytun`, `incy`, `v2rayng`, `v2rayn`, `onexray`, `v2box`, `simplexray` or `renoarx` | links |
+| Others | everything else | links or the subscription page, see [Answer format](#answer-format); `streisand`, `shadowrocket` and `foxray` always get links |
+
+The panel reads the core's version from `User-Agent` when the app names it: `mihomo/1.19.31` or `clash.meta/1.19.31`, `sing-box 1.14.2` (for example `SFA (sing-box 1.14.2; language en_US)`), `HiddifyNext/4.1.1`. For `Koala-Clash/1.4.0` the core is known from the app's version. The version decides which protocols and parameters are sent: a core that does not know one yet would get a profile it rejects whole. What each app gets is in [the presets table](/mikan/en/protocols/presets/#who-gets-what).
+
+### Answer format
+
+The format is chosen in this order:
+
+1. The `format` parameter in the URL, if there is one:
+
+| Value of `format` | Format | Content-Type |
+|---|---|---|
+| `clash`, `mihomo`, `yaml` | a Clash profile (YAML) | `text/yaml; charset=utf-8` |
+| `singbox`, `sing-box` | a whole sing-box config (JSON) | `application/json; charset=utf-8` |
+| `uri`, `v2ray`, `base64` | links such as `vless://`, one to a line, the whole list in base64 | `text/plain; charset=utf-8` |
+| `html` | the subscription page | a page |
+
+2. Without the parameter: by `User-Agent`, as in the table above.
+3. An app from the "Others" row (except `streisand`, `shadowrocket` and `foxray`) gets the subscription page if `Accept` has `text/html`, and the list of links if it does not.
+
+The subscription page also goes to messengers that build a preview of a pasted link (Telegram, WhatsApp and the like) when the URL has no `format`. The page itself is not part of this specification.
+
+### Device
+
+`X-Hwid` is the device ID. It is needed when **Settings → Subscription → Devices → Bind subscriptions to devices** is on: a device with an ID gets keys of its own and a place in the client's limit, details in [Plans and users](/mikan/en/billing/plans/#devices). Without binding the panel gives every device the client's keys, but it reads the ID then too: a device the administrator blocked gets no keys.
+
+An ID is valid if it is made of Latin letters, digits, `=` and `-`, and is 10 to 64 characters long. An invalid ID counts as missing. Without an ID all of a client's apps share one place, and with **Only allow apps that identify the device** on they get a notice in place of the servers with the `X-Hwid-Not-Supported` header. The address the request came from is recorded with the device.
+
+An example request:
+
+```bash
+curl -sS -D - -o /dev/null \
+  -H "User-Agent: Koala-Clash/1.4.0" \
+  -H "X-Hwid: 0f4c6a1e9b7d4c52" \
+  -H "X-Device-Os: Windows" \
+  -H "X-Ver-Os: 11" \
+  -H "X-Device-Model: ThinkPad X1" \
+  "https://sub.example.com/TOKEN"
+```
+
+## Answer
+
+The headers of the term and traffic, page and announcement, binding, branding and Happ go with a profile and with a notice in place of the servers (see [A notice in place of the servers](#a-notice-in-place-of-the-servers)), and `Content-Disposition` and `X-Mikan-Groups` go with a profile only. On `HEAD` all go except `Content-Type`, `Content-Disposition`, `X-Mikan-Groups` and the reason headers of the binding table. An example answer to the request above with binding, support and an announcement turned on:
+
+```http
+HTTP/1.1 200 OK
+Subscription-Userinfo: upload=1073741824; download=5368709120; total=107374182400; expire=1798761600
+Profile-Update-Interval: 1
+Profile-Title: base64:bWlrYW4gwrcg0LTQviAxMC4xMS4yMDI2
+Support-Url: https://t.me/mikan_support
+Profile-Web-Page-Url: https://sub.example.com/TOKEN
+Announce: base64:0KLQtdGF0L3QuNGH0LXRgdC60LjQtSDRgNCw0LHQvtGC0YsgMTIg0L3QvtGP0LHRgNGP
+Announce-Url: https://t.me/mikan_news
+X-Hwid-Active: true
+Cache-Control: no-store
+Content-Type: text/yaml; charset=utf-8
+Content-Disposition: attachment; filename*=UTF-8''mikan%20%C2%B7%20%D0%B4%D0%BE%2010.11.2026.yaml
+```
+
+If the token is not among the subscriptions, the answer is `404` with the text `404 Not Found`. If the panel could not answer, it is `500` with the text `internal error`: it does not say why. Every answer with a subscription carries `Cache-Control: no-store`.
+
+### Term and traffic
+
+| Header | Value |
+|---|---|
+| `Subscription-Userinfo` | `upload=<bytes>; download=<bytes>; total=<bytes>; expire=<time>` |
+| `Profile-Update-Interval` | always `1`: the app refreshes the subscription hourly |
+| `Profile-Title` | `base64:` and the profile's name |
+| `Support-Url` | the support link, only if it is set |
+
+The fields of `Subscription-Userinfo`:
+
+- `upload` and `download`: how much of the main traffic the client sent and received in the current period, in bytes;
+- `total`: how much traffic is available to the client. It is the limit, and when traffic packages are left, the larger of the limit and what was used, plus what is left of the packages. `0` means "no limit";
+- `expire`: the end of the term, Unix time in seconds. `0` means "no expiry".
+
+`Profile-Title` is the **Subscription name in apps** field with the variables filled in, see [the table of variables](/mikan/en/subscriptions/page/#subscription-name-in-apps). Empty, or empty after filling: the service name. The result is one line of up to 200 characters. Clash apps name the profile after the file, so the file name is taken from this title too, see [Profile](#profile).
+
+`Support-Url` comes from **Settings → Subscription → Support**. It is an `https://` link with a host, or `tg://`, with no spaces and no user name in the address.
+
+### Page and announcement
+
+| Header | Value |
+|---|---|
+| `Profile-Web-Page-Url` | the address of the subscription page: Happ and v2RayTun open it with their "in browser" button |
+| `Announce` | `base64:` and the text of the announcement |
+| `Announce-Url` | where a tap on the announcement leads, only together with `Announce` |
+
+`Profile-Web-Page-Url` is the subscription link without parameters. If the panel has an address for links (a domain of its own for subscriptions, or the panel's address), it is built from that address and the subscription's token; otherwise the address the request came to is taken.
+
+`Announce` is the **Announcement** field with the same variables as the title. Apps get it as one line of up to 200 characters: line breaks turn into spaces. INCY is the exception: it gets up to 5 lines with their indents, up to 200 characters in all. On the subscription page and in the Mini App the announcement is longer: up to 10 lines and 1000 characters. Without an announcement there is neither `Announce` nor `Announce-Url`.
+
+`Announce-Url` is the **Announcement link**: `https://` or `tg://`, by the same rules as `Support-Url`.
+
+### Device binding
+
+| Header | When | Value |
+|---|---|---|
+| `X-Hwid-Active` | binding is on | `true`: the panel counts devices by ID |
+| `X-Hwid-Not-Supported` | the app sent no valid ID and one is needed | `true` |
+| `X-Hwid-Max-Devices-Reached` | there is no place for a new device | `true` |
+| `X-Hwid-Limit` | together with `X-Hwid-Max-Devices-Reached` | `true`: v2RayTun shows its notice only with it |
+
+`X-Hwid-Active` goes with every answer while binding is on. The other three go only with a notice in place of the servers, and only for their own reasons. A blocked or unbound device does not get them: the notice's name says why.
+
+### Profile
+
+| Format | Content-Type | Content-Disposition |
+|---|---|---|
+| Clash | `text/yaml; charset=utf-8` | `attachment; filename*=UTF-8''<name>.yaml` |
+| sing-box | `application/json; charset=utf-8` | `attachment; filename*=UTF-8''<name>.json` |
+| links | `text/plain; charset=utf-8` | none |
+
+The file name is made of the profile's title (`Profile-Title`): the characters `/ \ : * ? " < > |` and control characters turn into spaces, the ends are trimmed, and an empty name becomes `mikan`. In `filename*` it is written in UTF-8 percent-encoding, as in the example above.
+
+### Server groups for the Mikan app
+
+The Mikan app asks to show the server groups with the request header `X-Mikan-Features: groups`. The comma-separated list may hold other words too: case and spaces do not matter, and the header may be repeated. Today the panel knows one extension, `groups`. An app that does not ask for it gets the subscription unchanged, header for header: the groups never turn into extra servers or proxy groups.
+
+The answer carries `X-Mikan-Groups`: `base64:` and JSON. An example (the value is shortened):
+
+```http
+X-Mikan-Groups: base64:eyJ2IjoxLCJyZXNldHNfYXQiOjE3OTYwODMyMDAsImdyb3VwcyI6W3siaWQiOjMs…
+```
+
+The same JSON decoded:
+
+```json
+{
+  "v": 1,
+  "resets_at": 1796083200,
+  "groups": [
+    {"id": 3, "name": "Белые списки", "mode": "own", "used": 2147483648, "limit": 32212254720, "extra": 5368709120, "left": 35433480192, "state": "active", "proxies": ["WL Moscow", "WL Saint Petersburg"]},
+    {"id": 4, "name": "Премиум", "mode": "unlimited", "used": 1073741824, "state": "active", "proxies": ["Premium Frankfurt"]},
+    {"id": 5, "name": "Общие", "mode": "main", "state": "active", "proxies": ["Frankfurt", "Amsterdam"]}
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `v` | the format's version, `1` now. It changes only when an app that reads the previous version would read the new one wrong: new fields are added without a change of version |
+| `resets_at` | when the period's traffic starts over, Unix time in seconds. The field is absent if it never does |
+| `groups` | the groups in the order the panel lists them |
+| `id`, `name` | the group's number and name |
+| `mode` | `own`: a limit of its own apart from the main traffic; `unlimited`: apart, with no limit; `main`: its servers spend the main traffic, and the app only names them |
+| `used` | bytes used in the period. Absent for `main`, and a zero value is left out |
+| `limit` | `own` only: the group's base limit in bytes |
+| `extra` | `own` only: how much is left of the traffic bought or given for the group. A zero value is left out |
+| `left` | `own` only: how much is left in all, the limit and packages together |
+| `state` | `active`, or `exhausted` when an `own` group has nothing left: its servers are out of the profile until the period starts over or traffic is bought |
+| `proxies` | the names of the group's servers in this very profile. `null` when the names did not fit in the header |
+
+The list holds the groups the client may use: `own` always, an exhausted one too; `unlimited` with servers in the profile or with traffic used; `main` only with servers to name.
+
+The header goes only with a Clash profile or a list of links. It is not on a sing-box config, a notice in place of the servers, or an answer to `HEAD`. The value is at most 1536 characters long, because a reverse proxy in front of the panel (nginx by default) answers with an error when the headers do not fit its buffer. If it is longer, the `main` groups go first (they hold names only) and `proxies` of the others becomes `null`, then groups are dropped from the end one by one. If nothing fits, there is no header. If the panel could not read the groups, the profile still goes out without the header, and the app shows the groups of its last fetch.
+
+### Branding in apps
+
+These headers go only when the **Settings → Subscription → Your brand in the apps** switch is on. Both sets go to any app: ClashFest reads `X-Brand-*`, SlothClash reads `X-Brand-Desktop-*`, and without `true` in the first row of the table they ignore the other fields. Other apps do not read these headers.
+
+| ClashFest | SlothClash | Value |
+|---|---|---|
+| `X-Branding-Enabled` | `X-Brand-Desktop-Enabled` | `true`, always with branding on |
+| `X-Brand-Name` | `X-Brand-Desktop-Name` | the service name, up to 32 characters |
+| `X-Brand-User-Display-Name` | `X-Brand-Desktop-User-Display-Name` | the client's name, up to 64 characters |
+| `X-Brand-Accent-Color` | `X-Brand-Desktop-Accent-Color` | a colour, `#RRGGBB` |
+| `X-Brand-Logo-URL` | `X-Brand-Desktop-Logo-URL` | an `https://` link to an image |
+| `X-Brand-Support-URL` | `X-Brand-Desktop-Support-URL` | the same link as in `Support-Url` |
+| `X-Brand-Bot-URL` | `X-Brand-Desktop-Bot-URL` | the bot's address without a start code |
+| `X-Brand-Renew-URL` | `X-Brand-Desktop-Renew-URL` | the address of the subscription page |
+| `X-Brand-Max-Devices` | `X-Brand-Desktop-Devices-Limit` | the client's number of places |
+| `X-Brand-Current-Devices` | `X-Brand-Desktop-Devices-Used` | how many places are taken |
+
+All the fields but the first go only when they have a value. The name and the client's name are stripped of control characters and cut to their length. ClashFest decodes `base64:`, so text with non-ASCII characters goes to it that way, for example `X-Brand-Name: base64:0JzQvtC5IFZQTg==`, and plain ASCII as it is. SlothClash gets text in UTF-8 as it is. The bot's start code does not get into the address: apps keep headers for days, and a code ties a subscription to whoever opens the link first.
+
+The number of places goes only when device binding is on and the client has a limit of places. In the "Online at once" mode there are no places, and these two headers are absent.
+
+### Happ and INCY
+
+Only Happ and INCY get these headers; they are told by `User-Agent` (it has `happ` or `incy`). Other apps do not see them. They are set in the Happ card of **Settings → Subscription**, more in [Happ](/mikan/en/subscriptions/happ/).
+
+| Header | To | Value |
+|---|---|---|
+| `routing` | Happ and INCY | the routing profile, a link |
+| `providerid` | Happ | the provider ID at happ-proxy.com |
+| `hide-settings` | Happ | `1`: hide the server settings |
+
+- `routing` for Happ is a link `happ://routing/onadd/…` (the profile is added and turned on), `happ://routing/add/…` (only added) or `happ://routing/off`. After the prefix comes the base64 of a JSON profile, as Happ itself exports it. If "From the routing settings" is chosen, the panel makes the profile itself from the rules of **Settings → Routing**: the sites and IPs that go direct, through the proxy or nowhere, with no groups and no process names. INCY gets the same link with the `incy://` scheme, and `providerid` and `hide-settings` do not go to it.
+- `providerid`: Latin letters, digits, `-` and `_`, 1 to 64 characters.
+- `hide-settings` goes only together with `providerid`: without a provider ID Happ would not accept hiding.
+
+An example for Happ:
+
+```http
+routing: happ://routing/onadd/eyJOYW1lIjoibWlrYW4iLCJHbG9iYWxQcm94eSI6…
+providerid: Ab3dE9fG
+hide-settings: 1
+```
+
+### A notice in place of the servers
+
+When there are no keys or the profile is empty, the panel answers `200` with a profile in the same format that holds one placeholder server: its name explains the reason (in the panel's language) and shows where the servers would be. The headers of the term, traffic, page, announcement, branding and Happ are the same as in an ordinary answer, `Content-Type` follows the format, and `Content-Disposition` and `X-Mikan-Groups` are absent. The binding headers of the table above are added to them.
+
+| Reason | Additional headers |
+|---|---|
+| There is no place for a new device | `X-Hwid-Max-Devices-Reached: true`, `X-Hwid-Limit: true` |
+| The app sent no valid ID and one is needed | `X-Hwid-Not-Supported: true` |
+| The administrator blocked the device | none |
+| The subscriber unbound the device: a pause or for good | none |
+| The subscription has no servers this app can run | none |
+| The term is over, the traffic is used up or the subscription is off, and **Show a notice in place of the servers** is on | none |
+
+The notice for the last reason can have a text of your own, see [When a subscription does not work](/mikan/en/subscriptions/page/#when-a-subscription-does-not-work).

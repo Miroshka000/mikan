@@ -1,0 +1,135 @@
+---
+title: Создать пользователя по ключу
+description: Как выпустить ключ API, найти тариф, создать пользователя запросом POST /users и получить ссылку на его подписку, с примерами на curl, TypeScript и Python.
+---
+
+import { Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Скрипт или свой сервис заводит пользователей так же, как администратор в панели: по тарифу, с его лимитами и сроком. В ответе приходит ссылка на подписку.
+
+<Steps>
+
+1. **Выпустите ключ**: **Настройки → Безопасность → API → Новый ключ**. Права нужны «Полный доступ»: создание пользователя меняет данные, а ключ «Чтение» выполняет только GET. Панель спросит пароль администратора и код 2FA, если она включена. Ключ показывается один раз и выглядит как `mk_...`.
+
+2. **Возьмите адрес API** на той же странице: `https://<панель>:<порт>/<секретный путь>/api/v1`.
+
+3. **Найдите номер тарифа**: `GET /tariffs` отдаёт список, нужное поле `id`. Тариф из архива не подойдёт.
+
+4. **Создайте пользователя**: `POST /users` с именем и номером тарифа. Контакт, заметка и метки необязательны.
+
+5. **Отдайте ссылку**: она в поле `sub_url` ответа.
+
+</Steps>
+
+## Запросы
+
+<Tabs syncKey="api-client">
+<TabItem label="curl">
+
+```bash
+BASE="https://vpn.example.com:8443/SECRET-PATH/api/v1"
+KEY="mk_..."
+
+# 3. тарифы
+curl -s -H "Authorization: Bearer $KEY" "$BASE/tariffs"
+
+# 4. пользователь на тарифе 2
+curl -s -X POST "$BASE/users" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"name": "Anna", "tariff_id": 2, "contact": "@anna", "tags": ["family"]}'
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { createClient } from "mikan-sdk";
+
+const mikan = createClient({
+  baseUrl: "https://vpn.example.com:8443/SECRET-PATH/api/v1",
+  apiKey: process.env.MIKAN_API_KEY!,
+});
+
+// 3. тарифы
+const tariffs = await mikan.GET("/tariffs");
+if (tariffs.error) throw new Error(tariffs.error.detail);
+console.log(tariffs.data.map((t) => `${t.id}: ${t.name}`));
+
+// 4. пользователь на тарифе 2
+const created = await mikan.POST("/users", {
+  body: { name: "Anna", tariff_id: 2, contact: "@anna", tags: ["family"] },
+});
+if (created.error) throw new Error(created.error.detail);
+console.log(created.data.id, created.data.sub_url);
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import os
+
+from mikan_sdk import AuthenticatedClient
+from mikan_sdk.api.tariffs import list_tariffs
+from mikan_sdk.api.users import create_user
+from mikan_sdk.models import CreateUserInputBody
+
+client = AuthenticatedClient(
+    base_url="https://vpn.example.com:8443/SECRET-PATH/api/v1",
+    token=os.environ["MIKAN_API_KEY"],
+)
+
+# 3. тарифы
+tariffs = list_tariffs.sync_detailed(client=client)
+if tariffs.status_code != 200:
+    raise RuntimeError(tariffs.parsed.detail)
+print([f"{t.id}: {t.name}" for t in tariffs.parsed])
+
+# 4. пользователь на тарифе 2
+created = create_user.sync_detailed(
+    client=client,
+    body=CreateUserInputBody(name="Anna", tariff_id=2, contact="@anna", tags=["family"]),
+)
+if created.status_code != 201:
+    raise RuntimeError(created.parsed.detail)
+print(created.parsed.id, created.parsed.sub_url)
+```
+
+</TabItem>
+</Tabs>
+
+Ответ на создание, сокращённо:
+
+```json
+{
+  "id": 42,
+  "name": "Anna",
+  "contact": "@anna",
+  "tags": ["family"],
+  "state": "active",
+  "tariff_id": 2,
+  "traffic_limit": 107374182400,
+  "expires_at": "2026-11-25T12:00:00Z",
+  "sub_url": "https://vpn.example.com:8443/..."
+}
+```
+
+Установка SDK и адрес API для него описаны на странице [SDK](/mikan/api/sdk/).
+
+## Что получает пользователь
+
+Из тарифа берутся лимит трафика, число устройств, скорость, правило сброса трафика, серверы и срок. Срок отсчитывается от момента создания. Пользователь создан «в панели»: его `source` равен `admin`, как у созданных вручную.
+
+Дальше тем же ключом можно [продлить](/mikan/api/reference/operations/extend-user/) срок, [начислить трафик](/mikan/api/reference/operations/grant-traffic/), [перевыпустить ссылку](/mikan/api/reference/operations/reissue-user/) или сбросить трафик. Полный список методов в [справочнике](/mikan/api/reference/).
+
+## Если не получилось
+
+| Ответ | Что значит |
+|---|---|
+| 401 `unauthorized` | ключа нет, он неверный, отозван или истёк. Частые неудачи с одного адреса временно закрывают вход: 429 `rate_limited`, срок в заголовке `Retry-After` |
+| 403 `read_only_key` | ключ «Чтение» пробует менять данные: выпустите ключ «Полный доступ» |
+| 422, `body.tariff_id`, `tariff_not_found` | такого тарифа нет или он в архиве |
+| 422, `body.name` | имя пустое (`user_name_empty`), длиннее 100 букв (`user_name_long`) или с управляющими символами (`name_chars`) |
+| 503 `no_free_slots` | в панели кончились свободные места под пользователей |
+
+Ошибки приходят в формате RFC 9457: код в поле `detail`, коды по полям в `errors[]`.
