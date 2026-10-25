@@ -3128,7 +3128,10 @@
         "created": "Subscription created",
         "granted": "Days or traffic granted by an addon",
         "expiring": "Subscription ends soon",
-        "expired": "Subscription ended"
+        "expired": "Subscription ended",
+        "started": "Term that waited for a connection started",
+        "switched": "Next plan took over",
+        "removed": "Inactive subscription deleted"
       },
       "traffic": {
         "90": "90% of traffic used",

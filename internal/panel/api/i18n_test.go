@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"mikan/internal/panel/events"
 )
 
 // codeSources are where error codes the web shows are written: the API's own (huma's
@@ -140,6 +142,40 @@ func TestErrorCodesHaveTexts(t *testing.T) {
 	for code := range codesNotShown {
 		if _, ok := where[code]; !ok {
 			t.Errorf("codesNotShown has %s, which nothing sends", code)
+		}
+	}
+}
+
+// Every event type the panel emits has a name in both languages under webhooks.events of
+// web/src/i18n: the picker of events on the webhooks page shows the bare type otherwise. A
+// name left for a type the panel no longer emits goes too, so the two lists stay one.
+func TestWebhookEventsHaveTexts(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	for _, lang := range []string{"ru", "en"} {
+		raw, err := os.ReadFile(filepath.Join(root, "web", "src", "i18n", lang+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var f struct {
+			Webhooks struct {
+				Events map[string]map[string]string `json:"events"`
+			} `json:"webhooks"`
+		}
+		if err := json.Unmarshal(raw, &f); err != nil {
+			t.Fatalf("%s.json: %v", lang, err)
+		}
+		for _, typ := range events.Types() {
+			group, name, _ := strings.Cut(typ, ".")
+			if f.Webhooks.Events[group][name] == "" {
+				t.Errorf("%s: no webhooks.events.%s in %s.json", typ, typ, lang)
+			}
+		}
+		for group, names := range f.Webhooks.Events {
+			for name := range names {
+				if !events.Known(group + "." + name) {
+					t.Errorf("%s.json: webhooks.events.%s.%s names no event the panel emits", lang, group, name)
+				}
+			}
 		}
 	}
 }
