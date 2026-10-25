@@ -2793,6 +2793,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Адреса для событий (webhooks) */
+        get: operations["list-webhooks"];
+        put?: never;
+        /** Добавить адрес: секрет подписи показывается один раз */
+        post: operations["create-webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Какие события можно отправлять */
+        get: operations["list-webhook-events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить адрес вместе с его журналом */
+        delete: operations["delete-webhook"];
+        options?: never;
+        head?: never;
+        /** Изменить адрес */
+        patch: operations["update-webhook"];
+        trace?: never;
+    };
+    "/api/v1/webhooks/{id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Журнал доставок адреса: хранится 7 суток после последней попытки */
+        get: operations["list-webhook-deliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{id}/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Выпустить новый секрет: старый перестаёт подписывать сразу, новый показывается один раз */
+        post: operations["rotate-webhook-secret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отправить проверочное событие webhook.test: одна попытка, ответ сразу */
+        post: operations["test-webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3621,6 +3725,18 @@ export interface components {
             tags?: string[];
             /** Format: int64 */
             tariff_id: number;
+        };
+        CreateWebhookInputBody: {
+            /** @description Разрешить адреса этого сервера и его сети: localhost, 10.x, 172.16-31.x, 192.168.x, 100.64-127.x. Метаданные облака (169.254.169.254 и подобные) закрыты всегда */
+            allow_local?: boolean;
+            /** @description Не задано — включён */
+            enabled?: boolean;
+            /** @description Типы событий (GET /webhooks/events); пусто или не задано — все, и те, что появятся позже */
+            events?: string[];
+            /** @description Название для списка */
+            name: string;
+            /** @description http:// или https:// и адрес получателя. Адреса этого сервера, его сети и облачных метаданных панель не принимает; для адресов сети нужен allow_local */
+            url: string;
         };
         DNS: {
             default_nameserver?: string[];
@@ -5159,6 +5275,14 @@ export interface components {
             /** Format: int64 */
             traffic_limit?: number;
             traffic_unlimited?: boolean;
+        };
+        PatchWebhookInputBody: {
+            allow_local?: boolean;
+            enabled?: boolean;
+            /** @description Пустой список — все события. Добавленные типы начинаются с этой минуты, если адрес ничего не должен; что ему должны, он получит */
+            events?: string[];
+            name?: string;
+            url?: string;
         };
         PaymentSettingsView: {
             /** @description Новые люди могут купить подписку в боте; иначе — только продление */
@@ -6850,6 +6974,139 @@ export interface components {
             source?: "register" | "import" | "";
             /** @description Последняя проверка выхода через WARP с ноды; нет — у ноды ещё нет настроенного WARP */
             status?: components["schemas"]["WarpCheck"];
+        };
+        WebhookCreatedView: {
+            /** @description Можно ли слать на адреса этого сервера и его сети (localhost, 10.x, 192.168.x, 100.64.x). Адреса из диапазона 169.254 с метаданными облака и подобные закрыты всегда */
+            allow_local: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description Выключенный адрес ничего не получает, события ждут его до недели */
+            enabled: boolean;
+            /** @description Какие события отправляются; пусто — все, и новые тоже */
+            events: string[];
+            /** Format: int64 */
+            id: number;
+            /** @description Последняя доставка: по ней видно, всё ли в порядке */
+            last?: components["schemas"]["WebhookDeliveryView"];
+            name: string;
+            /** @description Секрет подписи: показывается один раз, потом только его конец (secret_hint). Получатель проверяет им каждый запрос */
+            secret: string;
+            /**
+             * Format: date-time
+             * @description Когда секрет создан или заменён
+             */
+            secret_at: string;
+            /** @description Последние символы секрета: чтобы понять, какой из них у получателя */
+            secret_hint: string;
+            url: string;
+            /**
+             * Format: int64
+             * @description Сколько событий ждёт отправки этому адресу
+             */
+            waiting: number;
+        };
+        WebhookDeliveriesOutputBody: {
+            /** @description От новых к старым */
+            items: components["schemas"]["WebhookDeliveryView"][];
+            /**
+             * Format: int64
+             * @description Передайте как before за следующей страницей; 0 — это всё
+             */
+            next: number;
+        };
+        WebhookDeliveryView: {
+            /**
+             * Format: int64
+             * @description Сколько раз пробовали
+             */
+            attempts: number;
+            /**
+             * Format: date-time
+             * @description Первая попытка
+             */
+            created_at: string;
+            /** @description Почему не вышло в последний раз: address_local, address_blocked, dns, refused, timeout, tls, redirect, status, network, internal; после 2xx пусто */
+            error?: string;
+            /**
+             * Format: int64
+             * @description Номер события в ленте; у проверки его нет
+             */
+            event_id?: number;
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description HTTP-статус последнего ответа; 0 — ответа не было
+             */
+            response_code: number;
+            /**
+             * @description retrying — будет отправлено снова; delivered — получатель ответил 2xx; failed — больше не пробуем (проверка не прошла, событие ушло из ленты или адрес его больше не просит)
+             * @enum {string}
+             */
+            status: "retrying" | "delivered" | "failed";
+            /** @description Тип события; webhook.test — проверка кнопкой */
+            type: string;
+            /**
+             * Format: date-time
+             * @description Последняя попытка
+             */
+            updated_at: string;
+        };
+        WebhookEventsView: {
+            /** @description Типы событий, которые панель отправляет: каждый можно выбрать для адреса */
+            types: string[];
+        };
+        WebhookTestView: {
+            /**
+             * Format: int64
+             * @description Сколько шла проверка
+             */
+            duration_ms: number;
+            /** @description Почему не вышло: те же коды, что у доставок */
+            error?: string;
+            /** @description Получатель ответил 2xx */
+            ok: boolean;
+            /**
+             * Format: int64
+             * @description HTTP-статус ответа; 0 — ответа не было
+             */
+            status: number;
+        };
+        WebhookView: {
+            /** @description Можно ли слать на адреса этого сервера и его сети (localhost, 10.x, 192.168.x, 100.64.x). Адреса из диапазона 169.254 с метаданными облака и подобные закрыты всегда */
+            allow_local: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** @description Выключенный адрес ничего не получает, события ждут его до недели */
+            enabled: boolean;
+            /** @description Какие события отправляются; пусто — все, и новые тоже */
+            events: string[];
+            /** Format: int64 */
+            id: number;
+            /** @description Последняя доставка: по ней видно, всё ли в порядке */
+            last?: components["schemas"]["WebhookDeliveryView"];
+            name: string;
+            /**
+             * Format: date-time
+             * @description Когда секрет создан или заменён
+             */
+            secret_at: string;
+            /** @description Последние символы секрета: чтобы понять, какой из них у получателя */
+            secret_hint: string;
+            url: string;
+            /**
+             * Format: int64
+             * @description Сколько событий ждёт отправки этому адресу
+             */
+            waiting: number;
+        };
+        WebhooksView: {
+            items: components["schemas"]["WebhookView"][];
+            /**
+             * Format: int64
+             * @description Сколько адресов можно завести
+             */
+            limit: number;
         };
         XHTTPTuning: {
             /** @description Размер куска отправки у приложений, байт: число или диапазон */
@@ -13445,6 +13702,260 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrafficOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhooksView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWebhookInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookCreatedView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-webhook-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookEventsView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchWebhookInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-webhook-deliveries": {
+        parameters: {
+            query?: {
+                /** @description Записи до этого номера; 0 — самые новые */
+                before?: number;
+                limit?: number;
+                /** @description Только с этим статусом; не задано — любые */
+                status?: "retrying" | "delivered" | "failed";
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveriesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "rotate-webhook-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookCreatedView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "test-webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookTestView"];
                 };
             };
             /** @description Error */

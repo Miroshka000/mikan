@@ -531,6 +531,13 @@
       "device_no_hwid": "Only a device with an ID can be banned. Apps without one share a single place",
       "source_url_invalid": "The address does not fit. It must be an https link to mikan-addon.json or index.json, or github.com/owner/repo.",
       "source_address_refused": "The source points to a closed address (local or internal): the panel does not go there.",
+      "webhook_url_invalid": "The address is not a URL with a host, or it holds a login, a password or a #fragment",
+      "webhook_url_scheme": "The address starts with http:// or https://",
+      "webhook_url_port": "The port is 1 to 65535",
+      "webhook_url_local": "This is an address of this server or its local network. Turn on “Allow local targets” if you mean it",
+      "webhook_url_blocked": "The panel never sends to this address: it is cloud metadata or leads nowhere",
+      "webhook_event_unknown": "The panel has no event “{value}”",
+      "webhooks_limit": "There are too many addresses already: delete the ones you do not use",
       "source_redirect_refused": "The source redirects to another site: the panel does not follow.",
       "source_too_large": "The source file is larger than 1 MiB.",
       "source_unreachable": "The source does not answer or answered with an error.",
@@ -2890,13 +2897,151 @@
       "support": "Support access",
       "support-operator": "Support operator",
       "auth": "Sign-in and sessions",
-      "payments": "Payments"
+      "payments": "Payments",
+      "webhooks": "Webhooks"
     },
     "back": "Settings",
     "download": "Download OpenAPI",
     "downloadHint": "openapi.json for Postman, Insomnia, Swagger UI and client generators. It carries this panel's address, which is secret, so do not publish the file.",
     "prometheus": "Prometheus and Grafana",
     "prometheusHint": "GET /metrics gives clients, traffic, nodes and protocols in the Prometheus format. Scrape it with a read key; this is the job for prometheus.yml:"
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "The panel sends its events to your servers: payments, subscribers, devices, nodes. Every request is signed.",
+    "back": "Settings",
+    "docs": "How to check the signature",
+    "linkTitle": "Webhooks",
+    "linkSub": "The panel's events sent to your servers: payments, subscribers, devices, nodes.",
+    "linkOpen": "Open",
+    "cardTitle": "Addresses",
+    "cardSub": "Each address gets the events you choose. An event it did not take is sent again, and the events behind it wait.",
+    "add": "Add address",
+    "emptyTitle": "No addresses yet",
+    "emptyText": "Add an address and the panel makes an HTTP request to it for each event you choose: a payment, a subscription that is about to end, a node that went down.",
+    "limit": "The panel holds {n} addresses at most. Delete one you do not use.",
+    "state": {
+      "paused": "Paused",
+      "failing": "Not delivering",
+      "ok": "Working",
+      "idle": "No events yet",
+      "failed": "Last attempt failed"
+    },
+    "local": "local target",
+    "allEvents": "All events",
+    "someEvents": "{n, plural, one {# event} other {# events}}",
+    "waiting": "{n, plural, one {# event waits} other {# events wait}}",
+    "lastOk": "last delivery {ago}",
+    "lastTry": "attempt {n}: {reason}",
+    "test": "Send test",
+    "testOk": "The test event was taken: HTTP {code}, {ms} ms",
+    "testFailed": "The test event was not taken: {reason}",
+    "enable": "Send events to “{name}”",
+    "log": "Deliveries",
+    "edit": "Edit",
+    "newTitle": "New address",
+    "editTitle": "Address",
+    "name": "Name",
+    "nameHint": "To tell the addresses apart in the list.",
+    "namePlaceholder": "Billing bot",
+    "url": "Address",
+    "urlHint": "The panel POSTs JSON here: http or https. An address of this server or its local network needs the switch below.",
+    "eventsLabel": "Events",
+    "eventsAll": "All events",
+    "eventsChosen": "Chosen",
+    "eventsAllHint": "Every event the panel sends, and the ones that come with later versions.",
+    "eventsChosenHint": "Only the ticked ones.",
+    "eventsNone": "Tick at least one event, or choose all events",
+    "eventsFromNow": "Events you add are sent from this moment on: the older ones are not.",
+    "groups": {
+      "payments": "Payments and balance",
+      "subscribers": "Subscribers",
+      "devices": "Devices",
+      "nodes": "Nodes",
+      "other": "Other"
+    },
+    "enabled": "Send events",
+    "enabledSub": "Turned off, the address gets nothing, and the events wait for it for up to 7 days.",
+    "allowLocal": "Allow local targets",
+    "allowLocalSub": "The address may be on this server or its local network: localhost, 10.x, 172.16.x, 192.168.x, 100.64.x. Cloud metadata addresses stay closed.",
+    "create": "Add",
+    "saved": "Address saved",
+    "secretTitle": "Signing secret",
+    "secretNote": "Every request is signed with it, and the receiver checks the signature.",
+    "secretNow": "…{hint}, made {date}",
+    "rotate": "New secret",
+    "rotateTitle": "Make a new secret for “{name}”?",
+    "rotateText": "The old secret stops signing at once. Give the new one to the receiver: the events it refuses until then are sent again, none is lost.",
+    "rotated": "New secret made",
+    "madeTitle": "Signing secret",
+    "madeOnce": "Copy the secret now: the panel will not show it again, only its last characters.",
+    "madeDone": "I saved the secret",
+    "copySecret": "Copy secret",
+    "secretCopied": "Secret copied",
+    "delete": "Delete",
+    "deleteTitle": "Delete “{name}”?",
+    "deleteText": "The address stops getting events and its log is deleted. This cannot be undone.",
+    "deleted": "Address deleted",
+    "logTitle": "Deliveries: {name}",
+    "logSub": "Kept for 7 days after the last attempt. An event that was not taken is sent again, the pause growing from 1 second to 5 minutes.",
+    "logEmpty": "No deliveries yet",
+    "logEmptyText": "Send a test event, or wait for an event the address is told of.",
+    "logNone": "Nothing with this status",
+    "filter": "Status",
+    "filterAll": "All",
+    "status": {
+      "delivered": "Delivered",
+      "retrying": "Will be sent again",
+      "failed": "Not sent"
+    },
+    "attempts": "{n, plural, one {# attempt} other {# attempts}}",
+    "http": "HTTP {code}",
+    "testEvent": "Test event",
+    "eventNo": "event #{id}",
+    "more": "Show more",
+    "failure": {
+      "address_local": "The address is local, and local targets are not allowed for it",
+      "address_blocked": "An address the panel never sends to (cloud metadata and the like)",
+      "dns": "The name does not resolve",
+      "refused": "The connection was refused: nothing listens at the address",
+      "timeout": "No answer in time",
+      "tls": "TLS error: the certificate is not trusted or does not fit the name",
+      "redirect": "The server redirected the request, and the panel does not follow redirects",
+      "status": "The server answered with an error",
+      "network": "The connection broke",
+      "internal": "The panel could not make the request: see its log"
+    },
+    "events": {
+      "payment": {
+        "paid": "Payment received",
+        "refunded": "Payment refunded"
+      },
+      "user": {
+        "created": "Subscription created",
+        "granted": "Days or traffic granted by an addon",
+        "expiring": "Subscription ends soon",
+        "expired": "Subscription ended"
+      },
+      "traffic": {
+        "90": "90% of traffic used",
+        "100": "Traffic used up"
+      },
+      "trial": {
+        "started": "Trial started",
+        "not_given": "A paid trial could not be given"
+      },
+      "device": {
+        "bound": "Device bound",
+        "unbound": "Device unbound"
+      },
+      "node": {
+        "down": "Node is down",
+        "up": "Node is back"
+      },
+      "balance": {
+        "topup": "Balance top-up decided"
+      }
+    }
   },
   "payments": {
     "title": "Payments",
@@ -4553,7 +4698,8 @@
       "torrent": "Torrents",
       "traffic_detail": "Traffic by site",
       "updates": "Updates",
-      "user": "Clients"
+      "user": "Clients",
+      "webhook": "Webhooks"
     },
     "action": {
       "auth": {
@@ -4613,6 +4759,13 @@
       "balance": {
         "topup": "Top-up decided",
         "adjust": "Balance changed by hand"
+      },
+      "webhook": {
+        "create": "Webhook address added",
+        "update": "Webhook address changed",
+        "delete": "Webhook address deleted",
+        "rotate": "Webhook secret replaced",
+        "test": "Test event sent to a webhook address"
       }
     },
     "target": {
@@ -4638,7 +4791,8 @@
       "telegram": "bot {id}",
       "certificate": "certificate {id}",
       "users": "clients {id}",
-      "sub_page_image": "subscription page image {id}"
+      "sub_page_image": "subscription page image {id}",
+      "webhook": "webhook #{id}"
     }
   }
 }

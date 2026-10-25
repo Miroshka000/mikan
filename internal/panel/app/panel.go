@@ -52,6 +52,7 @@ import (
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
+	"mikan/internal/panel/webhooks"
 	"mikan/internal/release"
 )
 
@@ -74,6 +75,8 @@ type Panel struct {
 	Alerts   *infraalerts.Monitor
 	Backups  *tgbackup.Service
 	Importer *panelimport.Importer
+	// Webhooks sends the events to the addresses the admin names.
+	Webhooks *webhooks.Service
 	// Support keeps the support access grants; the operator's terminal hooks into it.
 	Support   *support.Service
 	Addons    *addons.Manager
@@ -278,6 +281,8 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.Addons = p.Addons
 	addonPages := addonpages.New(addonpages.Deps{Addons: p.Addons, Store: st.Q, Log: o.Log, Now: o.Now})
 	deps.Pages = addonPages
+	p.Webhooks = webhooks.New(webhooks.Deps{Store: st, Hub: hub, Log: o.Log, Now: o.Now, Version: o.Version})
+	deps.Webhooks = p.Webhooks
 	deps.DNS = o.DNS
 	deps.Reach, deps.Geo = o.Reach, o.Geo
 	deps.DataDir = o.DataDir
@@ -611,7 +616,7 @@ func (p *Panel) Run(ctx context.Context) {
 	if p.NodeUpdates != nil {
 		workers = append(workers, p.NodeUpdates.Run)
 	}
-	workers = append(workers, p.Gateway.Run, p.Telegram.Run, p.Billing.Run, p.AddonsAPI.Run, p.AddonsAPI.RunPush, (&botAddon{p: p}).Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
+	workers = append(workers, p.Gateway.Run, p.Telegram.Run, p.Billing.Run, p.AddonsAPI.Run, p.AddonsAPI.RunPush, p.Webhooks.Run, (&botAddon{p: p}).Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
 		func(ctx context.Context) {
 			pace.Tick(ctx, 5*time.Second, func(ctx context.Context) {
 				if _, err := p.Apply(ctx); err != nil {
