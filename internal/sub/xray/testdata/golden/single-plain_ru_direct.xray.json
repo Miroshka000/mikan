@@ -1,0 +1,580 @@
+[
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        {
+          "address": "77.88.8.8",
+          "domains": [
+            "geosite:category-ru"
+          ],
+          "skipFallback": true
+        },
+        {
+          "address": "77.88.8.1",
+          "domains": [
+            "geosite:category-ru"
+          ],
+          "skipFallback": true
+        },
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "observatory": {
+      "subjectSelector": [
+        "proxy-1",
+        "proxy-2"
+      ],
+      "probeUrl": "https://www.gstatic.com/generate_204",
+      "probeInterval": "300s",
+      "enableConcurrency": true
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "xhttp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality",
+          "xhttpSettings": {
+            "mode": "stream-one",
+            "path": "/golden-path"
+          }
+        },
+        "tag": "proxy-1"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 8443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "flow": "xtls-rprx-vision",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality"
+        },
+        "tag": "proxy-2"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "Авто",
+    "routing": {
+      "balancers": [
+        {
+          "tag": "Авто",
+          "selector": [
+            "proxy-1",
+            "proxy-2"
+          ],
+          "strategy": {
+            "type": "leastPing"
+          }
+        }
+      ],
+      "domainStrategy": "IPIfNonMatch",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "77.88.8.8",
+            "77.88.8.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "balancerTag": "Авто",
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1",
+            "8.8.8.8"
+          ]
+        },
+        {
+          "balancerTag": "Авто",
+          "inboundTag": [
+            "dns"
+          ]
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "balancerTag": "Авто",
+          "network": "tcp,udp"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        {
+          "address": "77.88.8.8",
+          "domains": [
+            "geosite:category-ru"
+          ],
+          "skipFallback": true
+        },
+        {
+          "address": "77.88.8.1",
+          "domains": [
+            "geosite:category-ru"
+          ],
+          "skipFallback": true
+        },
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "xhttp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality",
+          "xhttpSettings": {
+            "mode": "stream-one",
+            "path": "/golden-path"
+          }
+        },
+        "tag": "proxy-1"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "VLESS XHTTP",
+    "routing": {
+      "domainStrategy": "IPIfNonMatch",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "77.88.8.8",
+            "77.88.8.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1",
+            "8.8.8.8"
+          ],
+          "outboundTag": "proxy-1"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-1"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy-1"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        {
+          "address": "77.88.8.8",
+          "domains": [
+            "geosite:category-ru"
+          ],
+          "skipFallback": true
+        },
+        {
+          "address": "77.88.8.1",
+          "domains": [
+            "geosite:category-ru"
+          ],
+          "skipFallback": true
+        },
+        "https://1.1.1.1/dns-query",
+        "https://8.8.8.8/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 8443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "flow": "xtls-rprx-vision",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality"
+        },
+        "tag": "proxy-2"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "VLESS Vision",
+    "routing": {
+      "domainStrategy": "IPIfNonMatch",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "77.88.8.8",
+            "77.88.8.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1",
+            "8.8.8.8"
+          ],
+          "outboundTag": "proxy-2"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-2"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy-2"
+        }
+      ]
+    }
+  }
+]

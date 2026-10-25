@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 )
@@ -298,30 +297,4 @@ func (c *converter) observe(b routing.Balance) {
 	if len(c.load) > 0 {
 		c.out.BurstObservatory = &BurstObservatory{SubjectSelector: subjects(c.load), PingConfig: PingConfig{Destination: b.URL, Interval: every, Sampling: c.s.Sampling}}
 	}
-}
-
-// Notes are what xray makes of the groups of p's profile it cannot carry as they are
-// (Balance), for the admin panel's preview: of the own Clash profile src, or of the
-// built-in groups. The outbounds are the proxies xray has links for.
-func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) []model.Note {
-	g = g.WithDefaults(p.Lang)
-	_, ps, err := Links(p.Proxies)
-	if err != nil {
-		return nil
-	}
-	tags := map[string]bool{}
-	for _, x := range ps {
-		tags[x.Name] = true
-	}
-	var groups []model.Group
-	if src != "" {
-		if parts, err := mihomo.TemplateParts(p, src); err == nil {
-			groups = parts.Groups
-		}
-	}
-	if groups == nil {
-		in := routing.NewIntent(m, p.Rules, p.Routes)
-		groups = routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.XrayBalance(), in.Routes, p.Lang).List
-	}
-	return Balance(groups, tags, p.Routes.Servers).Notes
 }

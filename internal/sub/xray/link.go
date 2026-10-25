@@ -136,20 +136,7 @@ func transport(q url.Values, tr *model.Transport) {
 				q.Set(k, v)
 			}
 		}
-		// Padding, session and uplink settings must match on both ends: they go in the
-		// link's "extra", under Xray's names.
-		extra := map[string]any{}
-		for _, s := range tr.XHTTP.Settings {
-			extra[s.Xray] = s.Value
-		}
-		if tr.XHTTP.Reuse != nil {
-			xmux := map[string]any{}
-			for _, s := range tr.XHTTP.Reuse {
-				xmux[s.Xray] = s.Value
-			}
-			extra["xmux"] = xmux
-		}
-		if len(extra) > 0 {
+		if extra := xhttpExtra(tr.XHTTP); len(extra) > 0 {
 			b, _ := json.Marshal(extra)
 			q.Set("extra", string(b))
 		}
@@ -167,4 +154,25 @@ func transport(q url.Values, tr *model.Transport) {
 	default:
 		q.Set("type", "tcp")
 	}
+}
+
+// xhttpExtra is the "extra" of an XHTTP transport, under Xray's names: the padding, session
+// and uplink settings, which must match on both ends, and the app's connection reuse
+// (xmux). The share link and the JSON profile carry the same one.
+func xhttpExtra(x *model.XHTTP) map[string]any {
+	extra := map[string]any{}
+	if x == nil {
+		return extra
+	}
+	for _, s := range x.Settings {
+		extra[s.Xray] = s.Value
+	}
+	if x.Reuse != nil {
+		xmux := map[string]any{}
+		for _, s := range x.Reuse {
+			xmux[s.Xray] = s.Value
+		}
+		extra["xmux"] = xmux
+	}
+	return extra
 }
