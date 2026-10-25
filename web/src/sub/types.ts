@@ -9,6 +9,8 @@ export type Info = {
   support_url?: string;
   /** Happ's crypt link: the Happ button opens it, hiding the subscription address. */
   happ_link?: string;
+  /** Ids of the catalog's apps (apps.ts) the admin turned away: they would get a stub, so the page does not offer them. */
+  blocked_apps?: string[];
   state: "active" | "expiring" | "limited" | "expired" | "disabled";
   used_up: number;
   used_down: number;

@@ -98,6 +98,15 @@ const (
 	// A subscription that cannot connect gets one notice in place of its servers
 	// (serve.Config.InactiveServer), with the admin's words or the built-in ones.
 	KeyInactiveServer = "sub_inactive_server"
+	// The response rules of the subscription (internal/sub/apps): KeySubBuiltin switches the
+	// built-in ones, KeySubBlockedText is the words of the entry an app on the list of
+	// blocked ones gets in place of the servers. The rules and the list are in tables
+	// (sub_rules, sub_blocked_apps).
+	KeySubBuiltin     = "sub_builtin_rules"
+	KeySubBlockedText = "sub_blocked_text"
+	// KeySubLogDays is how many days the request log of the subscriptions is kept
+	// (subsrc.LogDays); 0 turns the log off.
+	KeySubLogDays = "sub_log_days"
 	// KeySiteTemplate is the built-in front page a stranger sees at the panel's address
 	// (frontpage.Templates); "" for none.
 	KeySiteTemplate = "site_template"
@@ -154,6 +163,7 @@ var (
 	AppBranding    = Switch{KeyAppBranding, false}
 	HappHide       = Switch{KeyHappHide, false}
 	InactiveServer = Switch{KeyInactiveServer, false}
+	SubBuiltin     = Switch{KeySubBuiltin, true}
 	TrafficDetail  = Switch{KeyTrafficDetail, false}
 	SupportAccess  = Switch{KeySupportAccess, true}
 )

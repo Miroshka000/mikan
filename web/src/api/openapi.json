@@ -47,6 +47,53 @@
         ],
         "type": "object"
       },
+      "Action": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "maxLength": 16,
+            "type": "string"
+          },
+          "headers": {
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "html": {
+            "maxLength": 16384,
+            "type": "string"
+          },
+          "respond": {
+            "enum": [
+              "serve",
+              "stub",
+              "403",
+              "404",
+              "html",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "skip_hwid": {
+            "type": "boolean"
+          },
+          "template": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "respond"
+        ],
+        "type": "object"
+      },
       "AddSourceInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1815,6 +1862,37 @@
         ],
         "type": "object"
       },
+      "Cond": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "not": {
+            "type": "boolean"
+          },
+          "op": {
+            "enum": [
+              "equals",
+              "contains",
+              "regex"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "op",
+          "value"
+        ],
+        "type": "object"
+      },
       "Config": {
         "additionalProperties": false,
         "properties": {
@@ -3040,6 +3118,38 @@
         ],
         "type": "object"
       },
+      "Group": {
+        "additionalProperties": false,
+        "properties": {
+          "conds": {
+            "items": {
+              "$ref": "#/components/schemas/Cond"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/Inner"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "op": {
+            "enum": [
+              "and",
+              "or"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "conds",
+          "groups"
+        ],
+        "type": "object"
+      },
       "GroupInTariff": {
         "additionalProperties": false,
         "properties": {
@@ -3115,6 +3225,25 @@
         },
         "required": [
           "link"
+        ],
+        "type": "object"
+      },
+      "Header": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 512,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
         ],
         "type": "object"
       },
@@ -3584,6 +3713,31 @@
           "enabled",
           "allow",
           "networks"
+        ],
+        "type": "object"
+      },
+      "Inner": {
+        "additionalProperties": false,
+        "properties": {
+          "conds": {
+            "items": {
+              "$ref": "#/components/schemas/Cond"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "op": {
+            "enum": [
+              "and",
+              "or"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "conds"
         ],
         "type": "object"
       },
@@ -6270,6 +6424,12 @@
             "maxLength": 120,
             "type": "string"
           },
+          "sub_log_days": {
+            "format": "int64",
+            "maximum": 90,
+            "minimum": 0,
+            "type": "integer"
+          },
           "sub_port": {
             "description": "Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать",
             "format": "int64",
@@ -7321,6 +7481,29 @@
         ],
         "type": "object"
       },
+      "PutSubAppsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "blocked": {
+            "description": "Идентификаторы заблокированных приложений из списка",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "text": {
+            "description": "Один ряд текста: приложение показывает его вместо серверов",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "blocked",
+          "text"
+        ],
+        "type": "object"
+      },
       "PutSubImageInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -7354,6 +7537,26 @@
         },
         "required": [
           "config"
+        ],
+        "type": "object"
+      },
+      "PutSubRulesInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "type": "boolean"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "maxItems": 100,
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "builtin"
         ],
         "type": "object"
       },
@@ -8038,6 +8241,32 @@
         ],
         "type": "object"
       },
+      "Rule": {
+        "additionalProperties": false,
+        "properties": {
+          "do": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Group"
+          }
+        },
+        "required": [
+          "name",
+          "enabled",
+          "when",
+          "do"
+        ],
+        "type": "object"
+      },
       "RussiaPort": {
         "additionalProperties": false,
         "properties": {
@@ -8551,6 +8780,11 @@
             "description": "Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки",
             "type": "string"
           },
+          "sub_log_days": {
+            "description": "Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен",
+            "format": "int64",
+            "type": "integer"
+          },
           "sub_port": {
             "description": "Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае",
             "format": "int64",
@@ -8607,6 +8841,7 @@
           "app_branding",
           "sub_inactive_server",
           "sub_inactive_text",
+          "sub_log_days",
           "site_template",
           "site_own",
           "brand_accent",
@@ -8942,6 +9177,67 @@
         ],
         "type": "object"
       },
+      "SubAppView": {
+        "additionalProperties": false,
+        "properties": {
+          "blocked": {
+            "type": "boolean"
+          },
+          "family": {
+            "enum": [
+              "mihomo",
+              "xray",
+              "singbox",
+              "stash",
+              "other"
+            ],
+            "type": "string"
+          },
+          "generic": {
+            "description": "Остальные приложения этого семейства, у которых нет своей строки",
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "family",
+          "generic",
+          "blocked"
+        ],
+        "type": "object"
+      },
+      "SubAppsView": {
+        "additionalProperties": false,
+        "properties": {
+          "apps": {
+            "items": {
+              "$ref": "#/components/schemas/SubAppView"
+            },
+            "type": "array"
+          },
+          "preview": {
+            "description": "Что увидит заблокированное приложение: свой текст или встроенный на языке панели",
+            "type": "string"
+          },
+          "text": {
+            "description": "Свой текст записи заблокированного приложения; пусто — встроенный",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apps",
+          "text",
+          "preview"
+        ],
+        "type": "object"
+      },
       "SubDocBody": {
         "additionalProperties": false,
         "properties": {
@@ -9039,6 +9335,57 @@
         ],
         "type": "object"
       },
+      "SubLogItem": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "description": "User-Agent",
+            "type": "string"
+          },
+          "app": {
+            "description": "Идентификатор известного приложения; пусто — неизвестное",
+            "type": "string"
+          },
+          "app_name": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "format": {
+            "description": "Формат ответа; пусто — запрос отклонён правилом",
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "served",
+              "stub",
+              "blocked",
+              "dropped"
+            ],
+            "type": "string"
+          },
+          "rule": {
+            "description": "Что решило: имя правила, builtin:ssr, builtin:old, apps; пусто — ничего",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "ip",
+          "agent",
+          "app",
+          "app_name",
+          "rule",
+          "format",
+          "outcome"
+        ],
+        "type": "object"
+      },
       "SubPageView": {
         "additionalProperties": false,
         "properties": {
@@ -9069,6 +9416,154 @@
           "defaults",
           "brand",
           "brand_accent"
+        ],
+        "type": "object"
+      },
+      "SubRuleLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "conds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "groups": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "headers": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "html": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rules": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "text": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "value": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules",
+          "conds",
+          "groups",
+          "value",
+          "name",
+          "headers",
+          "html",
+          "text"
+        ],
+        "type": "object"
+      },
+      "SubRuleTest": {
+        "additionalProperties": false,
+        "properties": {
+          "app_id": {
+            "description": "Известное приложение по User-Agent; пусто — неизвестное",
+            "type": "string"
+          },
+          "app_name": {
+            "type": "string"
+          },
+          "format": {
+            "description": "Формат профиля или заглушки; пусто, когда профиля в ответе нет",
+            "type": "string"
+          },
+          "headers": {
+            "description": "Заголовки, которые добавляет правило",
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "type": "array"
+          },
+          "position": {
+            "description": "Место сработавшего правила в списке, с 1; 0 — сработало не правило из списка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "respond": {
+            "enum": [
+              "serve",
+              "stub",
+              "403",
+              "404",
+              "html",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "rule": {
+            "description": "Что решило: имя правила, builtin:ssr, builtin:old, apps (список приложений); пусто — ничего, ответ как обычно",
+            "type": "string"
+          },
+          "skip_hwid": {
+            "type": "boolean"
+          },
+          "status": {
+            "description": "Код ответа; 0 — соединение закрыто без ответа",
+            "format": "int64",
+            "type": "integer"
+          },
+          "text": {
+            "description": "Текст заглушки",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "app_name",
+          "rule",
+          "position",
+          "respond",
+          "status",
+          "format",
+          "headers",
+          "skip_hwid",
+          "text"
+        ],
+        "type": "object"
+      },
+      "SubRulesView": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "description": "Встроенные правила включены: ShadowsocksR и брошенные приложения Clash получают заглушку",
+            "type": "boolean"
+          },
+          "formats": {
+            "description": "Форматы, которые правило может навязать",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/SubRuleLimits"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "builtin",
+          "formats",
+          "limits"
         ],
         "type": "object"
       },
@@ -9895,6 +10390,41 @@
         ],
         "type": "object"
       },
+      "TestSubRulesInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "description": "Встроенные правила вместо сохранённого выбора",
+            "type": "boolean"
+          },
+          "headers": {
+            "description": "Остальные заголовки запроса: X-Device-Os, Accept, свои",
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "maxItems": 30,
+            "type": "array"
+          },
+          "rules": {
+            "description": "Правила вместо сохранённых: проверить, пока они не сохранены",
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "user_agent": {
+            "description": "User-Agent приложения",
+            "maxLength": 1024,
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_agent",
+          "headers"
+        ],
+        "type": "object"
+      },
       "Texts": {
         "additionalProperties": false,
         "properties": {
@@ -10635,6 +11165,28 @@
         "required": [
           "enabled",
           "keep_days",
+          "items"
+        ],
+        "type": "object"
+      },
+      "UserSubLogOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "description": "Сколько дней хранится журнал; 0 — журнал выключен",
+            "format": "int64",
+            "type": "integer"
+          },
+          "items": {
+            "description": "Новые сверху",
+            "items": {
+              "$ref": "#/components/schemas/SubLogItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "days",
           "items"
         ],
         "type": "object"
@@ -16760,6 +17312,77 @@
         ]
       }
     },
+    "/api/v1/sub-apps": {
+      "get": {
+        "operationId": "get-sub-apps",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubAppsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Известные приложения: какие получают серверы",
+        "tags": [
+          "sub-rules"
+        ]
+      },
+      "put": {
+        "operationId": "put-sub-apps",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutSubAppsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubAppsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Заблокировать или разрешить приложения",
+        "tags": [
+          "sub-rules"
+        ],
+        "x-session-only": true
+      }
+    },
     "/api/v1/sub-docs": {
       "get": {
         "operationId": "list-sub-docs",
@@ -17182,6 +17805,119 @@
           "sub-page"
         ],
         "x-session-only": true
+      }
+    },
+    "/api/v1/sub-rules": {
+      "get": {
+        "operationId": "get-sub-rules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubRulesView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Правила ответа на запрос подписки",
+        "tags": [
+          "sub-rules"
+        ]
+      },
+      "put": {
+        "operationId": "put-sub-rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutSubRulesInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubRulesView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сохранить правила ответа на запрос подписки",
+        "tags": [
+          "sub-rules"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/sub-rules/test": {
+      "post": {
+        "description": "Ничего не меняет: правила можно передать ещё не сохранёнными.",
+        "operationId": "test-sub-rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestSubRulesInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubRuleTest"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Какое правило сработает на такой запрос",
+        "tags": [
+          "sub-rules"
+        ]
       }
     },
     "/api/v1/support/enter": {
@@ -19940,6 +20676,61 @@
           }
         },
         "summary": "Куда ходит подписка: трафик по сайтам",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/sub-log": {
+      "get": {
+        "operationId": "user-sub-log",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSubLogOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Журнал запросов подписки пользователя",
         "tags": [
           "users"
         ]

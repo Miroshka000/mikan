@@ -340,3 +340,26 @@ func (g AppGroups) header() string {
 	}
 	return v
 }
+
+// ruleHeaders are the headers a response rule adds, over the panel's own: the admin may
+// tell a client something the panel does not (Check keeps out the ones that would break
+// the answer).
+func ruleHeaders(hd http.Header, headers []apps.Header) {
+	for _, h := range headers {
+		hd.Set(h.Name, h.Value)
+	}
+}
+
+// htmlPolicy keeps the admin's page what it is, a page to read: no script runs, nothing is
+// embedded or sent anywhere, so it cannot be turned against the subscriber who opens it on
+// the panel's own address.
+const htmlPolicy = "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+// htmlHeaders are what the admin's page of a response rule is served with. They are set
+// after the rule's own headers, which must not weaken the policy.
+func htmlHeaders(hd http.Header) {
+	hd.Set("Content-Type", "text/html; charset=utf-8")
+	hd.Set("Content-Security-Policy", htmlPolicy)
+	hd.Set("X-Content-Type-Options", "nosniff")
+	hd.Set("Referrer-Policy", "no-referrer")
+}

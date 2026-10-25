@@ -23,12 +23,18 @@ import { SubDomainCard } from "./sub-domain";
 import { SiteCard } from "./site";
 import { HappCard } from "./happ";
 import { SubPageSettings, type SubPagePart } from "./sub-page";
+import { SubClients } from "./sub-clients";
+import { LogDaysCard } from "./sub-log";
+import { SubResponses } from "./sub-rules";
 
 type Tab = SettingsSearch["tab"];
 
 const ICONS = { general: Globe, subscription: Link2, page: LayoutTemplate, routing: Route, security: ShieldCheck, support: LifeBuoy, system: Cpu, import: ArrowDownToLine } as const;
 
 const PART_LABELS: Record<string, Key> = {
+  main: "settings.subParts.main",
+  clients: "settings.subParts.clients",
+  responses: "settings.subParts.responses",
   look: "settings.page.tab.look",
   brand: "settings.page.tab.brand",
   blocks: "settings.page.tab.blocks",
@@ -59,8 +65,10 @@ export function SettingsPage() {
   // simple mode ("simple") opens the mode.
   const routingPart: RoutingPart = ROUTING_PARTS.includes(part as RoutingPart) ? (part as RoutingPart) : settings.data?.sub_template.trim() && part !== "simple" ? "yaml" : "mode";
   const pagePart: SubPagePart = (part as SubPagePart | undefined) ?? "look";
-  const shownPart = tab === "page" ? pagePart : tab === "routing" ? routingPart : undefined;
-  const wide = tab === "page" || tab === "routing";
+  // The subscription opens on its settings; the apps and how it answers requests are parts of it.
+  const subPart = (SETTINGS_PARTS.subscription as readonly string[]).includes(part ?? "") ? (part as (typeof SETTINGS_PARTS.subscription)[number]) : "main";
+  const shownPart = tab === "page" ? pagePart : tab === "routing" ? routingPart : tab === "subscription" ? subPart : undefined;
+  const wide = tab === "page" || tab === "routing" || (tab === "subscription" && subPart === "responses");
   return (
     <>
       <PageHeader title={t("nav.settings")} sub={t("settings.subtitle")} />
@@ -91,15 +99,22 @@ export function SettingsPage() {
                   <AppCard s={s} />
                 </>
               ) : tab === "subscription" ? (
-                <>
-                  <DevicesCard s={s} />
-                  <AppsCard s={s} />
-                  <HappCard s={s} />
-                  <SubscriptionCard s={s} />
-                  <InactiveCard s={s} />
-                  <SubDomainCard s={s} />
-                  <SubPortCard s={s} />
-                </>
+                subPart === "clients" ? (
+                  <SubClients />
+                ) : subPart === "responses" ? (
+                  <SubResponses />
+                ) : (
+                  <>
+                    <DevicesCard s={s} />
+                    <AppsCard s={s} />
+                    <HappCard s={s} />
+                    <SubscriptionCard s={s} />
+                    <InactiveCard s={s} />
+                    <LogDaysCard s={s} />
+                    <SubDomainCard s={s} />
+                    <SubPortCard s={s} />
+                  </>
+                )
               ) : tab === "routing" ? (
                 <RoutingSection s={s} part={routingPart} onPart={(p) => go("routing", p)} />
               ) : tab === "security" ? (

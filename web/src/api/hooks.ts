@@ -48,6 +48,9 @@ export const qk = {
   speedTests: (node: number) => ["speedtests", node] as const,
   subPage: ["sub-page"] as const,
   subDocs: ["sub-docs"] as const,
+  subApps: ["sub-apps"] as const,
+  subRules: ["sub-rules"] as const,
+  userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
   nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
   nodeShares: (range: string) => ["node-shares", range] as const,
@@ -461,4 +464,19 @@ export function useSpeedTests(node: number | undefined) {
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/speedtests", { params: { path: { id: node! }, query: { limit: SPEEDTESTS_LIMIT } }, signal })),
     enabled: !!node,
   });
+}
+
+/** The known apps and which of them the admin turned away. */
+export function useSubApps() {
+  return useQuery({ queryKey: qk.subApps, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-apps", { signal })) });
+}
+
+/** The response rules of the subscription, and what the editor needs to keep within their limits. */
+export function useSubRules() {
+  return useQuery({ queryKey: qk.subRules, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-rules", { signal })) });
+}
+
+/** The latest requests of a user's subscription, newest first. */
+export function useUserSubLog(id: number) {
+  return useQuery({ queryKey: qk.userSubLog(id), queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/sub-log", { params: { path: { id }, query: { limit: 50 } }, signal })) });
 }

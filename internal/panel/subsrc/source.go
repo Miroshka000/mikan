@@ -86,7 +86,8 @@ func (s *subscription) slot(ctx context.Context, dev serve.Device) (db.Slot, err
 		}
 		return s.h.st.Q.GetSlot(ctx, u.SlotID.Int64)
 	}
-	return devices.Bind(ctx, u, domain.DeviceInfo{HWID: dev.HWID, OS: dev.OS, OSVersion: dev.OSVersion, Model: dev.Model, App: dev.App, IP: dev.IP}, s.cfg.RequireHWID)
+	// A response rule may waive the device id for an app that cannot send one.
+	return devices.Bind(ctx, u, domain.DeviceInfo{HWID: dev.HWID, OS: dev.OS, OSVersion: dev.OSVersion, Model: dev.Model, App: dev.App, IP: dev.IP}, s.cfg.RequireHWID && !dev.SkipHWID)
 }
 
 // deviceError is why a device gets no keys in serve's words; any other error as it is.

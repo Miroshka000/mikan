@@ -53,6 +53,7 @@ import (
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
 	"mikan/internal/release"
+	"mikan/internal/sub/apps"
 	submodel "mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/serve"
@@ -441,6 +442,14 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if cfg.InactiveText, err = set.String(ctx, settings.KeyInactiveText); err != nil {
 			return subsrc.Config{}, err
 		}
+		policy, err := subsrc.LoadPolicy(ctx, st.Q, set, o.Log)
+		if err != nil {
+			return subsrc.Config{}, err
+		}
+		if cfg.Responses, err = apps.NewResponder(policy); err != nil {
+			return subsrc.Config{}, err
+		}
+		cfg.LogDays = subsrc.LogDays(ctx, set)
 		tariffs, err := st.Q.ListTariffs(ctx)
 		if err != nil {
 			return subsrc.Config{}, err

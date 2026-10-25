@@ -58,6 +58,9 @@ type Subscription interface {
 	// Groups are the server groups the Mikan app shows (X-Mikan-Groups), their servers
 	// named among ps, the proxies of the profile the app gets.
 	Groups(ctx context.Context, ps []model.Proxy) (AppGroups, error)
+	// Record writes one request in the subscription's request log. It is best effort: a
+	// log that cannot be written is the source's to report, and never fails the request.
+	Record(ctx context.Context, e LogEntry)
 }
 
 // Config is the panel's settings for subscriptions, read for every request so that a
@@ -98,6 +101,9 @@ type Config struct {
 	// servers (stub.go), InactiveText its words ("": the built-in ones by state).
 	InactiveServer bool
 	InactiveText   string
+	// Responses decides a request by its headers before anything is made for it: the apps
+	// the admin blocked and the response rules (rules.go); nil serves every request.
+	Responses *apps.Responder
 }
 
 // User is what a subscription's headers and texts say of its user.
@@ -138,6 +144,9 @@ func (s State) CanConnect() bool { return s == StateActive || s == StateExpiring
 // Device is the app that asks for its keys, as it says of itself.
 type Device struct {
 	HWID, OS, OSVersion, Model, App, IP string
+	// SkipHWID: a response rule gives a device that sends no id its keys all the same,
+	// whatever the panel requires of devices.
+	SkipHWID bool
 }
 
 // Why a device gets no keys.
@@ -205,12 +214,12 @@ func internalError(w http.ResponseWriter) {
 
 // Serve answers a fetch of the subscription of token: the page for a browser or a
 // messenger's preview, the profile in the format the app asks for otherwise (Format). The
-// order is fixed: the headers go before the keys are handed out (a HEAD stops after them),
-// the device gets its keys before the profile is made, and the fetch is recorded once
-// there is a profile to give.
+// response rules go first (rules.go): they may answer for the profile, or name the format
+// and what the device is asked for. The order is fixed: the headers go before the keys are
+// handed out (a HEAD stops after them), the device gets its keys before the profile is made,
+// and the fetch is recorded once there is a profile to give.
 func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
-	ctx := r.Context()
-	sub, err := h.src.Subscription(ctx, token)
+	sub, err := h.src.Subscription(r.Context(), token)
 	switch {
 	case errors.Is(err, ErrNotFound):
 		frontpage.NotFound(w)
@@ -220,18 +229,38 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
 		return
 	}
 	cfg := sub.Config()
+	ex := &exchange{dec: cfg.Responses.Decide(r.Header)}
+	outcome := h.answer(w, r, sub, cfg, ex)
+	h.record(r, sub, ex, outcome)
+	if ex.abort {
+		// A connection that cannot be taken over to be closed (HTTP/2) is ended the way
+		// net/http ends one on purpose: the client sees it cut, and nothing is logged.
+		panic(http.ErrAbortHandler)
+	}
+}
+
+// answer writes the answer to the request and says what it came to, for the request log;
+// an empty outcome is a request that is not logged (a HEAD, a failure of the panel's own).
+func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscription, cfg Config, ex *exchange) Outcome {
+	ctx := r.Context()
+	dec := ex.dec
+	switch dec.Responds() {
+	case apps.Respond403, apps.Respond404, apps.RespondHTML, apps.RespondDrop:
+		return h.refuse(w, r, ex)
+	}
 	ua := r.Header.Get("User-Agent")
-	format := Format(ua, r.Header.Get("Accept"), r.URL.Query().Get("format"))
+	format := Resolve(r.Header, r.URL.Query().Get("format"), dec)
+	ex.format = format
 	// A messenger that builds a preview of a pasted link gets the page, which has the
 	// preview's title and picture and nothing of the user's.
 	if (format == FormatHTML || LinkPreview(ua) && r.URL.Query().Get("format") == "") && h.page != nil {
 		h.page(w, r, cfg)
-		return
+		return OutcomeServed
 	}
 	u, err := sub.User(ctx)
 	if err != nil {
 		internalError(w)
-		return
+		return ""
 	}
 	// The values are worked out only when a title or an announcement can use them.
 	var vars map[string]string
@@ -245,28 +274,35 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
 	userInfoHeaders(hd, u, cfg, vars)
 	h.operatorHeaders(hd, r, sub, u, cfg)
 	appHeaders(hd, ua, cfg)
+	ruleHeaders(hd, dec.Action.Headers)
 	hd.Set("Cache-Control", "no-store")
 	if r.Method == http.MethodHead {
-		return // apps peek at the traffic headers; the keys go only with a real fetch
+		return "" // apps peek at the traffic headers; the keys go only with a real fetch
+	}
+	if dec.Responds() == apps.RespondStub {
+		// An app that is turned away gets no keys: it must not take a place of the
+		// subscriber's devices.
+		h.stub(w, cfg, format, &unsupportedError{text: StubText(cfg.Lang, dec)})
+		return OutcomeStub
 	}
 	keys, err := sub.Keys(ctx, Device{HWID: r.Header.Get("X-Hwid"), OS: r.Header.Get("X-Device-Os"), OSVersion: r.Header.Get("X-Ver-Os"),
-		Model: r.Header.Get("X-Device-Model"), App: ua, IP: h.ip(r)})
+		Model: r.Header.Get("X-Device-Model"), App: ua, IP: h.ip(r), SkipHWID: dec.Action.SkipHWID})
 	switch {
 	case errors.Is(err, ErrDeviceLimit), errors.Is(err, ErrNoHWID), errors.Is(err, ErrDeviceBanned), errors.As(err, new(*UnboundError)):
 		h.stub(w, cfg, format, err)
-		return
+		return OutcomeStub
 	case err != nil:
 		internalError(w)
-		return
+		return ""
 	}
 	if notice := inactiveNotice(cfg, u.State, vars); notice != nil {
 		h.stub(w, cfg, format, notice)
-		return
+		return OutcomeStub
 	}
 	ins, err := sub.Inbounds(ctx)
 	if err != nil {
 		internalError(w)
-		return
+		return ""
 	}
 	app := apps.DetectApp(ua)
 	ins = build.ForApp(ins, app, u.State.CanConnect())
@@ -281,8 +317,7 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
 		prof.Rules, prof.Routes, prof.App = mihomo.RulesFor(cfg.Rules, app), cfg.Routes, app
 		body, ps, err := h.clashProfile(prof, cfg)
 		if err != nil {
-			h.profileFailed(w, cfg, format, err)
-			return
+			return h.profileFailed(w, cfg, format, err)
 		}
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, profileTitle(cfg, vars))
@@ -291,21 +326,20 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
 		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
 		body, err := singbox.Render(ctx, prof, cfg.Groups, cfg.Mode, cfg.Template)
 		if err != nil {
-			h.profileFailed(w, cfg, format, err)
-			return
+			return h.profileFailed(w, cfg, format, err)
 		}
 		profileHeaders(hd, format, profileTitle(cfg, vars))
 		_, _ = w.Write(body)
 	default:
 		links, ps, err := xray.Links(proxies)
 		if err != nil {
-			h.profileFailed(w, cfg, format, err)
-			return
+			return h.profileFailed(w, cfg, format, err)
 		}
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, "")
 		_, _ = w.Write(xray.Encode(links))
 	}
+	return OutcomeServed
 }
 
 // clashProfile is the Clash profile of prof: the admin's own (cfg.Template) when the app
@@ -330,12 +364,14 @@ func (h *Handler) clashProfile(prof mihomo.Profile, cfg Config) ([]byte, []model
 
 // profileFailed answers a profile that could not be made: with nothing for this app to
 // connect to (model.ErrNoProxies) the stub that says so, otherwise the panel's own failure.
-func (h *Handler) profileFailed(w http.ResponseWriter, cfg Config, format string, err error) {
+// The outcome is the request log's: a failure of the panel's own is not logged.
+func (h *Handler) profileFailed(w http.ResponseWriter, cfg Config, format string, err error) Outcome {
 	if errors.Is(err, model.ErrNoProxies) {
 		h.stub(w, cfg, format, err)
-		return
+		return OutcomeStub
 	}
 	internalError(w)
+	return ""
 }
 
 // Announcement is cfg's announcement as the subscription page and the Mini App show it to
