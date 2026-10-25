@@ -91,7 +91,7 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 	bad := map[string]any{"builtin": true, "rules": []apps.Rule{{Name: "x", Enabled: true,
 		When: apps.Group{Op: apps.And, Conds: []apps.Cond{{Header: "User-Agent", Op: apps.OpRegex, Value: "("}}, Groups: []apps.Inner{}}, Do: apps.Action{Respond: apps.Respond403}}}}
 	resp, out = h.do(http.MethodPut, api+"/sub-rules", bad, csrf)
-	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(out), "rule_regex") || !strings.Contains(string(out), "body.rules[0].when.conds[0].value") {
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(out), "resp_regex") || !strings.Contains(string(out), "body.rules[0].when.conds[0].value") {
 		t.Fatalf("a regular expression that does not compile: %d %s", resp.StatusCode, out)
 	}
 	// A change is the session's own: without its CSRF token nothing is saved.

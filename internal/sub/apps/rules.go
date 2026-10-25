@@ -138,7 +138,7 @@ func bad(path, code, detail string) error { return &CheckError{Path: path, Code:
 // CheckRules checks the admin's rules as a list.
 func CheckRules(rules []Rule, opts CheckOpts) error {
 	if len(rules) > MaxRules {
-		return bad("rules", "rules_many", strconv.Itoa(MaxRules))
+		return bad("rules", "resp_rules_many", strconv.Itoa(MaxRules))
 	}
 	for i, r := range rules {
 		if err := r.Check("rules."+strconv.Itoa(i), opts); err != nil {
@@ -160,14 +160,14 @@ var framing = map[string]bool{
 // Check says what is wrong with the rule at path, or nil. A rule that passes compiles.
 func (r Rule) Check(path string, opts CheckOpts) error {
 	if n := utf8.RuneCountInString(strings.TrimSpace(r.Name)); n == 0 || n > MaxName || hasControl(r.Name) {
-		return bad(path+".name", "rule_name", r.Name)
+		return bad(path+".name", "resp_name", r.Name)
 	}
 	total := len(r.When.Conds)
 	if err := checkGroup(path+".when", r.When.Op, r.When.Conds, opts, true); err != nil {
 		return err
 	}
 	if len(r.When.Groups) > MaxGroups {
-		return bad(path+".when.groups", "rule_groups", strconv.Itoa(MaxGroups))
+		return bad(path+".when.groups", "resp_groups", strconv.Itoa(MaxGroups))
 	}
 	for i, g := range r.When.Groups {
 		total += len(g.Conds)
@@ -176,20 +176,20 @@ func (r Rule) Check(path string, opts CheckOpts) error {
 		}
 	}
 	if total > MaxConds {
-		return bad(path+".when", "rule_conds", strconv.Itoa(MaxConds))
+		return bad(path+".when", "resp_conds", strconv.Itoa(MaxConds))
 	}
 	return r.Do.check(path+".do", opts)
 }
 
 func checkGroup(path, op string, conds []Cond, opts CheckOpts, outer bool) error {
 	if op != And && op != Or {
-		return bad(path+".op", "rule_group_op", op)
+		return bad(path+".op", "resp_group_op", op)
 	}
 	if len(conds) > MaxConds {
-		return bad(path+".conds", "rule_conds", strconv.Itoa(MaxConds))
+		return bad(path+".conds", "resp_conds", strconv.Itoa(MaxConds))
 	}
 	if !outer && len(conds) == 0 {
-		return bad(path+".conds", "rule_group_empty", "")
+		return bad(path+".conds", "resp_group_empty", "")
 	}
 	for i, c := range conds {
 		if err := c.check(path + ".conds." + strconv.Itoa(i)); err != nil {
@@ -201,26 +201,26 @@ func checkGroup(path, op string, conds []Cond, opts CheckOpts, outer bool) error
 
 func (c Cond) check(path string) error {
 	if !headerName.MatchString(c.Header) {
-		return bad(path+".header", "rule_header", c.Header)
+		return bad(path+".header", "resp_header", c.Header)
 	}
 	if len(c.Value) > MaxValue || strings.ContainsAny(c.Value, "\r\n\x00") {
-		return bad(path+".value", "rule_value", "")
+		return bad(path+".value", "resp_value", "")
 	}
 	switch c.Op {
 	case OpEquals:
 	case OpContains:
 		if c.Value == "" {
-			return bad(path+".value", "rule_value_empty", "")
+			return bad(path+".value", "resp_value_empty", "")
 		}
 	case OpRegex:
 		if c.Value == "" {
-			return bad(path+".value", "rule_value_empty", "")
+			return bad(path+".value", "resp_value_empty", "")
 		}
 		if _, err := regexp.Compile(c.Value); err != nil {
-			return bad(path+".value", "rule_regex", err.Error())
+			return bad(path+".value", "resp_regex", err.Error())
 		}
 	default:
-		return bad(path+".op", "rule_op", c.Op)
+		return bad(path+".op", "resp_op", c.Op)
 	}
 	return nil
 }
@@ -229,7 +229,7 @@ func (a Action) check(path string, opts CheckOpts) error {
 	switch a.Respond {
 	case "", RespondServe, RespondStub, Respond403, Respond404, RespondHTML, RespondDrop:
 	default:
-		return bad(path+".respond", "rule_respond", a.Respond)
+		return bad(path+".respond", "resp_respond", a.Respond)
 	}
 	if a.takes(RespondServe, RespondStub) && a.Format != "" {
 		ok := false
@@ -237,31 +237,31 @@ func (a Action) check(path string, opts CheckOpts) error {
 			ok = ok || f == a.Format
 		}
 		if !ok {
-			return bad(path+".format", "rule_format", a.Format)
+			return bad(path+".format", "resp_format", a.Format)
 		}
 	}
 	if a.takes(RespondServe) && a.Template != 0 && (opts.Template == nil || !opts.Template(a.Template)) {
-		return bad(path+".template", "rule_template", strconv.FormatInt(a.Template, 10))
+		return bad(path+".template", "resp_template", strconv.FormatInt(a.Template, 10))
 	}
 	if a.takes(RespondStub) && (utf8.RuneCountInString(a.Text) > MaxText || hasControl(a.Text)) {
-		return bad(path+".text", "rule_text", "")
+		return bad(path+".text", "resp_text", "")
 	}
 	if a.takes(RespondHTML) && (strings.TrimSpace(a.HTML) == "" || len(a.HTML) > MaxHTML) {
-		return bad(path+".html", "rule_html", "")
+		return bad(path+".html", "resp_html", "")
 	}
 	if !a.takes(RespondServe, RespondStub, Respond403, Respond404, RespondHTML) {
 		return nil
 	}
 	if len(a.Headers) > MaxHeaders {
-		return bad(path+".headers", "rule_headers_many", strconv.Itoa(MaxHeaders))
+		return bad(path+".headers", "resp_headers_many", strconv.Itoa(MaxHeaders))
 	}
 	for i, h := range a.Headers {
 		at := path + ".headers." + strconv.Itoa(i)
 		if !headerName.MatchString(h.Name) || framing[canonical(h.Name)] {
-			return bad(at+".name", "rule_header_name", h.Name)
+			return bad(at+".name", "resp_header_name", h.Name)
 		}
 		if len(h.Value) > 512 || !printable(h.Value) {
-			return bad(at+".value", "rule_header_value", "")
+			return bad(at+".value", "resp_header_value", "")
 		}
 	}
 	return nil

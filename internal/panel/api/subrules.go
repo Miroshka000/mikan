@@ -244,7 +244,7 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 	}
 	for i, hd := range in.Body.Headers {
 		if !apps.ValidHeaderName(hd.Name) {
-			return nil, fieldErrValue("body.headers["+strconv.Itoa(i)+"].name", "rule_header", hd.Name)
+			return nil, fieldErrValue("body.headers["+strconv.Itoa(i)+"].name", "resp_header", hd.Name)
 		}
 		req.Add(hd.Name, hd.Value)
 	}
@@ -263,7 +263,7 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 	}
 	r, err := apps.NewResponder(p)
 	if err != nil {
-		return nil, fieldErr("body.rules", "rule_regex")
+		return nil, fieldErr("body.rules", "resp_regex")
 	}
 	lang, err := h.d.Settings.Lang(ctx)
 	if err != nil {

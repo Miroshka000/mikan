@@ -314,44 +314,44 @@ func TestCheck(t *testing.T) {
 		path string
 		code string
 	}{
-		{"a name", with(func(r *Rule) { r.Name = "  " }), "r.name", "rule_name"},
-		{"a long name", with(func(r *Rule) { r.Name = strings.Repeat("я", MaxName+1) }), "r.name", "rule_name"},
-		{"a group's op", with(func(r *Rule) { r.When.Op = "xor" }), "r.when.op", "rule_group_op"},
-		{"a condition's op", with(func(r *Rule) { r.When.Conds[0].Op = "starts" }), "r.when.conds.0.op", "rule_op"},
-		{"a header name with a space", with(func(r *Rule) { r.When.Conds[0].Header = "User Agent" }), "r.when.conds.0.header", "rule_header"},
-		{"a long value", with(func(r *Rule) { r.When.Conds[0].Value = long }), "r.when.conds.0.value", "rule_value"},
-		{"a value with a line break", with(func(r *Rule) { r.When.Conds[0].Value = "a\nb" }), "r.when.conds.0.value", "rule_value"},
-		{"an empty contains", with(func(r *Rule) { r.When.Conds[0].Value = "" }), "r.when.conds.0.value", "rule_value_empty"},
-		{"a regular expression that does not compile", with(func(r *Rule) { r.When.Conds[0] = uaIs(OpRegex, "(", false) }), "r.when.conds.0.value", "rule_regex"},
-		{"an empty regular expression", with(func(r *Rule) { r.When.Conds[0] = uaIs(OpRegex, "", false) }), "r.when.conds.0.value", "rule_value_empty"},
-		{"too many conditions", with(func(r *Rule) { r.When = Group{Op: Or, Conds: tooMany} }), "r.when.conds", "rule_conds"},
+		{"a name", with(func(r *Rule) { r.Name = "  " }), "r.name", "resp_name"},
+		{"a long name", with(func(r *Rule) { r.Name = strings.Repeat("я", MaxName+1) }), "r.name", "resp_name"},
+		{"a group's op", with(func(r *Rule) { r.When.Op = "xor" }), "r.when.op", "resp_group_op"},
+		{"a condition's op", with(func(r *Rule) { r.When.Conds[0].Op = "starts" }), "r.when.conds.0.op", "resp_op"},
+		{"a header name with a space", with(func(r *Rule) { r.When.Conds[0].Header = "User Agent" }), "r.when.conds.0.header", "resp_header"},
+		{"a long value", with(func(r *Rule) { r.When.Conds[0].Value = long }), "r.when.conds.0.value", "resp_value"},
+		{"a value with a line break", with(func(r *Rule) { r.When.Conds[0].Value = "a\nb" }), "r.when.conds.0.value", "resp_value"},
+		{"an empty contains", with(func(r *Rule) { r.When.Conds[0].Value = "" }), "r.when.conds.0.value", "resp_value_empty"},
+		{"a regular expression that does not compile", with(func(r *Rule) { r.When.Conds[0] = uaIs(OpRegex, "(", false) }), "r.when.conds.0.value", "resp_regex"},
+		{"an empty regular expression", with(func(r *Rule) { r.When.Conds[0] = uaIs(OpRegex, "", false) }), "r.when.conds.0.value", "resp_value_empty"},
+		{"too many conditions", with(func(r *Rule) { r.When = Group{Op: Or, Conds: tooMany} }), "r.when.conds", "resp_conds"},
 		{"too many through the groups", with(func(r *Rule) {
 			r.When = Group{Op: And, Conds: tooMany[:MaxConds-1], Groups: []Inner{{Op: Or, Conds: tooMany[:2]}}}
-		}), "r.when", "rule_conds"},
-		{"an empty inner group", with(func(r *Rule) { r.When.Groups = []Inner{{Op: Or}} }), "r.when.groups.0.conds", "rule_group_empty"},
-		{"an inner group's op", with(func(r *Rule) { r.When.Groups = []Inner{{Op: "", Conds: []Cond{uaIs(OpContains, "a", false)}}} }), "r.when.groups.0.op", "rule_group_op"},
+		}), "r.when", "resp_conds"},
+		{"an empty inner group", with(func(r *Rule) { r.When.Groups = []Inner{{Op: Or}} }), "r.when.groups.0.conds", "resp_group_empty"},
+		{"an inner group's op", with(func(r *Rule) { r.When.Groups = []Inner{{Op: "", Conds: []Cond{uaIs(OpContains, "a", false)}}} }), "r.when.groups.0.op", "resp_group_op"},
 		{"too many groups", with(func(r *Rule) {
 			for range MaxGroups + 1 {
 				r.When.Groups = append(r.When.Groups, Inner{Op: Or, Conds: []Cond{uaIs(OpContains, "a", false)}})
 			}
-		}), "r.when.groups", "rule_groups"},
-		{"a respond", with(func(r *Rule) { r.Do.Respond = "redirect" }), "r.do.respond", "rule_respond"},
-		{"a format the panel has not", with(func(r *Rule) { r.Do.Format = "yaml" }), "r.do.format", "rule_format"},
-		{"a template that does not exist", with(func(r *Rule) { r.Do.Template = 7 }), "r.do.template", "rule_template"},
-		{"a page with nothing in it", with(func(r *Rule) { r.Do = Action{Respond: RespondHTML, HTML: " \n"} }), "r.do.html", "rule_html"},
-		{"a page that is too long", with(func(r *Rule) { r.Do = Action{Respond: RespondHTML, HTML: strings.Repeat("a", MaxHTML+1)} }), "r.do.html", "rule_html"},
-		{"a stub's text with a line break", with(func(r *Rule) { r.Do = Action{Respond: RespondStub, Text: "a\nb"} }), "r.do.text", "rule_text"},
+		}), "r.when.groups", "resp_groups"},
+		{"a respond", with(func(r *Rule) { r.Do.Respond = "redirect" }), "r.do.respond", "resp_respond"},
+		{"a format the panel has not", with(func(r *Rule) { r.Do.Format = "yaml" }), "r.do.format", "resp_format"},
+		{"a template that does not exist", with(func(r *Rule) { r.Do.Template = 7 }), "r.do.template", "resp_template"},
+		{"a page with nothing in it", with(func(r *Rule) { r.Do = Action{Respond: RespondHTML, HTML: " \n"} }), "r.do.html", "resp_html"},
+		{"a page that is too long", with(func(r *Rule) { r.Do = Action{Respond: RespondHTML, HTML: strings.Repeat("a", MaxHTML+1)} }), "r.do.html", "resp_html"},
+		{"a stub's text with a line break", with(func(r *Rule) { r.Do = Action{Respond: RespondStub, Text: "a\nb"} }), "r.do.text", "resp_text"},
 		{"too many headers", with(func(r *Rule) {
 			r.Do.Headers = make([]Header, MaxHeaders+1)
 			for i := range r.Do.Headers {
 				r.Do.Headers[i] = Header{Name: "X-A", Value: "1"}
 			}
-		}), "r.do.headers", "rule_headers_many"},
-		{"a header that frames the body", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "Content-Length", Value: "0"}} }), "r.do.headers.0.name", "rule_header_name"},
-		{"a header that frames, in any case", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "transfer-encoding", Value: "chunked"}} }), "r.do.headers.0.name", "rule_header_name"},
-		{"a header name with a line break", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "X-A\r\nX-B", Value: "1"}} }), "r.do.headers.0.name", "rule_header_name"},
-		{"a header value with a line break", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "X-A", Value: "1\r\nX-B: 2"}} }), "r.do.headers.0.value", "rule_header_value"},
-		{"a header value that is not ASCII", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "X-A", Value: "привет"}} }), "r.do.headers.0.value", "rule_header_value"},
+		}), "r.do.headers", "resp_headers_many"},
+		{"a header that frames the body", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "Content-Length", Value: "0"}} }), "r.do.headers.0.name", "resp_header_name"},
+		{"a header that frames, in any case", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "transfer-encoding", Value: "chunked"}} }), "r.do.headers.0.name", "resp_header_name"},
+		{"a header name with a line break", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "X-A\r\nX-B", Value: "1"}} }), "r.do.headers.0.name", "resp_header_name"},
+		{"a header value with a line break", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "X-A", Value: "1\r\nX-B: 2"}} }), "r.do.headers.0.value", "resp_header_value"},
+		{"a header value that is not ASCII", with(func(r *Rule) { r.Do.Headers = []Header{{Name: "X-A", Value: "привет"}} }), "r.do.headers.0.value", "resp_header_value"},
 	} {
 		err := c.rule.Check("r", opts)
 		var ce *CheckError
@@ -392,7 +392,7 @@ func TestCheckRules(t *testing.T) {
 		rules[i] = okRule()
 	}
 	var ce *CheckError
-	if err := CheckRules(rules, CheckOpts{}); !errors.As(err, &ce) || ce.Code != "rules_many" {
+	if err := CheckRules(rules, CheckOpts{}); !errors.As(err, &ce) || ce.Code != "resp_rules_many" {
 		t.Errorf("%v", err)
 	}
 	rules = rules[:2]
