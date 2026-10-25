@@ -647,7 +647,7 @@ function BulkConfirm({ asked, loading, onClose, onConfirm }: { asked: Asked; loa
   const { action, plan } = asked;
   const stake = plan.at_stake;
   const notes = [
-    plan.unchanged > 0 ? t(`users.bulkConfirm.unchanged.${action}`, { n: plan.unchanged }) : "",
+    plan.unchanged > 0 ? t("users.bulkConfirm.alreadyOff", { n: plan.unchanged }) : "",
     plan.missing > 0 ? t("users.bulkConfirm.missing", { n: plan.missing }) : "",
   ].filter(Boolean);
   const warnings = stake
