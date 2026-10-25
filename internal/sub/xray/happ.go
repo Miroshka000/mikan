@@ -3,17 +3,17 @@ package xray
 import (
 	"encoding/base64"
 	"encoding/json"
-	"net/netip"
 	"strings"
 
+	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/routing"
 )
 
 // HappRoutingAuto as Happ's routing (settings.KeyHappRouting): the panel makes the routing
-// profile of the Clash profile's rules, so Settings → Routing and an own profile reach
+// profile of its routing (HappRoutingOf), so Settings → Routing and an own profile reach
 // Happ too, as far as Xray's routing goes: sites and IPs that go direct, through the
 // proxy or nowhere. No groups (a service on one server goes through the proxy), no
-// process names, no rule lists.
+// process names, no rule lists but the panel's own, as their nearest categories.
 const HappRoutingAuto = "auto"
 
 // HappRoutingMax bounds the routing link: a profile with geo lists stays far below it.
@@ -72,9 +72,50 @@ type happProfile struct {
 	FakeDNS           string            `json:"FakeDNS"`
 }
 
-// HappRoutingOf turns Clash rules into Happ's routing link: a site or IP goes to the list
-// of the first rule that takes it (mihomo's first match), MATCH decides the rest.
-func HappRoutingOf(name string, rules []string) string {
+// HappRoutingOf is Happ's routing link of the profile the settings make, the same for every
+// user: of the own Clash profile src when it renders, of the panel's routing (routing.Intent)
+// otherwise. A site or IP goes to the list of the first rule that takes it, as in the cores,
+// and where the rest goes decides GlobalProxy.
+func HappRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) string {
+	rules, final := happRules(p, m, src)
+	return happLink(name, rules, final)
+}
+
+// happRules are the rules of the profile the settings make, in order, and where what none
+// of them takes goes: an own profile's up to its first MATCH (through the proxy without
+// one, Happ's own default), or the intent's.
+func happRules(p mihomo.Profile, m routing.Mode, src string) ([]routing.Rule, routing.Target) {
+	if src != "" {
+		if rules, ok := mihomo.TemplateRules(p, src); ok {
+			for i, r := range rules {
+				if len(r.When) == 0 {
+					return rules[:i], r.To
+				}
+			}
+			return rules, routing.Target{Kind: routing.ToMain}
+		}
+	}
+	in := routing.NewIntent(m, p.Rules, p.Routes)
+	var rules []routing.Rule
+	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
+		rules = append(rules, part...)
+	}
+	for _, r := range in.Routes {
+		for _, x := range r.Rules {
+			rules = append(rules, routing.Rule{When: []routing.Match{x}, To: r.To})
+		}
+	}
+	return append(rules, in.Tail()...), in.Final()
+}
+
+// happTypes are the conditions Happ's lists hold: sites and IPs, as xray matches them.
+var happTypes = map[string]bool{"DOMAIN": true, "DOMAIN-SUFFIX": true, "DOMAIN-KEYWORD": true, "GEOSITE": true,
+	"GEOIP": true, "IP-CIDR": true, "IP-CIDR6": true, "RULE-SET": true}
+
+// happLink is the routing link of the rules and final: the sites and IPs of each rule of
+// one condition Happ's lists hold go to the lists of its target (direct, blocked, or through
+// the proxy for any group).
+func happLink(name string, rules []routing.Rule, final routing.Target) string {
 	r := happProfile{Name: name, GlobalProxy: "true", UseChunkFiles: "true",
 		RemoteDNS: "1.1.1.1", RemoteDNSType: "DoH", RemoteDNSDomain: "https://1.1.1.1/dns-query", RemoteDNSIP: "1.1.1.1",
 		DomesticDNS: "77.88.8.8", DomesticDNSType: "DoH", DomesticDNSDomain: "https://77.88.8.8/dns-query", DomesticDNSIP: "77.88.8.8",
@@ -82,59 +123,30 @@ func HappRoutingOf(name string, rules []string) string {
 		// The profile sends the blocked and the proxied ahead of the direct.
 		RouteOrder: "block-proxy-direct", DomainStrategy: "IPIfNonMatch", FakeDNS: "false",
 		DirectSites: []string{}, DirectIP: []string{}, ProxySites: []string{}, ProxyIP: []string{}, BlockSites: []string{}, BlockIP: []string{}}
+	if final.Kind == routing.ToDirect {
+		r.GlobalProxy = "false"
+	}
 	seen := map[string]bool{}
 	for _, rule := range rules {
-		typ, target, _ := routing.RuleParts(rule)
-		if typ == "MATCH" {
-			if target == "DIRECT" {
-				r.GlobalProxy = "false"
-			}
-			break // nothing after it is reached
-		}
-		f := routing.SplitRule(rule)
-		if typ == "" || len(f) < 3 {
+		if len(rule.When) != 1 || !happTypes[rule.When[0].Type] {
 			continue
 		}
-		value := strings.TrimSpace(f[1])
 		var sites, ips []string
-		switch typ {
-		case "DOMAIN":
-			sites = []string{"full:" + value}
-		case "DOMAIN-SUFFIX":
-			sites = []string{"domain:" + value}
-		case "DOMAIN-KEYWORD":
-			sites = []string{"keyword:" + value}
-		case "GEOSITE":
-			if v := strings.ToLower(value); routing.RunetfreedomHas("geosite", v) {
-				sites = []string{"geosite:" + v}
-			}
-		case "GEOIP":
-			switch v := strings.ToLower(value); {
-			case v == "lan":
-				ips = []string{"geoip:private"}
-			case routing.RunetfreedomHas("geoip", v):
-				ips = []string{"geoip:" + v}
-			}
-		case "IP-CIDR", "IP-CIDR6":
-			if _, err := netip.ParsePrefix(value); err == nil {
-				ips = []string{value}
-			}
-		case "RULE-SET":
-			// The panel's own lists, by the geodata categories nearest to them.
-			sites, ips = routing.RunetfreedomList(value)
+		for _, f := range matchOf(rule.When[0]) {
+			s, _ := f["domain"].([]string)
+			i, _ := f["ip"].([]string)
+			sites, ips = append(sites, s...), append(ips, i...)
 		}
-		var list *[2]*[]string
-		switch {
-		case target == "DIRECT":
-			list = &[2]*[]string{&r.DirectSites, &r.DirectIP}
-		case strings.HasPrefix(target, "REJECT"):
-			list = &[2]*[]string{&r.BlockSites, &r.BlockIP}
-		default:
-			list = &[2]*[]string{&r.ProxySites, &r.ProxyIP}
+		list := [2]*[]string{&r.ProxySites, &r.ProxyIP}
+		switch rule.To.Kind {
+		case routing.ToDirect:
+			list = [2]*[]string{&r.DirectSites, &r.DirectIP}
+		case routing.ToReject, routing.ToDrop:
+			list = [2]*[]string{&r.BlockSites, &r.BlockIP}
 		}
 		for i, xs := range [2][]string{sites, ips} {
 			for _, x := range xs {
-				if !seen[x] { // the first rule that takes it decides, as in mihomo
+				if !seen[x] { // the first rule that takes it decides, as in the cores
 					seen[x] = true
 					*list[i] = append(*list[i], x)
 				}

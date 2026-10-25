@@ -34,29 +34,26 @@ func RulesFor(rules []routing.Rule, app apps.App) []routing.Rule {
 	return rules
 }
 
-// Rules are the rules of the Clash profile the settings make (an own one, src, when it
-// renders), the same for every user: a placeholder stands for the user's proxies, which the
-// rules do not depend on. p carries no proxies of its own.
-func Rules(p Profile, g model.GroupNames, m routing.Mode, src string) []string {
+// TemplateRules are the rules of the own Clash profile src as the settings make it, the same
+// for every user, read apart from the core (routing.ReadRule): a placeholder stands for the
+// user's proxies, which the rules do not depend on, and the panel's hosts go first as in
+// every profile. A rule ReadRule cannot read (OR, NOT, SUB-RULE) is left out; false when
+// src does not render.
+func TemplateRules(p Profile, src string) ([]routing.Rule, bool) {
 	p.Proxies = []model.Proxy{{Name: "mikan", Type: "direct"}}
-	var rules []any
-	if src != "" {
-		t, err := parseProfileTemplate(src)
-		if err == nil {
-			_, err = fillTemplate(t, p)
-		}
-		if err == nil {
-			rules, _ = t["rules"].([]any)
+	t, err := parseProfileTemplate(src)
+	if err == nil {
+		_, err = fillTemplate(t, p)
+	}
+	if err != nil {
+		return nil, false
+	}
+	raw, _ := t["rules"].([]any)
+	out := []routing.Rule{}
+	for _, x := range raw {
+		if r, ok := routing.ReadRule(str(x)); ok {
+			out = append(out, r)
 		}
 	}
-	if rules == nil {
-		for _, r := range configOf(p, g, m)["rules"].([]string) {
-			rules = append(rules, r)
-		}
-	}
-	out := make([]string, 0, len(rules))
-	for _, r := range rules {
-		out = append(out, str(r))
-	}
-	return out
+	return out, true
 }

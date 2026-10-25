@@ -51,10 +51,28 @@ func decodeHapp(t *testing.T, link string) happProfile {
 	return p
 }
 
-// A Clash profile's rules land in Happ's lists by their target, the first rule that takes
-// a site deciding, as in mihomo; what Xray has no list for is left out.
+// happOf is the routing link of Clash rules: the rules up to the first MATCH, and where
+// it sends the rest.
+func happOf(lines ...string) string {
+	var rules []routing.Rule
+	final := routing.Target{Kind: routing.ToMain}
+	for _, l := range lines {
+		r, ok := routing.ReadRule(l)
+		if ok && len(r.When) == 0 {
+			final = r.To
+			break
+		}
+		if ok {
+			rules = append(rules, r)
+		}
+	}
+	return happLink("VPN", rules, final)
+}
+
+// Rules land in Happ's lists by their target, the first rule that takes a site deciding,
+// as in the cores; what Xray has no list for is left out.
 func TestHappRoutingOf(t *testing.T) {
-	p := decodeHapp(t, HappRoutingOf("VPN", []string{
+	p := decodeHapp(t, happOf(
 		"IP-CIDR,203.0.113.7/32,DIRECT,no-resolve",
 		"GEOIP,LAN,DIRECT,no-resolve",
 		"DOMAIN-SUFFIX,sber.ru,DIRECT",
@@ -69,7 +87,7 @@ func TestHappRoutingOf(t *testing.T) {
 		"GEOSITE,category-ru,DIRECT",
 		"MATCH,DIRECT",
 		"MATCH,REJECT",
-	}))
+	))
 	if p.GlobalProxy != "false" || p.Name != "VPN" || p.GeositeURL != routing.RunetfreedomGeosite {
 		t.Fatalf("profile: %+v", p)
 	}
@@ -89,7 +107,7 @@ func TestHappRoutingOf(t *testing.T) {
 	if len(p.BlockIP) != 0 {
 		t.Errorf("BlockIp: %v", p.BlockIP)
 	}
-	if all := decodeHapp(t, HappRoutingOf("VPN", []string{"MATCH,VPN"})); all.GlobalProxy != "true" || !slices.Equal(all.DirectSites, []string{"geosite:private"}) {
+	if all := decodeHapp(t, happOf("MATCH,VPN")); all.GlobalProxy != "true" || !slices.Equal(all.DirectSites, []string{"geosite:private"}) {
 		t.Fatalf("all through the proxy: %+v", all)
 	}
 }
@@ -116,7 +134,7 @@ func TestGoldenHappRouting(t *testing.T) {
 func happRouting(v subtest.Variant, m routing.Mode, src string) string {
 	u := v.User()
 	p := mihomo.Profile{Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
-	return HappRoutingOf("VPN", mihomo.Rules(p, v.Groups.WithDefaults(u.Lang), m, src))
+	return HappRoutingOf("VPN", p, m, src)
 }
 
 func goldenHapp(t *testing.T, file, link string) {
