@@ -168,11 +168,11 @@ func TestWebhooksAPI(t *testing.T) {
 	}
 	// The ones the schema refuses before the handler sees them.
 	for name, body := range map[string]map[string]any{
-		"no name":      {"url": "https://hooks.example.com/x"},
-		"an empty url": {"name": "x", "url": ""},
-		"a long name":  {"name": strings.Repeat("n", 61), "url": "https://hooks.example.com/x"},
-		"a long url":   {"name": "x", "url": "https://hooks.example.com/" + strings.Repeat("a", 2100)},
-		"many events":  {"name": "x", "url": "https://hooks.example.com/x", "events": slices.Repeat([]string{"payment.paid"}, 65)},
+		"no name":           {"url": "https://hooks.example.com/x"},
+		"an empty url":      {"name": "x", "url": ""},
+		"a long name":       {"name": strings.Repeat("n", 61), "url": "https://hooks.example.com/x"},
+		"a long url":        {"name": "x", "url": "https://hooks.example.com/" + strings.Repeat("a", 2100)},
+		"many events":       {"name": "x", "url": "https://hooks.example.com/x", "events": slices.Repeat([]string{"payment.paid"}, 65)},
 		"events not a list": {"name": "x", "url": "https://hooks.example.com/x", "events": "payment.paid"},
 	} {
 		if resp, out := call(http.MethodPost, "/webhooks", body); resp.StatusCode != http.StatusUnprocessableEntity {
