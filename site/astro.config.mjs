@@ -2,16 +2,27 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
+import starlightOpenAPI, { createOpenAPISidebarGroup } from 'starlight-openapi';
 import changelog from './integrations/changelog.mjs';
+import openapi, { isReferenceLink, specFile } from './integrations/openapi.mjs';
+import { reference } from './integrations/reference.mjs';
+
+// The API reference of each language: starlight-openapi puts its pages in the sidebar where
+// these groups stand, and src/starlightRoute.ts shows a page the one of its own language.
+const referenceGroup = { ru: createOpenAPISidebarGroup(), en: createOpenAPISidebarGroup() };
 
 // GitHub Pages serves the project at miroshka000.github.io/mikan/. Links inside the docs are
 // written with the base (/mikan/...), and the link validator checks them on every build.
+const base = '/mikan';
+
 export default defineConfig({
 	site: 'https://miroshka000.github.io',
-	base: '/mikan',
+	base,
 	trailingSlash: 'always',
 	integrations: [
 		changelog(),
+		// Before Starlight: the reference reads the specs this writes.
+		openapi(),
 		starlight({
 			title: 'mikan',
 			description:
@@ -26,6 +37,7 @@ export default defineConfig({
 			editLink: { baseUrl: 'https://github.com/Miroshka000/mikan/edit/dev/site/' },
 			lastUpdated: false,
 			credits: false,
+			routeMiddleware: './src/starlightRoute.ts',
 			customCss: [
 				'@fontsource-variable/onest',
 				'@fontsource-variable/unbounded',
@@ -136,12 +148,40 @@ export default defineConfig({
 					],
 				},
 				{
+					label: 'API',
+					items: [
+						{ slug: 'api' },
+						{ slug: 'api/create-user' },
+						{ slug: 'api/own-bot' },
+						{ slug: 'api/sdk' },
+						// The guide to the webhooks, api/webhooks, goes here: it is written apart from the rest.
+						{ slug: 'api/stability' },
+						referenceGroup.ru,
+						referenceGroup.en,
+					],
+				},
+				{
 					label: 'Справка',
 					translations: { en: 'Reference' },
-					items: [{ slug: 'api' }, { slug: 'faq' }, { slug: 'changelog' }, { slug: 'support' }, { slug: 'support/paid' }],
+					items: [{ slug: 'faq' }, { slug: 'changelog' }, { slug: 'support' }, { slug: 'support/paid' }],
 				},
 			],
-			plugins: [starlightLinksValidator({ errorOnLocalLinks: true })],
+			plugins: [
+				// It does not know the pages starlight-openapi makes: a link to one is checked by isReferenceLink.
+				starlightLinksValidator({ errorOnLocalLinks: true, exclude: ({ link }) => isReferenceLink(link, base) }),
+				// The reference reads the web admin's own spec (web/src/api/openapi.json), as openapi.mjs derives it.
+				starlightOpenAPI(
+					/** @type {const} */ (['ru', 'en']).map((lang) => ({
+						base: reference[lang].base,
+						schema: specFile(lang),
+						sidebar: {
+							label: reference[lang].label,
+							group: referenceGroup[lang],
+							operations: { badges: true, labels: lang === 'en' ? 'operationId' : 'summary' },
+						},
+					})),
+				),
+			],
 		}),
 	],
 	vite: {

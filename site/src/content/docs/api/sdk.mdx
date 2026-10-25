@@ -1,0 +1,99 @@
+---
+title: SDK для TypeScript и Python
+description: Клиенты API панели на TypeScript и Python. Как поставить версию под свою панель, войти по ключу mk_..., вызвать метод и разобрать ошибку.
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+У API панели два готовых клиента, оба называются `mikan-sdk`: на [npm](https://www.npmjs.com/package/mikan-sdk) для TypeScript и на [PyPI](https://pypi.org/project/mikan-sdk/) для Python. Их делает [сборка](https://github.com/Miroshka000/mikan/tree/main/sdk) из того же файла OpenAPI, по которому построен [справочник методов](/mikan/api/reference/), поэтому методы, параметры и ответы в них те же. Для каждого стабильного релиза панели выходит SDK с тем же номером; предварительные версии (`-rc`) не публикуются.
+
+## Версия
+
+Берите SDK того же номера, что и у панели (**Настройки → Основное → Обновления**). У панели четыре числа, а у версий npm три, поэтому четвёртое идёт после дефиса:
+
+| Панель | npm | PyPI |
+|---|---|---|
+| `0.5.3.0` | `0.5.3-0` | `0.5.3.0` |
+
+npm считает такую версию предварительной, поэтому называйте её точно, а не диапазоном (`^`, `~`). Точный номер нужен и по существу: Python-клиент строго разбирает ответы и может отказаться от ответа, если SDK не совпадает с панелью: в нём значение перечисления, которого клиент ещё не знает, или не хватает обязательного поля. TypeScript-клиент ответов не проверяет, типы работают только при сборке.
+
+## Установка
+
+<Tabs syncKey="api-client">
+<TabItem label="TypeScript">
+
+```bash
+npm install mikan-sdk@<версия>
+```
+
+Нужен Node 18 или новее, либо любая среда с `fetch`.
+
+</TabItem>
+<TabItem label="Python">
+
+```bash
+pip install mikan-sdk==<версия>
+```
+
+Нужен Python 3.11 или новее.
+
+</TabItem>
+</Tabs>
+
+## Адрес и ключ
+
+Клиенту нужны ключ API (`mk_...`, [как выпустить](/mikan/api/#ключи)) и адрес API так, как его показывает страница API в панели: `https://<панель>:<порт>/<секретный путь>/api/v1`, с `/api/v1` на конце и ничего после. Пути в SDK пишутся без `/api/v1`: метод `GET /users` из справочника вызывается как `"/users"`.
+
+## Вызов
+
+<Tabs syncKey="api-client">
+<TabItem label="TypeScript">
+
+```ts
+import { createClient } from "mikan-sdk";
+
+const mikan = createClient({
+  baseUrl: "https://vpn.example.com:8443/SECRET-PATH/api/v1",
+  apiKey: process.env.MIKAN_API_KEY!,
+});
+
+const { data, error } = await mikan.GET("/users", {
+  params: { query: { state: "active", limit: 10 } },
+});
+if (error) throw new Error(error.detail);
+for (const user of data.items) console.log(user.id, user.name);
+```
+
+Каждый вызов возвращает `{ data, error, response }`: `data` при успехе, `error` с документом ошибки при отказе и сам `response`. Компилятор проверяет путь, метод, параметры и тело запроса, поэтому опечатка в имени параметра или значение вне списка не пройдут сборку. Типы схем доступны так: `components["schemas"]["UserView"]`.
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import os
+
+from mikan_sdk import AuthenticatedClient
+from mikan_sdk.api.users import list_users
+from mikan_sdk.models import ListUsersState
+
+client = AuthenticatedClient(
+    base_url="https://vpn.example.com:8443/SECRET-PATH/api/v1",
+    token=os.environ["MIKAN_API_KEY"],
+)
+
+with client as client:
+    response = list_users.sync_detailed(client=client, state=ListUsersState.ACTIVE, limit=10)
+    if response.status_code != 200:
+        raise RuntimeError(response.parsed.detail)
+    for user in response.parsed.items:
+        print(user.id, user.name)
+```
+
+Каждый метод API лежит в модуле своего раздела и называется по `operationId` из справочника: `list-users` это `mikan_sdk.api.users.list_users`. В модуле четыре функции: `sync`, `sync_detailed`, `asyncio` и `asyncio_detailed`; «detailed» отдают ещё код ответа, заголовки и тело как есть (так читаются и картинки). Тела запросов лежат в `mikan_sdk.models`.
+
+</TabItem>
+</Tabs>
+
+## Ошибки
+
+Отказ приходит документом RFC 9457 (`application/problem+json`): код ошибки в поле `detail`, коды по полям в `errors[]`, подробнее на странице [API](/mikan/api/). Для SDK важны три отказа: 401 `unauthorized` (ключ неверный, отозван или истёк), 403 `read_only_key` (ключ «Чтение» пробует менять данные), 403 `session_only` (метод только для сессии администратора, в справочнике он так и помечен).

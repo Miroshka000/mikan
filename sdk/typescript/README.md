@@ -2,12 +2,12 @@
 
 A typed TypeScript client for the API of the [mikan](https://github.com/Miroshka000/mikan) panel. The types are generated from the panel's own OpenAPI spec with [openapi-typescript](https://openapi-ts.dev/), the calls go through [openapi-fetch](https://openapi-ts.dev/openapi-fetch/) (the pair the admin panel's own web client uses): a path, its method, and the parameters and bodies the API takes, all checked by the compiler.
 
-Every release of the panel has an SDK of the same number: install the one that matches your panel (Settings → General → Updates shows it). npm versions have three numbers and a panel release has four, so the fourth goes after a hyphen: the SDK of panel 0.5.2.0 is `0.5.2-0`.
+Every stable release of the panel has an SDK of the same number: install the one that matches your panel (Settings → General → Updates shows it). npm versions have three numbers and a panel release has four, so the fourth goes after a hyphen: for a panel 0.5.3.0 the SDK is `0.5.3-0`. npm calls such a version a pre-release, so name it exactly and do not use a range.
 
 ## Install
 
 ```sh
-npm install mikan-sdk@0.5.2-0
+npm install mikan-sdk@<version>
 ```
 
 It needs Node 18 or later, or any runtime with `fetch`.

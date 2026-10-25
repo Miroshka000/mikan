@@ -2,12 +2,12 @@
 
 A typed Python client for the API of the [mikan](https://github.com/Miroshka000/mikan) panel, generated from the panel's own OpenAPI spec with [openapi-python-client](https://github.com/openapi-generators/openapi-python-client). Every operation of the API is a function with typed parameters and typed answers, in a blocking and an asyncio version.
 
-Every release of the panel has an SDK of the same number: install the one that matches your panel (Settings → General → Updates shows it).
+Every stable release of the panel has an SDK of the same number: install the one that matches your panel (Settings → General → Updates shows it), for a panel 0.5.3.0 that is `0.5.3.0`. The client reads answers strictly, so one that does not match its panel can refuse an answer: a value of an enumeration it does not know yet, or a required field the panel does not send.
 
 ## Install
 
 ```sh
-pip install mikan-sdk==0.5.2.0
+pip install mikan-sdk==<version>
 ```
 
 It needs Python 3.11 or later.
