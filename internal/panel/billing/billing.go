@@ -951,7 +951,8 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 			}
 		}
 		if u, created, err = s.d.Users.Purchase(ctx, q, domain.PurchaseInput{UserID: userID, TariffID: pay.TariffID.Int64,
-			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), TgID: pay.TgID, ResetTraffic: reset, KeepExtraDevices: cfg.ExtraDevicesKeep}); err != nil {
+			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), TgID: pay.TgID, ResetTraffic: reset, KeepExtraDevices: cfg.ExtraDevicesKeep,
+			PaymentID: pay.ID}); err != nil {
 			return err
 		}
 		// The tariff's gifts come with every payment for it, on its transaction: a refund
