@@ -497,7 +497,30 @@ function PreviewCard({ mode, routes, rules, template }: { mode: Schemas["Setting
           {errorText(preview.error)}
         </p>
       ) : null}
+      {preview.data?.notes.length ? <PreviewNotes notes={preview.data.notes} /> : null}
       {preview.data ? <pre className="panel-soft mono mt-3 max-h-[70vh] overflow-auto p-3 text-[12px] leading-[1.45]">{preview.data.profile}</pre> : null}
+    </section>
+  );
+}
+
+const CORE_NAMES: Record<Schemas["Note"]["core"], string> = { mihomo: "Clash", singbox: "sing-box", xray: "Xray" };
+
+/** What the sing-box and Xray apps make of the groups they have none of their own for: the nearest kind. */
+function PreviewNotes({ notes }: { notes: Schemas["Note"][] }) {
+  return (
+    <section className="mt-4" aria-labelledby="routes-notes">
+      <h3 id="routes-notes" className="text-[13px] font-semibold text-[var(--ink-700)]">
+        {t("settings.routesNotesTitle")}
+      </h3>
+      <p className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.routesNotesSub")}</p>
+      <ul className="mt-2 flex flex-col gap-2">
+        {notes.map((n) => (
+          <li key={`${n.core}/${n.group}/${n.code}`} className="panel-soft flex flex-wrap gap-x-2 gap-y-1 p-3 text-[13px]">
+            <span className="font-medium">{CORE_NAMES[n.core]}</span>
+            <span className="min-w-0 break-words text-[var(--ink-700)]">{t(`settings.routesNotes.${n.code}`, { group: n.group })}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

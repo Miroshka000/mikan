@@ -52,6 +52,8 @@ type routesPreviewInput struct {
 type routesPreviewOutput struct {
 	Body struct {
 		Profile string `json:"profile" doc:"Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки"`
+		// Notes are empty for a starter.
+		Notes []submodel.Note `json:"notes" doc:"Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид"`
 	}
 }
 
@@ -102,7 +104,7 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 		}
 		req.Groups = &g
 	}
-	raw, err := h.d.RoutesPreview(ctx, req)
+	pv, err := h.d.RoutesPreview(ctx, req)
 	if errors.Is(err, submodel.ErrNoProxies) {
 		return nil, huma.Error409Conflict("no_proxies")
 	}
@@ -114,6 +116,9 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 		return nil, err
 	}
 	out := &routesPreviewOutput{}
-	out.Body.Profile = string(raw)
+	out.Body.Profile, out.Body.Notes = string(pv.Profile), pv.Notes
+	if out.Body.Notes == nil {
+		out.Body.Notes = []submodel.Note{}
+	}
 	return out, nil
 }

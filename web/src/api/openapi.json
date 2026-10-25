@@ -5017,6 +5017,40 @@
         ],
         "type": "object"
       },
+      "Note": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "fallback_fastest",
+              "balance_fastest",
+              "balance_random",
+              "balance_flat",
+              "select_first",
+              "chain_group_hop",
+              "chain_dialer_taken"
+            ],
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "core",
+          "group",
+          "code"
+        ],
+        "type": "object"
+      },
       "Notify": {
         "additionalProperties": false,
         "properties": {
@@ -7986,13 +8020,21 @@
       "RoutesPreviewOutputBody": {
         "additionalProperties": false,
         "properties": {
+          "notes": {
+            "description": "Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "type": "array"
+          },
           "profile": {
             "description": "Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки",
             "type": "string"
           }
         },
         "required": [
-          "profile"
+          "profile",
+          "notes"
         ],
         "type": "object"
       },

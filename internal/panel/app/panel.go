@@ -360,7 +360,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	p.Importer = importer
 	// The subscriptions' handler comes later; the preview reaches it once it is there.
 	var subHandler *subsrc.Handler
-	deps.RoutesPreview = func(ctx context.Context, req subsrc.PreviewRequest) ([]byte, error) {
+	deps.RoutesPreview = func(ctx context.Context, req subsrc.PreviewRequest) (subsrc.Preview, error) {
 		return subHandler.Preview(ctx, req)
 	}
 	deps.CheckTemplate = func(ctx context.Context, src string) error { return subHandler.CheckTemplate(ctx, src) }

@@ -41,5 +41,5 @@ func (t GroupType) Tests() bool { return t == URLTest || t == Fallback || t == L
 type Note struct {
 	Core  string `json:"core" enum:"mihomo,singbox,xray"`
 	Group string `json:"group"`
-	Code  string `json:"code" enum:"fallback_fastest,balance_fastest,balance_random,select_first,chain_group_hop,chain_dialer_taken,chain_member_skipped"`
+	Code  string `json:"code" enum:"fallback_fastest,balance_fastest,balance_random,balance_flat,select_first,chain_group_hop,chain_dialer_taken"`
 }

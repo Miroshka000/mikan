@@ -33,6 +33,8 @@ import (
 	submodel "mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/serve"
+	"mikan/internal/sub/singbox"
+	"mikan/internal/sub/xray"
 )
 
 // Config is resolved per request, so settings changes apply without a restart: what the
@@ -510,12 +512,19 @@ type PreviewRequest struct {
 	Groups *submodel.GroupNames
 }
 
-// Preview is the Clash profile of a user given every inbound, as req sets it: what the
-// admin panel shows before it is saved. Its keys are placeholders.
-func (h *Handler) Preview(ctx context.Context, req PreviewRequest) ([]byte, error) {
+// Preview is what the admin panel shows of a profile before it is saved: the Clash profile,
+// and what the other cores make of its groups they cannot carry as they are.
+type Preview struct {
+	Profile []byte
+	Notes   []submodel.Note
+}
+
+// Preview is the profile of a user given every inbound, as req sets it. Its keys are
+// placeholders; a starter has no notes, it is the start of an own profile.
+func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, error) {
 	prof, cfg, err := h.sample(ctx)
 	if err != nil {
-		return nil, err
+		return Preview{}, err
 	}
 	prof.Routes = req.Routes
 	g := cfg.Groups
@@ -526,14 +535,21 @@ func (h *Handler) Preview(ctx context.Context, req PreviewRequest) ([]byte, erro
 	if req.Rules != nil {
 		prof.Rules = routing.ServedRules(*req.Rules, g)
 	}
+	var out Preview
 	switch {
 	case req.Starter:
-		return mihomo.Starter(prof, g, req.Mode)
+		out.Profile, err = mihomo.Starter(prof, g, req.Mode)
+		return out, err
 	case req.Template != "":
-		body, _, err := mihomo.Template(prof, req.Template)
-		return body, err
+		out.Profile, _, err = mihomo.Template(prof, req.Template)
+	default:
+		out.Profile, err = mihomo.Render(prof, g, req.Mode)
 	}
-	return mihomo.Render(prof, g, req.Mode)
+	if err != nil {
+		return Preview{}, err
+	}
+	out.Notes = append(singbox.Notes(prof, g, req.Mode, req.Template), xray.Notes(prof, g, req.Mode, req.Template)...)
+	return out, nil
 }
 
 // CheckTemplate checks an own Clash profile against a user given every inbound.

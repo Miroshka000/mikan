@@ -4653,6 +4653,13 @@ export interface components {
             system: components["schemas"]["System"];
             version: string;
         };
+        Note: {
+            /** @enum {string} */
+            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken";
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            group: string;
+        };
         Notify: {
             expire_1d: boolean;
             expire_3d: boolean;
@@ -5728,6 +5735,8 @@ export interface components {
             sub_template?: string;
         };
         RoutesPreviewOutputBody: {
+            /** @description Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид */
+            notes: components["schemas"]["Note"][];
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
         };

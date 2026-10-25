@@ -81,9 +81,9 @@ type Deps struct {
 	WakeNodeCerts func()
 	// CheckCerts is «Проверить сертификат»; nil in development.
 	CheckCerts func(ctx context.Context) (certcheck.CertReport, error)
-	// RoutesPreview renders a Clash profile with routing in place of the saved one
-	// (subsrc.Handler.Preview); nil: no preview.
-	RoutesPreview func(ctx context.Context, req subsrc.PreviewRequest) ([]byte, error)
+	// RoutesPreview renders a Clash profile with routing in place of the saved one, and
+	// what the other cores make of its groups (subsrc.Handler.Preview); nil: no preview.
+	RoutesPreview func(ctx context.Context, req subsrc.PreviewRequest) (subsrc.Preview, error)
 	// CheckTemplate checks an own Clash profile (subsrc.Handler.CheckTemplate); nil: unchecked.
 	CheckTemplate func(ctx context.Context, src string) error
 	// HappLink is the Happ crypt link of a user's subscription (subsrc.Handler.HappLink); nil: none.

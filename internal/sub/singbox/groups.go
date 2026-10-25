@@ -3,11 +3,16 @@ package singbox
 import (
 	"strconv"
 
+	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
 )
 
 // The core's name in the notes of the admin panel's preview.
 const core = "singbox"
+
+// note is what sing-box made of the group: a code of model.Note, the preview's words.
+func note(group, code string) model.Note { return model.Note{Core: core, Group: group, Code: code} }
 
 // converted are the groups as sing-box carries them.
 type converted struct {
@@ -93,9 +98,9 @@ func convertGroups(groups []model.Group, tags map[string]bool) converted {
 			}
 			switch g.Type {
 			case model.Fallback:
-				out.notes = append(out.notes, model.Note{Core: core, Group: g.Name, Code: "fallback_fastest"})
+				out.notes = append(out.notes, note(g.Name, "fallback_fastest"))
 			case model.LoadBalance:
-				out.notes = append(out.notes, model.Note{Core: core, Group: g.Name, Code: "balance_fastest"})
+				out.notes = append(out.notes, note(g.Name, "balance_fastest"))
 			}
 		case model.Chain:
 			out.chain(g, byName, tags)
@@ -119,7 +124,7 @@ func (c *converted) chain(g model.Group, byName map[string]model.Group, tags map
 		}
 		for _, p := range proxiesOf(g.Members[i], byName, tags, map[string]bool{}) {
 			if d, ok := c.detours[p]; ok && d != prev {
-				c.notes = append(c.notes, model.Note{Core: core, Group: g.Name, Code: "chain_dialer_taken"})
+				c.notes = append(c.notes, note(g.Name, "chain_dialer_taken"))
 				continue
 			}
 			c.detours[p] = prev
@@ -149,4 +154,21 @@ func proxiesOf(hop string, byName map[string]model.Group, tags map[string]bool, 
 		out = append(out, proxiesOf(m, byName, tags, seen)...)
 	}
 	return out
+}
+
+// Notes are what sing-box makes of the groups of p's profile it cannot write as they are
+// (convertGroups), for the admin panel's preview: of the own Clash profile src, or of the
+// built-in groups.
+func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) []model.Note {
+	pl, err := planOf(p, g, m, src)
+	if err != nil {
+		return nil
+	}
+	tags := map[string]bool{"direct": true}
+	for _, x := range pl.proxies {
+		if o, ok := singboxOutbound(x); ok {
+			tags[str(o["tag"])] = true
+		}
+	}
+	return convertGroups(pl.groups, tags).notes
 }
