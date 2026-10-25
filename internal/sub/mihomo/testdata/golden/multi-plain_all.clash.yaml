@@ -104,6 +104,7 @@ proxies:
     client-fingerprint: chrome
     grpc-opts:
       grpc-service-name: goldengrpc
+      ping-interval: 15
     network: grpc
     reality-opts:
       public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw

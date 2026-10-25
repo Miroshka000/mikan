@@ -132,6 +132,8 @@
         }
       },
       "transport": {
+        "idle_timeout": "15s",
+        "ping_timeout": "10s",
         "service_name": "goldengrpc",
         "type": "grpc"
       },
