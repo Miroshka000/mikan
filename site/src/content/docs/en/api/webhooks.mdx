@@ -5,6 +5,10 @@ description: The panel sends its events to your address, from payments to a node
 
 import { Steps, TabItem, Tabs } from '@astrojs/starlight/components';
 
+:::note[New in 0.5.2.1]
+Webhooks are new in 0.5.2.1.
+:::
+
 The panel sends its events to your address: a plan was paid for, a subscription is about to end, a node stopped answering. You do not have to poll the API: for each event the panel makes one POST request with a JSON body, and the signature in a header proves the request is the panel's and not someone else's.
 
 <Steps>

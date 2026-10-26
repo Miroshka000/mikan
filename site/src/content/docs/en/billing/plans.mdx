@@ -18,6 +18,10 @@ description: Plans with a term, traffic and several sale terms, users, devices a
 - **Description for buyers**: up to 300 characters and 5 lines of plain text. When the limits do not show what sets plans apart ("with white lists", "without"), say it here: the description appears in the bot and the Mini App next to the line built from the limits. Markup does not work, line breaks are kept. An empty description changes nothing.
 - **What is included**: [server groups](/mikan/en/billing/pools/) (on the main traffic, with a limit of their own, unlimited or not included) and packages as a gift with a payment. The preview shows what the buyer sees.
 
+:::note[New in 0.5.2.1]
+The **Term from the first connection** and **Leftover traffic** fields are new in 0.5.2.1.
+:::
+
 The **Selling** block: the "On sale" switch, a price in Telegram Stars and in rubles (at least one is required). **More terms** adds up to 12 options, for example 7, 30 and 90 days, each with its own price. Limits are not multiplied, and traffic resets by the plan's rule. The buyer picks a term in the bot and the Mini App, and the invoice remembers the term and price it was issued with.
 
 An archived plan cannot be chosen for new users; nothing changes for existing ones.
@@ -39,6 +43,10 @@ In the user card:
 - **Telegram → Unlink**, a torrent ban and "Do not check for torrents".
 
 The list can be filtered by state: active, expiring, limit reached, expired, disabled. Search works on name, contact, tag and note. With rows selected, you can do "+1 month", reset traffic, disable and delete: before doing it the panel shows what will change and waits for a confirmation, see [Preview of bulk actions](/mikan/en/billing/lifecycle/#preview-of-bulk-actions). The **Rules** button in the page header opens the general subscription rules: carrying leftover traffic over and removing inactive subscriptions, see [Subscription lifecycle](/mikan/en/billing/lifecycle/).
+
+:::note[New in 0.5.2.1]
+The next plan, the term from the first connection in the new user form, the **Rules** button and the preview of bulk actions are new in 0.5.2.1.
+:::
 
 Since version 0.5.0.3 there are also folders, a user source (created in the panel, bought in the bot, free trial, import) and hidden users. Hiding only removes the row from the list: the subscription, payment and nodes work as usual.
 

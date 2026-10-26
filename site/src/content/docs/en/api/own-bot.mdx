@@ -5,6 +5,10 @@ description: How to run your own Telegram bot on the panel. It reads messages an
 
 import { Steps } from '@astrojs/starlight/components';
 
+:::note[New in 0.5.2.1]
+This guide is new in 0.5.2.1. The Bot API proxy it describes has been there since 0.5.1.0.
+:::
+
 The subscribers' bot in the panel is an addon, and your own bot, on any framework (aiogram, grammY, python-telegram-bot), can take its place. The panel stays the gateway to Telegram: it keeps the bot's real token, polls Telegram, takes the payments and keeps Telegram's sending limits. Your bot talks to it as it would to `api.telegram.org`, only at the panel's address and with the addon's token.
 
 :::caution
