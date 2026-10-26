@@ -9,7 +9,7 @@ name: release
 #     pre-release), where updaters look first; "from" comes from .github/upgrade-from;
 #   - the SDKs (sdk/), @getmikan/sdk on npm and mikan-sdk on PyPI (a beta: pre-releases of them), built from the
 #     spec of the tagged commit and numbered as the release, once the release is published
-#     (sdk/README.md lists what the npm token and PyPI's trusted publisher need).
+#     (sdk/README.md lists what npm's and PyPI's trusted publishers need).
 # A stable manifest must pass the legacy contract (mikan-release legacy-check) before it
 # is published: mikan 0.4.5 and 0.5.0.0 read "latest" and nothing else.
 # The image is pushed under its version only; :latest moves to it after the release is
@@ -390,10 +390,10 @@ jobs:
             sdk/dist/*.tar.gz
           if-no-files-found: error
 
-  # npm takes @getmikan/sdk by trusted publishing (this repository and release.yml, set up
-  # in the package's settings on npm) or, until that is set up, with the repository's
-  # NPM_TOKEN secret; npm tries the first and falls back to the token. Either way it signs
-  # where the package came from: the provenance and the trust need the id-token permission.
+  # npm takes @getmikan/sdk by trusted publishing only (this repository and release.yml, set
+  # up in the package's settings on npm with direct publishing allowed): no token is kept
+  # anywhere. The trust and the provenance, which signs where the package came from, need
+  # the id-token permission.
   sdk-npm:
     needs: sdk
     runs-on: ubuntu-24.04
@@ -416,8 +416,6 @@ jobs:
       # beta (0.5.201-rc.2): npm install without a version keeps taking the release. The file
       # goes with ./ : npm reads dist/<name>.tgz as a GitHub repository (owner/repo).
       - name: publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           tag=latest
           case "$GITHUB_REF_NAME" in
