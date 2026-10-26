@@ -655,6 +655,9 @@ func (p *Panel) Run(ctx context.Context) {
 			})
 		},
 		func(ctx context.Context) {
+			// The housekeeping runs at start too: a term that ends within ten minutes of a
+			// restart must find its next tariff (domain.SwitchAhead), not the first tick.
+			p.maintain(ctx)
 			pace.Tick(ctx, 10*time.Minute, func(ctx context.Context) {
 				if err := p.sessions.Cleanup(ctx); err != nil {
 					p.log.Error("session cleanup", "err", err)

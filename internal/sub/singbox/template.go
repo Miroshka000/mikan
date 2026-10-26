@@ -311,7 +311,7 @@ func Example(g model.GroupNames) []byte {
   "log": {"level": "warn"},
   "dns": {
     "servers": [
-      {"type": "https", "tag": "remote", "server": "1.1.1.1"},
+      {"type": "https", "tag": "remote", "server": "1.1.1.1", "detour": %[1]s},
       {"type": "udp", "tag": "local", "server": "1.1.1.1"}
     ],
     "final": "remote"

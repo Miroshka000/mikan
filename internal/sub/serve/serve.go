@@ -232,7 +232,11 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
 		return
 	}
 	cfg := sub.Config()
-	ex := &exchange{dec: cfg.Responses.Decide(r.Header)}
+	// Go keeps the request's Host out of its headers; a rule on Host must see it here as the
+	// tester, which takes it as a header, does.
+	hdr := r.Header.Clone()
+	hdr.Set("Host", r.Host)
+	ex := &exchange{dec: cfg.Responses.Decide(hdr)}
 	outcome := h.answer(w, r, sub, cfg, ex)
 	h.record(r, sub, ex, outcome)
 	if ex.abort {

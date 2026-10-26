@@ -159,4 +159,18 @@ func TestExample(t *testing.T) {
 	if c.Route.Final != g.Main || outbound(c, g.Auto) == nil || len(anyList(outbound(c, g.Main)["outbounds"])) < 2 {
 		t.Fatalf("%s", src)
 	}
+	// "DNS through the tunnel": the remote server goes out through the main group.
+	var ex struct {
+		DNS struct {
+			Servers []struct{ Tag, Detour string } `json:"servers"`
+		} `json:"dns"`
+	}
+	if err := json.Unmarshal([]byte(src), &ex); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range ex.DNS.Servers {
+		if s.Tag == "remote" && s.Detour != g.Main {
+			t.Fatalf("remote DNS detour %q, want %q", s.Detour, g.Main)
+		}
+	}
 }

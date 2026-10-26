@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"slices"
+	"strings"
 
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
@@ -12,6 +14,26 @@ import (
 	"mikan/internal/sub/xray"
 	"mikan/internal/textutil"
 )
+
+// hwidApps are the apps that send a device ID, for the stub of an app that does not, without
+// those the admin blocked: the stub must not send subscribers to an app that gets nothing.
+func hwidApps(blocked []string) []string {
+	var out []string
+	for _, a := range [][2]string{{"happ", "Happ"}, {"koala", "Koala Clash"}, {"incy", "INCY"}} {
+		if !slices.Contains(blocked, a[0]) {
+			out = append(out, a[1])
+		}
+	}
+	return out
+}
+
+// listOf joins names as "A, B or C", with last the word before the last one.
+func listOf(names []string, last string) string {
+	if len(names) == 1 {
+		return names[0]
+	}
+	return strings.Join(names[:len(names)-1], ", ") + last + names[len(names)-1]
+}
 
 // stub answers a device that gets no keys or a profile with nothing in it: one placeholder
 // server named after the reason, so the app shows it where the servers would be, and the
@@ -61,9 +83,15 @@ func (h *Handler) stub(w http.ResponseWriter, cfg Config, format string, reason 
 			}
 		}
 	case errors.Is(reason, ErrNoHWID):
-		name = "⛔ Приложение не сообщает ID устройства — поставьте Happ, Koala Clash или INCY"
+		name = "⛔ Приложение не сообщает ID устройства — откройте ссылку подписки в браузере"
 		if en {
-			name = "⛔ The app does not send a device ID — install Happ, Koala Clash or INCY"
+			name = "⛔ The app does not send a device ID — open the subscription link in a browser"
+		}
+		if apps := hwidApps(cfg.Responses.BlockedIDs()); len(apps) > 0 {
+			name = "⛔ Приложение не сообщает ID устройства — поставьте " + listOf(apps, " или ")
+			if en {
+				name = "⛔ The app does not send a device ID — install " + listOf(apps, " or ")
+			}
 		}
 	}
 	hd := w.Header()
