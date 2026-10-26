@@ -470,6 +470,10 @@ type SubAsset struct {
 	UpdatedAt   int64
 }
 
+type SubBlockedApp struct {
+	App string
+}
+
 type SubDoc struct {
 	ID        int64
 	Title     string
@@ -486,6 +490,36 @@ type SubFetch struct {
 	UserID    int64
 	Ip        string
 	FetchedAt int64
+}
+
+type SubLog struct {
+	ID      int64
+	UserID  int64
+	At      int64
+	Ip      string
+	Agent   string
+	App     string
+	Rule    string
+	Format  string
+	Outcome string
+}
+
+type SubRule struct {
+	Position int64
+	Name     string
+	Enabled  bool
+	Cond     string
+	Action   string
+}
+
+type SubTemplate struct {
+	ID        int64
+	Core      string
+	Name      string
+	Body      string
+	IsDefault bool
+	CreatedAt int64
+	UpdatedAt int64
 }
 
 type SupportGrant struct {
@@ -539,6 +573,12 @@ type TariffGift struct {
 type TariffInbound struct {
 	TariffID  int64
 	InboundID int64
+}
+
+type TariffLifecycle struct {
+	TariffID       int64
+	CarryOver      sql.NullBool
+	StartOnConnect bool
 }
 
 type TariffNode struct {
@@ -721,6 +761,13 @@ type UserFolder struct {
 	CreatedAt int64
 }
 
+type UserNextTariff struct {
+	UserID    int64
+	TariffID  int64
+	TermDays  sql.NullInt64
+	CreatedAt int64
+}
+
 type UserPool struct {
 	UserID       int64
 	PoolID       int64
@@ -736,4 +783,35 @@ type UserSite struct {
 	Site   string
 	Up     int64
 	Down   int64
+}
+
+type UserStart struct {
+	UserID   int64
+	FrozenAt int64
+}
+
+type WebhookDelivery struct {
+	ID           int64
+	EndpointID   int64
+	EventID      sql.NullInt64
+	Type         string
+	Status       string
+	Attempts     int64
+	ResponseCode int64
+	Error        string
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+type WebhookEndpoint struct {
+	ID         int64
+	Name       string
+	Url        string
+	Secret     string
+	Events     []string
+	Enabled    bool
+	AllowLocal bool
+	LastID     int64
+	CreatedAt  int64
+	SecretAt   int64
 }

@@ -177,7 +177,9 @@ SELECT key, value FROM node_state WHERE key LIKE 'counters\_epoch/%' OR key LIKE
 
 -- name: ListNoticeSubscriptions :many
 -- The subscriptions the bot may tell about (linked, the chat not blocked) with what is
--- left of their main grants: one read for a round of notices.
+-- left of their main grants: one read for a round of notices. A term that waits for its
+-- first connection is left out: nothing of it runs yet, and the expiry it shows moves on
+-- with the clock, which would make every round a new notice.
 SELECT sqlc.embed(users), l.tg_id, CAST(COALESCE(g.left_bytes, 0) AS BIGINT) AS grants_left
 FROM tg_links l
 JOIN users ON users.id = l.user_id
@@ -186,6 +188,7 @@ LEFT JOIN (SELECT user_id, SUM(remaining) AS left_bytes FROM traffic_grants
            WHERE pool_id IS NULL AND remaining > 0 AND (expires_at IS NULL OR expires_at > sqlc.arg(now)::bigint)
            GROUP BY user_id) g ON g.user_id = users.id
 WHERE COALESCE(c.blocked, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM user_starts s WHERE s.user_id = users.id)
 ORDER BY users.id;
 
 -- name: TgNoticeSent :one

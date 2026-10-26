@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -69,6 +70,86 @@ func TestBulkIsAllOrNothing(t *testing.T) {
 	}
 	if _, err := users.Bulk(ctx, ids, "explode", BulkOpt{}); err == nil {
 		t.Fatal("an unknown action was accepted")
+	}
+}
+
+// The plan of a bulk action is what the action then does: of the users asked for, each once,
+// how many are there and how many it changes at all, the first of those with the end an
+// extension gives them, and for a deletion what the users deleted hold; with the action's own
+// refusals.
+func TestBulkPlan(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	st, users, _ := setup(t, &now)
+	ctx := context.Background()
+	tariffs, _ := st.Q.ListTariffs(ctx)
+	var ids []int64
+	for i := range 12 {
+		u, err := users.Create(ctx, CreateInput{Name: "u" + strconv.Itoa(i), TariffID: tariffs[1].ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, u.ID)
+	}
+	off := true
+	if _, err := users.Update(ctx, ids[1], Patch{Disabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+	asked := []int64{ids[2], ids[0], ids[1], ids[2], 9999}
+
+	plan, err := users.BulkPlan(ctx, asked, BulkDisable, BulkOpt{})
+	if err != nil || plan.Asked != 4 || plan.Found != 3 || plan.Changed != 2 || plan.AtStake != nil {
+		t.Fatalf("disable: %+v %v", plan, err)
+	}
+	if len(plan.Sample) != 2 || plan.Sample[0].User.ID != ids[0] || plan.Sample[1].User.ID != ids[2] {
+		t.Fatalf("disable's sample: %+v, want the two still on, in id order", plan.Sample)
+	}
+	if plan, err = users.BulkPlan(ctx, asked, BulkEnable, BulkOpt{}); err != nil || plan.Changed != 1 || plan.Sample[0].User.ID != ids[1] {
+		t.Fatalf("enable: %+v %v", plan, err)
+	}
+
+	// The extension planned is the extension done, from each user's own end.
+	plan, err = users.BulkPlan(ctx, asked, BulkExtend, BulkOpt{Days: 10})
+	if err != nil || plan.Changed != 3 || len(plan.Sample) != 3 {
+		t.Fatalf("extend: %+v %v", plan, err)
+	}
+	if _, err := users.Bulk(ctx, asked, BulkExtend, BulkOpt{Days: 10}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range plan.Sample {
+		u, _ := users.Get(ctx, c.User.ID)
+		if u.ExpiresAt != c.Expires || c.Expires.Int64 != c.User.ExpiresAt.Int64+10*day {
+			t.Fatalf("user %d: planned %v, done %v", c.User.ID, c.Expires, u.ExpiresAt)
+		}
+	}
+
+	// A new period for all of them, ten shown; a deletion counts what goes with the users.
+	if plan, err = users.BulkPlan(ctx, ids, BulkReset, BulkOpt{}); err != nil || plan.Changed != 12 || len(plan.Sample) != BulkSampleSize {
+		t.Fatalf("reset: %d changed, %d shown, %v", plan.Changed, len(plan.Sample), err)
+	}
+	if err := st.Q.LinkTg(ctx, db.LinkTgParams{UserID: ids[0], TgID: 7, CreatedAt: now.Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.DB.ExecContext(ctx, "INSERT INTO balances (tg_id, amount, updated_at) VALUES (7, 100, $1)", now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	u3, _ := users.Get(ctx, ids[3])
+	if _, err := GrantTx(ctx, st.Q, u3, GrantSpec{Bytes: GiB, Lifetime: LifetimeUsed, Source: SourceAdmin}, now); err != nil {
+		t.Fatal(err)
+	}
+	plan, err = users.BulkPlan(ctx, ids, BulkDelete, BulkOpt{})
+	if err != nil || plan.Changed != 12 || plan.AtStake == nil || plan.AtStake.WithBalance != 1 || plan.AtStake.Granted != 1 || plan.AtStake.Paying != 0 {
+		t.Fatalf("delete: %+v %v", plan, err)
+	}
+	if n, _ := users.Bulk(ctx, ids, BulkReset, BulkOpt{}); n != 12 {
+		t.Fatal("the plans changed someone")
+	}
+
+	if _, err := users.BulkPlan(ctx, ids, "explode", BulkOpt{}); err == nil {
+		t.Fatal("an unknown action was planned")
+	}
+	var fe *FieldError
+	if _, err := users.BulkPlan(ctx, ids, BulkExtend, BulkOpt{Days: MaxExtendDays + 1}); !errors.As(err, &fe) || fe.Code != "bad_days" {
+		t.Fatalf("an extension past ten years: %v", err)
 	}
 }
 

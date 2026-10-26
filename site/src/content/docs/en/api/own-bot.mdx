@@ -1,0 +1,110 @@
+---
+title: Your own bot through the Bot API proxy
+description: How to run your own Telegram bot on the panel. It reads messages and answers through the panel's Bot API proxy, while the bot's token and the payments stay with the panel.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+:::note[New in 0.5.2.1]
+This guide is new in 0.5.2.1. The Bot API proxy it describes has been there since 0.5.1.0.
+:::
+
+The subscribers' bot in the panel is an addon, and your own bot, on any framework (aiogram, grammY, python-telegram-bot), can take its place. The panel stays the gateway to Telegram: it keeps the bot's real token, polls Telegram, takes the payments and keeps Telegram's sending limits. Your bot talks to it as it would to `api.telegram.org`, only at the panel's address and with the addon's token.
+
+:::caution
+mikan does not review the code of your bot. An addon with the "Telegram bot" permission sees the messages of every subscriber and answers as the bot, so run only code you trust as you trust yourself.
+:::
+
+## What you need
+
+- The bot is connected in the panel: **Telegram → Connection**, with the token from [@BotFather](https://t.me/BotFather) ([more](/mikan/en/billing/telegram/)). The real token is the panel's business only, your bot never needs it.
+- The bot is written on long polling (`getUpdates`). The proxy takes no webhooks: the real token is the panel's.
+- Root access to the panel's server: the addon's token is in a file only root reads.
+
+## Connect it
+
+<Steps>
+
+1. **Create the addon.** **Addons → Developer mode**. Fill in:
+   - **Name**: lowercase Latin letters, digits and a hyphen, up to 32 characters, for example `my-bot`;
+   - **Kind**: "Telegram bot";
+   - **Mode**: "Runs in the background" if the bot has no HTTP server of its own (a bot on aiogram, grammY or python-telegram-bot with long polling has none). Then the address can stay empty;
+   - **Permissions**: "Telegram bot" and only what else the bot needs;
+   - the box that says you understand the code is not verified by mikan.
+
+2. **Take the address and the token.** On the server, as root, open `/opt/mikan/addons/state.json`. The proxy's address is in the `panel_api` field, the addon's token in `adapters` → the addon's name → `panel_token`. The file holds the tokens of every addon: show it to nobody.
+
+3. **Start the bot with two variables:**
+
+   ```bash
+   MIKAN_BOT_API_URL=http://127.0.0.1:41990   # panel_api with http:// before it
+   MIKAN_BOT_TOKEN=0:<panel_token>            # the addon's token after "0:"
+   ```
+
+   The "0:" is there for looks only: frameworks check that a token is a number, a colon and a string. The bot's own id comes from `getMe`.
+
+4. **Hand the bot over.** In the addon's row, the menu "More actions" → **Hand the bot over**. One addon holds the bot: after the handover the official bot stops answering subscribers, and the proxy answers your bot. While the bot is not running, messages wait in the panel for up to a day.
+
+</Steps>
+
+## Examples
+
+A framework only needs to be pointed at the proxy's address: it waits for requests like `<address>/bot<token>/<method>`, as Telegram does.
+
+```python
+# aiogram 3
+import asyncio
+import os
+
+from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
+from aiogram.filters import CommandStart
+from aiogram.types import Message
+
+session = AiohttpSession(api=TelegramAPIServer.from_base(os.environ["MIKAN_BOT_API_URL"]))
+bot = Bot(os.environ["MIKAN_BOT_TOKEN"], session=session)
+dp = Dispatcher()
+
+
+@dp.message(CommandStart())
+async def start(message: Message) -> None:
+    await message.answer("Hello from my own bot")
+
+
+asyncio.run(dp.start_polling(bot))
+```
+
+```ts
+// grammY
+import { Bot } from "grammy";
+
+const bot = new Bot(process.env.MIKAN_BOT_TOKEN!, {
+  client: { apiRoot: process.env.MIKAN_BOT_API_URL! },
+});
+
+bot.command("start", (ctx) => ctx.reply("Hello from my own bot"));
+bot.start();
+```
+
+## What the proxy allows
+
+The token is accepted while the addon holds the bot and has the "Telegram bot" permission. Otherwise the answer is 401 `Unauthorized`.
+
+**Updates.** `getUpdates` gives what the panel has gathered for the bot: `offset` acknowledges everything below it, `limit` is 1 to 100, `timeout` up to 50 seconds. The buffer holds up to 2000 updates, for a day at most. `deleteWebhook` does nothing and answers `true`, so that frameworks start; with `drop_pending_updates` it empties the buffer.
+
+**Straight to Telegram:** `getMe`, `getChat`, `getChatMember`, `answerCallbackQuery`, `setMyCommands`, `getMyCommands`, `deleteMyCommands`, `setChatMenuButton`, `getChatMenuButton`.
+
+**Through the panel's queue** (the request needs a `chat_id`, the queue keeps Telegram's limits): `sendMessage`, `editMessageText`, `editMessageReplyMarkup`, `editMessageCaption`, `editMessageMedia`, `deleteMessage`, `deleteMessages`, `sendPhoto`, `sendDocument`, `sendMediaGroup`, `sendChatAction`, `sendSticker`, `sendAnimation`, `sendVideo`, `sendAudio`, `sendVoice`, `sendLocation`, `pinChatMessage`, `unpinChatMessage`. The header `X-Mikan-Priority: notice` or `bulk` picks the queue's lane for notices and broadcasts; without it a request goes as a reply to a user.
+
+**Everything else is refused**: the answer is 403 `Forbidden: <method> is not allowed for addons`. Among the refused are `setWebhook`, `sendInvoice`, `createInvoiceLink`, `answerPreCheckoutQuery`, `refundStarPayment`, `logOut` and `close`. The panel runs the payments itself: `pre_checkout_query` and `successful_payment` never reach the bot, and an addon learns about payments from the panel's events (the "Events" permission).
+
+**Parameters** come as JSON, a form, multipart or in the query string. A body without files is up to 1 MiB, files up to 50 MiB.
+
+**Buttons.** `web_app.url` and `login_url` in `reply_markup` and `menu_button` may lead only to the panel's own pages (its subscription address): a foreign page would get the signed data of the Mini App. Otherwise 400.
+
+Errors come in the Bot API's format: `{"ok": false, "error_code": 403, "description": "..."}`.
+
+## An image instead of a process of your own
+
+A bot packed in a Docker image can be published as an addon of protocol 2: the panel then runs the container itself and gives it these variables, and it is installed from a source or from the [community registry](/mikan/en/operations/community-addons/). The protocol is described in [PROTOCOL-v2.md](https://github.com/getmikan/marketplace/blob/main/PROTOCOL-v2.md).

@@ -1,0 +1,47 @@
+---
+title: Apps, response rules and the request log
+description: Which apps get the servers and how to block an app, the subscription's response rules by request headers, the rule tester, and the subscription request log.
+---
+
+:::note[New in 0.5.2.1]
+The app list, response rules and the request log are new in 0.5.2.1.
+:::
+
+All of it is in **Settings → Subscription**: the **Apps** and **Response rules** tabs; the log's retention is set in the **General** tab.
+
+## Apps
+
+The panel tells the app by its User-Agent header and gives it a format it understands. In the **Apps** tab every known app has a switch.
+
+- A blocked app gets one entry with the stub text instead of the servers. It takes no device place and is not shown in the app catalog of the subscription page.
+- **Stub text**: one line of up to 200 characters. Name the app to install instead. Left empty, the panel writes a built-in text that lists the allowed apps.
+- Example: block Happ and keep INCY. Happ users see the stub that tells them to install INCY; every other app works as before.
+
+## Response rules
+
+The rules decide how the subscription answers a request, before anything is built for it. They are checked from the top down, and the first one that matches decides.
+
+A **condition** is a request header (User-Agent, x-device-os or any other, Host included), a comparison (equals, contains, a regular expression in RE2 syntax), and groups of conditions joined by AND or OR.
+
+The **answer** can be:
+- the subscription in a chosen format: Clash (mihomo), sing-box, links (base64) or Xray configs (JSON), with your own [template](/mikan/en/subscriptions/templates/) and extra headers;
+- the stub;
+- a 403 or 404 response;
+- your own HTML page;
+- dropping the connection silently, for scanners for example;
+- not asking for a device ID, for apps that do not send one.
+
+The built-in rules are on by default: ShadowsocksR and old Clash clients (Clash for Windows, Clash for Android, ClashX without Meta) get the stub, since they cannot use the panel's protocols anyway. A switch in the same tab turns the built-in rules off.
+
+Limits: up to 100 rules, up to 20 conditions in a rule, a condition value up to 256 characters. The panel refuses a regular expression that is too complex: simplify it or split it into several conditions.
+
+### Tester
+
+The **Response rules** tab has a tester. Paste a User-Agent and headers, and it shows which rule fires, which format and template the app gets, and what the stub text would be. It checks rules that are not saved yet too.
+
+## Request log
+
+The log records every subscription request: the time, the address, the app, the rule that fired and what the panel answered (served, stub, blocked, connection dropped). Subscription and key links are not stored in it.
+
+- The retention is set in **Settings → Subscription → General**, 14 days by default. With the log off, requests are no longer recorded, and what was recorded before is deleted within ten minutes.
+- The log is shown in the user card. It is the main tool when a client says "it does not work": you see whether the app came for the subscription and what it got.

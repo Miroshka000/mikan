@@ -109,6 +109,10 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		"update-sub-doc":        {http.MethodPut, "/sub-docs/1", map[string]any{"title": "Pay here", "emoji": "", "body": "", "platform": "", "published": true}},
 		"delete-sub-doc":        {http.MethodDelete, "/sub-docs/1", nil},
 		"order-sub-docs":        {http.MethodPut, "/sub-docs/order", map[string]any{"ids": []int64{1}}},
+		// The templates every subscriber's profile is made of.
+		"create-sub-template": {http.MethodPost, "/sub-templates", map[string]any{"core": "mihomo", "name": "Pay here", "body": "rules: [MATCH,DIRECT]\n"}},
+		"update-sub-template": {http.MethodPatch, "/sub-templates/1", map[string]any{"default": true}},
+		"delete-sub-template": {http.MethodDelete, "/sub-templates/1", nil},
 	} {
 		resp, body := k.asKey(k.full, c.method, c.path, c.body)
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(body), "session_only") {
@@ -125,7 +129,6 @@ func TestFullKeyCannotTakeOverThePanel(t *testing.T) {
 		"app_branding": {"app_branding": true}, "brand_accent": {"brand_accent": "#000000"}, "brand_logo_url": {"brand_logo_url": "https://evil.example/l.png"},
 		// Where every client's traffic goes.
 		"sub_routing": {"sub_routing": "blocked"}, "sub_routes": {"sub_routes": map[string]any{"services": map[string]any{"youtube": "direct"}}},
-		"sub_template": {"sub_template": "rules: [MATCH,DIRECT]\n"},
 		// Which apps get a subscription at all.
 		"device_require_hwid": {"device_require_hwid": true}, "device_binding": {"device_binding": true},
 		// Ports the firewall does not open.
@@ -225,16 +228,17 @@ func TestReadKeyDoesNotGetSecrets(t *testing.T) {
 		t.Errorf("a full key misses a protocol's server key: %s", body)
 	}
 
-	// An own Clash profile may hold the admin's own proxies and secrets.
-	const tpl = "secret: controller-secret-1234\nrules: [MATCH,DIRECT]\n"
-	if err := settings.Set(ctx, settings.New(k.st.Q), settings.KeyTemplate, tpl); err != nil {
+	// A subscription template may hold the admin's own proxies and secrets.
+	tpl, err := k.st.Q.CreateSubTemplate(ctx, db.CreateSubTemplateParams{Core: "mihomo", Name: "own", Body: "secret: controller-secret-1234\nrules: [MATCH,DIRECT]\n", At: 1})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, body := k.asKey(k.read, http.MethodGet, "/settings", nil); strings.Contains(string(body), "controller-secret-1234") {
-		t.Errorf("a read key sees the own profile: %s", body)
+	if resp, body := k.asKey(k.read, http.MethodGet, "/sub-templates/"+idOf(tpl.ID), nil); resp.StatusCode != http.StatusOK || strings.Contains(string(body), "controller-secret-1234") ||
+		!strings.Contains(string(body), `"hidden":true`) {
+		t.Errorf("a read key sees the template: %d %s", resp.StatusCode, body)
 	}
-	if _, body := k.asKey(k.full, http.MethodGet, "/settings", nil); !strings.Contains(string(body), "controller-secret-1234") {
-		t.Errorf("a full key misses the own profile: %s", body)
+	if _, body := k.asKey(k.full, http.MethodGet, "/sub-templates/"+idOf(tpl.ID), nil); !strings.Contains(string(body), "controller-secret-1234") {
+		t.Errorf("a full key misses the template: %s", body)
 	}
 }
 

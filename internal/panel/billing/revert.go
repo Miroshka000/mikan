@@ -125,7 +125,8 @@ func (s *Service) takeBack(ctx context.Context, q *db.Queries, p db.Payment) (rv
 		}
 		return rv, u, err
 	}
-	// The tariff's gifts go with the payment that gave them, whole like a package.
+	// The tariff's gifts, and the traffic a renewal carried over from the period before, go
+	// with the payment that gave them, whole like a package.
 	if _, err := q.DeleteGrantByPayment(ctx, sql.NullInt64{Int64: p.ID, Valid: true}); err != nil {
 		return rv, u, err
 	}
@@ -148,11 +149,14 @@ func (s *Service) takeBackTariff(ctx context.Context, q *db.Queries, p db.Paymen
 	}
 	par := domain.UserParams(u, now)
 	if ri.Created && later == 0 {
-		// Disabled, not deleted: the buyer's Telegram link and the subscription stay.
+		// Disabled, not deleted: the buyer's Telegram link and the subscription stay. A term
+		// that waited for its first connection has nothing left to wait with.
 		par.Status, par.ExpiresAt = "disabled", sql.NullInt64{Int64: now, Valid: true}
 		rv.Action = "disabled"
-		u, err = q.UpdateUser(ctx, par)
-		return rv, u, err
+		if u, err = q.UpdateUser(ctx, par); err != nil {
+			return rv, u, err
+		}
+		return rv, u, domain.EndWaitOn(ctx, q, u.ID)
 	}
 	days, err := s.termOf(ctx, q, p)
 	if err != nil {

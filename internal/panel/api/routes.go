@@ -8,11 +8,14 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
+	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
 )
 
 // The routing of the Clash profiles: what the admin can send where (the catalog), and the
-// profile it makes before it is saved (the preview).
+// built-in profile it makes before it is saved (the preview). The own profiles are the
+// subscription templates (subtemplates.go).
 
 type routeService struct {
 	ID   string `json:"id"`
@@ -36,19 +39,19 @@ type routesCatalogOutput struct {
 
 type routesPreviewInput struct {
 	Body struct {
-		SubRouting  string      `json:"sub_routing" enum:"ru_direct,all,blocked"`
-		SubRoutes   subs.Routes `json:"sub_routes"`
-		SubTemplate string      `json:"sub_template,omitempty" maxLength:"524288" doc:"Свой профиль Clash: показать его вместо встроенного"`
-		Starter     bool        `json:"starter,omitempty" doc:"Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами"`
-		SubRules    *string     `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила вместо сохранённых"`
-		GroupMain   *string     `json:"sub_group_main,omitempty" maxLength:"200" doc:"Имя главной группы вместо сохранённого"`
-		GroupAuto   *string     `json:"sub_group_auto,omitempty" maxLength:"200" doc:"Имя группы автовыбора вместо сохранённого"`
+		SubRouting string         `json:"sub_routing" enum:"ru_direct,all,blocked"`
+		SubRoutes  routing.Routes `json:"sub_routes"`
+		SubRules   *string        `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила вместо сохранённых"`
+		GroupMain  *string        `json:"sub_group_main,omitempty" maxLength:"200" doc:"Имя главной группы вместо сохранённого"`
+		GroupAuto  *string        `json:"sub_group_auto,omitempty" maxLength:"200" doc:"Имя группы автовыбора вместо сохранённого"`
 	}
 }
 
 type routesPreviewOutput struct {
 	Body struct {
 		Profile string `json:"profile" doc:"Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки"`
+		// Notes are empty for a starter.
+		Notes []submodel.Note `json:"notes" doc:"Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид"`
 	}
 }
 
@@ -60,11 +63,11 @@ func (h *handlers) registerRoutes() {
 func (h *handlers) routesCatalog(context.Context, *struct{}) (*routesCatalogOutput, error) {
 	out := &routesCatalogOutput{}
 	out.Body.Services = []routeService{}
-	for _, s := range subs.Services {
+	for _, s := range routing.Services {
 		out.Body.Services = append(out.Body.Services, routeService{ID: s.ID, Icon: s.Icon, Name: s.Name, En: s.NameEN})
 	}
 	out.Body.Direct = []routeDirectSet{}
-	for _, d := range subs.DirectSets {
+	for _, d := range routing.DirectSets {
 		out.Body.Direct = append(out.Body.Direct, routeDirectSet{ID: d.ID, Name: d.Name, En: d.NameEN})
 	}
 	return out, nil
@@ -81,10 +84,10 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 	if err := in.Body.SubRoutes.Check(exists); err != nil {
 		return nil, fieldErr("body.sub_routes", err.Error())
 	}
-	req := subs.PreviewRequest{Routing: subs.ParseRouting(in.Body.SubRouting), Routes: in.Body.SubRoutes, Template: in.Body.SubTemplate, Starter: in.Body.Starter, Rules: in.Body.SubRules}
+	req := subsrc.PreviewRequest{Mode: routing.ParseMode(in.Body.SubRouting), Routes: in.Body.SubRoutes, Rules: in.Body.SubRules}
 	if in.Body.GroupMain != nil || in.Body.GroupAuto != nil {
 		// The saved names with the given ones over them, checked as a save would check them.
-		g, err := subs.LoadGroups(ctx, h.d.Settings)
+		g, err := subsrc.LoadGroups(ctx, h.d.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -99,18 +102,17 @@ func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*
 		}
 		req.Groups = &g
 	}
-	raw, err := h.d.RoutesPreview(ctx, req)
-	if errors.Is(err, subs.ErrNoProxies) {
+	pv, err := h.d.RoutesPreview(ctx, req)
+	if errors.Is(err, submodel.ErrNoProxies) {
 		return nil, huma.Error409Conflict("no_proxies")
-	}
-	var te *subs.TemplateError
-	if errors.As(err, &te) {
-		return nil, fieldErrValue("body.sub_template", te.Code, te.Detail)
 	}
 	if err != nil {
 		return nil, err
 	}
 	out := &routesPreviewOutput{}
-	out.Body.Profile = string(raw)
+	out.Body.Profile, out.Body.Notes = string(pv.Profile), pv.Notes
+	if out.Body.Notes == nil {
+		out.Body.Notes = []submodel.Note{}
+	}
 	return out, nil
 }

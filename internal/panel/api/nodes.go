@@ -20,7 +20,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/release"
 )
@@ -384,7 +384,7 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 // nodeRules are what a node's name and domain are checked against: the subscription's
 // groups, and public DNS.
 func (h *handlers) nodeRules(ctx context.Context) (domain.NodeRules, error) {
-	g, err := subs.LoadGroups(ctx, h.d.Settings)
+	g, err := subsrc.LoadGroups(ctx, h.d.Settings)
 	if err != nil {
 		return domain.NodeRules{}, err
 	}

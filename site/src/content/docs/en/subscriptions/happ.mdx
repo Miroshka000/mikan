@@ -3,7 +3,7 @@ title: Happ
 description: The encrypted happ://crypt5 link, a routing profile, and hidden server settings.
 ---
 
-Happ has its own card in **Settings → Subscription**. Only Happ receives its headers; other apps don't see them.
+Happ has its own card in **Settings → Subscription**. Only Happ receives its headers; other apps don't see them. The headers themselves are described in the [Subscription specification](/mikan/en/subscriptions/spec/#happ-and-incy).
 
 ## Encrypted link
 
@@ -30,6 +30,6 @@ Happ adds the profile together with the subscription and applies it after reconn
 - **Provider ID** from happ-proxy.com: Latin letters, digits, `-` and `_`, up to 64 characters.
 - **Hide server settings**: the user won't see the server parameters in Happ. Works only with a saved Provider ID.
 
-:::note
-Per-service routes from **Settings → Routing** don't reach Happ: they are for Clash apps only. For Happ, use a routing profile.
+:::note[New in 0.5.2.1]
+With the **Xray configs for Happ and INCY** switch on (**Settings → Subscription → Apps**, on by default) Happ gets the routes of **Settings → Routing**, the DNS and the automatic choice inside its configs, see [the Xray format](/mikan/en/subscriptions/spec/#the-xray-format). With the switch off Happ gets links, and these routes don't reach it: use a routing profile.
 :::

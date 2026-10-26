@@ -2,7 +2,6 @@ package proto
 
 import (
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -71,56 +70,6 @@ func TestCDNRefusesWhatACDNCannotCarry(t *testing.T) {
 	// A template written by hand is checked the same way.
 	if got := code(Validate(mustParse(t, "type: trojan\nmikan: {tls: node, cdn: {}}\n"), Options{})); got != "cdn_transport" {
 		t.Fatalf("validate: %q", got)
-	}
-}
-
-// Through a CDN the apps get the CDN's address, name and Host, and no pin of the node's
-// self-signed certificate: they see the CDN's.
-func TestCDNClients(t *testing.T) {
-	in := ClientInput{Name: "X", Host: "203.0.113.7", Port: 2053, PinSHA256: "ab12", SNI: "node.example.com", Slot: slots[0]}
-	for src, prefix := range map[string]string{
-		"type: vless\nws-path: /w\nmikan: {tls: node}\n":                               "vless://",
-		"type: vless\nxhttp-config: {path: /x, mode: packet-up}\nmikan: {tls: node}\n": "vless://",
-	} {
-		tpl := mustParse(t, src)
-		if err := SetClientEndpoint(tpl, "cdn.example.com", 443, "cdn.example.com", "edge.example.com"); err != nil {
-			t.Fatal(err)
-		}
-		if err := SetCDN(tpl, &CDN{}); err != nil {
-			t.Fatal(err)
-		}
-		c, err := ClientConfig(tpl, in)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if c.Mihomo["server"] != "cdn.example.com" || c.Mihomo["port"] != 443 || c.Mihomo["servername"] != "cdn.example.com" {
-			t.Errorf("%s: endpoint %v", src, c.Mihomo)
-		}
-		if _, pinned := c.Mihomo["fingerprint"]; pinned || strings.Contains(c.URI, "pcs=") || strings.Contains(c.URI, "insecure") {
-			t.Errorf("%s: pinned behind a CDN: %s %v", src, c.URI, c.Mihomo)
-		}
-		if !strings.HasPrefix(c.URI, prefix) || !strings.Contains(c.URI, "host=edge.example.com") {
-			t.Errorf("%s: link %s", src, c.URI)
-		}
-		host := ""
-		if ws, ok := c.Mihomo["ws-opts"].(map[string]any); ok {
-			h, _ := ws["headers"].(map[string]any)
-			host, _ = h["Host"].(string)
-		}
-		if x, ok := c.Mihomo["xhttp-opts"].(map[string]any); ok {
-			host, _ = x["host"].(string)
-		}
-		if host != "edge.example.com" {
-			t.Errorf("%s: Host %q", src, host)
-		}
-	}
-	// Not behind a CDN, the pin stays.
-	c, _ := ClientConfig(mustParse(t, "type: vless\nws-path: /w\nmikan: {tls: node}\n"), in)
-	if c.Mihomo["fingerprint"] != "ab12" {
-		t.Fatalf("the pin without a CDN: %v", c.Mihomo)
-	}
-	if code(SetClientEndpoint(mustParse(t, "type: hysteria2\n"), "", 0, "", "h.example.com")) != "config_client_host" {
-		t.Fatal("Hysteria2 sends no HTTP Host")
 	}
 }
 

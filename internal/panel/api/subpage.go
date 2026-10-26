@@ -15,7 +15,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
-	"mikan/internal/panel/subs"
+	"mikan/internal/sub/serve"
 )
 
 // The subscription page as the admin builds it (subpage): its settings document, its
@@ -178,7 +178,7 @@ func (h *handlers) putSubPage(ctx context.Context, in *putSubPageInput) (*subPag
 	accent := ""
 	if in.Body.BrandAccent != nil {
 		accent = strings.ToUpper(strings.TrimSpace(*in.Body.BrandAccent))
-		if accent != "" && !subs.ValidAccent(accent) {
+		if accent != "" && !serve.ValidAccent(accent) {
 			details = append(details, fieldDetail("body.brand_accent", "color_invalid", nil))
 		}
 	} else {

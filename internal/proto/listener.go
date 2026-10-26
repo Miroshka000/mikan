@@ -89,7 +89,7 @@ func users(t Template, slots []Slot, ext Ext) any {
 		cipher := t.str("cipher")
 		out := make([]map[string]any, 0, len(slots))
 		for _, s := range slots {
-			out = append(out, map[string]any{"name": s.Name, "password": ssUserKey(cipher, s.Secret)})
+			out = append(out, map[string]any{"name": s.Name, "password": SSUserKey(cipher, s.Secret)})
 		}
 		return out
 	case "trojan", "trusttunnel", "shadowquic":

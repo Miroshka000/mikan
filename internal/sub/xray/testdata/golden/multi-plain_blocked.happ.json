@@ -1,0 +1,36 @@
+{
+  "Name": "VPN",
+  "GlobalProxy": "false",
+  "UseChunkFiles": "true",
+  "RemoteDns": "1.1.1.1",
+  "DomesticDns": "77.88.8.8",
+  "RemoteDNSType": "DoH",
+  "RemoteDNSDomain": "https://1.1.1.1/dns-query",
+  "RemoteDNSIP": "1.1.1.1",
+  "DomesticDNSType": "DoH",
+  "DomesticDNSDomain": "https://77.88.8.8/dns-query",
+  "DomesticDNSIP": "77.88.8.8",
+  "Geoipurl": "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/download/202610071030/geoip.dat",
+  "Geositeurl": "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/download/202610071030/geosite.dat",
+  "DnsHosts": {},
+  "RouteOrder": "block-proxy-direct",
+  "DirectSites": [
+    "geosite:private",
+    "full:usa.example.com",
+    "full:vpn.example.com"
+  ],
+  "DirectIp": [
+    "203.0.113.7/32",
+    "geoip:private"
+  ],
+  "ProxySites": [
+    "geosite:ru-blocked"
+  ],
+  "ProxyIp": [
+    "geoip:ru-blocked"
+  ],
+  "BlockSites": [],
+  "BlockIp": [],
+  "DomainStrategy": "IPIfNonMatch",
+  "FakeDNS": "false"
+}

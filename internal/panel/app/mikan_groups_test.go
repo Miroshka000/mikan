@@ -14,7 +14,7 @@ import (
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
-	"mikan/internal/panel/subs"
+	"mikan/internal/sub/serve"
 )
 
 // The Mikan app's server groups (X-Mikan-Groups): only the app that asks gets them, with the
@@ -69,7 +69,7 @@ func TestMikanGroupsHeader(t *testing.T) {
 		t.Helper()
 		hd := map[string]string{"User-Agent": "mihomo/1.19.32 Mikan/1.2.0"}
 		if features != "" {
-			hd[subs.FeaturesHeader] = features
+			hd[serve.FeaturesHeader] = features
 		}
 		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken+query, nil, hd)
 		if resp.StatusCode != http.StatusOK {
@@ -78,13 +78,13 @@ func TestMikanGroupsHeader(t *testing.T) {
 		return resp.Header, body
 	}
 	fetch := func(features string) (http.Header, []byte) { return fetchAs("", features) }
-	groups := func(hd http.Header) subs.AppGroups {
+	groups := func(hd http.Header) serve.AppGroups {
 		t.Helper()
-		raw, ok := strings.CutPrefix(hd.Get(subs.GroupsHeader), "base64:")
+		raw, ok := strings.CutPrefix(hd.Get(serve.GroupsHeader), "base64:")
 		b, err := base64.StdEncoding.DecodeString(raw)
-		var g subs.AppGroups
+		var g serve.AppGroups
 		if !ok || err != nil || json.Unmarshal(b, &g) != nil {
-			t.Fatalf("X-Mikan-Groups: %q", hd.Get(subs.GroupsHeader))
+			t.Fatalf("X-Mikan-Groups: %q", hd.Get(serve.GroupsHeader))
 		}
 		return g
 	}
@@ -106,7 +106,7 @@ func TestMikanGroupsHeader(t *testing.T) {
 	}
 
 	plainHd, plain := fetch("")
-	if v := plainHd.Get(subs.GroupsHeader); v != "" {
+	if v := plainHd.Get(serve.GroupsHeader); v != "" {
 		t.Fatalf("an app that did not ask got the groups: %q", v)
 	}
 	hd, body := fetch("groups")

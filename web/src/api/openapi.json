@@ -47,6 +47,53 @@
         ],
         "type": "object"
       },
+      "Action": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "maxLength": 16,
+            "type": "string"
+          },
+          "headers": {
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "html": {
+            "maxLength": 16384,
+            "type": "string"
+          },
+          "respond": {
+            "enum": [
+              "serve",
+              "stub",
+              "403",
+              "404",
+              "html",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "skip_hwid": {
+            "type": "boolean"
+          },
+          "template": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "respond"
+        ],
+        "type": "object"
+      },
       "AddSourceInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1230,6 +1277,38 @@
         ],
         "type": "object"
       },
+      "BulkAtStake": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "description": "Ещё работают: срок и трафик не кончились, не отключены",
+            "format": "int64",
+            "type": "integer"
+          },
+          "granted": {
+            "description": "С действующими пакетами трафика",
+            "format": "int64",
+            "type": "integer"
+          },
+          "paying": {
+            "description": "С платежом, который ещё не применён, или пополнением на проверке",
+            "format": "int64",
+            "type": "integer"
+          },
+          "with_balance": {
+            "description": "С деньгами на балансе привязанного аккаунта",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active",
+          "with_balance",
+          "paying",
+          "granted"
+        ],
+        "type": "object"
+      },
       "BulkInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1286,6 +1365,111 @@
         },
         "required": [
           "affected"
+        ],
+        "type": "object"
+      },
+      "BulkPreviewOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "at_stake": {
+            "$ref": "#/components/schemas/BulkAtStake",
+            "description": "Только для delete: что удалится вместе с пользователями"
+          },
+          "changed": {
+            "description": "Скольких действие изменит",
+            "format": "int64",
+            "type": "integer"
+          },
+          "found": {
+            "description": "Сколько из них есть: к ним действие и применится (affected)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "missing": {
+            "description": "Сколько уже удалены",
+            "format": "int64",
+            "type": "integer"
+          },
+          "requested": {
+            "description": "Сколько разных пользователей в запросе",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sample": {
+            "description": "Первые 10 изменяемых, по id",
+            "items": {
+              "$ref": "#/components/schemas/BulkSample"
+            },
+            "type": "array"
+          },
+          "unchanged": {
+            "description": "Сколько уже такие: например, уже отключены",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "requested",
+          "found",
+          "missing",
+          "changed",
+          "unchanged",
+          "sample"
+        ],
+        "type": "object"
+      },
+      "BulkSample": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_after": {
+            "description": "extend: новый конец срока",
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "folder_id": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "state": {
+            "enum": [
+              "active",
+              "expiring",
+              "limited",
+              "expired",
+              "disabled"
+            ],
+            "type": "string"
+          },
+          "used": {
+            "description": "Израсходовано за период: reset начинает период заново",
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "user_name",
+          "state",
+          "expires_at",
+          "used",
+          "folder_id"
         ],
         "type": "object"
       },
@@ -1351,6 +1535,27 @@
           "renewed",
           "revenue_stars",
           "revenue_rub"
+        ],
+        "type": "object"
+      },
+      "CarryRules": {
+        "additionalProperties": false,
+        "properties": {
+          "cap_percent": {
+            "description": "Сколько можно перенести: процент квоты нового периода",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "on": {
+            "description": "Переносить остаток трафика периода в новый период при продлении и при переходе на следующий тариф. Тариф может решить по-своему",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "cap_percent"
         ],
         "type": "object"
       },
@@ -1815,6 +2020,37 @@
         ],
         "type": "object"
       },
+      "Cond": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "not": {
+            "type": "boolean"
+          },
+          "op": {
+            "enum": [
+              "equals",
+              "contains",
+              "regex"
+            ],
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 256,
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "op",
+          "value"
+        ],
+        "type": "object"
+      },
       "Config": {
         "additionalProperties": false,
         "properties": {
@@ -2130,6 +2366,39 @@
         ],
         "type": "object"
       },
+      "CreateSubTemplateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray",
+            "maxLength": 524288,
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "default": {
+            "description": "Сделать шаблоном ядра по умолчанию",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "core",
+          "name",
+          "body"
+        ],
+        "type": "object"
+      },
       "CreateSupportGrantInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -2230,6 +2499,10 @@
             "maxLength": 2000,
             "type": "string"
           },
+          "starts_on_connect": {
+            "description": "Срок начнётся с первого подключения; не задано — как у тарифа",
+            "type": "boolean"
+          },
           "tags": {
             "items": {
               "type": "string"
@@ -2246,6 +2519,44 @@
         "required": [
           "name",
           "tariff_id"
+        ],
+        "type": "object"
+      },
+      "CreateWebhookInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "description": "Разрешить адреса этого сервера и его сети: localhost, 10.x, 172.16-31.x, 192.168.x, 100.64-127.x. Метаданные облака (169.254.169.254 и подобные) закрыты всегда",
+            "type": "boolean"
+          },
+          "enabled": {
+            "description": "Не задано — включён",
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Типы событий (GET /webhooks/events); пусто или не задано — все, и те, что появятся позже",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "name": {
+            "description": "Название для списка",
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "description": "http:// или https:// и адрес получателя. Адреса этого сервера, его сети и облачных метаданных панель не принимает; для адресов сети нужен allow_local",
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "url"
         ],
         "type": "object"
       },
@@ -3015,11 +3326,12 @@
             "type": "integer"
           },
           "source": {
-            "description": "purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате",
+            "description": "purchase — куплен, admin — начислен вручную, gift — подарок тарифа к оплате, carry — остаток трафика прошлого периода, перенесённый продлением или следующим тарифом",
             "enum": [
               "purchase",
               "admin",
-              "gift"
+              "gift",
+              "carry"
             ],
             "type": "string"
           }
@@ -3037,6 +3349,38 @@
           "package_name",
           "note",
           "created_at"
+        ],
+        "type": "object"
+      },
+      "Group": {
+        "additionalProperties": false,
+        "properties": {
+          "conds": {
+            "items": {
+              "$ref": "#/components/schemas/Cond"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/Inner"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "op": {
+            "enum": [
+              "and",
+              "or"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "conds",
+          "groups"
         ],
         "type": "object"
       },
@@ -3115,6 +3459,25 @@
         },
         "required": [
           "link"
+        ],
+        "type": "object"
+      },
+      "Header": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 512,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
         ],
         "type": "object"
       },
@@ -3303,6 +3666,96 @@
         "required": [
           "kind",
           "url"
+        ],
+        "type": "object"
+      },
+      "InactiveOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "description": "Число дней, с которым составлен список",
+            "format": "int64",
+            "type": "integer"
+          },
+          "due": {
+            "description": "Сколько подписок удалится",
+            "format": "int64",
+            "type": "integer"
+          },
+          "items": {
+            "description": "Первые 200 по сроку, дольше всех кончившиеся первыми",
+            "items": {
+              "$ref": "#/components/schemas/InactiveView"
+            },
+            "type": "array"
+          },
+          "kept": {
+            "description": "Сколько правило достаёт, но оставит",
+            "format": "int64",
+            "type": "integer"
+          },
+          "on": {
+            "description": "Правило включено: следующий проход удалит тех, кого ничто не держит",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "days",
+          "due",
+          "kept",
+          "items"
+        ],
+        "type": "object"
+      },
+      "InactiveView": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "description": "Когда кончился срок",
+            "format": "date-time",
+            "type": "string"
+          },
+          "keep": {
+            "description": "Почему подписка останется: balance — деньги на балансе привязанного аккаунта, payment — платёж ещё не применён или пополнение ждёт проверки, grant — действуют пакеты трафика; пусто — удалится",
+            "enum": [
+              "",
+              "balance",
+              "payment",
+              "grant"
+            ],
+            "type": "string"
+          },
+          "online_at": {
+            "description": "Последнее подключение; null — не подключался",
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tariff_id": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "user_name",
+          "tariff_id",
+          "expires_at",
+          "online_at",
+          "keep"
         ],
         "type": "object"
       },
@@ -3587,6 +4040,31 @@
         ],
         "type": "object"
       },
+      "Inner": {
+        "additionalProperties": false,
+        "properties": {
+          "conds": {
+            "items": {
+              "$ref": "#/components/schemas/Cond"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "op": {
+            "enum": [
+              "and",
+              "or"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "conds"
+        ],
+        "type": "object"
+      },
       "JobState": {
         "additionalProperties": false,
         "properties": {
@@ -3696,6 +4174,22 @@
           "kind",
           "secret_set",
           "links"
+        ],
+        "type": "object"
+      },
+      "Lifecycle": {
+        "additionalProperties": false,
+        "properties": {
+          "carry": {
+            "$ref": "#/components/schemas/CarryRules"
+          },
+          "removal": {
+            "$ref": "#/components/schemas/RemovalRules"
+          }
+        },
+        "required": [
+          "carry",
+          "removal"
         ],
         "type": "object"
       },
@@ -4316,6 +4810,91 @@
           "label",
           "on",
           "row"
+        ],
+        "type": "object"
+      },
+      "MihomoServers": {
+        "additionalProperties": false,
+        "properties": {
+          "interval": {
+            "description": "Секунды между проверками, 30–86400; 0 — общая настройка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tolerance": {
+            "description": "Миллисекунды: на сервер быстрее меньше чем на столько не переключаться, 0–5000; 0 — 50",
+            "format": "int64",
+            "type": "integer"
+          },
+          "type": {
+            "description": "Автовыбор в приложениях Clash: url-test — самый быстрый, fallback — первый рабочий, load-balance — нагрузка по всем",
+            "enum": [
+              "url-test",
+              "fallback",
+              "load-balance"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "NextTariffInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "tariff_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок на нём в днях (0 — бессрочно); не задан — первый срок тарифа",
+            "format": "int64",
+            "maximum": 3650,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tariff_id"
+        ],
+        "type": "object"
+      },
+      "NextTariffOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "switched": {
+            "description": "Срок уже кончился или кончится до следующего прохода: тариф применён сразу",
+            "type": "boolean"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserView"
+          }
+        },
+        "required": [
+          "user",
+          "switched"
+        ],
+        "type": "object"
+      },
+      "NextTariffView": {
+        "additionalProperties": false,
+        "properties": {
+          "tariff_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок на нём; null — первый срок тарифа",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "tariff_id",
+          "term_days"
         ],
         "type": "object"
       },
@@ -4989,6 +5568,40 @@
           "system",
           "listeners",
           "checked_at"
+        ],
+        "type": "object"
+      },
+      "Note": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "fallback_fastest",
+              "balance_fastest",
+              "balance_random",
+              "balance_flat",
+              "select_first",
+              "chain_group_hop",
+              "chain_dialer_taken"
+            ],
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "core",
+          "group",
+          "code"
         ],
         "type": "object"
       },
@@ -6211,6 +6824,12 @@
             "maxLength": 120,
             "type": "string"
           },
+          "sub_log_days": {
+            "format": "int64",
+            "maximum": 90,
+            "minimum": 0,
+            "type": "integer"
+          },
           "sub_port": {
             "description": "Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать",
             "format": "int64",
@@ -6234,15 +6853,13 @@
             "maxLength": 65536,
             "type": "string"
           },
-          "sub_template": {
-            "description": "Свой профиль Clash; пусто — вернуть встроенный",
-            "maxLength": 524288,
-            "type": "string"
-          },
           "sub_title": {
             "description": "Переменные — см. SettingsView.sub_title",
             "maxLength": 200,
             "type": "string"
+          },
+          "sub_xray_json": {
+            "type": "boolean"
           },
           "support_access": {
             "type": "boolean"
@@ -6254,6 +6871,25 @@
           },
           "wide_sni_scan": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PatchSubTemplateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 524288,
+            "type": "string"
+          },
+          "default": {
+            "description": "true — шаблон ядра по умолчанию, false — у ядра снова встроенный профиль",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
           }
         },
         "type": "object"
@@ -6406,6 +7042,10 @@
             "description": "Снять ограничение скорости",
             "type": "boolean"
           },
+          "starts_on_connect": {
+            "description": "true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана",
+            "type": "boolean"
+          },
           "tags": {
             "items": {
               "type": "string"
@@ -6426,6 +7066,36 @@
           },
           "traffic_unlimited": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PatchWebhookInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Пустой список — все события. Добавленные типы начинаются с этой минуты, если адрес ничего не должен; что ему должны, он получит",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
           }
         },
         "type": "object"
@@ -6840,6 +7510,53 @@
           "no_link",
           "statuses",
           "on_hold"
+        ],
+        "type": "object"
+      },
+      "PreviewSubTemplateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Шаблон; пусто — встроенный профиль ядра",
+            "maxLength": 524288,
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "starter": {
+            "description": "Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами, или пример для sing-box и Xray",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "core"
+        ],
+        "type": "object"
+      },
+      "PreviewSubTemplateOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "description": "Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "type": "array"
+          },
+          "profile": {
+            "description": "Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "notes"
         ],
         "type": "object"
       },
@@ -7262,6 +7979,29 @@
         ],
         "type": "object"
       },
+      "PutSubAppsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "blocked": {
+            "description": "Идентификаторы заблокированных приложений из списка",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "text": {
+            "description": "Один ряд текста: приложение показывает его вместо серверов",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "blocked",
+          "text"
+        ],
+        "type": "object"
+      },
       "PutSubImageInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -7295,6 +8035,26 @@
         },
         "required": [
           "config"
+        ],
+        "type": "object"
+      },
+      "PutSubRulesInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "type": "boolean"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "maxItems": 100,
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "builtin"
         ],
         "type": "object"
       },
@@ -7613,6 +8373,27 @@
         ],
         "type": "object"
       },
+      "RemovalRules": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "description": "Через сколько дней после конца срока и последнего подключения",
+            "format": "int64",
+            "maximum": 3650,
+            "minimum": 7,
+            "type": "integer"
+          },
+          "on": {
+            "description": "Удалять неактивные подписки сами",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "on",
+          "days"
+        ],
+        "type": "object"
+      },
       "RenameDeviceInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -7916,10 +8697,6 @@
       "RoutesPreviewInputBody": {
         "additionalProperties": false,
         "properties": {
-          "starter": {
-            "description": "Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами",
-            "type": "boolean"
-          },
           "sub_group_auto": {
             "description": "Имя группы автовыбора вместо сохранённого",
             "maxLength": 200,
@@ -7945,11 +8722,6 @@
             "description": "Свои правила вместо сохранённых",
             "maxLength": 65536,
             "type": "string"
-          },
-          "sub_template": {
-            "description": "Свой профиль Clash: показать его вместо встроенного",
-            "maxLength": 524288,
-            "type": "string"
           }
         },
         "required": [
@@ -7961,13 +8733,47 @@
       "RoutesPreviewOutputBody": {
         "additionalProperties": false,
         "properties": {
+          "notes": {
+            "description": "Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "type": "array"
+          },
           "profile": {
             "description": "Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки",
             "type": "string"
           }
         },
         "required": [
-          "profile"
+          "profile",
+          "notes"
+        ],
+        "type": "object"
+      },
+      "Rule": {
+        "additionalProperties": false,
+        "properties": {
+          "do": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/Group"
+          }
+        },
+        "required": [
+          "name",
+          "enabled",
+          "when",
+          "do"
         ],
         "type": "object"
       },
@@ -8082,8 +8888,17 @@
             "format": "int64",
             "type": "integer"
           },
+          "mihomo": {
+            "$ref": "#/components/schemas/MihomoServers"
+          },
           "no_countries": {
             "type": "boolean"
+          },
+          "singbox": {
+            "$ref": "#/components/schemas/SingBoxServers"
+          },
+          "xray": {
+            "$ref": "#/components/schemas/XrayServers"
           }
         },
         "type": "object"
@@ -8475,6 +9290,11 @@
             "description": "Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки",
             "type": "string"
           },
+          "sub_log_days": {
+            "description": "Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен",
+            "format": "int64",
+            "type": "integer"
+          },
           "sub_port": {
             "description": "Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае",
             "format": "int64",
@@ -8501,13 +9321,13 @@
             "description": "Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий",
             "type": "string"
           },
-          "sub_template": {
-            "description": "Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types}",
-            "type": "string"
-          },
           "sub_title": {
             "description": "Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего, {devices} — привязанные устройства (2/3); без срока или лимита — ∞",
             "type": "string"
+          },
+          "sub_xray_json": {
+            "description": "Happ и INCY получают полные конфиги Xray (JSON) вместо ссылок: маршрутизация, DNS и «Авто» панели доходят до них; запрос с ?format= получает свой формат в любом случае",
+            "type": "boolean"
           },
           "support_access": {
             "description": "Разрешить доступ для поддержки (Настройки → Безопасность). Выключено: новый доступ не выдать, действующий закрывается. MIKAN_SUPPORT_ACCESS=off в .env сервера выключает его независимо от этой настройки",
@@ -8531,6 +9351,8 @@
           "app_branding",
           "sub_inactive_server",
           "sub_inactive_text",
+          "sub_xray_json",
+          "sub_log_days",
           "site_template",
           "site_own",
           "brand_accent",
@@ -8548,7 +9370,6 @@
           "sub_rules",
           "rule_targets",
           "sub_routing",
-          "sub_template",
           "sub_routes",
           "client_fingerprint",
           "auto_port",
@@ -8571,6 +9392,22 @@
           "happ_hide_settings",
           "happ_crypt"
         ],
+        "type": "object"
+      },
+      "SingBoxServers": {
+        "additionalProperties": false,
+        "properties": {
+          "interval": {
+            "description": "Секунды между проверками, 30–86400; 0 — общая настройка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "tolerance": {
+            "description": "Миллисекунды, 0–5000; 0 — 50",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
         "type": "object"
       },
       "SiteBytes": {
@@ -8850,6 +9687,67 @@
         ],
         "type": "object"
       },
+      "SubAppView": {
+        "additionalProperties": false,
+        "properties": {
+          "blocked": {
+            "type": "boolean"
+          },
+          "family": {
+            "enum": [
+              "mihomo",
+              "xray",
+              "singbox",
+              "stash",
+              "other"
+            ],
+            "type": "string"
+          },
+          "generic": {
+            "description": "Остальные приложения этого семейства, у которых нет своей строки",
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "family",
+          "generic",
+          "blocked"
+        ],
+        "type": "object"
+      },
+      "SubAppsView": {
+        "additionalProperties": false,
+        "properties": {
+          "apps": {
+            "items": {
+              "$ref": "#/components/schemas/SubAppView"
+            },
+            "type": "array"
+          },
+          "preview": {
+            "description": "Что увидит заблокированное приложение: свой текст или встроенный на языке панели",
+            "type": "string"
+          },
+          "text": {
+            "description": "Свой текст записи заблокированного приложения; пусто — встроенный",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apps",
+          "text",
+          "preview"
+        ],
+        "type": "object"
+      },
       "SubDocBody": {
         "additionalProperties": false,
         "properties": {
@@ -8947,6 +9845,57 @@
         ],
         "type": "object"
       },
+      "SubLogItem": {
+        "additionalProperties": false,
+        "properties": {
+          "agent": {
+            "description": "User-Agent",
+            "type": "string"
+          },
+          "app": {
+            "description": "Идентификатор известного приложения; пусто — неизвестное",
+            "type": "string"
+          },
+          "app_name": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "format": {
+            "description": "Формат ответа; пусто — запрос отклонён правилом",
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "served",
+              "stub",
+              "blocked",
+              "dropped"
+            ],
+            "type": "string"
+          },
+          "rule": {
+            "description": "Что решило: имя правила, builtin:ssr, builtin:old, apps; пусто — ничего",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "ip",
+          "agent",
+          "app",
+          "app_name",
+          "rule",
+          "format",
+          "outcome"
+        ],
+        "type": "object"
+      },
       "SubPageView": {
         "additionalProperties": false,
         "properties": {
@@ -8977,6 +9926,297 @@
           "defaults",
           "brand",
           "brand_accent"
+        ],
+        "type": "object"
+      },
+      "SubRuleLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "conds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "groups": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "headers": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "html": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "rules": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "text": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "value": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules",
+          "conds",
+          "groups",
+          "value",
+          "name",
+          "headers",
+          "html",
+          "text"
+        ],
+        "type": "object"
+      },
+      "SubRuleTest": {
+        "additionalProperties": false,
+        "properties": {
+          "app_id": {
+            "description": "Известное приложение по User-Agent; пусто — неизвестное",
+            "type": "string"
+          },
+          "app_name": {
+            "type": "string"
+          },
+          "format": {
+            "description": "Формат профиля или заглушки; пусто, когда профиля в ответе нет",
+            "type": "string"
+          },
+          "headers": {
+            "description": "Заголовки, которые добавляет правило",
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "type": "array"
+          },
+          "position": {
+            "description": "Место сработавшего правила в списке, с 1; 0 — сработало не правило из списка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "respond": {
+            "enum": [
+              "serve",
+              "stub",
+              "403",
+              "404",
+              "html",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "rule": {
+            "description": "Что решило: имя правила, builtin:ssr, builtin:old, apps (список приложений); пусто — ничего, ответ как обычно",
+            "type": "string"
+          },
+          "skip_hwid": {
+            "type": "boolean"
+          },
+          "status": {
+            "description": "Код ответа; 0 — соединение закрыто без ответа",
+            "format": "int64",
+            "type": "integer"
+          },
+          "template": {
+            "description": "Шаблон подписки, из которого собран профиль; 0 — встроенный профиль",
+            "format": "int64",
+            "type": "integer"
+          },
+          "text": {
+            "description": "Текст заглушки",
+            "type": "string"
+          }
+        },
+        "required": [
+          "app_id",
+          "app_name",
+          "rule",
+          "position",
+          "respond",
+          "status",
+          "format",
+          "headers",
+          "skip_hwid",
+          "text",
+          "template"
+        ],
+        "type": "object"
+      },
+      "SubRulesView": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "description": "Встроенные правила включены: ShadowsocksR и брошенные приложения Clash получают заглушку",
+            "type": "boolean"
+          },
+          "formats": {
+            "description": "Форматы, которые правило может навязать",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/SubRuleLimits"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "builtin",
+          "formats",
+          "limits"
+        ],
+        "type": "object"
+      },
+      "SubTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Текст шаблона; пусто, когда он скрыт",
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "hidden": {
+            "description": "Текст скрыт от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rules": {
+            "description": "Правила ответа, которые выбирают этот шаблон",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name",
+          "default",
+          "size",
+          "updated_at",
+          "rules",
+          "body",
+          "hidden"
+        ],
+        "type": "object"
+      },
+      "SubTemplateHead": {
+        "additionalProperties": false,
+        "properties": {
+          "core": {
+            "description": "Ядро: mihomo (Clash, YAML), singbox или xray (JSON)",
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "default": {
+            "description": "Приложения этого ядра получают его, если правило ответа не выбрало другой",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rules": {
+            "description": "Правила ответа, которые выбирают этот шаблон",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "size": {
+            "description": "Размер текста в байтах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name",
+          "default",
+          "size",
+          "updated_at",
+          "rules"
+        ],
+        "type": "object"
+      },
+      "SubTemplatesView": {
+        "additionalProperties": false,
+        "properties": {
+          "max": {
+            "description": "Сколько шаблонов может быть у одного ядра",
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_size": {
+            "description": "Наибольший размер текста шаблона в байтах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "templates": {
+            "description": "По ядрам, в порядке создания",
+            "items": {
+              "$ref": "#/components/schemas/SubTemplateHead"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates",
+          "max",
+          "max_size"
         ],
         "type": "object"
       },
@@ -9253,6 +10493,15 @@
             "minimum": 1,
             "type": "integer"
           },
+          "carry_over": {
+            "description": "Перенос остатка трафика: inherit — как в правилах подписок, on, off. Не передан — без изменений (у нового тарифа — inherit)",
+            "enum": [
+              "inherit",
+              "on",
+              "off"
+            ],
+            "type": "string"
+          },
           "description": {
             "description": "Текст для покупателей, виден в боте и Mini App рядом со строкой из лимитов: чем тариф отличается, когда лимиты этого не показывают («с белыми списками»). Простой текст до 300 символов и до 5 строк; не передан или пустой — только строка из лимитов",
             "type": "string"
@@ -9349,6 +10598,10 @@
             "minimum": 1,
             "type": "integer"
           },
+          "starts_on_connect": {
+            "description": "Срок новой подписки начинается с первого подключения. Не передан — без изменений (у нового тарифа — нет)",
+            "type": "boolean"
+          },
           "terms": {
             "description": "Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений",
             "items": {
@@ -9380,6 +10633,15 @@
               "integer",
               "null"
             ]
+          },
+          "carry_over": {
+            "description": "Перенос остатка трафика в новый период при продлении и переходе на этот тариф: inherit — как в правилах подписок, on — переносить, off — нет",
+            "enum": [
+              "inherit",
+              "on",
+              "off"
+            ],
+            "type": "string"
           },
           "description": {
             "description": "Текст для покупателей: чем тариф отличается, когда лимиты этого не показывают; до 300 символов, до 5 строк, пустой — только строка из лимитов",
@@ -9478,6 +10740,10 @@
               "null"
             ]
           },
+          "starts_on_connect": {
+            "description": "Срок новой подписки на этом тарифе начинается с первого подключения, а не с создания",
+            "type": "boolean"
+          },
           "subscribers": {
             "description": "Сколько подписок выдано на этом тарифе",
             "format": "int64",
@@ -9520,7 +10786,9 @@
           "pools",
           "gifts",
           "subscribers",
-          "sort"
+          "sort",
+          "carry_over",
+          "starts_on_connect"
         ],
         "type": "object"
       },
@@ -9800,6 +11068,41 @@
           "days",
           "price_stars",
           "price_rub"
+        ],
+        "type": "object"
+      },
+      "TestSubRulesInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "builtin": {
+            "description": "Встроенные правила вместо сохранённого выбора",
+            "type": "boolean"
+          },
+          "headers": {
+            "description": "Остальные заголовки запроса: X-Device-Os, Accept, свои",
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "maxItems": 30,
+            "type": "array"
+          },
+          "rules": {
+            "description": "Правила вместо сохранённых: проверить, пока они не сохранены",
+            "items": {
+              "$ref": "#/components/schemas/Rule"
+            },
+            "maxItems": 100,
+            "type": "array"
+          },
+          "user_agent": {
+            "description": "User-Agent приложения",
+            "maxLength": 1024,
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_agent",
+          "headers"
         ],
         "type": "object"
       },
@@ -10547,6 +11850,28 @@
         ],
         "type": "object"
       },
+      "UserSubLogOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "description": "Сколько дней хранится журнал; 0 — журнал выключен",
+            "format": "int64",
+            "type": "integer"
+          },
+          "items": {
+            "description": "Новые сверху",
+            "items": {
+              "$ref": "#/components/schemas/SubLogItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "days",
+          "items"
+        ],
+        "type": "object"
+      },
       "UserView": {
         "additionalProperties": false,
         "properties": {
@@ -10623,6 +11948,10 @@
           "name": {
             "type": "string"
           },
+          "next_tariff": {
+            "$ref": "#/components/schemas/NextTariffView",
+            "description": "Следующий тариф: включится сам, когда кончится срок; null — нет"
+          },
           "note": {
             "type": "string"
           },
@@ -10676,6 +12005,10 @@
               "integer",
               "null"
             ]
+          },
+          "starts_on_connect": {
+            "description": "Срок ждёт первого подключения: до него стоит на месте, expires_at уходит вперёд вместе с часами (обновляется раз в 10 минут), подписка показывает весь срок",
+            "type": "boolean"
           },
           "state": {
             "enum": [
@@ -10776,6 +12109,8 @@
           "source",
           "folder_id",
           "hidden",
+          "starts_on_connect",
+          "next_tariff",
           "created_at"
         ],
         "type": "object"
@@ -10970,6 +12305,290 @@
         ],
         "type": "object"
       },
+      "WebhookCreatedView": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "description": "Можно ли слать на адреса этого сервера и его сети (localhost, 10.x, 192.168.x, 100.64.x). Адреса из диапазона 169.254 с метаданными облака и подобные закрыты всегда",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Выключенный адрес ничего не получает, события ждут его до недели",
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Какие события отправляются; пусто — все, и новые тоже",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last": {
+            "$ref": "#/components/schemas/WebhookDeliveryView",
+            "description": "Последняя доставка: по ней видно, всё ли в порядке"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "description": "Секрет подписи: показывается один раз, потом только его конец (secret_hint). Получатель проверяет им каждый запрос",
+            "type": "string"
+          },
+          "secret_at": {
+            "description": "Когда секрет создан или заменён",
+            "format": "date-time",
+            "type": "string"
+          },
+          "secret_hint": {
+            "description": "Последние символы секрета: чтобы понять, какой из них у получателя",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "waiting": {
+            "description": "Сколько событий ждёт отправки этому адресу",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "secret",
+          "id",
+          "name",
+          "url",
+          "events",
+          "enabled",
+          "allow_local",
+          "secret_hint",
+          "secret_at",
+          "created_at",
+          "waiting"
+        ],
+        "type": "object"
+      },
+      "WebhookDeliveriesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "От новых к старым",
+            "items": {
+              "$ref": "#/components/schemas/WebhookDeliveryView"
+            },
+            "type": "array"
+          },
+          "next": {
+            "description": "Передайте как before за следующей страницей; 0 — это всё",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "next"
+        ],
+        "type": "object"
+      },
+      "WebhookDeliveryView": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "description": "Сколько раз пробовали",
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "description": "Первая попытка",
+            "format": "date-time",
+            "type": "string"
+          },
+          "error": {
+            "description": "Почему не вышло в последний раз: address_local, address_blocked, dns, refused, timeout, tls, redirect, status, network, internal; после 2xx пусто",
+            "type": "string"
+          },
+          "event_id": {
+            "description": "Номер события в ленте; у проверки его нет",
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "response_code": {
+            "description": "HTTP-статус последнего ответа; 0 — ответа не было",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "description": "retrying — будет отправлено снова; delivered — получатель ответил 2xx; failed — больше не пробуем (проверка не прошла, событие ушло из ленты или адрес его больше не просит)",
+            "enum": [
+              "retrying",
+              "delivered",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "description": "Тип события; webhook.test — проверка кнопкой",
+            "type": "string"
+          },
+          "updated_at": {
+            "description": "Последняя попытка",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "attempts",
+          "response_code",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "WebhookEventsView": {
+        "additionalProperties": false,
+        "properties": {
+          "types": {
+            "description": "Типы событий, которые панель отправляет: каждый можно выбрать для адреса",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "types"
+        ],
+        "type": "object"
+      },
+      "WebhookTestView": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "description": "Сколько шла проверка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "description": "Почему не вышло: те же коды, что у доставок",
+            "type": "string"
+          },
+          "ok": {
+            "description": "Получатель ответил 2xx",
+            "type": "boolean"
+          },
+          "status": {
+            "description": "HTTP-статус ответа; 0 — ответа не было",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "status",
+          "duration_ms"
+        ],
+        "type": "object"
+      },
+      "WebhookView": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_local": {
+            "description": "Можно ли слать на адреса этого сервера и его сети (localhost, 10.x, 192.168.x, 100.64.x). Адреса из диапазона 169.254 с метаданными облака и подобные закрыты всегда",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enabled": {
+            "description": "Выключенный адрес ничего не получает, события ждут его до недели",
+            "type": "boolean"
+          },
+          "events": {
+            "description": "Какие события отправляются; пусто — все, и новые тоже",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last": {
+            "$ref": "#/components/schemas/WebhookDeliveryView",
+            "description": "Последняя доставка: по ней видно, всё ли в порядке"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret_at": {
+            "description": "Когда секрет создан или заменён",
+            "format": "date-time",
+            "type": "string"
+          },
+          "secret_hint": {
+            "description": "Последние символы секрета: чтобы понять, какой из них у получателя",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "waiting": {
+            "description": "Сколько событий ждёт отправки этому адресу",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "url",
+          "events",
+          "enabled",
+          "allow_local",
+          "secret_hint",
+          "secret_at",
+          "created_at",
+          "waiting"
+        ],
+        "type": "object"
+      },
+      "WebhooksView": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookView"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Сколько адресов можно завести",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "limit"
+        ],
+        "type": "object"
+      },
       "XHTTPTuning": {
         "additionalProperties": false,
         "properties": {
@@ -11151,6 +12770,52 @@
           "xmux_max_connections": {
             "description": "Соединений сразу; взаимоисключается с потоками",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "XrayServers": {
+        "additionalProperties": false,
+        "properties": {
+          "expected": {
+            "description": "leastLoad: из скольких лучших серверов выбирать, 1–100",
+            "format": "int64",
+            "type": "integer"
+          },
+          "interval": {
+            "description": "Секунды между проверками, 30–86400; 0 — общая настройка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_rtt": {
+            "description": "leastLoad: миллисекунды, дольше которых сервер не берётся, 1–60000",
+            "format": "int64",
+            "type": "integer"
+          },
+          "probe_url": {
+            "description": "Адрес проверки серверов (http или https); пусто — общий",
+            "maxLength": 500,
+            "type": "string"
+          },
+          "sampling": {
+            "description": "leastLoad: сколько последних проверок учитывать, 1–100",
+            "format": "int64",
+            "type": "integer"
+          },
+          "strategy": {
+            "description": "Стратегия балансировщика; пусто — по виду группы (самый быстрый — leastPing)",
+            "enum": [
+              "leastPing",
+              "leastLoad",
+              "random",
+              "roundRobin"
+            ],
+            "type": "string"
+          },
+          "tolerance": {
+            "description": "leastLoad: доля неудачных проверок, с которой сервер ещё годится, 0–1",
+            "format": "double",
+            "type": "number"
           }
         },
         "type": "object"
@@ -13475,6 +15140,123 @@
         "summary": "Скопировать подключение: те же настройки с новыми ключами, на ту же или другую ноду",
         "tags": [
           "inbounds"
+        ]
+      }
+    },
+    "/api/v1/lifecycle": {
+      "get": {
+        "operationId": "get-lifecycle",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lifecycle"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Правила подписок: перенос остатка трафика и удаление неактивных",
+        "tags": [
+          "users"
+        ]
+      },
+      "put": {
+        "description": "Удаление неактивных меняет только сессия админа: ключу API и поддержке — 403 session_only / support_extended.",
+        "operationId": "update-lifecycle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Lifecycle"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Lifecycle"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить правила подписок",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/lifecycle/inactive": {
+      "get": {
+        "operationId": "list-inactive-users",
+        "parameters": [
+          {
+            "description": "Посмотреть, кого достанет правило с этим числом дней; 0 — с сохранённым",
+            "explode": false,
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "description": "Посмотреть, кого достанет правило с этим числом дней; 0 — с сохранённым",
+              "format": "int64",
+              "maximum": 3650,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InactiveOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Кого достаёт удаление неактивных: пробный прогон, ничего не удаляет",
+        "tags": [
+          "users"
         ]
       }
     },
@@ -16622,6 +18404,77 @@
         ]
       }
     },
+    "/api/v1/sub-apps": {
+      "get": {
+        "operationId": "get-sub-apps",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubAppsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Известные приложения: какие получают серверы",
+        "tags": [
+          "sub-rules"
+        ]
+      },
+      "put": {
+        "operationId": "put-sub-apps",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutSubAppsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubAppsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Заблокировать или разрешить приложения",
+        "tags": [
+          "sub-rules"
+        ],
+        "x-session-only": true
+      }
+    },
     "/api/v1/sub-docs": {
       "get": {
         "operationId": "list-sub-docs",
@@ -17042,6 +18895,362 @@
         "summary": "Загрузить логотип или фон страницы подписки",
         "tags": [
           "sub-page"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/sub-rules": {
+      "get": {
+        "operationId": "get-sub-rules",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubRulesView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Правила ответа на запрос подписки",
+        "tags": [
+          "sub-rules"
+        ]
+      },
+      "put": {
+        "operationId": "put-sub-rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutSubRulesInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubRulesView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сохранить правила ответа на запрос подписки",
+        "tags": [
+          "sub-rules"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/sub-rules/test": {
+      "post": {
+        "description": "Ничего не меняет: правила можно передать ещё не сохранёнными.",
+        "operationId": "test-sub-rules",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestSubRulesInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubRuleTest"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Какое правило сработает на такой запрос",
+        "tags": [
+          "sub-rules"
+        ]
+      }
+    },
+    "/api/v1/sub-templates": {
+      "get": {
+        "operationId": "list-sub-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplatesView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Шаблоны подписки по ядрам",
+        "tags": [
+          "sub-templates"
+        ]
+      },
+      "post": {
+        "operationId": "create-sub-template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubTemplateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplate"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Новый шаблон подписки",
+        "tags": [
+          "sub-templates"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/sub-templates/preview": {
+      "post": {
+        "description": "Ничего не меняет: показывает, что получит пользователь со всеми подключениями.",
+        "operationId": "preview-sub-template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewSubTemplateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewSubTemplateOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Профиль из шаблона, без сохранения",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
+    "/api/v1/sub-templates/{id}": {
+      "delete": {
+        "operationId": "delete-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить шаблон подписки",
+        "tags": [
+          "sub-templates"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "get-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplate"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Шаблон подписки с текстом",
+        "tags": [
+          "sub-templates"
+        ]
+      },
+      "patch": {
+        "operationId": "update-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchSubTemplateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplate"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить шаблон подписки или сделать его шаблоном по умолчанию",
+        "tags": [
+          "sub-templates"
         ],
         "x-session-only": true
       }
@@ -18901,6 +21110,47 @@
         ]
       }
     },
+    "/api/v1/users/bulk/preview": {
+      "post": {
+        "operationId": "bulk-users-preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkPreviewOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Что сделает массовое действие: без изменений, для подтверждения",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/v1/users/{id}": {
       "delete": {
         "operationId": "delete-user",
@@ -19566,6 +21816,93 @@
         ]
       }
     },
+    "/api/v1/users/{id}/next-tariff": {
+      "delete": {
+        "operationId": "clear-next-tariff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Убрать следующий тариф",
+        "tags": [
+          "users"
+        ]
+      },
+      "put": {
+        "operationId": "set-next-tariff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NextTariffInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NextTariffOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Следующий тариф: включится сам, когда кончится срок",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/v1/users/{id}/pools": {
       "get": {
         "operationId": "user-pools",
@@ -19807,6 +22144,61 @@
         ]
       }
     },
+    "/api/v1/users/{id}/sub-log": {
+      "get": {
+        "operationId": "user-sub-log",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSubLogOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Журнал запросов подписки пользователя",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/v1/users/{id}/telegram": {
       "delete": {
         "operationId": "unlink-telegram",
@@ -19941,6 +22333,371 @@
         "tags": [
           "users"
         ]
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "operationId": "list-webhooks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhooksView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Адреса для событий (webhooks)",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      },
+      "post": {
+        "operationId": "create-webhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookCreatedView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Добавить адрес: секрет подписи показывается один раз",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/events": {
+      "get": {
+        "operationId": "list-webhook-events",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookEventsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Какие события можно отправлять",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}": {
+      "delete": {
+        "operationId": "delete-webhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить адрес вместе с его журналом",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      },
+      "patch": {
+        "operationId": "update-webhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchWebhookInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить адрес",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}/deliveries": {
+      "get": {
+        "operationId": "list-webhook-deliveries",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Записи до этого номера; 0 — самые новые",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "default": 0,
+              "description": "Записи до этого номера; 0 — самые новые",
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Только с этим статусом; не задано — любые",
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "description": "Только с этим статусом; не задано — любые",
+              "enum": [
+                "retrying",
+                "delivered",
+                "failed"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookDeliveriesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Журнал доставок адреса: хранится 7 суток после последней попытки",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}/secret": {
+      "post": {
+        "operationId": "rotate-webhook-secret",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookCreatedView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Выпустить новый секрет: старый перестаёт подписывать сразу, новый показывается один раз",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/webhooks/{id}/test": {
+      "post": {
+        "operationId": "test-webhook",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookTestView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Отправить проверочное событие webhook.test: одна попытка, ответ сразу",
+        "tags": [
+          "webhooks"
+        ],
+        "x-session-only": true
       }
     }
   },

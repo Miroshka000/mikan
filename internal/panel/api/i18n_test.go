@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"mikan/internal/panel/events"
 )
 
 // codeSources are where error codes the web shows are written: the API's own (huma's
@@ -29,7 +31,8 @@ var codeSources = []struct {
 	{"internal/proto", []*regexp.Regexp{failCode, structCode}},
 	{"internal/panel/presets", []*regexp.Regexp{failCode, structCode}},
 	{"internal/panel/warp", []*regexp.Regexp{structCode}},
-	{"internal/panel/subs", []*regexp.Regexp{structCode}},
+	{"internal/sub", []*regexp.Regexp{structCode}},
+	{"internal/panel/subsrc", []*regexp.Regexp{structCode}},
 	// billing.errCode keeps a provider's refusal in payments.error, for the history.
 	{"internal/panel/billing", []*regexp.Regexp{structCode}},
 	{"internal/panel/addons", []*regexp.Regexp{structCode}},
@@ -47,12 +50,17 @@ var codesByText = []string{
 	// billing.errCode: payments.error of a paid payment the panel could not apply yet,
 	// and billing.refundTrial for a paid trial it may neither give nor refund.
 	"addon_unreachable", "no_slots", "timeout", "user_gone", "package_gone", "trial_refund_failed", "trial_refund_manual",
-	// subs.Routes.Check, as a detail's Message.
+	// routing.Routes.Check, as a detail's Message.
 	"routes_service", "routes_target", "routes_direct", "routes_dns",
 	"routes_lists_many", "routes_list_name", "routes_list_url", "routes_list_behavior", "routes_list_format", "routes_servers",
-	// subs.TemplateError, as a detail's Message.
+	// apps.CheckError, as a detail's Message: the response rules of the subscription.
+	"resp_rules_many", "resp_name", "resp_group_op", "resp_conds", "resp_group_empty", "resp_groups", "resp_header", "resp_value", "resp_value_empty", "resp_regex",
+	"resp_op", "resp_respond", "resp_format", "resp_template", "resp_text", "resp_html", "resp_headers_many", "resp_header_name", "resp_header_value",
+	// model.TemplateError of the subscription templates, as a detail's Message.
 	"template_yaml", "template_empty", "template_groups", "template_group_name", "template_group_dup", "template_group_member",
-	"template_rule", "template_rule_target", "template_rule_set",
+	"template_rule", "template_rule_target", "template_rule_set", "template_filter", "template_json", "template_object", "template_shape",
+	"template_tag", "template_tag_dup", "template_ask", "template_group_empty", "template_detour", "template_rule_set_tag", "template_final",
+	"template_proxy_tag", "template_balancer_tag", "template_rule_to", "template_core",
 	// checkCA, as a detail's Message.
 	"email_invalid", "eab_kid_invalid", "eab_hmac_invalid", "zerossl_email_required", "google_eab_required",
 }
@@ -140,6 +148,40 @@ func TestErrorCodesHaveTexts(t *testing.T) {
 	for code := range codesNotShown {
 		if _, ok := where[code]; !ok {
 			t.Errorf("codesNotShown has %s, which nothing sends", code)
+		}
+	}
+}
+
+// Every event type the panel emits has a name in both languages under webhooks.events of
+// web/src/i18n: the picker of events on the webhooks page shows the bare type otherwise. A
+// name left for a type the panel no longer emits goes too, so the two lists stay one.
+func TestWebhookEventsHaveTexts(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	for _, lang := range []string{"ru", "en"} {
+		raw, err := os.ReadFile(filepath.Join(root, "web", "src", "i18n", lang+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var f struct {
+			Webhooks struct {
+				Events map[string]map[string]string `json:"events"`
+			} `json:"webhooks"`
+		}
+		if err := json.Unmarshal(raw, &f); err != nil {
+			t.Fatalf("%s.json: %v", lang, err)
+		}
+		for _, typ := range events.Types() {
+			group, name, _ := strings.Cut(typ, ".")
+			if f.Webhooks.Events[group][name] == "" {
+				t.Errorf("%s: no webhooks.events.%s in %s.json", typ, typ, lang)
+			}
+		}
+		for group, names := range f.Webhooks.Events {
+			for name := range names {
+				if !events.Known(group + "." + name) {
+					t.Errorf("%s.json: webhooks.events.%s.%s names no event the panel emits", lang, group, name)
+				}
+			}
 		}
 	}
 }

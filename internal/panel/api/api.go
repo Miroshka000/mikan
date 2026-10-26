@@ -38,13 +38,15 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/panel/support"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbackup"
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
+	"mikan/internal/panel/webhooks"
+	submodel "mikan/internal/sub/model"
 )
 
 type Deps struct {
@@ -81,12 +83,16 @@ type Deps struct {
 	WakeNodeCerts func()
 	// CheckCerts is «Проверить сертификат»; nil in development.
 	CheckCerts func(ctx context.Context) (certcheck.CertReport, error)
-	// RoutesPreview renders a Clash profile with routing in place of the saved one
-	// (subs.Handler.Preview); nil: no preview.
-	RoutesPreview func(ctx context.Context, req subs.PreviewRequest) ([]byte, error)
-	// CheckTemplate checks an own Clash profile (subs.Handler.CheckTemplate); nil: unchecked.
-	CheckTemplate func(ctx context.Context, src string) error
-	// HappLink is the Happ crypt link of a user's subscription (subs.Handler.HappLink); nil: none.
+	// RoutesPreview renders the built-in Clash profile with routing in place of the saved
+	// one, and what the other cores make of its groups (subsrc.Handler.Preview); nil: no
+	// preview.
+	RoutesPreview func(ctx context.Context, req subsrc.PreviewRequest) (subsrc.Preview, error)
+	// CheckTemplate checks a subscription template of a core (subsrc.Handler.CheckTemplate);
+	// nil: unchecked. TemplatePreview renders one (subsrc.Handler.PreviewTemplate); nil: no
+	// preview.
+	CheckTemplate   func(ctx context.Context, core submodel.Core, src string) error
+	TemplatePreview func(ctx context.Context, req subsrc.TemplatePreview) (subsrc.Preview, error)
+	// HappLink is the Happ crypt link of a user's subscription (subsrc.Handler.HappLink); nil: none.
 	HappLink func(ctx context.Context, u db.User) (string, error)
 	// Nodes is the live side of the nodes; nil when the panel runs without them.
 	Nodes NodeRuntime
@@ -135,6 +141,9 @@ type Deps struct {
 	Addons *addons.Manager
 	// Pages are the addons' own pages in the admin panel; nil: none.
 	Pages *pages.Pages
+	// Webhooks sends the events to the addresses the admin names; nil in tests that do not
+	// need it.
+	Webhooks *webhooks.Service
 	// Resolve looks a name up for what the panel dials on the admin's word (a REALITY
 	// target); nil asks the system's resolver.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
@@ -305,6 +314,8 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerImport()
 	h.registerSettings()
 	h.registerSubPage()
+	h.registerSubRules()
+	h.registerSubTemplates()
 	h.registerRoutes()
 	h.registerCerts()
 	h.registerSubDomain()
@@ -323,6 +334,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerSpeedTests()
 	h.registerNodeUpdates()
 	h.registerAPIKeys()
+	h.registerWebhooks()
 	h.registerPayments()
 	h.registerPromocodes()
 	h.registerAddons()

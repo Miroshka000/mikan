@@ -1,0 +1,141 @@
+---
+title: Create a user with a key
+description: How to make an API key, find a plan, create a user with POST /users and get the subscription link, with examples in curl, TypeScript and Python.
+---
+
+import { Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+:::note[New in 0.5.2.1]
+This guide is new in 0.5.2.1. The method it uses is older; the SDKs and webhooks it links to are new in 0.5.2.1.
+:::
+
+A script or a service of your own creates users the way an administrator does in the panel: on a plan, with its limits and its term. The answer carries the subscription link.
+
+<Steps>
+
+1. **Make a key**: **Settings → Security → API → New key**. It needs "Full access": creating a user changes data, and a "Read" key only does GET. The panel asks for the administrator's password and the 2FA code, if it is on. The key is shown once and looks like `mk_...`.
+
+2. **Take the API address** from the same page: `https://<panel>:<port>/<secret path>/api/v1`.
+
+3. **Find the plan's number**: `GET /tariffs` gives the list, the field you need is `id`. A plan in the archive will not do.
+
+4. **Create the user**: `POST /users` with a name and the plan's number. The contact, the note and the tags are optional.
+
+5. **Hand over the link**: it is the `sub_url` field of the answer.
+
+</Steps>
+
+## Requests
+
+<Tabs syncKey="api-client">
+<TabItem label="curl">
+
+```bash
+BASE="https://vpn.example.com:8443/SECRET-PATH/api/v1"
+KEY="mk_..."
+
+# 3. the plans
+curl -s -H "Authorization: Bearer $KEY" "$BASE/tariffs"
+
+# 4. a user on plan 2
+curl -s -X POST "$BASE/users" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"name": "Anna", "tariff_id": 2, "contact": "@anna", "tags": ["family"]}'
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { createClient } from "mikan-sdk";
+
+const mikan = createClient({
+  baseUrl: "https://vpn.example.com:8443/SECRET-PATH/api/v1",
+  apiKey: process.env.MIKAN_API_KEY!,
+});
+
+// 3. the plans
+const tariffs = await mikan.GET("/tariffs");
+if (tariffs.error) throw new Error(tariffs.error.detail);
+console.log(tariffs.data.map((t) => `${t.id}: ${t.name}`));
+
+// 4. a user on plan 2
+const created = await mikan.POST("/users", {
+  body: { name: "Anna", tariff_id: 2, contact: "@anna", tags: ["family"] },
+});
+if (created.error) throw new Error(created.error.detail);
+console.log(created.data.id, created.data.sub_url);
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import os
+
+from mikan_sdk import AuthenticatedClient
+from mikan_sdk.api.tariffs import list_tariffs
+from mikan_sdk.api.users import create_user
+from mikan_sdk.models import CreateUserInputBody
+
+client = AuthenticatedClient(
+    base_url="https://vpn.example.com:8443/SECRET-PATH/api/v1",
+    token=os.environ["MIKAN_API_KEY"],
+)
+
+# 3. the plans
+tariffs = list_tariffs.sync_detailed(client=client)
+if tariffs.status_code != 200:
+    raise RuntimeError(tariffs.parsed.detail)
+print([f"{t.id}: {t.name}" for t in tariffs.parsed])
+
+# 4. a user on plan 2
+created = create_user.sync_detailed(
+    client=client,
+    body=CreateUserInputBody(name="Anna", tariff_id=2, contact="@anna", tags=["family"]),
+)
+if created.status_code != 201:
+    raise RuntimeError(created.parsed.detail)
+print(created.parsed.id, created.parsed.sub_url)
+```
+
+</TabItem>
+</Tabs>
+
+The answer to the creation, shortened:
+
+```json
+{
+  "id": 42,
+  "name": "Anna",
+  "contact": "@anna",
+  "tags": ["family"],
+  "state": "active",
+  "tariff_id": 2,
+  "traffic_limit": 107374182400,
+  "expires_at": "2026-11-25T12:00:00Z",
+  "sub_url": "https://vpn.example.com:8443/..."
+}
+```
+
+How to install the SDK and what address to give it is on the [SDK](/mikan/en/api/sdk/) page.
+
+## What the user gets
+
+The plan gives the traffic limit, the number of devices, the speed, the rule that resets traffic, the servers and the term. The term counts from the moment of creation. The user is made "in the panel": their `source` is `admin`, as for those made by hand.
+
+With the same key you can then [extend](/mikan/en/api/reference/operations/extend-user/) the term, [add traffic](/mikan/en/api/reference/operations/grant-traffic/), [reissue the link](/mikan/en/api/reference/operations/reissue-user/) or reset the traffic. The full list of methods is in the [reference](/mikan/en/api/reference/).
+
+For a service to learn of new users, payments and the end of a term at once, instead of polling the API, connect [webhooks](/mikan/en/api/webhooks/): the panel sends an event to your address by itself, `user.created` among them for every user that is made.
+
+## If it did not work
+
+| Answer | What it means |
+|---|---|
+| 401 `unauthorized` | there is no key, it is wrong, revoked or expired. Many failures from one address close the entrance for a while: 429 `rate_limited`, the time is in the `Retry-After` header |
+| 403 `read_only_key` | a "Read" key tries to change data: make a "Full access" key |
+| 422, `body.tariff_id`, `tariff_not_found` | there is no such plan, or it is in the archive |
+| 422, `body.name` | the name is empty (`user_name_empty`), longer than 100 letters (`user_name_long`) or has control characters (`name_chars`) |
+| 503 `no_free_slots` | the panel has run out of free places for users |
+
+Errors come in RFC 9457 format: the code is in the `detail` field, the codes of fields are in `errors[]`.

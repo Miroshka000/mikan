@@ -36,12 +36,11 @@ const (
 	KeyACMECA      = "acme_ca"
 	KeyACMEEABKID  = "acme_eab_kid"
 	KeyACMEEABHMAC = "acme_eab_hmac"
-	KeyGroupMain   = "sub_group_main" // subscription group names, see subs.Groups
+	KeyGroupMain   = "sub_group_main" // subscription group names, see model.GroupNames (internal/sub)
 	KeyGroupAuto   = "sub_group_auto"
-	KeyRouting     = "sub_routing"  // subs.Routing
-	KeyRules       = "sub_rules"    // the admin's own Clash rules, as typed (subs.ParseRules)
-	KeyRoutes      = "sub_routes"   // services, direct apps and DNS of the profiles (subs.Routes)
-	KeyTemplate    = "sub_template" // the admin's own Clash profile (subs.Template); empty: none
+	KeyRouting     = "sub_routing" // routing.Mode (internal/sub)
+	KeyRules       = "sub_rules"   // the admin's own Clash rules, as typed (routing.ParseRules)
+	KeyRoutes      = "sub_routes"  // services, direct apps and DNS of the profiles (routing.Routes)
 	// KeyFingerprint is the uTLS profile clients get where an inbound sets none
 	// (proto.Fingerprints); unset means proto.DefaultFingerprint.
 	KeyFingerprint = "client_fingerprint"
@@ -93,11 +92,23 @@ const (
 	// for maintenance or news; empty: none.
 	KeyAnnounce    = "sub_announce"
 	KeyAnnounceURL = "sub_announce_url"
-	// KeySubTitle is the profile's name in the apps (subs.Config.Title); empty: the brand.
+	// KeySubTitle is the profile's name in the apps (serve.Config.Title); empty: the brand.
 	KeySubTitle = "sub_title"
 	// A subscription that cannot connect gets one notice in place of its servers
-	// (subs.Config.InactiveServer), with the admin's words or the built-in ones.
+	// (serve.Config.InactiveServer), with the admin's words or the built-in ones.
 	KeyInactiveServer = "sub_inactive_server"
+	// KeyXrayJSON: the apps that run whole xray configs (Happ, INCY) get the xray JSON profile
+	// in place of share links (serve.Config.XrayJSON).
+	KeyXrayJSON = "sub_xray_json"
+	// The response rules of the subscription (internal/sub/apps): KeySubBuiltin switches the
+	// built-in ones, KeySubBlockedText is the words of the entry an app on the list of
+	// blocked ones gets in place of the servers. The rules and the list are in tables
+	// (sub_rules, sub_blocked_apps).
+	KeySubBuiltin     = "sub_builtin_rules"
+	KeySubBlockedText = "sub_blocked_text"
+	// KeySubLogDays is how many days the request log of the subscriptions is kept
+	// (subsrc.LogDays); 0 turns the log off.
+	KeySubLogDays = "sub_log_days"
 	// KeySiteTemplate is the built-in front page a stranger sees at the panel's address
 	// (frontpage.Templates); "" for none.
 	KeySiteTemplate = "site_template"
@@ -107,11 +118,11 @@ const (
 	KeyTrafficDetailDays = "traffic_detail_days"
 	KeyInactiveText      = "sub_inactive_text"
 	// App branding: the brand, logo and accent colour go to the apps that read operator
-	// headers (subs.OperatorHeaders); off by default.
+	// headers (serve.OperatorHeaders); off by default.
 	KeyAppBranding = "app_branding"
 	KeyBrandAccent = "brand_accent"   // #RRGGBB, empty: the app's own
 	KeyBrandLogo   = "brand_logo_url" // https, empty: the app's own
-	// Happ (subs.Happ): a routing profile link, the happ-proxy.com provider id and what
+	// Happ (serve.Happ): a routing profile link, the happ-proxy.com provider id and what
 	// needs it, and how the page's Happ button hides the address ("", "api", "local").
 	KeyHappRouting  = "happ_routing"
 	KeyHappProvider = "happ_provider_id"
@@ -154,6 +165,8 @@ var (
 	AppBranding    = Switch{KeyAppBranding, false}
 	HappHide       = Switch{KeyHappHide, false}
 	InactiveServer = Switch{KeyInactiveServer, false}
+	XrayJSON       = Switch{KeyXrayJSON, true}
+	SubBuiltin     = Switch{KeySubBuiltin, true}
 	TrafficDetail  = Switch{KeyTrafficDetail, false}
 	SupportAccess  = Switch{KeySupportAccess, true}
 )

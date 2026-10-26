@@ -1,0 +1,110 @@
+---
+title: Свой бот через прокси Bot API
+description: Как запустить своего Telegram-бота на панели. Он читает сообщения и отвечает через прокси Bot API панели, а токен бота и платежи остаются у панели.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+:::note[С версии 0.5.2.1]
+Это руководство появилось в 0.5.2.1. Прокси Bot API, который в нём описан, работает с 0.5.1.0.
+:::
+
+Бот подписчиков в панели работает как аддон, и его место может занять ваш бот на любом фреймворке: aiogram, grammY, python-telegram-bot. Панель остаётся шлюзом к Telegram: она хранит настоящий токен бота, опрашивает Telegram, принимает платежи и соблюдает лимиты Telegram на отправку. Ваш бот говорит с ней так же, как с `api.telegram.org`, только по адресу панели и с токеном аддона.
+
+:::caution
+Код своего бота mikan не проверяет. Аддон с правом «Telegram-бот» видит сообщения всех подписчиков и отвечает от имени бота, поэтому ставьте только тот код, которому доверяете как себе.
+:::
+
+## Что нужно
+
+- Бот подключён в панели: **Telegram → Подключение**, токен от [@BotFather](https://t.me/BotFather) ([подробнее](/mikan/billing/telegram/)). Настоящий токен нужен только панели, вашему боту он не понадобится.
+- Бот написан на long polling (`getUpdates`). Вебхуки прокси не принимает: настоящий токен у панели.
+- Доступ к серверу панели под root: токен аддона лежит в файле, который читает только root.
+
+## Подключить
+
+<Steps>
+
+1. **Заведите аддон.** **Аддоны → Режим разработчика**. Укажите:
+   - **Имя**: строчные латинские буквы, цифры и дефис, до 32 символов, например `my-bot`;
+   - **Вид**: «Telegram-бот»;
+   - **Режим**: «Работает в фоне», если у бота нет своего HTTP-сервера (так у ботов на aiogram, grammY и python-telegram-bot с long polling). Тогда адрес можно не указывать;
+   - **Права**: «Telegram-бот» и только то, что боту ещё нужно;
+   - отметку, что вы понимаете: код не проверен mikan.
+
+2. **Возьмите адрес и токен.** На сервере, под root, откройте `/opt/mikan/addons/state.json`. Адрес прокси лежит в поле `panel_api`, токен аддона в `adapters` → имя аддона → `panel_token`. В файле токены всех аддонов, не показывайте его никому.
+
+3. **Запустите бота с двумя переменными:**
+
+   ```bash
+   MIKAN_BOT_API_URL=http://127.0.0.1:41990   # panel_api с приставкой http://
+   MIKAN_BOT_TOKEN=0:<panel_token>            # токен аддона после «0:»
+   ```
+
+   «0:» нужно только для вида: фреймворки проверяют, что токен состоит из числа, двоеточия и строки. Номер бота фреймворк узнаёт у `getMe`.
+
+4. **Передайте бота.** В строке аддона меню «Ещё действия» → **Отдать бота**. Бота держит один аддон: после передачи официальный бот перестаёт отвечать подписчикам, а вашему отвечает прокси. Пока бот не запущен, сообщения ждут в панели до суток.
+
+</Steps>
+
+## Примеры
+
+Любой фреймворк достаточно направить на адрес прокси: он ждёт запросы вида `<адрес>/bot<токен>/<метод>`, как Telegram.
+
+```python
+# aiogram 3
+import asyncio
+import os
+
+from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
+from aiogram.filters import CommandStart
+from aiogram.types import Message
+
+session = AiohttpSession(api=TelegramAPIServer.from_base(os.environ["MIKAN_BOT_API_URL"]))
+bot = Bot(os.environ["MIKAN_BOT_TOKEN"], session=session)
+dp = Dispatcher()
+
+
+@dp.message(CommandStart())
+async def start(message: Message) -> None:
+    await message.answer("Привет из своего бота")
+
+
+asyncio.run(dp.start_polling(bot))
+```
+
+```ts
+// grammY
+import { Bot } from "grammy";
+
+const bot = new Bot(process.env.MIKAN_BOT_TOKEN!, {
+  client: { apiRoot: process.env.MIKAN_BOT_API_URL! },
+});
+
+bot.command("start", (ctx) => ctx.reply("Привет из своего бота"));
+bot.start();
+```
+
+## Что разрешает прокси
+
+Токен принимается, пока аддон держит бота и у него есть право «Telegram-бот». Иначе ответ 401 `Unauthorized`.
+
+**Обновления.** `getUpdates` отдаёт то, что панель накопила для бота: `offset` подтверждает всё, что ниже него, `limit` от 1 до 100, `timeout` до 50 секунд. В буфере до 2000 обновлений и не дольше суток. `deleteWebhook` ничего не делает и отвечает `true`, чтобы фреймворки запускались; с `drop_pending_updates` он очищает буфер.
+
+**Сразу к Telegram:** `getMe`, `getChat`, `getChatMember`, `answerCallbackQuery`, `setMyCommands`, `getMyCommands`, `deleteMyCommands`, `setChatMenuButton`, `getChatMenuButton`.
+
+**Через очередь панели** (в запросе нужен `chat_id`, очередь держит лимиты Telegram): `sendMessage`, `editMessageText`, `editMessageReplyMarkup`, `editMessageCaption`, `editMessageMedia`, `deleteMessage`, `deleteMessages`, `sendPhoto`, `sendDocument`, `sendMediaGroup`, `sendChatAction`, `sendSticker`, `sendAnimation`, `sendVideo`, `sendAudio`, `sendVoice`, `sendLocation`, `pinChatMessage`, `unpinChatMessage`. Заголовок `X-Mikan-Priority: notice` или `bulk` выбирает полосу очереди для уведомлений и рассылок, без него запрос идёт как ответ пользователю.
+
+**Остальное запрещено**: ответ 403 `Forbidden: <метод> is not allowed for addons`. Среди запрещённых `setWebhook`, `sendInvoice`, `createInvoiceLink`, `answerPreCheckoutQuery`, `refundStarPayment`, `logOut`, `close`. Платежи ведёт сама панель: `pre_checkout_query` и `successful_payment` до бота не доходят, о платежах аддон узнаёт из событий панели (право «События»).
+
+**Параметры** принимаются в JSON, форме, multipart или в строке запроса. Тело без файлов до 1 МиБ, файлы до 50 МиБ.
+
+**Кнопки.** `web_app.url` и `login_url` в `reply_markup` и `menu_button` могут вести только на страницы самой панели (её адрес подписки): чужая страница получила бы подписанные данные Mini App. Иначе 400.
+
+Ошибки приходят в формате Bot API: `{"ok": false, "error_code": 403, "description": "..."}`.
+
+## Образом вместо своего процесса
+
+Бота, упакованного в Docker-образ, можно опубликовать как аддон протокола 2: панель сама запустит контейнер и сама выдаст ему эти переменные, а устанавливать его можно из источника или из [реестра сообществ](/mikan/operations/community-addons/). Протокол описан в [PROTOCOL-v2.md](https://github.com/getmikan/marketplace/blob/main/PROTOCOL-v2.md).

@@ -18,17 +18,26 @@ import { ImportCard, LegacyLinksCard } from "./import";
 import { ROUTING_PARTS, RoutingSection, type RoutingPart } from "./routing";
 import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
 import { SupportCard } from "./support";
-import { AppsCard, DevicesCard, InactiveCard, SubPortCard, SubscriptionCard } from "./subscription";
+import { AppsCard, DevicesCard, InactiveCard, SubPortCard, SubscriptionCard, XrayJSONCard } from "./subscription";
 import { SubDomainCard } from "./sub-domain";
 import { SiteCard } from "./site";
 import { HappCard } from "./happ";
 import { SubPageSettings, type SubPagePart } from "./sub-page";
+import { WebhooksCard } from "./webhooks-link";
+import { SubClients } from "./sub-clients";
+import { LogDaysCard } from "./sub-log";
+import { SubResponses } from "./sub-rules";
+import { SubTemplates } from "./sub-templates";
 
 type Tab = SettingsSearch["tab"];
 
 const ICONS = { general: Globe, subscription: Link2, page: LayoutTemplate, routing: Route, security: ShieldCheck, support: LifeBuoy, system: Cpu, import: ArrowDownToLine } as const;
 
 const PART_LABELS: Record<string, Key> = {
+  main: "settings.subParts.main",
+  clients: "settings.subParts.clients",
+  responses: "settings.subParts.responses",
+  templates: "settings.subParts.templates",
   look: "settings.page.tab.look",
   brand: "settings.page.tab.brand",
   blocks: "settings.page.tab.blocks",
@@ -40,7 +49,6 @@ const PART_LABELS: Record<string, Key> = {
   rules: "settings.routingParts.rules",
   dns: "settings.routingParts.dns",
   advanced: "settings.routingParts.advanced",
-  yaml: "settings.routingParts.yaml",
 };
 
 /**
@@ -55,12 +63,13 @@ export function SettingsPage() {
   const { tab, part } = useSearch({ from: "/_app/settings" });
   const navigate = useNavigate({ from: "/settings" });
   const go = (next: Tab, nextPart?: string) => void navigate({ search: { tab: next, part: nextPart }, replace: true });
-  // The routing opens where it is in use: the own YAML once there is one. An old link to the
-  // simple mode ("simple") opens the mode.
-  const routingPart: RoutingPart = ROUTING_PARTS.includes(part as RoutingPart) ? (part as RoutingPart) : settings.data?.sub_template.trim() && part !== "simple" ? "yaml" : "mode";
+  const routingPart: RoutingPart = ROUTING_PARTS.includes(part as RoutingPart) ? (part as RoutingPart) : "mode";
   const pagePart: SubPagePart = (part as SubPagePart | undefined) ?? "look";
-  const shownPart = tab === "page" ? pagePart : tab === "routing" ? routingPart : undefined;
-  const wide = tab === "page" || tab === "routing";
+  // The subscription opens on its settings; the apps, how it answers requests and its
+  // templates are parts of it.
+  const subPart = (SETTINGS_PARTS.subscription as readonly string[]).includes(part ?? "") ? (part as (typeof SETTINGS_PARTS.subscription)[number]) : "main";
+  const shownPart = tab === "page" ? pagePart : tab === "routing" ? routingPart : tab === "subscription" ? subPart : undefined;
+  const wide = tab === "page" || tab === "routing" || (tab === "subscription" && (subPart === "responses" || subPart === "templates"));
   return (
     <>
       <PageHeader title={t("nav.settings")} sub={t("settings.subtitle")} />
@@ -91,15 +100,27 @@ export function SettingsPage() {
                   <AppCard s={s} />
                 </>
               ) : tab === "subscription" ? (
-                <>
-                  <DevicesCard s={s} />
-                  <AppsCard s={s} />
-                  <HappCard s={s} />
-                  <SubscriptionCard s={s} />
-                  <InactiveCard s={s} />
-                  <SubDomainCard s={s} />
-                  <SubPortCard s={s} />
-                </>
+                subPart === "clients" ? (
+                  <>
+                    <SubClients />
+                    <XrayJSONCard s={s} />
+                  </>
+                ) : subPart === "responses" ? (
+                  <SubResponses />
+                ) : subPart === "templates" ? (
+                  <SubTemplates />
+                ) : (
+                  <>
+                    <DevicesCard s={s} />
+                    <AppsCard s={s} />
+                    <HappCard s={s} />
+                    <SubscriptionCard s={s} />
+                    <InactiveCard s={s} />
+                    <LogDaysCard s={s} />
+                    <SubDomainCard s={s} />
+                    <SubPortCard s={s} />
+                  </>
+                )
               ) : tab === "routing" ? (
                 <RoutingSection s={s} part={routingPart} onPart={(p) => go("routing", p)} />
               ) : tab === "security" ? (
@@ -118,6 +139,7 @@ export function SettingsPage() {
                     <SiteCard s={s} />
                     <CertificateCard s={s} />
                     <ApiCard />
+                    <WebhooksCard />
                   </>
                 )
               ) : tab === "support" ? (

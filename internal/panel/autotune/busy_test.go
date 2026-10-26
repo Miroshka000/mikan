@@ -14,7 +14,11 @@ import (
 	"mikan/internal/panel/presets"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
+	"mikan/internal/proto"
+	"mikan/internal/sub/build"
+	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/xray"
 )
 
 const inUse = "listen tcp :443: bind: address already in use"
@@ -164,8 +168,9 @@ func TestBusyInboundMovesByItself(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	links, err := subs.URIs(subs.Profile{Slot: slot, Inbounds: []db.Inbound{e.inbound(t, "vless-xhttp")},
-		Nodes: []subs.Node{{ID: 1, Endpoint: subs.Endpoint{Host: "203.0.113.10"}}}})
+	keys := proto.Slot{Name: slot.Name, UUID: slot.Uuid, Secret: slot.Secret}
+	links, _, err := xray.Links(build.Proxies(build.Profile{Keys: keys, Inbounds: []submodel.Inbound{subsrc.Inbound(e.inbound(t, "vless-xhttp"))},
+		Nodes: []submodel.Node{{ID: 1, Endpoint: submodel.Endpoint{Host: "203.0.113.10"}}}}))
 	if err != nil || !strings.Contains(links, "@203.0.113.10:2053?") {
 		t.Fatalf("subscription: %s %v", links, err)
 	}
