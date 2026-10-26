@@ -53,7 +53,16 @@ build_typescript() {
       fi
       npm_version="${head%.*}.$((patch * 100 + rev))"
       ;;
-    *) npm_version="${version%.*}.$((${version##*.} * 100))" ;;
+    *)
+      # Only the check build (0.0.0) has three numbers: a release with three would take the
+      # npm version of the four-number one after it (0.5.2 and 0.5.2.0 both make 0.5.200),
+      # and npm never takes a version twice.
+      if [ "$version" != 0.0.0 ]; then
+        echo "sdk: $version: npm takes releases with four numbers only (like 0.5.2.0)" >&2
+        exit 1
+      fi
+      npm_version=0.0.0
+      ;;
   esac
 
   cd "$here/typescript"
