@@ -33,6 +33,7 @@ type InboundForm = {
   outbound: Inbound["outbound"];
   exitNode: number;
   poolId: number;
+  inAuto: boolean; // in the subscriptions' automatic choice
   name: string;
   config: string;
   autoPort: boolean;
@@ -58,6 +59,7 @@ function inboundFormOf(i: Inbound | null): InboundForm {
     outbound: i?.outbound ?? "direct",
     exitNode: i?.exit_node_id ?? 0,
     poolId: i?.pool_id ?? 0,
+    inAuto: i?.in_auto ?? true,
     name: i?.display_name ?? "",
     config: i?.config ?? "",
     autoPort: i?.auto_port ?? true,
@@ -80,7 +82,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
   const { reset: resetValidate } = validate;
   const [tab, setTab] = useState<"main" | "xhttp" | "config">("main");
   const [form, set, replace] = useFields(() => inboundFormOf(null));
-  const { port, dest, sni, fp, obfs, xhttp, outbound, exitNode, poolId, name, config, autoPort, autoSni, listenMode, listenIP, clientServer, clientPort, clientSni, cdn, sni443 } = form;
+  const { port, dest, sni, fp, obfs, xhttp, outbound, exitNode, poolId, inAuto, name, config, autoPort, autoSni, listenMode, listenIP, clientServer, clientPort, clientSni, cdn, sni443 } = form;
   const pools = usePools();
   const allNodes = useNodes();
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -191,6 +193,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
         JSON.stringify(client.cdn ?? null) !== JSON.stringify(was.cdn ?? null));
     if (!configChanged && clientChanged) body.client = client;
     if (poolId !== (inbound?.pool_id ?? 0)) body.pool_id = poolId;
+    if (inAuto !== (inbound?.in_auto ?? true)) body.in_auto = inAuto;
     const autoPortNow = autoPort && !behindProxy;
     if (autoPortNow !== inbound?.auto_port) body.auto_port = autoPortNow;
     const autoSniNow = autoSni && !behindProxy;
@@ -397,6 +400,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   </Select>
                 </Field>
               ) : null}
+              <SwitchRow label={t("inbounds.inAuto")} sub={t("inbounds.inAutoHint")} checked={inAuto} onChange={set.inAuto} />
               {inbound?.sni443_possible ? (
                 <SwitchRow
                   label={t("inbounds.sni443.title")}

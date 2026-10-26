@@ -4497,6 +4497,8 @@ export interface components {
             fingerprint?: string;
             /** Format: int64 */
             id: number;
+            /** @description Подключение входит в «Авто» подписки; выключено — только в списке и группе страны (выключенная нода убирает все свои) */
+            in_auto: boolean;
             /** @description Адрес, на котором нода слушает: пусто — все адреса, 127.0.0.1 — только сам сервер (за nginx или HAProxy) */
             listen: string;
             name: string;
@@ -5469,6 +5471,8 @@ export interface components {
             exit_node_id?: number;
             /** @description Отпечаток TLS у клиентов: из списка (chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized) или своё — латиница, цифры, _; пусто — общий из настроек */
             fingerprint?: string;
+            /** @description Подключение в «Авто» подписки; false — только в списке и группе страны */
+            in_auto?: boolean;
             /** @description Адрес, на котором нода слушает: пусто — все адреса, иначе один IP (127.0.0.1 — за nginx или HAProxy на том же сервере). Свой адрес выключает перенос порта */
             listen?: string;
             /**

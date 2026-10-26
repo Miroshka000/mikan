@@ -205,6 +205,7 @@ type Inbound struct {
 	ExitNodeID  sql.NullInt64
 	PoolID      sql.NullInt64
 	Listen      string
+	NoAuto      int64
 }
 
 type InboundEvent struct {

@@ -69,6 +69,12 @@ func TestAutoLeavesNodesOut(t *testing.T) {
 	if wl.Name != "🇳🇱 Нидерланды [WL]" || !slices.Equal(wl.Members, []string{"🇳🇱 VLESS [WL]"}) || !slices.Contains(main.Members, "🇳🇱 VLESS [WL]") || !slices.Contains(main.Members, wl.Name) {
 		t.Fatalf("the node stays to pick by hand: main %v, its group %+v", main.Members, wl)
 	}
+	// One protocol of a node kept out by its inbound, the node's others stay.
+	ps[0].NoAuto = true
+	if one := BuildGroups(ps, nodes, g, Servers{}, b, nil, ""); !slices.Equal(one.List[1].Members, []string{"🇺🇸 VLESS"}) {
+		t.Fatalf("an inbound out: %v", one.List[1].Members)
+	}
+	ps[0].NoAuto = false
 	for i := range nodes {
 		nodes[i].NoAuto = true
 	}

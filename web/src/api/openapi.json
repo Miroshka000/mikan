@@ -3827,6 +3827,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "in_auto": {
+            "description": "Подключение входит в «Авто» подписки; выключено — только в списке и группе страны (выключенная нода убирает все свои)",
+            "type": "boolean"
+          },
           "listen": {
             "description": "Адрес, на котором нода слушает: пусто — все адреса, 127.0.0.1 — только сам сервер (за nginx или HAProxy)",
             "type": "string"
@@ -3936,6 +3940,7 @@
           "auto_sni",
           "auto",
           "outbound",
+          "in_auto",
           "client",
           "client_sni",
           "client_host",
@@ -6478,6 +6483,10 @@
             "description": "Отпечаток TLS у клиентов: из списка (chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized) или своё — латиница, цифры, _; пусто — общий из настроек",
             "maxLength": 32,
             "type": "string"
+          },
+          "in_auto": {
+            "description": "Подключение в «Авто» подписки; false — только в списке и группе страны",
+            "type": "boolean"
           },
           "listen": {
             "description": "Адрес, на котором нода слушает: пусто — все адреса, иначе один IP (127.0.0.1 — за nginx или HAProxy на том же сервере). Свой адрес выключает перенос порта",

@@ -768,6 +768,20 @@ func (q *Queries) SetGroupInbounds(ctx context.Context, arg SetGroupInboundsPara
 	return result.RowsAffected()
 }
 
+const setInboundNoAuto = `-- name: SetInboundNoAuto :exec
+UPDATE inbounds SET no_auto = $1 WHERE id = $2
+`
+
+type SetInboundNoAutoParams struct {
+	NoAuto int64
+	ID     int64
+}
+
+func (q *Queries) SetInboundNoAuto(ctx context.Context, arg SetInboundNoAutoParams) error {
+	_, err := q.db.ExecContext(ctx, setInboundNoAuto, arg.NoAuto, arg.ID)
+	return err
+}
+
 const setInboundPool = `-- name: SetInboundPool :exec
 UPDATE inbounds SET pool_id = $1 WHERE id = $2
 `

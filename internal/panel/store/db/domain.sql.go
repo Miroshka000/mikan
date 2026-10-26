@@ -169,7 +169,7 @@ func (q *Queries) CountTariffs(ctx context.Context) (int64, error) {
 const createInbound = `-- name: CreateInbound :one
 INSERT INTO inbounds (node_id, name, preset, port, enabled, config, created_at, updated_at)
 VALUES ($1, $2, $3, $4, 1, $5, $6, $7)
-RETURNING id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen
+RETURNING id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen, no_auto
 `
 
 type CreateInboundParams struct {
@@ -210,6 +210,7 @@ func (q *Queries) CreateInbound(ctx context.Context, arg CreateInboundParams) (I
 		&i.ExitNodeID,
 		&i.PoolID,
 		&i.Listen,
+		&i.NoAuto,
 	)
 	return i, err
 }
@@ -405,7 +406,7 @@ func (q *Queries) DeleteTariffTerms(ctx context.Context, tariffID int64) error {
 }
 
 const getInbound = `-- name: GetInbound :one
-SELECT id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen FROM inbounds WHERE id = $1
+SELECT id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen, no_auto FROM inbounds WHERE id = $1
 `
 
 func (q *Queries) GetInbound(ctx context.Context, id int64) (Inbound, error) {
@@ -428,6 +429,7 @@ func (q *Queries) GetInbound(ctx context.Context, id int64) (Inbound, error) {
 		&i.ExitNodeID,
 		&i.PoolID,
 		&i.Listen,
+		&i.NoAuto,
 	)
 	return i, err
 }
@@ -670,7 +672,7 @@ func (q *Queries) ListBoundDeviceSlots(ctx context.Context, userID int64) ([]Lis
 }
 
 const listInbounds = `-- name: ListInbounds :many
-SELECT id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen FROM inbounds ORDER BY id
+SELECT id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen, no_auto FROM inbounds ORDER BY id
 `
 
 func (q *Queries) ListInbounds(ctx context.Context) ([]Inbound, error) {
@@ -699,6 +701,7 @@ func (q *Queries) ListInbounds(ctx context.Context) ([]Inbound, error) {
 			&i.ExitNodeID,
 			&i.PoolID,
 			&i.Listen,
+			&i.NoAuto,
 		); err != nil {
 			return nil, err
 		}
@@ -714,7 +717,7 @@ func (q *Queries) ListInbounds(ctx context.Context) ([]Inbound, error) {
 }
 
 const listNodeInbounds = `-- name: ListNodeInbounds :many
-SELECT id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen FROM inbounds WHERE node_id = $1 ORDER BY id
+SELECT id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen, no_auto FROM inbounds WHERE node_id = $1 ORDER BY id
 `
 
 func (q *Queries) ListNodeInbounds(ctx context.Context, nodeID int64) ([]Inbound, error) {
@@ -743,6 +746,7 @@ func (q *Queries) ListNodeInbounds(ctx context.Context, nodeID int64) ([]Inbound
 			&i.ExitNodeID,
 			&i.PoolID,
 			&i.Listen,
+			&i.NoAuto,
 		); err != nil {
 			return nil, err
 		}
@@ -1465,7 +1469,7 @@ func (q *Queries) TotalTrafficHourly(ctx context.Context, hour int64) ([]TotalTr
 }
 
 const updateInbound = `-- name: UpdateInbound :one
-UPDATE inbounds SET port = $1, enabled = $2, config = $3, display_name = $4, updated_at = $5 WHERE id = $6 RETURNING id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen
+UPDATE inbounds SET port = $1, enabled = $2, config = $3, display_name = $4, updated_at = $5 WHERE id = $6 RETURNING id, node_id, name, preset, port, enabled, created_at, updated_at, display_name, config, auto_port, auto_sni, outbound, exit_node_id, pool_id, listen, no_auto
 `
 
 type UpdateInboundParams struct {
@@ -1504,6 +1508,7 @@ func (q *Queries) UpdateInbound(ctx context.Context, arg UpdateInboundParams) (I
 		&i.ExitNodeID,
 		&i.PoolID,
 		&i.Listen,
+		&i.NoAuto,
 	)
 	return i, err
 }

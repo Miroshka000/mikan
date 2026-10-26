@@ -110,6 +110,8 @@ type InboundPatch struct {
 	Outbound   *string // direct, warp or node
 	ExitNodeID *int64  // for Outbound node
 	PoolID     *int64  // 0: the main traffic
+	// InAuto: the inbound is in the subscriptions' automatic choice (as a node's switch).
+	InAuto *bool
 
 	// FromPort, when set, applies the patch only while the inbound is on this port: an
 	// automatic move decided on what a node reported never lands on a row moved since
@@ -124,7 +126,7 @@ func (p InboundPatch) EditsTemplate() bool {
 
 // ForClients: the patch changes what clients get.
 func (p InboundPatch) ForClients() bool {
-	return p.EditsTemplate() || p.Port != nil || p.Enabled != nil || p.DisplayName != nil
+	return p.EditsTemplate() || p.Port != nil || p.Enabled != nil || p.DisplayName != nil || p.InAuto != nil
 }
 
 // ClientEndpoint is where clients connect when a TCP proxy or a CDN stands in front of
@@ -360,6 +362,11 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 		}
 		if p.PoolID != nil {
 			if err := q.SetInboundPool(ctx, db.SetInboundPoolParams{PoolID: next.PoolID, ID: id}); err != nil {
+				return err
+			}
+		}
+		if p.InAuto != nil {
+			if err := q.SetInboundNoAuto(ctx, db.SetInboundNoAutoParams{NoAuto: Flag(!*p.InAuto), ID: id}); err != nil {
 				return err
 			}
 		}

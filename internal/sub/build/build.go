@@ -73,7 +73,7 @@ func Proxies(p Profile) []model.Proxy {
 				continue
 			}
 			used[name] = true
-			c.Node, c.Pool = n.ID, in.Pool
+			c.Node, c.Pool, c.NoAuto = n.ID, in.Pool, in.NoAuto
 			out = append(out, c)
 		}
 	}

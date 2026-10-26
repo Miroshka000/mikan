@@ -12,6 +12,9 @@ type Proxy struct {
 	Name string
 	Node int64 // the node the inbound is on
 	Pool int64 // the inbound's server group; 0: none, the main servers
+	// NoAuto keeps the server out of the automatic choice: its inbound's word (the node's is
+	// Node.NoAuto).
+	NoAuto bool
 	// Type is the protocol as the inbound's template names it: vless, trojan, hysteria2,
 	// tuic, anytls, shadowsocks, trusttunnel, shadowquic, mieru, sudoku or snell.
 	Type   string

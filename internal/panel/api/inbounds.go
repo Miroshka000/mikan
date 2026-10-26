@@ -51,6 +51,7 @@ type InboundView struct {
 	Outbound    string         `json:"outbound" enum:"direct,warp,node" doc:"Выход в интернет: напрямую с сервера, через WARP ноды или через другую ноду (каскад)"`
 	ExitNodeID  *int64         `json:"exit_node_id,omitempty" doc:"Нода, через которую выходит трафик, если outbound=node"`
 	PoolID      *int64         `json:"pool_id,omitempty" doc:"Группа серверов подключения: какой трафик оно тратит; нет — основной трафик"`
+	InAuto      bool           `json:"in_auto" doc:"Подключение входит в «Авто» подписки; выключено — только в списке и группе страны (выключенная нода убирает все свои)"`
 	Client      ClientEndpoint `json:"client" doc:"Куда подключаются клиенты, если не к ноде напрямую (mikan.client в шаблоне)"`
 	ClientSNI   bool           `json:"client_sni" doc:"Можно ли задать клиентам свой SNI: у REALITY имя задаёт сайт маскировки"`
 	ClientHost  bool           `json:"client_host" doc:"Можно ли задать клиентам свой HTTP Host: VLESS и Trojan по WebSocket и XHTTP"`
@@ -131,6 +132,7 @@ type patchInboundInput struct {
 		Outbound    *string         `json:"outbound,omitempty" enum:"direct,warp,node" doc:"Выход в интернет: напрямую, через WARP ноды или через другую ноду"`
 		ExitNodeID  *int64          `json:"exit_node_id,omitempty" minimum:"1" doc:"Для outbound=node: через какую ноду"`
 		PoolID      *int64          `json:"pool_id,omitempty" minimum:"0" doc:"Группа серверов; 0 — без группы, основной трафик"`
+		InAuto      *bool           `json:"in_auto,omitempty" doc:"Подключение в «Авто» подписки; false — только в списке и группе страны"`
 
 		XHTTP  *proto.XHTTPTuning `json:"xhttp,omitempty" doc:"Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию"`
 		SNI443 *bool              `json:"sni443,omitempty" doc:"Поставить за SNI-роутер ноды на 443 (true) или вернуть на свой порт (false)"`
@@ -197,7 +199,7 @@ func (h *handlers) viewInbound(ctx context.Context, in db.Inbound, last map[int6
 	}
 	v := InboundView{ID: in.ID, NodeID: in.NodeID, Name: in.Name, Preset: in.Preset, Title: info.Title, Port: in.Port, Enabled: in.Enabled != 0,
 		DisplayName: in.DisplayName, SubName: domain.ProxyName(in), Config: config, Status: "unknown", UpdatedAt: store.Time(in.UpdatedAt),
-		AutoPort: in.AutoPort != 0, AutoSNI: in.AutoSni != 0, Outbound: in.Outbound, Listen: in.Listen}
+		AutoPort: in.AutoPort != 0, AutoSNI: in.AutoSni != 0, Outbound: in.Outbound, Listen: in.Listen, InAuto: in.NoAuto == 0}
 	if in.PoolID.Valid {
 		id := in.PoolID.Int64
 		v.PoolID = &id
@@ -421,7 +423,7 @@ func (h *handlers) updateInbound(ctx context.Context, in *patchInboundInput) (*i
 	}
 	p := domain.InboundPatch{Port: b.Port, Enabled: b.Enabled, Config: b.Config, Dest: b.Dest, ServerName: b.ServerName, Fingerprint: b.Fingerprint, Obfs: b.Obfs, XHTTP: b.XHTTP,
 		DisplayName: b.DisplayName, Listen: b.Listen, AutoPort: b.AutoPort, AutoSNI: b.AutoSNI, Outbound: b.Outbound, ExitNodeID: b.ExitNodeID, PoolID: b.PoolID,
-		SNI443: b.SNI443}
+		SNI443: b.SNI443, InAuto: b.InAuto}
 	if c := b.Client; c != nil {
 		// The address clients connect to: like the panel's public host, not for a key.
 		if err := requireSession(ctx, "client"); err != nil {
@@ -448,7 +450,7 @@ func (h *handlers) updateInbound(ctx context.Context, in *patchInboundInput) (*i
 	switch {
 	case p.ForClients():
 		h.audit(ctx, admin, "inbound.update", "inbound", row.Name, map[string]any{"config_changed": p.EditsTemplate(),
-			"listen": row.Listen, "auto_port": row.AutoPort != 0, "auto_sni": row.AutoSni != 0})
+			"listen": row.Listen, "auto_port": row.AutoPort != 0, "auto_sni": row.AutoSni != 0, "in_auto": row.NoAuto == 0})
 	case moved || row.AutoPort != prev.AutoPort || row.AutoSni != prev.AutoSni:
 		h.audit(ctx, admin, "inbound.auto", "inbound", row.Name, map[string]any{"listen": row.Listen, "auto_port": row.AutoPort != 0, "auto_sni": row.AutoSni != 0})
 	}

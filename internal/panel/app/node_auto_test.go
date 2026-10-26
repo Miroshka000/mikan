@@ -76,6 +76,63 @@ func TestNodeOutOfAuto(t *testing.T) {
 	}
 }
 
+// One protocol switched out of the automatic choice leaves "Auto", the node's others stay.
+func TestInboundOutOfAuto(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355} {
+		if err := settings.Set(ctx, settings.New(h.st.Q), k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	api := "/" + adminPath + "/api/v1"
+	tariffs, _ := h.st.Q.ListTariffs(ctx)
+	clock := func() time.Time { return h.now }
+	u, err := domain.NewUsers(h.st, domain.NewPool(h.st, clock), noChanges{}, clock).Create(ctx, domain.CreateInput{Name: "a", TariffID: tariffs[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	auto := func() []string {
+		t.Helper()
+		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "clash.meta/1.19"})
+		var cfg struct {
+			Groups []struct {
+				Name    string   `yaml:"name"`
+				Proxies []string `yaml:"proxies"`
+			} `yaml:"proxy-groups"`
+		}
+		if resp.StatusCode != http.StatusOK || yaml.Unmarshal(body, &cfg) != nil {
+			t.Fatalf("subscription: %d %s", resp.StatusCode, body)
+		}
+		for _, g := range cfg.Groups {
+			if g.Name == "Авто" {
+				return g.Proxies
+			}
+		}
+		return nil
+	}
+	before := auto()
+	ins, _ := h.st.Q.ListInbounds(ctx)
+	resp, body := h.do(http.MethodPatch, api+"/inbounds/"+strconv.FormatInt(ins[0].ID, 10), map[string]any{"in_auto": false}, csrf)
+	var view struct {
+		InAuto bool `json:"in_auto"`
+	}
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &view) != nil || view.InAuto {
+		t.Fatalf("patch: %d %s", resp.StatusCode, body)
+	}
+	after := auto()
+	if len(before) < 2 || len(after) != len(before)-1 {
+		t.Fatalf("auto before %v, after %v", before, after)
+	}
+}
+
 // The admin's word keeps a node out at once; a node that does not answer the panel, only
 // after nodeDownForAuto; one never checked, or answering, stays in.
 func TestOutOfAuto(t *testing.T) {

@@ -49,6 +49,8 @@ type Inbound struct {
 	Port     int
 	PortSpec string // "443", or a Hysteria2 hopping range ("20000-30000")
 	Config   string // the template (proto)
+	// NoAuto keeps the inbound's servers out of the automatic choice (as Node.NoAuto).
+	NoAuto bool
 }
 
 // GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.

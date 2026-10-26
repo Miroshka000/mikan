@@ -212,7 +212,7 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 // Inbound is in as the subscription module sees it.
 func Inbound(in db.Inbound) submodel.Inbound {
 	return submodel.Inbound{ID: in.ID, Node: in.NodeID, Pool: in.PoolID.Int64, Label: in.Name, Name: domain.ProxyName(in),
-		Named: in.DisplayName != "", Port: domain.FirstPort(in.Port), PortSpec: in.Port, Config: in.Config}
+		Named: in.DisplayName != "", Port: domain.FirstPort(in.Port), PortSpec: in.Port, Config: in.Config, NoAuto: in.NoAuto != 0}
 }
 
 func inbounds(ins []db.Inbound) []submodel.Inbound {

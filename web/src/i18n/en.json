@@ -1373,6 +1373,8 @@
     "portLabel": "Port",
     "portHint": "Default {port}/{network}, or a free spare one (2053, 2083…) when it is taken. Hysteria2 accepts a range, e.g. 20000-20100.",
     "saved": "Saved. Clients get the changes when their subscription updates",
+    "inAuto": "In auto select",
+    "inAutoHint": "The connection is in the subscription's automatic choice. Turn it off if the apps must not pick it on their own: it stays in the list and in its country's group. The node's switch takes all its connections out at once.",
     "savedAuto": "Saved",
     "subName": "Name in the subscription",
     "subNameHint": "Clients see the protocol under this name. Emoji are fine: «🇳🇱 Netherlands». Empty: the default name.",
