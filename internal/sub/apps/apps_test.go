@@ -1,7 +1,9 @@
 package apps
 
 import (
+	"net/http"
 	"reflect"
+	"slices"
 	"testing"
 
 	"mikan/internal/proto"
@@ -148,5 +150,158 @@ func TestHappAndINCY(t *testing.T) {
 	}
 	if !IsINCY("INCY/2.0.8/iOS") || IsINCY("Happ/3.6.0") || IsINCY("") {
 		t.Fatal("IsINCY")
+	}
+}
+
+// pinnedUAs is what every detector of the package says of a User-Agent today: DetectApp,
+// Identify, IsHapp, IsINCY, TakesXrayJSON and the built-in rules of a Responder. It pins
+// the answers, not what they should be: a refactor of the tables of words must leave every
+// row as it is, and a row that changes on purpose is changed here with a reason. The rows
+// marked "looks wrong" are answers that disagree with another detector or with the app.
+var pinnedUAs = []struct {
+	ua             string
+	app            App
+	id             string // Identify's app; "" for none
+	happ, incy, xj bool   // IsHapp, IsINCY, TakesXrayJSON
+	rule           string // the built-in rule that decides; "" for none
+}{
+	// Looks wrong: Happ's word is on its xray app, DetectApp makes a sing-box app of it.
+	{"Happ/3.0 sing-box", App{Family: FamilySingBox}, "happ", true, false, true, ""},
+	// Looks wrong: a sing-box app for DetectApp, the generic mihomo for Identify (it tries
+	// the generic entries in the catalog's order, mihomo before sing-box).
+	{"sing-box 1.12 mihomo", App{Family: FamilySingBox}, "mihomo", false, false, false, ""},
+	// Looks wrong: Inhive is a sing-box app of the catalog, "ClashMeta" makes it mihomo for Identify.
+	{"Inhive/1.0 like ClashMeta sing-box", App{Family: FamilySingBox}, "mihomo", false, false, false, ""},
+	// Looks wrong: v2rayN for Identify, a mihomo app for DetectApp (mihomo is tried before xray).
+	{"v2rayN/7.0.0 mihomo", App{Family: FamilyMihomo}, "v2rayn", false, false, false, ""},
+	// The same, and "mihomo/1.19" names no core: the version wants three numbers.
+	{"v2rayN/7 mihomo/1.19", App{Family: FamilyMihomo}, "v2rayn", false, false, false, ""},
+	// Looks wrong: Happ for Identify (happ comes first in the catalog), INCY for the
+	// headers and the announcement (IsINCY is asked first there).
+	{"INCY/2.1 Happ", App{Family: FamilyXray}, "happ", true, true, true, ""},
+	{"Stash/2.8.0 Clash/1.11.0", App{Family: FamilyStash}, "stash", false, false, false, ""},
+	// The Mikan app asks for a subscription as "mihomo[/core] Mikan/x", the mihomo on
+	// purpose (MikanApp's SubscriptionOverrides.buildDefaultUserAgent). A bare "Mikan/x"
+	// comes only from its update check or a user's own User-Agent: Identify calls it Mikan,
+	// DetectApp, which has no "mikan" word, an unknown app. Unhandled, not the app's fault.
+	{"Mikan/0.1.3", App{Family: FamilyOther}, "mikan", false, false, false, ""},
+	{"mihomo/1.19.32 Mikan/0.1.3", App{Family: FamilyMihomo, Core: Version{1, 19, 32}}, "mikan", false, false, false, ""},
+	{"mihomo Mikan/1.1.1", App{Family: FamilyMihomo}, "mikan", false, false, false, ""},
+	// Looks wrong: the discontinued Clash apps (the Clash Premium core, not mihomo) are the
+	// generic mihomo app; the built-in rule turns them away before that matters.
+	{"ClashforWindows/0.20.39", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
+	{"Clash for Windows/0.20.39", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
+	{"ClashForAndroid/2.5.12", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
+	{"ClashX/1.118.0 (com.west2online.ClashX; build:1.118.0; macOS 14.0.0) Alamofire/5.8.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
+	{"ClashX Meta/1.3.0 (com.metacubex.ClashX.meta; build:1.3.0; macOS 14.0.0) Alamofire/5.8.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	{"ShadowsocksR/2.5.6", App{Family: FamilyOther}, "", false, false, false, RuleSSR},
+	{"ssr/1.0", App{Family: FamilyOther}, "", false, false, false, RuleSSR},
+	{"", App{Family: FamilyOther}, "", false, false, false, ""},
+	{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", App{Family: FamilyOther}, "", false, false, false, ""},
+	{"curl/8.9", App{Family: FamilyOther}, "", false, false, false, ""},
+	{"HAPP/3.4.1", App{Family: FamilyXray}, "happ", true, false, true, ""},
+	{"Happ/3.6.0/Android/abc", App{Family: FamilyXray}, "happ", true, false, true, ""},
+	{"INCY/2.0.8/iOS", App{Family: FamilyXray}, "incy", false, true, true, ""},
+	{"v2rayNG/1.10.20", App{Family: FamilyXray}, "v2rayng", false, false, false, ""},
+	{"v2RayTun/5.1", App{Family: FamilyXray}, "v2raytun", false, false, false, ""},
+	{"koala-clash/1.4.1", App{Family: FamilyMihomo, Core: Version{1, 19, 30}}, "koala", false, false, false, ""},
+	{"clash-verge/v2.2.3", App{Family: FamilyMihomo}, "verge", false, false, false, ""},
+	{"HiddifyNext/2.5.7 (android) like ClashMeta v2ray sing-box", App{Family: FamilySingBox, Legacy: true}, "hiddify", false, false, false, ""},
+	{"HiddifyNext/4.1.1 (android) like ClashMeta v2ray sing-box", App{Family: FamilySingBox}, "hiddify", false, false, false, ""},
+	{"SFA (sing-box 1.14.2; language en_US)", App{Family: FamilySingBox, Core: Version{1, 14, 2}, Whole: true}, "singbox", false, false, false, ""},
+	{"SFI (sing-box 1.11.4; language ru_RU)", App{Family: FamilySingBox, Core: Version{1, 11, 4}, Whole: true}, "singbox", false, false, false, ""},
+	{"Karing/1.2.26 platform/tvos sing-box 1.14.0", App{Family: FamilySingBox, Core: Version{1, 14, 0}}, "karing", false, false, false, ""},
+	{"Shadowrocket/2592 CFNetwork/1568.100.1", App{Family: FamilyOther}, "shadowrocket", false, false, false, ""},
+	// Looks wrong: FlClashX is a current mihomo app, yet RuleOld's "clashx" contains-check
+	// (meant for ClashX before its Meta fork) turns it away. A fix will flip this row.
+	{"FlClashX/v0.9.1 Platform/android", App{Family: FamilyMihomo}, "flclash", false, false, false, RuleOld},
+	{"clash.meta/v1.19.32 SlothClash/0.9.4", App{Family: FamilyMihomo, Core: Version{1, 19, 32}}, "slothclash", false, false, false, ""},
+	{"husi/0.9.1 (sing-box 1.15.0-alpha.10)", App{Family: FamilySingBox, Core: Version{1, 15, 0}}, "husi", false, false, false, ""},
+	{"Flowvy/0.9 mihomo/1.19.31", App{Family: FamilyMihomo, Core: Version{1, 19, 31}}, "mihomo", false, false, false, ""},
+	{"ClashMetaForAndroid/2.11.19.Meta", App{Family: FamilyMihomo}, "clashmeta", false, false, false, ""},
+	{"mihomo/1.19.32 ClashFest/1.2.0", App{Family: FamilyMihomo, Core: Version{1, 19, 32}}, "clashfest", false, false, false, ""},
+	{"INCY/2.1.0", App{Family: FamilyXray}, "incy", false, true, true, ""},
+	{"v2rayN/7.0.0", App{Family: FamilyXray}, "v2rayn", false, false, false, ""},
+	{"NekoBox/1.3.7", App{Family: FamilySingBox}, "nekobox", false, false, false, ""},
+	{"v2RayTun/Android", App{Family: FamilyXray}, "v2raytun", false, false, false, ""},
+
+	// A row for every word and prefix of the Catalog, as word+"/1.0": TestDetectionIsPinned
+	// fails for one that has none, so a new entry is pinned when it is added.
+	{"mikan/1.0", App{Family: FamilyOther}, "mikan", false, false, false, ""}, // a bare Mikan: see Mikan/0.1.3
+	{"kabosu/1.0", App{Family: FamilyMihomo}, "kabosu", false, false, false, ""},
+	{"koala/1.0", App{Family: FamilyMihomo}, "koala", false, false, false, ""},
+	{"clashfest/1.0", App{Family: FamilyMihomo}, "clashfest", false, false, false, ""},
+	{"slothclash/1.0", App{Family: FamilyMihomo}, "slothclash", false, false, false, ""},
+	{"flclash/1.0", App{Family: FamilyMihomo}, "flclash", false, false, false, ""},
+	{"verge/1.0", App{Family: FamilyMihomo}, "verge", false, false, false, ""},
+	{"clashmetaforandroid/1.0", App{Family: FamilyMihomo}, "clashmeta", false, false, false, ""},
+	{"mihomo/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	{"clash/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	{"prizrak/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	{"flowvy/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	{"murge/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	{"rabbit/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	{"happ/1.0", App{Family: FamilyXray}, "happ", true, false, true, ""},
+	{"incy/1.0", App{Family: FamilyXray}, "incy", false, true, true, ""},
+	{"v2raytun/1.0", App{Family: FamilyXray}, "v2raytun", false, false, false, ""},
+	{"v2rayng/1.0", App{Family: FamilyXray}, "v2rayng", false, false, false, ""},
+	{"v2rayn/1.0", App{Family: FamilyXray}, "v2rayn", false, false, false, ""},
+	{"onexray/1.0", App{Family: FamilyXray}, "xray", false, false, false, ""},
+	{"v2box/1.0", App{Family: FamilyXray}, "xray", false, false, false, ""},
+	{"simplexray/1.0", App{Family: FamilyXray}, "xray", false, false, false, ""},
+	{"renoarx/1.0", App{Family: FamilyXray}, "xray", false, false, false, ""},
+	{"hiddify/1.0", App{Family: FamilySingBox, Legacy: true}, "hiddify", false, false, false, ""},
+	{"karing/1.0", App{Family: FamilySingBox}, "karing", false, false, false, ""},
+	{"nekobox/1.0", App{Family: FamilySingBox}, "nekobox", false, false, false, ""},
+	{"nekoray/1.0", App{Family: FamilySingBox}, "nekobox", false, false, false, ""},
+	{"throne/1.0", App{Family: FamilySingBox}, "nekobox", false, false, false, ""},
+	{"husi/1.0", App{Family: FamilySingBox}, "husi", false, false, false, ""},
+	{"sing-box/1.0", App{Family: FamilySingBox}, "singbox", false, false, false, ""},
+	{"singbox/1.0", App{Family: FamilySingBox}, "singbox", false, false, false, ""},
+	{"deskbox/1.0", App{Family: FamilySingBox}, "singbox", false, false, false, ""},
+	{"inhive/1.0", App{Family: FamilySingBox}, "singbox", false, false, false, ""},
+	{"sfa/1.0", App{Family: FamilySingBox, Whole: true}, "singbox", false, false, false, ""},
+	{"sfi/1.0", App{Family: FamilySingBox, Whole: true}, "singbox", false, false, false, ""},
+	{"sfm/1.0", App{Family: FamilySingBox, Whole: true}, "singbox", false, false, false, ""},
+	{"sft/1.0", App{Family: FamilySingBox, Whole: true}, "singbox", false, false, false, ""},
+	{"stash/1.0", App{Family: FamilyStash}, "stash", false, false, false, ""},
+	{"streisand/1.0", App{Family: FamilyOther}, "streisand", false, false, false, ""},
+	{"shadowrocket/1.0", App{Family: FamilyOther}, "shadowrocket", false, false, false, ""},
+	{"foxray/1.0", App{Family: FamilyOther}, "foxray", false, false, false, ""},
+}
+
+func TestDetectionIsPinned(t *testing.T) {
+	r, err := NewResponder(Policy{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned := map[string]bool{}
+	for _, c := range pinnedUAs {
+		pinned[c.ua] = true
+		if got := DetectApp(c.ua); got != c.app {
+			t.Errorf("DetectApp(%q) = %+v, want %+v", c.ua, got, c.app)
+		}
+		if k, _ := Identify(c.ua); k.ID != c.id {
+			t.Errorf("Identify(%q) = %q, want %q", c.ua, k.ID, c.id)
+		}
+		if got := IsHapp(c.ua); got != c.happ {
+			t.Errorf("IsHapp(%q) = %v", c.ua, got)
+		}
+		if got := IsINCY(c.ua); got != c.incy {
+			t.Errorf("IsINCY(%q) = %v", c.ua, got)
+		}
+		if got := TakesXrayJSON(c.ua); got != c.xj {
+			t.Errorf("TakesXrayJSON(%q) = %v", c.ua, got)
+		}
+		if got := r.Decide(http.Header{"User-Agent": {c.ua}}).Rule; got != c.rule {
+			t.Errorf("Decide(%q).Rule = %q, want %q", c.ua, got, c.rule)
+		}
+	}
+	for _, k := range Catalog {
+		for _, w := range slices.Concat(k.Words, k.Prefixes) {
+			if !pinned[w+"/1.0"] {
+				t.Errorf("%s: no row for %q in pinnedUAs", k.ID, w+"/1.0")
+			}
+		}
 	}
 }
