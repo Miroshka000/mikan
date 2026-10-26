@@ -2,7 +2,9 @@ package routing
 
 import (
 	_ "embed"
+	"maps"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -102,6 +104,18 @@ func (g Geodata) Has(kind, name string) bool {
 		return names[1][name]
 	}
 	return false
+}
+
+// Names are the categories of the geodata, sorted; kind is "geosite" or "geoip".
+func (g Geodata) Names(kind string) []string {
+	names := g.names()
+	switch kind {
+	case "geosite":
+		return slices.Sorted(maps.Keys(names[0]))
+	case "geoip":
+		return slices.Sorted(maps.Keys(names[1]))
+	}
+	return nil
 }
 
 // runetfreedomLists are the categories nearest to the panel's rule lists (Services,

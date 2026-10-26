@@ -7,6 +7,7 @@ import (
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
+	"mikan/internal/sub/subtest/corecheck"
 )
 
 // The share links, which do not depend on the mode: one list for each user (subtest has
@@ -57,5 +58,5 @@ func goldenXray(t *testing.T, v subtest.Variant, mode routing.Mode, tpl model.Te
 		t.Fatal(err)
 	}
 	subtest.Golden(t, file, append(raw, '\n'))
-	t.Run("xray", func(t *testing.T) { checkXray(t, raw) })
+	t.Run("xray", func(t *testing.T) { corecheck.Xray(t, raw) })
 }
