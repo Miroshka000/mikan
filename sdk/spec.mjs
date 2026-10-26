@@ -12,8 +12,9 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const prefix = "/api/v1";
-// A panel release: 0.5.2.0, or 0.4.5 for the older tags with three numbers.
-const release = /^\d+\.\d+\.\d+(\.\d+)?$/;
+// A panel release: 0.5.2.0, or 0.4.5 for the older tags with three numbers, or a beta of
+// one (0.5.2.1-rc.2).
+const release = /^\d+\.\d+\.\d+(\.\d+)?(-rc\.\d+)?$/;
 
 const [version, out] = process.argv.slice(2);
 if (!release.test(version ?? "") || !out) {
