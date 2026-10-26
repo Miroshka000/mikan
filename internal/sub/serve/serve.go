@@ -85,9 +85,9 @@ type Config struct {
 	Mode    routing.Mode
 	Rules   []routing.Rule // the admin's own Clash rules, checked (routing.ServedRules)
 	Routes  routing.Routes // services, direct apps and DNS (settings.KeyRoutes)
-	// Template is the admin's own Clash profile (settings.KeyTemplate); it takes the place
-	// of Groups, Mode, Rules and Routes for mihomo apps. "": none.
-	Template string
+	// Templates are the admin's own profiles of the cores, the subscription templates; the
+	// one a profile is made of (Template) takes the place of Groups, Mode, Rules and Routes.
+	Templates []model.Template
 	// Fingerprint is the default uTLS profile for inbounds that set none.
 	Fingerprint string
 	// Binding gives every device that sends its id keys of its own; RequireHWID refuses
@@ -276,7 +276,8 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	hd := w.Header()
 	userInfoHeaders(hd, u, cfg, vars)
 	h.operatorHeaders(hd, r, sub, u, cfg)
-	appHeaders(hd, ua, cfg)
+	// Happ's routing profile is the one of the Clash profile the request would get.
+	appHeaders(hd, ua, cfg, Template(cfg.Templates, FormatClash, dec.Action.Template).Body)
 	ruleHeaders(hd, dec.Action.Headers)
 	hd.Set("Cache-Control", "no-store")
 	if r.Method == http.MethodHead {
@@ -315,10 +316,11 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
 		}})
 	prof := mihomo.Profile{Proxies: proxies, Nodes: cfg.Nodes, Direct: cfg.Direct, Lang: cfg.Lang}
+	tpl := Template(cfg.Templates, format, dec.Action.Template)
 	switch format {
 	case FormatClash:
 		prof.Rules, prof.Routes, prof.App = mihomo.RulesFor(cfg.Rules, app), cfg.Routes, app
-		body, ps, err := h.clashProfile(prof, cfg)
+		body, ps, err := h.clashProfile(prof, cfg, tpl)
 		if err != nil {
 			return h.profileFailed(w, cfg, format, err)
 		}
@@ -327,7 +329,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		_, _ = w.Write(body)
 	case FormatSingBox:
 		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
-		body, err := singbox.Render(ctx, prof, cfg.Groups, cfg.Mode, cfg.Template)
+		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return singbox.Render(ctx, prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
 			return h.profileFailed(w, cfg, format, err)
 		}
@@ -335,7 +337,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		_, _ = w.Write(body)
 	case FormatXray:
 		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
-		body, err := xray.Render(prof, cfg.Groups, cfg.Mode, cfg.Template)
+		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return xray.Render(prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
 			return h.profileFailed(w, cfg, format, err)
 		}
@@ -353,21 +355,22 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	return OutcomeServed
 }
 
-// clashProfile is the Clash profile of prof: the admin's own (cfg.Template) when the app
-// can take it, the built-in one otherwise; and the panel's proxies in it.
-func (h *Handler) clashProfile(prof mihomo.Profile, cfg Config) ([]byte, []model.Proxy, error) {
+// clashProfile is the Clash profile of prof: of the admin's own template t when the app can
+// take it, the built-in one otherwise; and the panel's proxies in it.
+func (h *Handler) clashProfile(prof mihomo.Profile, cfg Config, t model.Template) ([]byte, []model.Proxy, error) {
 	builtIn := func() ([]byte, []model.Proxy, error) {
 		body, err := mihomo.Render(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Mode)
 		return body, prof.Proxies, err
 	}
-	if cfg.Template == "" || !prof.Routable() {
+	if t.Body == "" || !prof.Routable() {
 		return builtIn()
 	}
-	body, ps, err := mihomo.Template(prof, cfg.Template)
-	var te *mihomo.TemplateError
+	body, ps, err := mihomo.Template(prof, t.Body)
+	var te *model.TemplateError
 	if errors.As(err, &te) {
 		// Saved templates are checked; one that went bad must not leave apps without a profile.
-		h.Warn("template/"+te.Code, "subscription: the own Clash profile does not render, the built-in one goes out", "err", err)
+		h.Warn("template/"+strconv.FormatInt(t.ID, 10)+"/"+te.Code, "subscription: an own template does not render, the built-in profile goes out",
+			"template", t.ID, "core", t.Core, "err", err)
 		return builtIn()
 	}
 	return body, ps, err

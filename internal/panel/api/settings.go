@@ -21,7 +21,6 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subsrc"
 	"mikan/internal/proto"
-	"mikan/internal/sub/mihomo"
 	submodel "mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/serve"
@@ -61,7 +60,6 @@ type SettingsView struct {
 	SubRules       string         `json:"sub_rules" doc:"Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий"`
 	RuleTargets    []string       `json:"rule_targets" doc:"Куда правило может направить трафик: DIRECT, REJECT, REJECT-DROP, PROXY и группы"`
 	SubRouting     string         `json:"sub_routing" enum:"ru_direct,all,blocked" doc:"Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую"`
-	SubTemplate    string         `json:"sub_template" doc:"Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types}"`
 	SubRoutes      routing.Routes `json:"sub_routes" doc:"Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog"`
 	Fingerprint    string         `json:"client_fingerprint" doc:"Отпечаток TLS (uTLS) у клиентов, если у подключения не задан свой: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized или своё значение"`
 	AutoPort       bool           `json:"auto_port" doc:"Переносить подключение на другой порт, если клиенты перестали до него доходить"`
@@ -93,8 +91,7 @@ type SettingsView struct {
 
 type settingsOutput struct{ Body SettingsView }
 
-// The size limits of the body are the huma tags: sub_template takes up to 524288 bytes (512 KiB),
-// the largest template there is, as a full profile with rule lists is a few dozen kilobytes.
+// The size limits of the body are the huma tags.
 type patchSettingsInput struct {
 	Body patchSettingsBody
 }
@@ -128,7 +125,6 @@ type patchSettingsBody = struct {
 	SubGroupAuto   *string              `json:"sub_group_auto,omitempty" maxLength:"200"`
 	SubRouting     *string              `json:"sub_routing,omitempty" enum:"ru_direct,all,blocked"`
 	SubRoutes      *routing.Routes      `json:"sub_routes,omitempty"`
-	SubTemplate    *string              `json:"sub_template,omitempty" maxLength:"524288" doc:"Свой профиль Clash; пусто — вернуть встроенный"`
 	SubRules       *string              `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила Clash, до 500 строк; ошибка указывает номер строки"`
 	Fingerprint    *string              `json:"client_fingerprint,omitempty" pattern:"^[a-z0-9_]{1,32}$" doc:"Из списка или своё: латиница в нижнем регистре, цифры и _, до 32 символов"`
 	AutoPort       *bool                `json:"auto_port,omitempty"`
@@ -202,10 +198,6 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	v.SubRouting = string(routing.ParseMode(v.SubRouting))
 	if err == nil {
 		v.SubRoutes, _, err = settings.Get[routing.Routes](ctx, h.d.Settings, settings.KeyRoutes)
-	}
-	// An own profile may hold the admin's own proxies, a controller secret or DNS tokens.
-	if !hidesSecrets(ctx) {
-		get(settings.KeyTemplate, &v.SubTemplate)
 	}
 	get(settings.KeyFingerprint, &v.Fingerprint)
 	if !proto.ValidFingerprint(v.Fingerprint) {
@@ -464,16 +456,6 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		if err := b.SubRoutes.Check(exists); err != nil {
 			details = append(details, fieldDetail("body.sub_routes", err.Error(), nil))
-		}
-	}
-	if b.SubTemplate != nil && strings.TrimSpace(*b.SubTemplate) != "" && h.d.CheckTemplate != nil {
-		err := h.d.CheckTemplate(ctx, *b.SubTemplate)
-		var te *mihomo.TemplateError
-		switch {
-		case errors.As(err, &te):
-			details = append(details, fieldDetail("body.sub_template", te.Code, te.Detail))
-		case err != nil && !errors.Is(err, submodel.ErrNoProxies):
-			return nil, err
 		}
 	}
 	if b.ACMECA != nil || b.ACMEEmail != nil || b.ACMEEABKID != nil || b.ACMEEABHMAC != nil {

@@ -86,9 +86,10 @@ type Action struct {
 	// HTML is the page (html), shown as it is, with no scripts: the answer carries a
 	// policy that forbids them, so a page cannot be turned against the subscriber.
 	HTML string `json:"html,omitempty" maxLength:"16384"`
-	// Template is the subscription template the profile is made from (serve): 0 is the
-	// default one. The templates themselves come later (roadmap #02); until then no
-	// template exists for a rule to name, and Check refuses a value (CheckOpts.Template).
+	// Template is the subscription template the profile is made from (serve), by its id: a
+	// template of the core of the format the app gets; 0, or one of another core, leaves the
+	// core's default (serve.Template). Check refuses one that does not exist
+	// (CheckOpts.Template).
 	Template int64 `json:"template,omitempty" minimum:"0"`
 }
 

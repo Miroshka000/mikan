@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -24,7 +25,7 @@ func TestGoldenSingBox(t *testing.T) {
 	for _, v := range subtest.Variants {
 		for _, mode := range subtest.Modes {
 			t.Run(v.Name+"/"+string(mode), func(t *testing.T) {
-				raw, err := Render(context.Background(), goldenProfile(v), v.Groups, mode, "")
+				raw, err := Render(context.Background(), goldenProfile(v), v.Groups, mode, model.Template{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -42,7 +43,7 @@ func TestGoldenTemplate(t *testing.T) {
 			continue // the template names the second node's group
 		}
 		t.Run(v.Name, func(t *testing.T) {
-			sb, err := Render(context.Background(), goldenProfile(v), v.Groups, routing.All, subtest.OwnTemplate)
+			sb, err := Render(context.Background(), goldenProfile(v), v.Groups, routing.All, subtest.Clash(subtest.OwnTemplate))
 			if err != nil {
 				t.Fatal(err)
 			}

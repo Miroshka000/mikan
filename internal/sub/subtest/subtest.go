@@ -228,6 +228,80 @@ var Variants = []Variant{
 	{"multi-stash", Multi, true, apps.App{Family: apps.FamilyStash}, model.GroupNames{}},
 }
 
+// Clash is the admin's own Clash profile src as the template it is.
+func Clash(src string) model.Template { return model.Template{Core: model.CoreMihomo, Body: src} }
+
+// OwnSingBoxTemplate is an admin's own sing-box template with groups of each kind of ask
+// (one left with no server for the two-node user), a rule set downloaded through the main
+// group and DNS through it.
+const OwnSingBoxTemplate = `{
+  "log": {"level": "info"},
+  "dns": {
+    "servers": [
+      {"type": "https", "tag": "remote", "server": "1.1.1.1", "detour": "🌍 Сеть"},
+      {"type": "local", "tag": "local"}
+    ],
+    "final": "remote"
+  },
+  "inbounds": [{"type": "tun", "tag": "tun-in", "address": ["172.19.0.1/30"], "auto_route": true, "strict_route": true}],
+  "outbounds": [
+    {"type": "selector", "tag": "🌍 Сеть", "outbounds": ["⚡ Авто", "🇺🇸 США", "🔒 VLESS", "🇯🇵 Япония", "direct"]},
+    {"type": "urltest", "tag": "⚡ Авто", "mikan": {}, "url": "https://www.gstatic.com/generate_204", "interval": "5m"},
+    {"type": "selector", "tag": "🇺🇸 США", "mikan": {"filter": "🇺🇸"}},
+    {"type": "selector", "tag": "🇯🇵 Япония", "mikan": {"filter": "🇯🇵"}},
+    {"type": "selector", "tag": "🔒 VLESS", "mikan": {"nodes": ["🇳🇱 Нидерланды"], "types": ["vless"]}},
+    {"type": "direct", "tag": "direct"}
+  ],
+  "route": {
+    "rule_set": [
+      {"type": "remote", "tag": "geosite-ru", "format": "binary", "url": "https://example.com/geosite-ru.srs", "download_detour": "🌍 Сеть"}
+    ],
+    "rules": [
+      {"action": "sniff"},
+      {"protocol": "dns", "action": "hijack-dns"},
+      {"rule_set": "geosite-ru", "outbound": "direct"},
+      {"network": "udp", "port": 443, "action": "reject"}
+    ],
+    "final": "🌍 Сеть",
+    "auto_detect_interface": true,
+    "default_domain_resolver": "local"
+  }
+}
+`
+
+// OwnXrayTemplate is an admin's own xray template: the automatic choice with a config of
+// its own, a balancer of one node's VLESS servers a service goes to, one left with no
+// server for the two-node user, and DNS and the local networks as the apps need them.
+const OwnXrayTemplate = `{
+  "log": {"loglevel": "warning"},
+  "dns": {"tag": "dns", "servers": ["https://1.1.1.1/dns-query"]},
+  "inbounds": [
+    {"tag": "socks", "protocol": "socks", "listen": "127.0.0.1", "port": 10808, "settings": {"auth": "noauth", "udp": true},
+     "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"]}}
+  ],
+  "outbounds": [
+    {"tag": "direct", "protocol": "freedom"},
+    {"tag": "dns-out", "protocol": "dns"}
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {"port": "53", "outboundTag": "dns-out"},
+      {"ip": ["geoip:private"], "outboundTag": "direct"},
+      {"domain": ["geosite:youtube"], "balancerTag": "🔒 VLESS"},
+      {"domain": ["geosite:openai"], "balancerTag": "🇯🇵 Япония"},
+      {"network": "tcp,udp", "outboundTag": "proxy"}
+    ],
+    "balancers": [
+      {"tag": "⚡ Авто", "mikan": {"choice": true}, "strategy": {"type": "leastPing"}},
+      {"tag": "🔒 VLESS", "mikan": {"nodes": ["🇳🇱 Нидерланды"], "types": ["vless"]}, "strategy": {"type": "random"}},
+      {"tag": "🇯🇵 Япония", "mikan": {"filter": "🇯🇵"}, "strategy": {"type": "random"}}
+    ]
+  },
+  "observatory": {"subjectSelector": ["proxy"], "probeUrl": "https://www.gstatic.com/generate_204", "probeInterval": "5m"}
+}
+`
+
 // OwnTemplate is an admin's own Clash profile with groups of each kind of ask.
 const OwnTemplate = `mode: rule
 dns:

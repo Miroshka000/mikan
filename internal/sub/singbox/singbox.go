@@ -5,8 +5,9 @@
 // The config is of sing-box 1.12 and later: type-based DNS servers and rule actions, the
 // forms that version brought in and 1.14 requires. Its rules, rule sets and DNS are the
 // panel's routing (routing.Intent) as sing-box writes it, so Settings → Routing reaches
-// it; an own Clash profile is read the same way (mihomo.TemplateParts). The proxies are
-// mihomo's, whose fields sing-box reads. What sing-box has no counterpart for is left out:
+// it; an own Clash profile is read the same way (mihomo.TemplateParts), and an own sing-box
+// template is the config as the admin wrote it (Template). The proxies are mihomo's, whose
+// fields sing-box reads. What sing-box has no counterpart for is left out:
 // XHTTP and the mihomo-only protocols (build.ForApp leaves them out already), a self-signed
 // certificate pinned by its hash (sing-box pins a public key, from 1.13 on), .mrs lists,
 // rule types of mihomo's own, logic rules but AND.
@@ -15,7 +16,6 @@ package singbox
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/mihomo"
@@ -34,10 +34,15 @@ const (
 	grpcPingTimeout = "10s"
 )
 
-// Render is the sing-box config of p: of the own Clash profile src when there is one (and
-// it renders for p), of the panel's routing otherwise.
-func Render(ctx context.Context, p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) ([]byte, error) {
-	pl, err := planOf(p, g, m, src)
+// Render is the sing-box config of p made of the template t: an own sing-box one as the
+// admin wrote it, an own Clash one read as sing-box can, the panel's routing for none. A
+// template that does not render for p is a *model.TemplateError: the caller decides what
+// goes out in its place.
+func Render(ctx context.Context, p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
+	if t.Core == model.CoreSingBox {
+		return Template(p, t.Body)
+	}
+	pl, err := planOf(p, g, m, t)
 	if err != nil {
 		return nil, err
 	}
@@ -71,26 +76,24 @@ type plan struct {
 	main  string
 }
 
-// planOf is the plan of the own profile src for p, or of the panel's routing when there is
-// none or it does not render for p (Clash apps get the built-in profile then too).
-func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) (plan, error) {
+// planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
+// none (or of another core's).
+func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
 	g = g.WithDefaults(p.Lang)
 	if len(p.Proxies) == 0 {
 		return plan{}, model.ErrNoProxies
 	}
-	if src != "" {
-		// The profile as a current mihomo would get it: the rules of every list, for the
-		// lists to be converted (a list of a younger core has no sing-box counterpart anyway).
-		p.App = apps.App{}
-		parts, err := mihomo.TemplateParts(p, src)
-		if err == nil {
-			return plan{proxies: parts.Proxies, groups: parts.Groups, rules: parts.Rules, lists: parts.Lists, dns: parts.DNS, main: g.Main}, nil
-		}
-		if errors.Is(err, model.ErrNoProxies) {
-			return plan{}, err
-		}
+	if t.Core != model.CoreMihomo {
+		return builtin(p, g, m), nil
 	}
-	return builtin(p, g, m), nil
+	// The profile as a current mihomo would get it: the rules of every list, for the lists to
+	// be converted (a list of a younger core has no sing-box counterpart anyway).
+	p.App = apps.App{}
+	parts, err := mihomo.TemplateParts(p, t.Body)
+	if err != nil {
+		return plan{}, err
+	}
+	return plan{proxies: parts.Proxies, groups: parts.Groups, rules: parts.Rules, lists: parts.Lists, dns: parts.DNS, main: g.Main}, nil
 }
 
 // builtin is the plan of the panel's routing: the intent with the lists sing-box can read,

@@ -13,9 +13,9 @@ import (
 	"mikan/internal/sub/routing"
 )
 
-// The admin's own Clash profile (settings.KeyTemplate): a mihomo config without the
-// servers. The panel puts the user's proxies under proxies, and fills a group that asks
-// for them:
+// An own Clash template (model.CoreMihomo, a subscription template of the admin's): a
+// mihomo config without the servers. The panel puts the user's proxies under proxies, and
+// fills a group that asks for them:
 //
 //   - include-all-proxies: true (or include-all) takes every proxy of the user; filter,
 //     exclude-filter and exclude-type narrow them, as mihomo itself does;
@@ -26,16 +26,8 @@ import (
 // a group left with none for an app gets REJECT: closed, not open. The panel's and the
 // nodes' hosts go direct ahead of the admin's rules, whatever they say.
 
-// TemplateError is a template that would break the profiles: a code for the admin panel
-// and what it is about.
-type TemplateError struct {
-	Code   string
-	Detail string
-}
-
-func (e *TemplateError) Error() string { return e.Code + ": " + e.Detail }
-
-func templateErr(code, detail string) error { return &TemplateError{Code: code, Detail: detail} }
+// templateErr is a template that would break the profiles (model.TemplateError).
+func templateErr(code, detail string) error { return model.TemplateErr(code, detail) }
 
 func parseProfileTemplate(src string) (map[string]any, error) {
 	var cfg map[string]any
@@ -205,28 +197,7 @@ func fillGroup(g map[string]any, nodes []model.Node, ps []model.Proxy, providers
 // byNodeAndType are the proxies of ps on the nodes and of the types (mihomo's names) that
 // ext names; a list left out takes every one.
 func byNodeAndType(ps []model.Proxy, nodes []model.Node, ext map[string]any) []model.Proxy {
-	wantNode := map[int64]bool{}
-	for _, v := range list(ext["nodes"]) {
-		for _, n := range nodes {
-			if v == n.Name || v == strconv.FormatInt(n.ID, 10) {
-				wantNode[n.ID] = true
-			}
-		}
-	}
-	wantType := map[string]bool{}
-	for _, v := range list(ext["types"]) {
-		wantType[strings.ToLower(v)] = true
-	}
-	var out []model.Proxy
-	for _, x := range ps {
-		if len(list(ext["nodes"])) > 0 && !wantNode[x.Node] {
-			continue
-		}
-		if len(wantType) > 0 && !wantType[strings.ToLower(typeOf(x))] {
-			continue
-		}
-		out = append(out, x)
-	}
+	out, _ := model.Ask{Nodes: list(ext["nodes"]), Types: list(ext["types"])}.Take(ps, nodes) // no filter: no error
 	return out
 }
 

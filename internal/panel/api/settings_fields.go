@@ -56,12 +56,6 @@ var settingFields = []settingField{
 		return settings.Set(ctx, set, settings.KeyRules, strings.TrimRight(v, " \n\r\t"))
 	}),
 	value("sub_routes", settings.KeyRoutes, true, func(b *patchSettingsBody) *routing.Routes { return b.SubRoutes }),
-	custom("sub_template", true, func(b *patchSettingsBody) *string { return b.SubTemplate }, func(ctx context.Context, set *settings.Settings, v string) error {
-		if strings.TrimSpace(v) == "" {
-			v = "" // blank: back to the built-in profile
-		}
-		return settings.Set(ctx, set, settings.KeyTemplate, v)
-	}),
 	text("sub_routing", settings.KeyRouting, true, func(b *patchSettingsBody) *string { return b.SubRouting }),
 	text("support_url", settings.KeySupportURL, true, func(b *patchSettingsBody) *string { return b.SupportURL }),
 	// What every subscriber's app shows: text, links and the logo it downloads.

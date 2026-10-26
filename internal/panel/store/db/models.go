@@ -512,6 +512,16 @@ type SubRule struct {
 	Action   string
 }
 
+type SubTemplate struct {
+	ID        int64
+	Core      string
+	Name      string
+	Body      string
+	IsDefault bool
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 type SupportGrant struct {
 	ID              int64
 	TokenHash       string

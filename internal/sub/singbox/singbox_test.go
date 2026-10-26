@@ -58,9 +58,9 @@ func lists(t *testing.T) {
 	t.Cleanup(func() { singboxList = old })
 }
 
-func renderSingBox(t *testing.T, prof mihomo.Profile, m routing.Mode, src string) sbConfig {
+func renderSingBox(t *testing.T, prof mihomo.Profile, m routing.Mode, tpl model.Template) sbConfig {
 	t.Helper()
-	raw, err := Render(context.Background(), prof, model.GroupNames{}, m, src)
+	raw, err := Render(context.Background(), prof, model.GroupNames{}, m, tpl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestSingBox(t *testing.T) {
 	prof.Rules = subtest.ParseRules("DOMAIN-SUFFIX,sber.ru,DIRECT")
 	prof.Routes = routing.Routes{Services: map[string]string{"youtube": routing.TargetVPN, "ads": routing.TargetBlock}, Direct: []string{"ru"},
 		Tune: routing.Tune{BlockQUIC: true}}
-	c := renderSingBox(t, prof, routing.RUDirect, "")
+	c := renderSingBox(t, prof, routing.RUDirect, model.Template{})
 
 	if len(c.Inbounds) != 1 || c.Inbounds[0]["type"] != "tun" {
 		t.Fatalf("inbounds: %v", c.Inbounds)
@@ -149,7 +149,7 @@ func TestSingBox(t *testing.T) {
 // A pinned self-signed certificate is left out: sing-box 1.12 cannot pin it.
 func TestSingBoxLeavesPinnedOut(t *testing.T) {
 	lists(t)
-	c := renderSingBox(t, profileOf(subtest.Defaults("ab12")), routing.All, "")
+	c := renderSingBox(t, profileOf(subtest.Defaults("ab12")), routing.All, model.Template{})
 	for _, o := range c.Outbounds {
 		if o["type"] == "hysteria2" || o["type"] == "tuic" {
 			t.Errorf("a pinned proxy went in: %v", o)
@@ -164,12 +164,12 @@ func TestSingBoxLeavesPinnedOut(t *testing.T) {
 func TestSingBoxModes(t *testing.T) {
 	lists(t)
 	prof := profileOf(subtest.TwoNodes())
-	c := renderSingBox(t, prof, routing.Blocked, "")
+	c := renderSingBox(t, prof, routing.Blocked, model.Template{})
 	rules, _ := json.Marshal(c.Route.Rules)
 	if c.Route.Final != "direct" || !strings.Contains(string(rules), `"outbound":"VPN","rule_set":["list-mikan-blocked"]`) {
 		t.Fatalf("blocked: %q %s", c.Route.Final, rules)
 	}
-	own := renderSingBox(t, prof, routing.All, subtest.OwnTemplate)
+	own := renderSingBox(t, prof, routing.All, subtest.Clash(subtest.OwnTemplate))
 	if outbound(own, "🌍 Сеть") == nil || own.Route.Final != "🌍 Сеть" || outbound(own, "🇯🇵 Япония") != nil {
 		t.Fatalf("own profile: %+v", own.Outbounds)
 	}

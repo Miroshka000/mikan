@@ -245,22 +245,23 @@ var happProvider = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 // "-" and "_"; anything else would not survive a header.
 func ValidHappProviderID(s string) bool { return happProvider.MatchString(s) }
 
-// appHeaders are what Happ and INCY take beside the profile: the routing profile, and
-// Happ's provider headers. Other apps never get them.
-func appHeaders(hd http.Header, ua string, cfg Config) {
+// appHeaders are what Happ and INCY take beside the profile: the routing profile, of the
+// own Clash profile clash when there is one, and Happ's provider headers. Other apps never
+// get them.
+func appHeaders(hd http.Header, ua string, cfg Config, clash string) {
 	switch {
 	case apps.IsINCY(ua):
 		// INCY reads Happ's routing profile from the same header (docs.incy.cc/en/routing),
 		// and none of Happ's provider headers.
 		if routing := cfg.Happ.Routing; routing == xray.HappRoutingAuto {
-			hd.Set("routing", xray.IncyLink(happAutoRouting(cfg)))
+			hd.Set("routing", xray.IncyLink(happAutoRouting(cfg, clash)))
 		} else if routing != "" {
 			hd.Set("routing", xray.IncyLink(routing))
 		}
 	case apps.IsHapp(ua):
 		happ := cfg.Happ
 		if happ.Routing == xray.HappRoutingAuto {
-			happ.Routing = happAutoRouting(cfg)
+			happ.Routing = happAutoRouting(cfg, clash)
 		}
 		happHeaders(hd, happ)
 	}

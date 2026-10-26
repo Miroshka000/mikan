@@ -38,10 +38,9 @@ const (
 	KeyACMEEABHMAC = "acme_eab_hmac"
 	KeyGroupMain   = "sub_group_main" // subscription group names, see model.GroupNames (internal/sub)
 	KeyGroupAuto   = "sub_group_auto"
-	KeyRouting     = "sub_routing"  // routing.Mode (internal/sub)
-	KeyRules       = "sub_rules"    // the admin's own Clash rules, as typed (routing.ParseRules)
-	KeyRoutes      = "sub_routes"   // services, direct apps and DNS of the profiles (routing.Routes)
-	KeyTemplate    = "sub_template" // the admin's own Clash profile (mihomo.Template); empty: none
+	KeyRouting     = "sub_routing" // routing.Mode (internal/sub)
+	KeyRules       = "sub_rules"   // the admin's own Clash rules, as typed (routing.ParseRules)
+	KeyRoutes      = "sub_routes"  // services, direct apps and DNS of the profiles (routing.Routes)
 	// KeyFingerprint is the uTLS profile clients get where an inbound sets none
 	// (proto.Fingerprints); unset means proto.DefaultFingerprint.
 	KeyFingerprint = "client_fingerprint"

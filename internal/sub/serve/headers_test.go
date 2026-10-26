@@ -220,12 +220,12 @@ func TestHappHeaders(t *testing.T) {
 	}
 	// INCY takes the routing in its own scheme and none of Happ's provider headers.
 	h = http.Header{}
-	appHeaders(h, "INCY/2.0.8/iOS", Config{Happ: Happ{Routing: "happ://routing/off", ProviderID: "p1"}})
+	appHeaders(h, "INCY/2.0.8/iOS", Config{Happ: Happ{Routing: "happ://routing/off", ProviderID: "p1"}}, "")
 	if h.Get("routing") != "incy://routing/off" || h.Get("providerid") != "" {
 		t.Fatalf("INCY: %v", h)
 	}
 	h = http.Header{}
-	appHeaders(h, "v2RayTun/5.1", Config{Happ: Happ{Routing: "happ://routing/off", ProviderID: "p1"}})
+	appHeaders(h, "v2RayTun/5.1", Config{Happ: Happ{Routing: "happ://routing/off", ProviderID: "p1"}}, "")
 	if len(h) != 0 {
 		t.Fatalf("another app: %v", h)
 	}

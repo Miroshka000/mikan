@@ -364,7 +364,12 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.RoutesPreview = func(ctx context.Context, req subsrc.PreviewRequest) (subsrc.Preview, error) {
 		return subHandler.Preview(ctx, req)
 	}
-	deps.CheckTemplate = func(ctx context.Context, src string) error { return subHandler.CheckTemplate(ctx, src) }
+	deps.CheckTemplate = func(ctx context.Context, core submodel.Core, src string) error {
+		return subHandler.CheckTemplate(ctx, core, src)
+	}
+	deps.TemplatePreview = func(ctx context.Context, req subsrc.TemplatePreview) (subsrc.Preview, error) {
+		return subHandler.PreviewTemplate(ctx, req)
+	}
 	deps.HappLink = func(ctx context.Context, u db.User) (string, error) { return subHandler.HappLink(ctx, u) }
 	apiHandler, _, err := api.New(deps)
 	if err != nil {
@@ -412,7 +417,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		if cfg.Routes, _, err = settings.Get[routing.Routes](ctx, set, settings.KeyRoutes); err != nil {
 			return subsrc.Config{}, err
 		}
-		if cfg.Template, err = set.String(ctx, settings.KeyTemplate); err != nil {
+		if cfg.Templates, err = subsrc.LoadTemplates(ctx, st.Q); err != nil {
 			return subsrc.Config{}, err
 		}
 		if cfg.Binding, err = set.On(ctx, settings.DeviceBinding); err != nil {

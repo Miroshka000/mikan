@@ -146,7 +146,7 @@ func TestCheckTemplate(t *testing.T) {
 		"rules:\n  - SUB-RULE,(NETWORK,UDP),missing\n": "template_rule_target",
 	} {
 		err := CheckTemplate(prof, src)
-		var te *TemplateError
+		var te *model.TemplateError
 		if !errors.As(err, &te) || te.Code != code {
 			t.Errorf("%q: %v, want %s", src, err, code)
 		}
@@ -172,7 +172,7 @@ func TestTemplateIsCheckedForEachUser(t *testing.T) {
 		t.Fatalf("the user who has it: %v", err)
 	}
 	prof.Proxies = prof.Proxies[:len(prof.Proxies)-1] // the US node's inbound is not theirs
-	var te *TemplateError
+	var te *model.TemplateError
 	if _, _, err := Template(prof, src); !errors.As(err, &te) || te.Code != "template_group_member" {
 		t.Fatalf("a user without it: %v", err)
 	}
@@ -183,7 +183,7 @@ func TestTemplateIsCheckedForEachUser(t *testing.T) {
 func TestTemplateFilterGoCannotRead(t *testing.T) {
 	prof := profileOf(subtest.TwoNodes())
 	with := "proxy-groups:\n  - {name: G, type: select, mikan: {nodes: [2]}, filter: \"^(?=.*US)\"}\nrules:\n  - MATCH,G\n"
-	var te *TemplateError
+	var te *model.TemplateError
 	if err := CheckTemplate(prof, with); !errors.As(err, &te) || te.Code != "template_filter" {
 		t.Fatalf("mikan with a lookahead filter: %v", err)
 	}

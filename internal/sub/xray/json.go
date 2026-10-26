@@ -2,7 +2,6 @@ package xray
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -19,7 +18,7 @@ import (
 // per automatic group (the automatic choice, the countries, the ones of an own Clash
 // profile), each a balancer xray tests the servers with, then a config per server. A
 // config holds what it needs of the others: the servers its rules send a service to, and
-// the balancers they name.
+// the balancers they name. An own xray template makes its list its own way (Template).
 
 // The local proxies of a config, where the apps send what they tunnel.
 const (
@@ -27,11 +26,15 @@ const (
 	httpPort  = 10809
 )
 
-// Render is the xray JSON profile of p: of the own Clash profile src when there is one (and
-// it renders for p), of the panel's routing otherwise. model.ErrNoProxies when xray carries
-// none of p's proxies.
-func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) ([]byte, error) {
-	pl, err := planOf(p, g, m, src)
+// Render is the xray JSON profile of p made of the template t: an own xray one as the admin
+// wrote it (Template), an own Clash one read as xray can, the panel's routing for none.
+// model.ErrNoProxies when xray carries none of p's proxies; a template that does not render
+// for p is a *model.TemplateError, and the caller decides what goes out in its place.
+func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
+	if t.Core == model.CoreXray {
+		return Template(p, t.Body)
+	}
+	pl, err := planOf(p, g, m, t)
 	if err != nil {
 		return nil, err
 	}
@@ -39,11 +42,14 @@ func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) ([
 }
 
 // Notes are what xray makes of the groups of p's profile it cannot carry as they are
-// (Balance), for the admin panel's preview: of the own Clash profile src, or of the
-// built-in groups. The main group is no select in xray: its choices are the app's list of
-// configs.
-func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) []model.Note {
-	pl, err := planOf(p, g, m, src)
+// (Balance), for the admin panel's preview: of the own Clash profile t, or of the built-in
+// groups. The main group is no select in xray: its choices are the app's list of configs.
+// An own xray template has its balancers as the admin wrote them: no notes.
+func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
+	if t.Core == model.CoreXray {
+		return nil
+	}
+	pl, err := planOf(p, g, m, t)
 	if err != nil {
 		return nil
 	}
@@ -86,9 +92,9 @@ type rule struct {
 	to     routing.Target
 }
 
-// planOf is the plan of the own profile src for p, or of the panel's routing when there is
-// none or it does not render for p.
-func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) (plan, error) {
+// planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
+// none (or of another core's).
+func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
 	g = g.WithDefaults(p.Lang)
 	outs := outboundsOf(p.Proxies)
 	if len(outs) == 0 {
@@ -102,19 +108,17 @@ func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) (p
 		}
 	}
 	p.Proxies = carried
-	if src != "" {
-		// The profile as a current mihomo would get it, as for sing-box: the rules of every
-		// list, the ones xray has a form of are kept.
-		p.App = apps.App{}
-		parts, err := mihomo.TemplateParts(p, src)
-		if err == nil {
-			return template(parts, g, outs, p.Routes.Servers), nil
-		}
-		if errors.Is(err, model.ErrNoProxies) {
-			return plan{}, err
-		}
+	if t.Core != model.CoreMihomo {
+		return builtin(p, g, m, outs), nil
 	}
-	return builtin(p, g, m, outs), nil
+	// The profile as a current mihomo would get it, as for sing-box: the rules of every list,
+	// the ones xray has a form of are kept.
+	p.App = apps.App{}
+	parts, err := mihomo.TemplateParts(p, t.Body)
+	if err != nil {
+		return plan{}, err
+	}
+	return template(parts, g, outs, p.Routes.Servers), nil
 }
 
 // outboundsOf are the outbounds of the proxies xray carries, tagged.

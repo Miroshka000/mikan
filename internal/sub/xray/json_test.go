@@ -35,9 +35,9 @@ func profileOf(u subtest.User) mihomo.Profile {
 }
 
 // render is the xray JSON profile of p, each config checked by xray.
-func render(t *testing.T, p mihomo.Profile, m routing.Mode, src string) []xrayConfig {
+func render(t *testing.T, p mihomo.Profile, m routing.Mode, tpl model.Template) []xrayConfig {
 	t.Helper()
-	raw, err := Render(p, model.GroupNames{}, m, src)
+	raw, err := Render(p, model.GroupNames{}, m, tpl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestJSONOutbounds(t *testing.T) {
 		{Name: "gecko", Type: "hysteria2", Server: "203.0.113.7", Port: 443, Password: "pw", TLS: &model.TLS{}, Obfs: &model.Obfs{Type: "gecko"}},
 		{Name: "bad pin", Type: "trojan", Server: "203.0.113.7", Port: 2087, Password: "pw", TLS: &model.TLS{Pin: "ab12"}, Transport: &model.Transport{Network: "tcp"}},
 	}
-	cs := render(t, mihomo.Profile{Proxies: ps}, routing.All, "")
+	cs := render(t, mihomo.Profile{Proxies: ps}, routing.All, model.Template{})
 	var servers []string
 	for _, c := range cs[1:] {
 		servers = append(servers, c.Remarks)
@@ -169,7 +169,7 @@ func TestJSONOutbounds(t *testing.T) {
 		string(masks) != `{"udp":[{"settings":{"password":"obfs"},"type":"salamander"},{"settings":{"mode":"intervallocal,intervalremote","remotePorts":"20000-30000"},"type":"udphop"}]}` {
 		t.Fatalf("hysteria2: %v, masks %s", hy2, masks)
 	}
-	if _, err := Render(mihomo.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, ""); !errors.Is(err, model.ErrNoProxies) {
+	if _, err := Render(mihomo.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, model.Template{}); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("nothing xray carries: %v", err)
 	}
 }
@@ -178,7 +178,7 @@ func TestJSONOutbounds(t *testing.T) {
 // tests the servers with, then a config per server; each sends the main group to its own
 // choice and carries no more servers than it needs.
 func TestJSONConfigs(t *testing.T) {
-	cs := render(t, profileOf(subtest.TwoNodes()), routing.All, "")
+	cs := render(t, profileOf(subtest.TwoNodes()), routing.All, model.Template{})
 	var names []string
 	for _, c := range cs {
 		names = append(names, c.Remarks)
@@ -231,7 +231,7 @@ func TestJSONRouting(t *testing.T) {
 	u.Direct = []string{"203.0.113.7", "vpn.example.com"}
 	u.Rules = subtest.Rules
 	u.Routes = subtest.Routes()
-	cs := render(t, profileOf(u), routing.RUDirect, "")
+	cs := render(t, profileOf(u), routing.RUDirect, model.Template{})
 	nl := cs[3] // the first server's
 	if nl.Remarks != "🇳🇱 VLESS XHTTP" || nl.Routing.DomainStrategy != "IPIfNonMatch" {
 		t.Fatalf("config %q, %s", nl.Remarks, nl.Routing.DomainStrategy)
@@ -290,7 +290,7 @@ func TestJSONRouting(t *testing.T) {
 		t.Fatalf("the admin's DNS: %s", servers)
 	}
 	// The panel's own resolvers: through the tunnel, the Russian names past it.
-	cs = render(t, profileOf(subtest.TwoNodes()), routing.RUDirect, "")
+	cs = render(t, profileOf(subtest.TwoNodes()), routing.RUDirect, model.Template{})
 	servers, _ = json.Marshal(cs[0].DNS.Servers)
 	if string(servers) != `[{"address":"77.88.8.8","domains":["geosite:category-ru"],"skipFallback":true},{"address":"77.88.8.1","domains":["geosite:category-ru"],"skipFallback":true},"https://1.1.1.1/dns-query","https://8.8.8.8/dns-query"]` {
 		t.Fatalf("the panel's DNS: %s", servers)
@@ -299,7 +299,7 @@ func TestJSONRouting(t *testing.T) {
 		t.Fatalf("the DNS goes through the config's choice: %s", r)
 	}
 	// Only the rules that match an IP the app resolves a name for make it resolve.
-	if cs := render(t, profileOf(subtest.TwoNodes()), routing.All, ""); cs[0].Routing.DomainStrategy != "AsIs" {
+	if cs := render(t, profileOf(subtest.TwoNodes()), routing.All, model.Template{}); cs[0].Routing.DomainStrategy != "AsIs" {
 		t.Fatalf("all through the tunnel: %s", cs[0].Routing.DomainStrategy)
 	}
 }
@@ -307,7 +307,7 @@ func TestJSONRouting(t *testing.T) {
 // An own Clash profile: its automatic group is the first config, a select of one country is
 // a server and gets none of its own; its rules and DNS go as xray matches them.
 func TestJSONTemplate(t *testing.T) {
-	cs := render(t, profileOf(subtest.TwoNodes()), routing.All, subtest.OwnTemplate)
+	cs := render(t, profileOf(subtest.TwoNodes()), routing.All, subtest.Clash(subtest.OwnTemplate))
 	if cs[0].Remarks != "⚡ Авто" || cs[1].Remarks != "🇳🇱 VLESS XHTTP" || len(cs) != 5 {
 		t.Fatalf("configs: %q %q of %d", cs[0].Remarks, cs[1].Remarks, len(cs))
 	}
@@ -325,11 +325,11 @@ func TestJSONTemplate(t *testing.T) {
 // app's list of configs and has none.
 func TestJSONNotes(t *testing.T) {
 	p := profileOf(subtest.TwoNodes())
-	if n := Notes(p, model.GroupNames{}, routing.All, ""); len(n) != 0 {
+	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 0 {
 		t.Fatalf("built-in: %+v", n)
 	}
 	p.Routes.Servers = routing.Servers{Auto: "fallback"}
-	if n := Notes(p, model.GroupNames{}, routing.All, ""); len(n) != 1 || n[0].Group != "Авто" || n[0].Code != "fallback_fastest" {
+	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 1 || n[0].Group != "Авто" || n[0].Code != "fallback_fastest" {
 		t.Fatalf("fallback: %+v", n)
 	}
 }

@@ -20,7 +20,7 @@ import (
 // singboxTLS is the tls of c's outbound in the sing-box profile an app gets.
 func singboxTLS(t *testing.T, c model.Proxy) (map[string]any, bool) {
 	t.Helper()
-	body, err := singbox.Render(context.Background(), mihomo.Profile{Proxies: []model.Proxy{c}}, model.GroupNames{}.WithDefaults(""), routing.DefaultMode, "")
+	body, err := singbox.Render(context.Background(), mihomo.Profile{Proxies: []model.Proxy{c}}, model.GroupNames{}.WithDefaults(""), routing.DefaultMode, model.Template{})
 	if err != nil {
 		t.Fatal(err)
 	}

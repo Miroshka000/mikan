@@ -130,7 +130,7 @@ func TestSingBoxBalance(t *testing.T) {
 	lists(t)
 	prof := profileOf(subtest.TwoNodes())
 	prof.Routes.Servers = routing.Servers{Interval: 120, SingBox: routing.SingBoxServers{Interval: 600, Tolerance: 80}, Mihomo: routing.MihomoServers{Type: "load-balance"}}
-	c := renderSingBox(t, prof, routing.All, "")
+	c := renderSingBox(t, prof, routing.All, model.Template{})
 	auto := outbound(c, "Авто")
 	if auto["type"] != "urltest" || auto["interval"] != "600s" || auto["tolerance"] != float64(80) {
 		t.Fatalf("auto: %v", auto)

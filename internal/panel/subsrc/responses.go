@@ -38,9 +38,10 @@ func LogDays(ctx context.Context, set *settings.Settings) int {
 }
 
 // RuleOpts is what the response rules are checked against: the formats the handler can
-// write. No template exists yet for a rule to name (roadmap #02): the check refuses one
-// until the templates give this a lookup.
-func RuleOpts() apps.CheckOpts { return apps.CheckOpts{Formats: serve.Formats} }
+// write, and the ids of the templates there are (TemplateIDs) for a rule to name.
+func RuleOpts(templates []int64) apps.CheckOpts {
+	return apps.CheckOpts{Formats: serve.Formats, Template: func(id int64) bool { return slices.Contains(templates, id) }}
+}
 
 // LoadRules reads the admin's response rules in their order.
 func LoadRules(ctx context.Context, q *db.Queries) ([]apps.Rule, error) {
@@ -136,10 +137,14 @@ func LoadPolicy(ctx context.Context, q *db.Queries, set *settings.Settings, log 
 	if err != nil {
 		return p, err
 	}
+	templates, err := TemplateIDs(ctx, q)
+	if err != nil {
+		return p, err
+	}
 	for _, r := range rows {
 		rule, err := ruleOf(r)
 		if err == nil {
-			err = rule.Check("rule", RuleOpts())
+			err = rule.Check("rule", RuleOpts(templates))
 		}
 		if err != nil {
 			if log != nil {

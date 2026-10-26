@@ -157,10 +157,13 @@ func proxiesOf(hop string, byName map[string]model.Group, tags map[string]bool, 
 }
 
 // Notes are what sing-box makes of the groups of p's profile it cannot write as they are
-// (convertGroups), for the admin panel's preview: of the own Clash profile src, or of the
-// built-in groups.
-func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, src string) []model.Note {
-	pl, err := planOf(p, g, m, src)
+// (convertGroups), for the admin panel's preview: of the own Clash profile t, or of the
+// built-in groups. An own sing-box template has its groups as the admin wrote them: none.
+func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
+	if t.Core == model.CoreSingBox {
+		return nil
+	}
+	pl, err := planOf(p, g, m, t)
 	if err != nil {
 		return nil
 	}

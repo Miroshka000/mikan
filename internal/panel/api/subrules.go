@@ -16,6 +16,8 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subsrc"
 	"mikan/internal/sub/apps"
+	"mikan/internal/sub/mihomo"
+	submodel "mikan/internal/sub/model"
 	"mikan/internal/sub/serve"
 )
 
@@ -97,6 +99,7 @@ type SubRuleTest struct {
 	Headers  []apps.Header `json:"headers" doc:"Заголовки, которые добавляет правило"`
 	SkipHWID bool          `json:"skip_hwid"`
 	Text     string        `json:"text" doc:"Текст заглушки"`
+	Template int64         `json:"template" doc:"Шаблон подписки, из которого собран профиль; 0 — встроенный профиль"`
 }
 
 type testSubRulesOutput struct{ Body SubRuleTest }
@@ -210,8 +213,12 @@ var listIndex = regexp.MustCompile(`\.(\d+)`)
 
 // checkSubRules refuses the rules that would not work: the first thing wrong is named by its
 // place in the body, as the schema names the places of its own errors (rules[2].when.op).
-func checkSubRules(rules []apps.Rule, field string) error {
-	err := apps.CheckRules(rules, subsrc.RuleOpts())
+func (h *handlers) checkSubRules(ctx context.Context, rules []apps.Rule, field string) error {
+	templates, err := subsrc.TemplateIDs(ctx, h.d.Store.Q)
+	if err != nil {
+		return err
+	}
+	err = apps.CheckRules(rules, subsrc.RuleOpts(templates))
 	var ce *apps.CheckError
 	if errors.As(err, &ce) {
 		return fieldErrValue("body."+field+listIndex.ReplaceAllString(strings.TrimPrefix(ce.Path, "rules"), "[$1]"), ce.Code, ce.Detail)
@@ -220,7 +227,7 @@ func checkSubRules(rules []apps.Rule, field string) error {
 }
 
 func (h *handlers) putSubRules(ctx context.Context, in *putSubRulesInput) (*subRulesOutput, error) {
-	if err := checkSubRules(in.Body.Rules, "rules"); err != nil {
+	if err := h.checkSubRules(ctx, in.Body.Rules, "rules"); err != nil {
 		return nil, err
 	}
 	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
@@ -253,7 +260,7 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 		return nil, err
 	}
 	if in.Body.Rules != nil {
-		if err := checkSubRules(*in.Body.Rules, "rules"); err != nil {
+		if err := h.checkSubRules(ctx, *in.Body.Rules, "rules"); err != nil {
 			return nil, err
 		}
 		p.Rules = *in.Body.Rules
@@ -293,8 +300,30 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 	default:
 		out.Body.Status = http.StatusOK
 		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
+		if out.Body.Template, err = h.testedTemplate(ctx, out.Body.Format, req.Get("User-Agent"), d.Action.Template); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
+}
+
+// testedTemplate is the saved template a profile in format is made of for the app of the
+// User-Agent ua when the deciding rule names the template named, as Serve picks it
+// (serve.Template); 0 for the built-in profile, which a Clash app that takes no own profile
+// gets too (mihomo.Profile.Routable: Stash, an app of another core).
+func (h *handlers) testedTemplate(ctx context.Context, format, ua string, named int64) (int64, error) {
+	if format == serve.FormatClash && !(mihomo.Profile{App: apps.DetectApp(ua)}).Routable() {
+		return 0, nil
+	}
+	rows, err := h.d.Store.Q.ListSubTemplateHeads(ctx)
+	if err != nil {
+		return 0, err
+	}
+	ts := make([]submodel.Template, 0, len(rows))
+	for _, r := range rows {
+		ts = append(ts, submodel.Template{ID: r.ID, Core: submodel.Core(r.Core), Default: r.IsDefault})
+	}
+	return serve.Template(ts, format, named).ID, nil
 }
 
 func (h *handlers) userSubLog(ctx context.Context, in *userSubLogInput) (*userSubLogOutput, error) {

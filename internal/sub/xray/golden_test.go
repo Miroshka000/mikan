@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -30,7 +31,7 @@ func TestGoldenXrayJSON(t *testing.T) {
 		for _, mode := range subtest.Modes {
 			t.Run(v.Name+"/"+string(mode), func(t *testing.T) {
 				t.Parallel() // xray in Docker takes a while for each config
-				goldenXray(t, v, mode, "", v.Name+"_"+string(mode)+".xray.json")
+				goldenXray(t, v, mode, model.Template{}, v.Name+"_"+string(mode)+".xray.json")
 			})
 		}
 	}
@@ -44,14 +45,14 @@ func TestGoldenXrayTemplate(t *testing.T) {
 		}
 		t.Run(v.Name, func(t *testing.T) {
 			t.Parallel()
-			goldenXray(t, v, routing.All, subtest.OwnTemplate, v.Name+".template.xray.json")
+			goldenXray(t, v, routing.All, subtest.Clash(subtest.OwnTemplate), v.Name+".template.xray.json")
 		})
 	}
 }
 
-func goldenXray(t *testing.T, v subtest.Variant, mode routing.Mode, src, file string) {
+func goldenXray(t *testing.T, v subtest.Variant, mode routing.Mode, tpl model.Template, file string) {
 	t.Helper()
-	raw, err := Render(profileOf(v.User()), v.Groups, mode, src)
+	raw, err := Render(profileOf(v.User()), v.Groups, mode, tpl)
 	if err != nil {
 		t.Fatal(err)
 	}

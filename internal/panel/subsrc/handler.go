@@ -505,27 +505,25 @@ func (h *Handler) poolInfo(ctx context.Context, u db.User, grants domain.GrantsL
 	return out, nil
 }
 
-// PreviewRequest is what the admin panel shows a profile with, in place of the saved
-// settings.
+// PreviewRequest is what the admin panel shows the built-in profile with, in place of the
+// saved settings.
 type PreviewRequest struct {
-	Mode     routing.Mode
-	Routes   routing.Routes
-	Template string // the own Clash profile; "": the built-in one with Mode and Routes
-	Starter  bool   // the built-in one as the start of an own (mihomo.Starter)
+	Mode   routing.Mode
+	Routes routing.Routes
 	// Rules and Groups in place of the saved ones, when set: the routing form has them too.
 	Rules  *string
 	Groups *submodel.GroupNames
 }
 
-// Preview is what the admin panel shows of a profile before it is saved: the Clash profile,
-// and what the other cores make of its groups they cannot carry as they are.
+// Preview is what the admin panel shows of a profile before it is saved: the profile, and
+// what the other cores make of the groups of a Clash one they cannot carry as they are.
 type Preview struct {
 	Profile []byte
 	Notes   []submodel.Note
 }
 
-// Preview is the profile of a user given every inbound, as req sets it. Its keys are
-// placeholders; a starter has no notes, it is the start of an own profile.
+// Preview is the built-in profile of a user given every inbound, as req sets it. Its keys
+// are placeholders.
 func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, error) {
 	prof, cfg, err := h.sample(ctx)
 	if err != nil {
@@ -540,30 +538,12 @@ func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 	if req.Rules != nil {
 		prof.Rules = routing.ServedRules(*req.Rules, g)
 	}
-	var out Preview
-	switch {
-	case req.Starter:
-		out.Profile, err = mihomo.Starter(prof, g, req.Mode)
-		return out, err
-	case req.Template != "":
-		out.Profile, _, err = mihomo.Template(prof, req.Template)
-	default:
-		out.Profile, err = mihomo.Render(prof, g, req.Mode)
-	}
+	body, err := mihomo.Render(prof, g, req.Mode)
 	if err != nil {
 		return Preview{}, err
 	}
-	out.Notes = append(singbox.Notes(prof, g, req.Mode, req.Template), xray.Notes(prof, g, req.Mode, req.Template)...)
-	return out, nil
-}
-
-// CheckTemplate checks an own Clash profile against a user given every inbound.
-func (h *Handler) CheckTemplate(ctx context.Context, src string) error {
-	prof, _, err := h.sample(ctx)
-	if err != nil {
-		return err
-	}
-	return mihomo.CheckTemplate(prof, src)
+	none := submodel.Template{}
+	return Preview{Profile: body, Notes: append(singbox.Notes(prof, g, req.Mode, none), xray.Notes(prof, g, req.Mode, none)...)}, nil
 }
 
 // sample is the profile of a user given every inbound, with placeholder keys.
