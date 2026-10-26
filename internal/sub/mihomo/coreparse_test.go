@@ -1,6 +1,7 @@
 package mihomo
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -11,22 +12,34 @@ import (
 	"github.com/metacubex/mihomo/log"
 )
 
+// TestMain gives the core its process-wide home and log level once, before any test: the
+// core's own goroutines (a proxy closed by its finalizer) read the log level while tests
+// run, so setting it per test is a data race.
+func TestMain(m *testing.M) {
+	home, err := os.MkdirTemp("", "mikan-core-")
+	if err != nil {
+		panic(err)
+	}
+	C.SetHomeDir(home)
+	log.SetLevel(log.SILENT)
+	code := m.Run()
+	os.RemoveAll(home)
+	os.Exit(code)
+}
+
 // coreAccepts runs the profile through the core's own parser, the one an app loads it with:
 // proxies, groups, rule-providers, rules and DNS are each built, so a missing field, a
 // wrong type or a group, rule or policy naming nothing fails here. Geodata is a download,
 // so a GEOSITE, GEOIP or IP-ASN rule is rewritten to a plain DOMAIN / IP-CIDR rule with the
 // same target and flags, and a geosite: DNS policy to a plain domain; the core's home goes
-// to a temporary directory and the geodata URLs to a closed port, so nothing the parser
-// still reaches for leaves the test. Rule-providers are built, not fetched. Not safe for
-// t.Parallel: it sets the core's process-wide home dir and log level.
+// to a temporary directory (TestMain) and the geodata URLs to a closed port, so nothing the
+// parser still reaches for leaves the test. Rule-providers are built, not fetched.
 func coreAccepts(t *testing.T, raw []byte) {
 	t.Helper()
 	rc, err := config.UnmarshalRawConfig(raw)
 	if err != nil {
 		t.Fatalf("mihomo refuses the profile: %v\n%s", err, raw)
 	}
-	C.SetHomeDir(t.TempDir())
-	log.SetLevel(log.SILENT)
 	const nowhere = "http://127.0.0.1:1/"
 	rc.GeoXUrl.GeoIp, rc.GeoXUrl.Mmdb, rc.GeoXUrl.ASN, rc.GeoXUrl.GeoSite = nowhere, nowhere, nowhere, nowhere
 	for i, r := range rc.Rule {
