@@ -223,12 +223,40 @@ func prepare() {
 	if err != nil || strings.Count(string(decoded), "\n") != localProtos-clashOnly+remoteInbounds-1 {
 		log.Fatalf("uri subscription: %v %q", err, decoded)
 	}
-	// Happ is on Xray: no TUIC or AnyTLS for it, the rest as for everyone.
-	raw, _ := base64.StdEncoding.DecodeString(string(fetchSub(token, "Happ/3.4.1")))
+	// Happ is on Xray: no TUIC or AnyTLS for it, the rest as for everyone. It gets whole
+	// Xray configs, not links: one per automatic group first (a balancer), then one per server.
+	happServers := localProtos - clashOnly - 2 + remoteInbounds - 1
+	var configs []struct {
+		Outbounds []struct {
+			Protocol string `json:"protocol"`
+		} `json:"outbounds"`
+		Routing struct {
+			Balancers []json.RawMessage `json:"balancers"`
+		} `json:"routing"`
+	}
+	if err := json.Unmarshal(fetchSub(token, "Happ/3.4.1"), &configs); err != nil {
+		log.Fatalf("Happ gets Xray configs: %v", err)
+	}
+	groups, servers, protocols := 0, 0, map[string]bool{}
+	for _, c := range configs {
+		if len(c.Routing.Balancers) > 0 {
+			groups++
+			continue
+		}
+		servers++
+		for _, o := range c.Outbounds {
+			protocols[o.Protocol] = true
+		}
+	}
+	if groups == 0 || servers != happServers || protocols["tuic"] || protocols["anytls"] || !protocols["shadowsocks"] {
+		log.Fatalf("Happ gets only what Xray speaks: %d groups, %d servers (want %d), protocols %v", groups, servers, happServers, protocols)
+	}
+	// The link still asks for links: the same servers as share links.
+	raw, _ := base64.StdEncoding.DecodeString(string(fetchSub(token+"?format=uri", "Happ/3.4.1")))
 	happ := string(raw)
 	if strings.Contains(happ, "tuic://") || strings.Contains(happ, "anytls://") || !strings.Contains(happ, "ss://") ||
-		strings.Count(happ, "\n") != localProtos-clashOnly-2+remoteInbounds-1-1 {
-		log.Fatalf("Happ gets only what Xray speaks: %q", happ)
+		strings.Count(happ, "\n") != happServers-1 {
+		log.Fatalf("Happ asking for links gets only what Xray speaks: %q", happ)
 	}
 
 	writeClient(token, nil)
