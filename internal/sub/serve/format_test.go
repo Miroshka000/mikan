@@ -143,7 +143,6 @@ var pinnedUAs = []struct {
 	{"SFI (sing-box 1.11.4; language ru_RU)", FormatURI, FormatURI, FormatURI, "", false},
 	{"Karing/1.2.26 platform/tvos sing-box 1.14.0", FormatURI, FormatURI, FormatURI, "", false},
 	{"Shadowrocket/2592 CFNetwork/1568.100.1", FormatURI, FormatURI, FormatURI, "", false},
-	// FlClashX gets Clash here, but RuleOld turns it away first (see apps.pinnedUAs).
 	{"FlClashX/v0.9.1 Platform/android", FormatClash, FormatClash, FormatClash, "", false},
 	{"clash.meta/v1.19.32 SlothClash/0.9.4", FormatClash, FormatClash, FormatClash, "", false},
 	{"husi/0.9.1 (sing-box 1.15.0-alpha.10)", FormatURI, FormatURI, FormatURI, "", false},

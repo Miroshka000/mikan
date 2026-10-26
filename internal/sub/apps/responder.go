@@ -38,12 +38,13 @@ var builtin = []struct {
 	{RuleSSR, Rule{Name: "ShadowsocksR", Enabled: true,
 		When: Group{Op: Or, Conds: []Cond{{Header: "User-Agent", Op: OpRegex, Value: `(?i)shadowsocksr|^ssrr?([/ ]|$)`}}},
 		Do:   Action{Respond: RespondStub}}},
-	// ClashX before its Meta fork: both are "ClashX", the fork is a current core.
+	// ClashX before its Meta fork: both are "ClashX", the fork is a current core. ClashX is a
+	// word of its own, so FlClashX, a current mihomo app, is not taken for it.
 	{RuleOld, Rule{Name: "Discontinued Clash apps", Enabled: true,
 		When: Group{Op: Or,
 			Conds: []Cond{{Header: "User-Agent", Op: OpRegex, Value: `(?i)clash ?for ?windows|clashforandroid`}},
 			Groups: []Inner{{Op: And, Conds: []Cond{
-				{Header: "User-Agent", Op: OpContains, Value: "clashx"},
+				{Header: "User-Agent", Op: OpRegex, Value: `(?i)(^|[^a-z])clashx`},
 				{Header: "User-Agent", Op: OpContains, Value: "meta", Not: true},
 			}}}},
 		Do: Action{Respond: RespondStub}}},

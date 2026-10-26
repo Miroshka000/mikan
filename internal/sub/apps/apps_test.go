@@ -212,9 +212,8 @@ var pinnedUAs = []struct {
 	{"SFI (sing-box 1.11.4; language ru_RU)", App{Family: FamilySingBox, Core: Version{1, 11, 4}, Whole: true}, "singbox", false, false, false, ""},
 	{"Karing/1.2.26 platform/tvos sing-box 1.14.0", App{Family: FamilySingBox, Core: Version{1, 14, 0}}, "karing", false, false, false, ""},
 	{"Shadowrocket/2592 CFNetwork/1568.100.1", App{Family: FamilyOther}, "shadowrocket", false, false, false, ""},
-	// Looks wrong: FlClashX is a current mihomo app, yet RuleOld's "clashx" contains-check
-	// (meant for ClashX before its Meta fork) turns it away. A fix will flip this row.
-	{"FlClashX/v0.9.1 Platform/android", App{Family: FamilyMihomo}, "flclash", false, false, false, RuleOld},
+	// FlClashX is a current mihomo app: RuleOld's ClashX is a word of its own, not part of it.
+	{"FlClashX/v0.9.1 Platform/android", App{Family: FamilyMihomo}, "flclash", false, false, false, ""},
 	{"clash.meta/v1.19.32 SlothClash/0.9.4", App{Family: FamilyMihomo, Core: Version{1, 19, 32}}, "slothclash", false, false, false, ""},
 	{"husi/0.9.1 (sing-box 1.15.0-alpha.10)", App{Family: FamilySingBox, Core: Version{1, 15, 0}}, "husi", false, false, false, ""},
 	{"Flowvy/0.9 mihomo/1.19.31", App{Family: FamilyMihomo, Core: Version{1, 19, 31}}, "mihomo", false, false, false, ""},
