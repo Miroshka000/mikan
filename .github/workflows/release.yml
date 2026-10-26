@@ -413,7 +413,8 @@ jobs:
       - name: npm
         run: npm install -g npm@11.21.1
       # A release goes to latest (0.5.201 for the panel's 0.5.2.1, see sdk/build.sh), a beta to
-      # beta (0.5.201-rc.2): npm install without a version keeps taking the release.
+      # beta (0.5.201-rc.2): npm install without a version keeps taking the release. The file
+      # goes with ./ : npm reads dist/<name>.tgz as a GitHub repository (owner/repo).
       - name: publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -422,7 +423,7 @@ jobs:
           case "$GITHUB_REF_NAME" in
             *-*) tag=beta ;;
           esac
-          npm publish dist/getmikan-sdk-*.tgz --provenance --access public --tag "$tag"
+          npm publish ./dist/getmikan-sdk-*.tgz --provenance --access public --tag "$tag"
 
   # PyPI trusts this workflow (trusted publishing, set up on PyPI for the project, this
   # repository, release.yml and the environment pypi): no token is kept anywhere.
