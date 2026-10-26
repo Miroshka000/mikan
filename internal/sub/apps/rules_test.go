@@ -216,6 +216,7 @@ func TestBuiltinRules(t *testing.T) {
 		"ClashForAndroid/2.5.12":           RuleOld,
 		"ClashX Meta/1.4.15":               "",
 		"ClashMetaForAndroid/2.11.19.Meta": "",
+		"FlClashX/v0.9.1 Platform/android": "",
 		"clash.meta/v1.19.12":              "",
 		"clash-verge/v2.2.3":               "",
 		"Stash/2.8.0 Clash/1.11.0":         "",
@@ -231,6 +232,12 @@ func TestBuiltinRules(t *testing.T) {
 		}
 		if want != "" && (d.Responds() != RespondStub || len(d.Install) != 3) {
 			t.Errorf("%q: %s with %v to install, want a stub that names three apps", ua, d.Responds(), d.Install)
+		}
+	}
+	// No app the catalog knows is turned away by them: they are for apps it does not list.
+	for id, ua := range samples {
+		if d := r.Decide(hdr("User-Agent", ua)); d.Rule != "" {
+			t.Errorf("%s (%q) is refused by %s", id, ua, d.Rule)
 		}
 	}
 	// The admin turns them off all at once, or answers the client otherwise before they run.
