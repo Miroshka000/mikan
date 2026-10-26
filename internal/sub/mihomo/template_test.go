@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metacubex/mihomo/config"
-
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
@@ -26,9 +24,7 @@ type profileView struct {
 
 func readProfile(t *testing.T, raw []byte) profileView {
 	t.Helper()
-	if _, err := config.UnmarshalRawConfig(raw); err != nil {
-		t.Fatalf("mihomo refuses the profile: %v\n%s", err, raw)
-	}
+	coreAccepts(t, raw)
 	var v profileView
 	if err := unmarshalProfile(raw, &v); err != nil {
 		t.Fatal(err)

@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metacubex/mihomo/config"
-
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
@@ -30,9 +28,7 @@ func renderRouted(t *testing.T, prof Profile, m routing.Mode) (routedProfile, []
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := config.UnmarshalRawConfig(raw); err != nil {
-		t.Fatalf("mihomo refuses the profile: %v\n%s", err, raw)
-	}
+	coreAccepts(t, raw)
 	var cfg routedProfile
 	if err := unmarshalProfile(raw, &cfg); err != nil {
 		t.Fatal(err)

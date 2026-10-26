@@ -29,6 +29,7 @@ func TestGoldenClash(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				coreAccepts(t, raw)
 				subtest.Golden(t, v.Name+"_"+string(mode)+".clash.yaml", raw)
 			})
 		}
@@ -47,6 +48,7 @@ func TestGoldenTemplate(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			coreAccepts(t, raw)
 			subtest.Golden(t, v.Name+".template.clash.yaml", raw)
 			for _, mode := range subtest.Modes {
 				starter, err := Starter(prof, v.Groups, mode)
@@ -54,6 +56,13 @@ func TestGoldenTemplate(t *testing.T) {
 					t.Fatal(err)
 				}
 				subtest.Golden(t, v.Name+"_"+string(mode)+".starter.yaml", starter)
+				// The starter is a template, its groups asking for nodes the core has no
+				// word for: the profile it renders is what an app loads.
+				own, _, err := Template(prof, string(starter))
+				if err != nil {
+					t.Fatal(err)
+				}
+				coreAccepts(t, own)
 			}
 		})
 	}
