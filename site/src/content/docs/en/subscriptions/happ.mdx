@@ -25,6 +25,8 @@ The **Routing profile** field accepts a link built in Happ itself (Routing → S
 
 Happ adds the profile together with the subscription and applies it after reconnecting.
 
+INCY gets the same profile. With the Xray configs choose "From the routing settings": that profile loads the geo files the configs refer to, and INCY keeps them whole. Build an own profile for INCY without cutting the geo files: if a cut file lacks a category a config refers to, INCY does not start that config.
+
 ## Hidden server settings
 
 - **Provider ID** from happ-proxy.com: Latin letters, digits, `-` and `_`, up to 64 characters.

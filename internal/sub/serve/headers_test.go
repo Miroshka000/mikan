@@ -224,6 +224,15 @@ func TestHappHeaders(t *testing.T) {
 	if h.Get("routing") != "incy://routing/off" || h.Get("providerid") != "" {
 		t.Fatalf("INCY: %v", h)
 	}
+	// The panel's own profile: INCY's, which keeps the geodata whole and replaces the one saved.
+	h = http.Header{}
+	appHeaders(h, "INCY/3.8.1/Android", Config{Brand: "Mikan", Happ: Happ{Routing: "auto"}}, "")
+	payload, ok := strings.CutPrefix(h.Get("routing"), "incy://routing/onadd/")
+	raw, _ := base64.StdEncoding.DecodeString(payload)
+	var p map[string]any
+	if !ok || json.Unmarshal(raw, &p) != nil || p["Name"] != "Mikan" || p["useChunkFiles"] != false || p["LastUpdated"] == nil {
+		t.Fatalf("INCY's own profile: %v %s", h, raw)
+	}
 	h = http.Header{}
 	appHeaders(h, "v2RayTun/5.1", Config{Happ: Happ{Routing: "happ://routing/off", ProviderID: "p1"}}, "")
 	if len(h) != 0 {

@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"path"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/routing"
@@ -132,9 +136,40 @@ func TestGoldenHappRouting(t *testing.T) {
 
 // happRouting is the routing link of the variant's settings, as serve makes it.
 func happRouting(v subtest.Variant, m routing.Mode, src string) string {
+	return HappRoutingOf("VPN", variantProfile(v), m, src)
+}
+
+func variantProfile(v subtest.Variant) mihomo.Profile {
 	u := v.User()
-	p := mihomo.Profile{Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
-	return HappRoutingOf("VPN", p, m, src)
+	return mihomo.Profile{Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
+}
+
+// INCY gets Happ's profile in its own scheme, with the geodata kept whole and a stamp that
+// makes it replace the profile it saved; the stamp is no older than the geodata it loads.
+func TestIncyRoutingOf(t *testing.T) {
+	for _, mode := range subtest.Modes {
+		p := variantProfile(subtest.Variants[0])
+		link := IncyRoutingOf("VPN", p, mode, "")
+		rest, ok := strings.CutPrefix(link, "incy://")
+		if !ok {
+			t.Fatalf("not INCY's scheme: %s", link)
+		}
+		incy, happ := decodeHapp(t, "happ://"+rest), decodeHapp(t, HappRoutingOf("VPN", p, mode, ""))
+		if incy.UseChunkFiles != "false" || incy.ChunkFiles == nil || *incy.ChunkFiles || incy.LastUpdated != strconv.Itoa(incyStamp) {
+			t.Fatalf("%s: INCY's own fields: %+v", mode, incy)
+		}
+		if happ.UseChunkFiles != "true" || happ.ChunkFiles != nil || happ.LastUpdated != "" {
+			t.Fatalf("%s: Happ got INCY's fields: %+v", mode, happ)
+		}
+		happ.UseChunkFiles, happ.ChunkFiles, happ.LastUpdated = incy.UseChunkFiles, incy.ChunkFiles, incy.LastUpdated
+		if !reflect.DeepEqual(incy, happ) {
+			t.Fatalf("%s: INCY's profile is not Happ's:\n%+v\n%+v", mode, incy, happ)
+		}
+	}
+	pin := path.Base(path.Dir(routing.RunetfreedomGeoIP))
+	if at, err := time.Parse("200601021504", pin); err != nil || incyStamp < at.Unix() {
+		t.Fatalf("incyStamp %d is older than the geodata release %s (%v): move it forward", incyStamp, pin, err)
+	}
 }
 
 func goldenHapp(t *testing.T, file, link string) {

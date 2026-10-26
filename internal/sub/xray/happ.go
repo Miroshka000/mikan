@@ -3,6 +3,7 @@ package xray
 import (
 	"encoding/base64"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"mikan/internal/sub/mihomo"
@@ -45,11 +46,14 @@ func ValidHappRouting(s string) bool {
 	return false
 }
 
-// happProfile is Happ's routing profile (happ.su/main/dev-docs).
+// happProfile is Happ's routing profile (happ.su/main/dev-docs), which INCY reads too
+// (docs.incy.cc/en/routing). LastUpdated and ChunkFiles are INCY's alone.
 type happProfile struct {
 	Name              string            `json:"Name"`
 	GlobalProxy       string            `json:"GlobalProxy"` // "true": what no list takes goes through the proxy
+	LastUpdated       string            `json:"LastUpdated,omitempty"`
 	UseChunkFiles     string            `json:"UseChunkFiles"`
+	ChunkFiles        *bool             `json:"useChunkFiles,omitempty"` // INCY's spelling of UseChunkFiles
 	RemoteDNS         string            `json:"RemoteDns"`
 	DomesticDNS       string            `json:"DomesticDns"`
 	RemoteDNSType     string            `json:"RemoteDNSType"`
@@ -79,6 +83,26 @@ type happProfile struct {
 func HappRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) string {
 	rules, final := happRules(p, m, src)
 	return happLink(name, rules, final)
+}
+
+// incyStamp is the LastUpdated of the profile INCY gets. INCY keeps a profile it saved
+// until one of the same name comes with a later stamp, and loads the geodata again only
+// then (docs.incy.cc/en/routing), so the stamp moves forward with any change INCY has to
+// take: the profile's own fields or the geodata (a test keeps it after the release
+// routing.RunetfreedomGeoIP names). Changes of the settings' rules do not move it: the
+// Xray configs carry the panel's routing themselves.
+const incyStamp = 1792972800 // 2026-10-26
+
+// IncyRoutingOf is HappRoutingOf for INCY, in its own scheme. Asked to (UseChunkFiles),
+// INCY cuts the geodata down to the categories of the profile's lists, and an Xray config
+// of the panel names others (its DNS, a template's rules): one cut away fails the whole
+// config. So INCY keeps the files whole, and the stamp makes it replace the profile it
+// saved before, cut files and all.
+func IncyRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) string {
+	rules, final := happRules(p, m, src)
+	r, whole := happProfileOf(name, rules, final), false
+	r.LastUpdated, r.UseChunkFiles, r.ChunkFiles = strconv.Itoa(incyStamp), "false", &whole
+	return routingLink("incy", r)
 }
 
 // happRules are the rules of the profile the settings make, in order, and where what none
@@ -112,10 +136,21 @@ func happRules(p mihomo.Profile, m routing.Mode, src string) ([]routing.Rule, ro
 var happTypes = map[string]bool{"DOMAIN": true, "DOMAIN-SUFFIX": true, "DOMAIN-KEYWORD": true, "GEOSITE": true,
 	"GEOIP": true, "IP-CIDR": true, "IP-CIDR6": true, "RULE-SET": true}
 
-// happLink is the routing link of the rules and final: the sites and IPs of each rule of
+// happLink is the routing link of the rules and final (happProfileOf).
+func happLink(name string, rules []routing.Rule, final routing.Target) string {
+	return routingLink("happ", happProfileOf(name, rules, final))
+}
+
+// routingLink is the link that adds the profile and turns it on, in the app's scheme.
+func routingLink(scheme string, p happProfile) string {
+	b, _ := json.Marshal(p)
+	return scheme + "://routing/onadd/" + base64.StdEncoding.EncodeToString(b)
+}
+
+// happProfileOf is the profile of the rules and final: the sites and IPs of each rule of
 // one condition Happ's lists hold go to the lists of its target (direct, blocked, or through
 // the proxy for any group).
-func happLink(name string, rules []routing.Rule, final routing.Target) string {
+func happProfileOf(name string, rules []routing.Rule, final routing.Target) happProfile {
 	r := happProfile{Name: name, GlobalProxy: "true", UseChunkFiles: "true",
 		RemoteDNS: "1.1.1.1", RemoteDNSType: "DoH", RemoteDNSDomain: "https://1.1.1.1/dns-query", RemoteDNSIP: "1.1.1.1",
 		DomesticDNS: "77.88.8.8", DomesticDNSType: "DoH", DomesticDNSDomain: "https://77.88.8.8/dns-query", DomesticDNSIP: "77.88.8.8",
@@ -156,8 +191,7 @@ func happLink(name string, rules []routing.Rule, final routing.Target) string {
 	if !seen["geosite:private"] {
 		r.DirectSites = append([]string{"geosite:private"}, r.DirectSites...)
 	}
-	b, _ := json.Marshal(r)
-	return "happ://routing/onadd/" + base64.StdEncoding.EncodeToString(b)
+	return r
 }
 
 // IncyLink is a Happ routing link in INCY's own scheme: INCY takes any, its own is safest.

@@ -252,9 +252,9 @@ func appHeaders(hd http.Header, ua string, cfg Config, clash string) {
 	switch {
 	case apps.IsINCY(ua):
 		// INCY reads Happ's routing profile from the same header (docs.incy.cc/en/routing),
-		// and none of Happ's provider headers.
+		// and none of Happ's provider headers. The panel's own keeps the geodata whole.
 		if routing := cfg.Happ.Routing; routing == xray.HappRoutingAuto {
-			hd.Set("routing", xray.IncyLink(happAutoRouting(cfg, clash)))
+			hd.Set("routing", incyAutoRouting(cfg, clash))
 		} else if routing != "" {
 			hd.Set("routing", xray.IncyLink(routing))
 		}
