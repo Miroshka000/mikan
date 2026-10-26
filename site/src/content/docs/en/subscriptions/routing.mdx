@@ -1,6 +1,6 @@
 ---
 title: Routing in Clash
-description: Route modes, services, DNS, your own Clash YAML profile, custom rules and torrent blocking.
+description: Route modes, services, DNS, custom Clash rules and torrent blocking.
 ---
 
 Everything on this page applies to **Clash apps on mihomo**: Koala Clash, Clash Verge, FlClash, ClashFest, SlothClash and others. Happ, v2RayTun, Hiddify and other Xray and sing-box apps don't get these routes.
@@ -38,31 +38,7 @@ Nodes older than 0.5.2.0 skip this setting; after `mikan update` it works by its
 
 ## Your own Clash profile
 
-The "How to set it up" switch → **Own YAML** opens an editor for the whole mihomo config: DNS, fake-ip, TUN, sniffer, groups, rules. "Start from the simple one" copies the current settings as a starting point, and the ready snippets add DNS fake-ip, TUN, sniffer, QUIC blocking, and a group by country or by node.
-
-The panel inserts the user's servers itself, so don't write a `proxies` section. A group picks them up like this:
-
-```yaml
-proxy-groups:
-  - name: VPN
-    type: select
-    include-all-proxies: true        # all of the user's servers
-    exclude-filter: "Hysteria"       # filters as in mihomo
-  - name: Germany
-    type: url-test
-    mikan:
-      nodes: [Germany]               # nodes by name or id
-      types: [vless, hysteria2]      # protocol types
-rules:
-  - MATCH,VPN
-```
-
-- A group that ends up with no servers for this app gets REJECT.
-- After your `MATCH,<group>` the panel adds `MATCH,REJECT`, and before your rules it puts direct routes to the addresses of the panel and nodes.
-- On save the panel checks the YAML, the group names and the references to them. The size limit is 512 KB. If the profile later fails to build, the app gets the built-in one.
-- While your own YAML is on, the simple-mode settings don't reach Clash apps. Stash and non-mihomo apps always get the simple profile.
-
-"Back to the simple one" turns your own profile off.
+A whole mihomo config of your own (DNS, fake-ip, TUN, sniffer, groups, rules) is a subscription template in **Settings → Subscription → Templates**. While Clash has a default template, the settings of this page don't reach Clash apps, and the **Routing** section says so at the top. How to write templates and how response rules pick them: [Subscription templates](/mikan/en/subscriptions/templates/).
 
 ## Custom rules
 

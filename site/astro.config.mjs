@@ -104,6 +104,7 @@ export default defineConfig({
 						{ slug: 'subscriptions/domain' },
 						{ slug: 'subscriptions/happ' },
 						{ slug: 'subscriptions/routing' },
+						{ slug: 'subscriptions/templates' },
 					],
 				},
 				{
