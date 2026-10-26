@@ -320,6 +320,7 @@ func TestCheck(t *testing.T) {
 		{"a value with a line break", with(func(r *Rule) { r.When.Conds[0].Value = "a\nb" }), "r.when.conds.0.value", "resp_value"},
 		{"an empty contains", with(func(r *Rule) { r.When.Conds[0].Value = "" }), "r.when.conds.0.value", "resp_value_empty"},
 		{"a regular expression that does not compile", with(func(r *Rule) { r.When.Conds[0] = uaIs(OpRegex, "(", false) }), "r.when.conds.0.value", "resp_regex"},
+		{"a short regular expression with a huge program", with(func(r *Rule) { r.When.Conds[0] = uaIs(OpRegex, "[a-z]{1000}", false) }), "r.when.conds.0.value", "resp_regex_big"},
 		{"an empty regular expression", with(func(r *Rule) { r.When.Conds[0] = uaIs(OpRegex, "", false) }), "r.when.conds.0.value", "resp_value_empty"},
 		{"too many conditions", with(func(r *Rule) { r.When = Group{Op: Or, Conds: tooMany} }), "r.when.conds", "resp_conds"},
 		{"too many through the groups", with(func(r *Rule) {

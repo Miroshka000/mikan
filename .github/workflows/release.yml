@@ -112,6 +112,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-18
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+      # The same pinned xray-core as ci.yml, so the release checks the xray JSON configs too.
+      - name: xray-core for the xray JSON checks
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xray.zip" https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-64.zip
+          echo "0eec3ed4163c273d8c8bf821f7d219e257921cf584aa3fb970715e458e631978  $RUNNER_TEMP/xray.zip" | sha256sum -c -
+          unzip -q -o "$RUNNER_TEMP/xray.zip" xray -d "$RUNNER_TEMP/xray"
+          echo "XRAY=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
       - name: go
         run: go test -timeout 30m ./...
 

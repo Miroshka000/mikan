@@ -209,6 +209,17 @@ func template(parts mihomo.Parts, g model.GroupNames, outs []tagged, s routing.S
 		return pl
 	}
 	pl.choice = map[string]bool{main.Name: true}
+	// A select group goes to its first member, so one that starts with the main group (the
+	// PROXY alias, a service sent to [PROXY, DIRECT]) follows the config's choice as well,
+	// not the main group's first server.
+	for grown := true; grown; {
+		grown = false
+		for _, gr := range parts.Groups {
+			if gr.Type == model.Select && len(gr.Members) > 0 && pl.choice[gr.Members[0]] && !pl.choice[gr.Name] {
+				pl.choice[gr.Name], grown = true, true
+			}
+		}
+	}
 	pl.picks = []string{main.Name}
 	if main.Type == model.Select {
 		pl.picks = main.Members

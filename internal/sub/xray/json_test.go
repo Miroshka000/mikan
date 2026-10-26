@@ -321,6 +321,43 @@ func TestJSONTemplate(t *testing.T) {
 	}
 }
 
+// A select group that starts with the main group follows the config's choice: the PROXY
+// alias and a service sent to it ([PROXY, DIRECT]) go where the config's main group goes,
+// not to the main group's first server.
+func TestJSONTemplateSelectFollowsTheChoice(t *testing.T) {
+	src := `mode: rule
+proxy-groups:
+  - {name: Сеть, type: select, proxies: [Авто, DIRECT]}
+  - {name: Авто, type: url-test, include-all-proxies: true}
+  - {name: PROXY, type: select, proxies: [Сеть]}
+  - {name: Telegram, type: select, proxies: [PROXY, DIRECT]}
+rules:
+  - DOMAIN-SUFFIX,t.me,Telegram
+  - MATCH,Сеть
+`
+	cs := render(t, profileOf(subtest.TwoNodes()), routing.All, subtest.Clash(src))
+	if len(cs) < 2 {
+		t.Fatalf("configs: %d", len(cs))
+	}
+	for _, c := range cs {
+		var rules []map[string]any
+		b, _ := json.Marshal(c.Routing.Rules)
+		if err := json.Unmarshal(b, &rules); err != nil || len(rules) == 0 {
+			t.Fatalf("%s: rules %s", c.Remarks, b)
+		}
+		var tg map[string]any
+		for _, r := range rules {
+			if d, _ := json.Marshal(r["domain"]); strings.Contains(string(d), "t.me") {
+				tg = r
+			}
+		}
+		last := rules[len(rules)-1]
+		if tg == nil || tg["outboundTag"] != last["outboundTag"] || tg["balancerTag"] != last["balancerTag"] {
+			t.Fatalf("%s: telegram %v, the rest %v", c.Remarks, tg, last)
+		}
+	}
+}
+
 // The preview's notes are of the groups xray turns into another form; the main group is the
 // app's list of configs and has none.
 func TestJSONNotes(t *testing.T) {

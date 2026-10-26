@@ -2,6 +2,7 @@ package apps
 
 import (
 	"regexp"
+	"regexp/syntax"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -103,14 +104,18 @@ type Rule struct {
 
 // Limits of what the admin may write: every rule is run for every fetch of every app.
 const (
-	MaxRules   = 100
-	MaxConds   = 20  // in one group, and in one rule through its groups
-	MaxGroups  = 8   // inner groups of one rule
-	MaxValue   = 256 // a condition's value, a regular expression's source
-	MaxName    = 80
-	MaxHeaders = 10
-	MaxHTML    = 16 << 10
-	MaxText    = 200
+	MaxRules  = 100
+	MaxConds  = 20  // in one group, and in one rule through its groups
+	MaxGroups = 8   // inner groups of one rule
+	MaxValue  = 256 // a condition's value, a regular expression's source
+	// MaxRegexProgram bounds the compiled program of one regular expression: a short source
+	// like "[a-z]{1000}" compiles to thousands of instructions, and the rules (and the
+	// tester, with a draft of them) are compiled again and again.
+	MaxRegexProgram = 1000
+	MaxName         = 80
+	MaxHeaders      = 10
+	MaxHTML         = 16 << 10
+	MaxText         = 200
 	// MaxHeaderValue is how much of a request header a condition reads: a client may send
 	// a megabyte, and the rules must not be a way to make the panel read it again and again.
 	MaxHeaderValue = 2048
@@ -219,6 +224,14 @@ func (c Cond) check(path string) error {
 		}
 		if _, err := regexp.Compile(c.Value); err != nil {
 			return bad(path+".value", "resp_regex", err.Error())
+		}
+		// regexp compiles with the Perl flags; the same parse tells the program's size.
+		re, err := syntax.Parse(c.Value, syntax.Perl)
+		if err != nil {
+			return bad(path+".value", "resp_regex", err.Error())
+		}
+		if prog, err := syntax.Compile(re.Simplify()); err != nil || len(prog.Inst) > MaxRegexProgram {
+			return bad(path+".value", "resp_regex_big", "")
 		}
 	default:
 		return bad(path+".op", "resp_op", c.Op)

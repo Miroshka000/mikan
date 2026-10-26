@@ -91,6 +91,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-18
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+      # The xray JSON tests run every config through a real xray-core; without one they skip,
+      # so the release pinned here (by the hash of its archive) is what they check against.
+      - name: xray-core for the xray JSON checks
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/xray.zip" https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-64.zip
+          echo "0eec3ed4163c273d8c8bf821f7d219e257921cf584aa3fb970715e458e631978  $RUNNER_TEMP/xray.zip" | sha256sum -c -
+          unzip -q -o "$RUNNER_TEMP/xray.zip" xray -d "$RUNNER_TEMP/xray"
+          echo "XRAY=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
       # Every package, with the race detector: the panel's background writers, sync and
       # bot share state across goroutines. -race needs cgo, and the runner has gcc. The app
       # package alone takes 8 to 10 minutes under -race: past go test's 10 by default.

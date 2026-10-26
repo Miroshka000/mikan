@@ -639,6 +639,7 @@
       "resp_value": "The value is too long or has a line break",
       "resp_value_empty": "Contains and a regular expression need a value",
       "resp_regex": "The regular expression cannot be read: {value}",
+      "resp_regex_big": "The regular expression is too complex: simplify it or split it into several conditions",
       "resp_op": "A header is compared as equals, contains or a regular expression",
       "resp_respond": "The rule has no such answer",
       "resp_format": "A rule cannot force this format: {value}",
