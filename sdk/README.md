@@ -27,7 +27,7 @@ An SDK has the number of the panel release it is built from. PyPI takes the tag 
 
 ## Release
 
-`release.yml` builds and publishes both on a stable tag only, after the release itself is published (a pre-release tag publishes none). The build job has no secret; the npm job publishes by trusted publishing, or with the repository secret `NPM_TOKEN` until that is set up, with the provenance of the run; the PyPI job publishes by trusted publishing. A failed publish job leaves the release as it is: rerun the failed jobs. A version of a package cannot be taken back or reused, so a bad one is replaced by the next release.
+`release.yml` builds and publishes both after the release itself is published: a stable tag makes the release versions, a beta tag (`-rc.N`) makes pre-releases (npm `0.5.201-rc.2` under the dist-tag `beta`, PyPI `0.5.2.1rc2`), which `npm install` and `pip install` without a version do not take. The build job has no secret; the npm job publishes by trusted publishing, or with the repository secret `NPM_TOKEN` until that is set up, with the provenance of the run; the PyPI job publishes by trusted publishing. A failed publish job leaves the release as it is: rerun the failed jobs. A version of a package cannot be taken back or reused, so a bad one is replaced by the next release.
 
 ## What the maintainer sets up once
 

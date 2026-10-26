@@ -9,7 +9,7 @@ import { TabItem, Tabs } from '@astrojs/starlight/components';
 SDK для TypeScript и Python появились в 0.5.2.1.
 :::
 
-У API панели два готовых клиента: [`@getmikan/sdk`](https://www.npmjs.com/package/@getmikan/sdk) на npm для TypeScript и [`mikan-sdk`](https://pypi.org/project/mikan-sdk/) на PyPI для Python. Их делает [сборка](https://github.com/Miroshka000/mikan/tree/main/sdk) из того же файла OpenAPI, по которому построен [справочник методов](/mikan/api/reference/), поэтому методы, параметры и ответы в них те же. Для каждого стабильного релиза панели выходит SDK с тем же номером; предварительные версии (`-rc`) не публикуются.
+У API панели два готовых клиента: [`@getmikan/sdk`](https://www.npmjs.com/package/@getmikan/sdk) на npm для TypeScript и [`mikan-sdk`](https://pypi.org/project/mikan-sdk/) на PyPI для Python. Их делает [сборка](https://github.com/Miroshka000/mikan/tree/main/sdk) из того же файла OpenAPI, по которому построен [справочник методов](/mikan/api/reference/), поэтому методы, параметры и ответы в них те же. Для каждого стабильного релиза панели выходит SDK с тем же номером, для беты (`-rc`) предварительная версия SDK: `npm install` и `pip install` без номера её не берут.
 
 ## Версия
 
@@ -19,6 +19,9 @@ SDK для TypeScript и Python появились в 0.5.2.1.
 |---|---|---|
 | `0.5.2.1` | `0.5.201` | `0.5.2.1` |
 | `0.5.3.0` | `0.5.300` | `0.5.3.0` |
+| `0.5.2.1-rc.2` (бета) | `0.5.201-rc.2`, тег `beta` | `0.5.2.1rc2` |
+
+SDK для беты ставится явно: `npm install @getmikan/sdk@beta` или `pip install --pre mikan-sdk`.
 
 Называйте версию точно, а не диапазоном (`^`, `~`): Python-клиент строго разбирает ответы и может отказаться от ответа, если SDK не совпадает с панелью: в нём значение перечисления, которого клиент ещё не знает, или не хватает обязательного поля. TypeScript-клиент ответов не проверяет, типы работают только при сборке.
 

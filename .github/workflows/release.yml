@@ -7,7 +7,7 @@ name: release
 #     update check and the installer trust, and install.sh for the one-line install;
 #   - the release's entry in the signed release index (index.json on the "updates"
 #     pre-release), where updaters look first; "from" comes from .github/upgrade-from;
-#   - a stable release only: the SDKs (sdk/), @getmikan/sdk on npm and mikan-sdk on PyPI, built from the
+#   - the SDKs (sdk/), @getmikan/sdk on npm and mikan-sdk on PyPI (a beta: pre-releases of them), built from the
 #     spec of the tagged commit and numbered as the release, once the release is published
 #     (sdk/README.md lists what the npm token and PyPI's trusted publisher need).
 # A stable manifest must pass the legacy contract (mikan-release legacy-check) before it
@@ -342,14 +342,16 @@ jobs:
           IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/mikan"
           docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
 
-  # The SDKs of a stable release, from the spec of the tagged commit (web/src/api/openapi.json,
-  # which CI keeps equal to the code) and numbered as the release. A version of a package
-  # cannot be taken back or reused on npm or PyPI, so they come only after the release itself
-  # is published, and a failure here leaves the release as it is: rerun the failed jobs. The
-  # build has no write access and no secret; the two jobs after it publish what it made.
+  # The SDKs of a release, from the spec of the tagged commit (web/src/api/openapi.json,
+  # which CI keeps equal to the code) and numbered as the release; a beta (-rc.N) makes
+  # pre-releases of them, which the registries do not give to whoever asks for no version.
+  # A version of a package cannot be taken back or reused on npm or PyPI, so they come only
+  # after the release itself is published, and a failure here leaves the release as it is:
+  # rerun the failed jobs. The build has no write access and no secret; the two jobs after
+  # it publish what it made.
   sdk:
     needs: publish
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ !contains(github.ref_name, '-') || contains(github.ref_name, '-rc.') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -410,11 +412,17 @@ jobs:
       # Trusted publishing needs npm 11.5.1 or later, whatever Node bundles.
       - name: npm
         run: npm install -g npm@11.21.1
-      # The version is a plain one (0.5.201 for the panel's 0.5.2.1, see sdk/build.sh).
+      # A release goes to latest (0.5.201 for the panel's 0.5.2.1, see sdk/build.sh), a beta to
+      # beta (0.5.201-rc.2): npm install without a version keeps taking the release.
       - name: publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish dist/getmikan-sdk-*.tgz --provenance --access public --tag latest
+        run: |
+          tag=latest
+          case "$GITHUB_REF_NAME" in
+            *-*) tag=beta ;;
+          esac
+          npm publish dist/getmikan-sdk-*.tgz --provenance --access public --tag "$tag"
 
   # PyPI trusts this workflow (trusted publishing, set up on PyPI for the project, this
   # repository, release.yml and the environment pypi): no token is kept anywhere.

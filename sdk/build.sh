@@ -26,11 +26,17 @@ case "$target" in
     exit 2
     ;;
 esac
-# A panel release: 0.5.2.0, or 0.4.5 on the older tags with three numbers.
-if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
-  echo "sdk: $version is not a release version (like 0.5.2.0)" >&2
+# A panel release: 0.5.2.0, or 0.4.5 on the older tags with three numbers, or a beta of one
+# (0.5.2.1-rc.2), whose SDK is a pre-release.
+if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-rc\.[0-9]+)?$'; then
+  echo "sdk: $version is not a release version (like 0.5.2.0 or 0.5.2.1-rc.2)" >&2
   exit 2
 fi
+release="${version%%-*}"
+rc=""
+case "$version" in
+  *-rc.*) rc="${version##*-rc.}" ;;
+esac
 
 # The files of a package that a registry shows beside the code.
 stage_docs() {
@@ -41,12 +47,14 @@ build_typescript() {
   # npm versions have three numbers, a panel release four: the last two make npm's third
   # (0.5.2.1 is 0.5.201 there, 0.5.3.0 is 0.5.300), a plain version that orders as the
   # panel's releases do and that npm update follows. A hyphen would make every version a
-  # pre-release to npm. The fourth number must stay under 100 for this.
-  case "$version" in
+  # pre-release to npm. The fourth number must stay under 100 for this. A beta keeps its
+  # rc after a hyphen, the one place npm's pre-release is meant (0.5.2.1-rc.2 is
+  # 0.5.201-rc.2), and comes before its release there as on the panel.
+  case "$release" in
     *.*.*.*)
-      head="${version%.*}"
+      head="${release%.*}"
       patch="${head##*.}"
-      rev="${version##*.}"
+      rev="${release##*.}"
       if [ "$rev" -ge 100 ]; then
         echo "sdk: $version: npm takes the fourth number into the third, it must be under 100" >&2
         exit 1
@@ -64,6 +72,9 @@ build_typescript() {
       npm_version=0.0.0
       ;;
   esac
+  if [ -n "$rc" ]; then
+    npm_version="$npm_version-rc.$rc"
+  fi
 
   cd "$here/typescript"
   pnpm install --frozen-lockfile
@@ -106,16 +117,20 @@ build_python() {
   # The types are inline: this tells type checkers to read them (PEP 561).
   touch "$stage/mikan_sdk/py.typed"
 
+  # PyPI takes the release's four numbers as they are; a beta's rc is written the way
+  # Python versions write a release candidate (0.5.2.1-rc.2 is 0.5.2.1rc2), which pip
+  # installs only when asked for pre-releases.
+  py_version="$release${rc:+rc$rc}"
   cp "$here/python/pyproject.toml" "$stage/"
   stage_docs "$here/python" "$stage"
-  sed "s/^version = \"0.0.0\"\$/version = \"$version\"/" "$stage/pyproject.toml" > "$stage/pyproject.new"
+  sed "s/^version = \"0.0.0\"\$/version = \"$py_version\"/" "$stage/pyproject.toml" > "$stage/pyproject.new"
   mv "$stage/pyproject.new" "$stage/pyproject.toml"
-  grep -q "^version = \"$version\"\$" "$stage/pyproject.toml"
+  grep -q "^version = \"$py_version\"\$" "$stage/pyproject.toml"
 
   python -m build --no-isolation --outdir "$dist" "$stage"
 
   # The wheel as a user gets it, not the files beside it: its dependencies are in the venv.
-  pip install --quiet --disable-pip-version-check --no-deps --force-reinstall "$dist/mikan_sdk-$version-py3-none-any.whl"
+  pip install --quiet --disable-pip-version-check --no-deps --force-reinstall "$dist/mikan_sdk-$py_version-py3-none-any.whl"
   MIKAN_SDK_SPEC="$build/openapi.json" python -I -m unittest discover -s "$here/python/tests" -v
 }
 

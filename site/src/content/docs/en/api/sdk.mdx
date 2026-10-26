@@ -9,7 +9,7 @@ import { TabItem, Tabs } from '@astrojs/starlight/components';
 The TypeScript and Python SDKs are new in 0.5.2.1.
 :::
 
-The panel's API has two ready clients: [`@getmikan/sdk`](https://www.npmjs.com/package/@getmikan/sdk) on npm for TypeScript and [`mikan-sdk`](https://pypi.org/project/mikan-sdk/) on PyPI for Python. A [build](https://github.com/Miroshka000/mikan/tree/main/sdk) makes them from the same OpenAPI file the [methods reference](/mikan/en/api/reference/) is built from, so the methods, the parameters and the answers are the same. Every stable release of the panel gets an SDK of the same number; pre-releases (`-rc`) get none.
+The panel's API has two ready clients: [`@getmikan/sdk`](https://www.npmjs.com/package/@getmikan/sdk) on npm for TypeScript and [`mikan-sdk`](https://pypi.org/project/mikan-sdk/) on PyPI for Python. A [build](https://github.com/Miroshka000/mikan/tree/main/sdk) makes them from the same OpenAPI file the [methods reference](/mikan/en/api/reference/) is built from, so the methods, the parameters and the answers are the same. Every stable release of the panel gets an SDK of the same number, a beta (`-rc`) a pre-release of the SDK, which `npm install` and `pip install` without a version do not take.
 
 ## Version
 
@@ -19,6 +19,9 @@ Take the SDK of the same number as your panel (**Settings → System → Updates
 |---|---|---|
 | `0.5.2.1` | `0.5.201` | `0.5.2.1` |
 | `0.5.3.0` | `0.5.300` | `0.5.3.0` |
+| `0.5.2.1-rc.2` (beta) | `0.5.201-rc.2`, dist-tag `beta` | `0.5.2.1rc2` |
+
+The SDK of a beta is installed on purpose: `npm install @getmikan/sdk@beta` or `pip install --pre mikan-sdk`.
 
 Name the version exactly instead of giving a range (`^`, `~`): the Python client reads answers strictly and can refuse an answer when the SDK does not match the panel: a value of an enumeration the client does not know yet, or a required field the panel does not send. The TypeScript client does not check answers, its types work at build time only.
 
