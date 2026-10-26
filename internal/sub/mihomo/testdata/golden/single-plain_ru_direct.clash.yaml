@@ -56,7 +56,7 @@ proxies:
     port: 443
     alpn:
       - h3
-    fingerprint: ab12
+    fingerprint: ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12
     obfs: salamander
     obfs-password: golden-obfs-password
     password: S3cr3t+/=
@@ -68,7 +68,7 @@ proxies:
     alpn:
       - h3
     congestion-controller: bbr
-    fingerprint: ab12
+    fingerprint: ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12
     password: S3cr3t+/=
     skip-cert-verify: false
     udp-relay-mode: native

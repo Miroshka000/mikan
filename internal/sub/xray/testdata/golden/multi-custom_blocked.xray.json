@@ -58,7 +58,9 @@
         "proxy-03",
         "proxy-04",
         "proxy-05",
-        "proxy-06"
+        "proxy-06",
+        "proxy-07",
+        "proxy-08"
       ],
       "probeUrl": "https://www.gstatic.com/generate_204",
       "probeInterval": "120s",
@@ -98,6 +100,39 @@
         "tag": "proxy-01"
       },
       {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "203.0.113.7",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+          }
+        },
+        "tag": "proxy-02"
+      },
+      {
         "protocol": "vless",
         "settings": {
           "vnext": [
@@ -124,7 +159,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "trojan",
@@ -147,7 +182,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-03"
+        "tag": "proxy-04"
       },
       {
         "protocol": "vless",
@@ -180,7 +215,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "vless",
@@ -212,7 +247,41 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
+      },
+      {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "usa.example.com",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22",
+            "serverName": "usa.example.com"
+          }
+        },
+        "tag": "proxy-07"
       },
       {
         "protocol": "vless",
@@ -241,7 +310,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-06"
+        "tag": "proxy-08"
       },
       {
         "protocol": "freedom",
@@ -267,7 +336,9 @@
             "proxy-03",
             "proxy-04",
             "proxy-05",
-            "proxy-06"
+            "proxy-06",
+            "proxy-07",
+            "proxy-08"
           ],
           "fallbackTag": "proxy-01",
           "strategy": {
@@ -380,13 +451,13 @@
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -483,7 +554,8 @@
         "proxy-01",
         "proxy-02",
         "proxy-03",
-        "proxy-04"
+        "proxy-04",
+        "proxy-05"
       ],
       "probeUrl": "https://www.gstatic.com/generate_204",
       "probeInterval": "120s",
@@ -523,6 +595,39 @@
         "tag": "proxy-01"
       },
       {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "203.0.113.7",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+          }
+        },
+        "tag": "proxy-02"
+      },
+      {
         "protocol": "vless",
         "settings": {
           "vnext": [
@@ -549,7 +654,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "trojan",
@@ -572,7 +677,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-03"
+        "tag": "proxy-04"
       },
       {
         "protocol": "vless",
@@ -605,7 +710,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "vless",
@@ -637,7 +742,7 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
       },
       {
         "protocol": "freedom",
@@ -661,7 +766,8 @@
             "proxy-01",
             "proxy-02",
             "proxy-03",
-            "proxy-04"
+            "proxy-04",
+            "proxy-05"
           ],
           "strategy": {
             "type": "leastPing"
@@ -773,13 +879,13 @@
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -873,8 +979,9 @@
     },
     "observatory": {
       "subjectSelector": [
-        "proxy-05",
-        "proxy-06"
+        "proxy-06",
+        "proxy-07",
+        "proxy-08"
       ],
       "probeUrl": "https://www.gstatic.com/generate_204",
       "probeInterval": "120s",
@@ -911,7 +1018,41 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
+      },
+      {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "usa.example.com",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22",
+            "serverName": "usa.example.com"
+          }
+        },
+        "tag": "proxy-07"
       },
       {
         "protocol": "vless",
@@ -940,7 +1081,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-06"
+        "tag": "proxy-08"
       },
       {
         "protocol": "freedom",
@@ -961,8 +1102,9 @@
         {
           "tag": "🇺🇸 США",
           "selector": [
-            "proxy-05",
-            "proxy-06"
+            "proxy-06",
+            "proxy-07",
+            "proxy-08"
           ],
           "strategy": {
             "type": "leastPing"
@@ -1074,13 +1216,13 @@
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -1235,7 +1377,7 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
       },
       {
         "protocol": "freedom",
@@ -1357,13 +1499,13 @@
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -1395,6 +1537,290 @@
             "geoip:ru-blocked"
           ],
           "outboundTag": "proxy-01"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "direct"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        {
+          "address": "223.5.5.5",
+          "domains": [
+            "domain:cn"
+          ],
+          "skipFallback": true
+        },
+        "https://dns.alidns.com/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "203.0.113.7",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+          }
+        },
+        "tag": "proxy-02"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "usa.example.com",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "xhttp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality",
+          "xhttpSettings": {
+            "mode": "stream-one",
+            "path": "/golden-path"
+          }
+        },
+        "tag": "proxy-06"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "🇳🇱 Hysteria2",
+    "routing": {
+      "domainStrategy": "IPIfNonMatch",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "223.5.5.5"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:dns.alidns.com"
+          ],
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-02"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:usa.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "udp",
+          "outboundTag": "block",
+          "port": "443"
+        },
+        {
+          "domain": [
+            "domain:sber.ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "regexp:^.*\\.tinkoff\\.ru$"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "10.0.0.0/8"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ads-all"
+          ],
+          "outboundTag": "block"
+        },
+        {
+          "domain": [
+            "geosite:youtube"
+          ],
+          "outboundTag": "proxy-02"
+        },
+        {
+          "domain": [
+            "geosite:telegram"
+          ],
+          "outboundTag": "proxy-02"
+        },
+        {
+          "ip": [
+            "geoip:telegram"
+          ],
+          "outboundTag": "proxy-02"
+        },
+        {
+          "domain": [
+            "geosite:category-ai-!cn"
+          ],
+          "outboundTag": "proxy-06"
+        },
+        {
+          "domain": [
+            "geosite:google-gemini"
+          ],
+          "outboundTag": "proxy-06"
+        },
+        {
+          "domain": [
+            "geosite:category-public-tracker"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ru",
+            "geosite:ru-available-only-inside"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:ru-blocked"
+          ],
+          "outboundTag": "proxy-02"
+        },
+        {
+          "ip": [
+            "geoip:ru-blocked"
+          ],
+          "outboundTag": "proxy-02"
         },
         {
           "network": "tcp,udp",
@@ -1483,7 +1909,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "vless",
@@ -1515,7 +1941,7 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
       },
       {
         "protocol": "freedom",
@@ -1556,7 +1982,7 @@
           "inboundTag": [
             "dns"
           ],
-          "outboundTag": "proxy-02"
+          "outboundTag": "proxy-03"
         },
         {
           "outboundTag": "dns-out",
@@ -1619,31 +2045,31 @@
           "domain": [
             "geosite:youtube"
           ],
-          "outboundTag": "proxy-02"
+          "outboundTag": "proxy-03"
         },
         {
           "domain": [
             "geosite:telegram"
           ],
-          "outboundTag": "proxy-02"
+          "outboundTag": "proxy-03"
         },
         {
           "ip": [
             "geoip:telegram"
           ],
-          "outboundTag": "proxy-02"
+          "outboundTag": "proxy-03"
         },
         {
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -1668,13 +2094,13 @@
           "domain": [
             "geosite:ru-blocked"
           ],
-          "outboundTag": "proxy-02"
+          "outboundTag": "proxy-03"
         },
         {
           "ip": [
             "geoip:ru-blocked"
           ],
-          "outboundTag": "proxy-02"
+          "outboundTag": "proxy-03"
         },
         {
           "network": "tcp,udp",
@@ -1757,7 +2183,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-03"
+        "tag": "proxy-04"
       },
       {
         "protocol": "vless",
@@ -1789,7 +2215,7 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
       },
       {
         "protocol": "freedom",
@@ -1830,7 +2256,7 @@
           "inboundTag": [
             "dns"
           ],
-          "outboundTag": "proxy-03"
+          "outboundTag": "proxy-04"
         },
         {
           "outboundTag": "dns-out",
@@ -1893,31 +2319,31 @@
           "domain": [
             "geosite:youtube"
           ],
-          "outboundTag": "proxy-03"
+          "outboundTag": "proxy-04"
         },
         {
           "domain": [
             "geosite:telegram"
           ],
-          "outboundTag": "proxy-03"
+          "outboundTag": "proxy-04"
         },
         {
           "ip": [
             "geoip:telegram"
           ],
-          "outboundTag": "proxy-03"
+          "outboundTag": "proxy-04"
         },
         {
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -1942,13 +2368,13 @@
           "domain": [
             "geosite:ru-blocked"
           ],
-          "outboundTag": "proxy-03"
+          "outboundTag": "proxy-04"
         },
         {
           "ip": [
             "geoip:ru-blocked"
           ],
-          "outboundTag": "proxy-03"
+          "outboundTag": "proxy-04"
         },
         {
           "network": "tcp,udp",
@@ -2041,7 +2467,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "vless",
@@ -2073,7 +2499,7 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
       },
       {
         "protocol": "freedom",
@@ -2114,7 +2540,7 @@
           "inboundTag": [
             "dns"
           ],
-          "outboundTag": "proxy-04"
+          "outboundTag": "proxy-05"
         },
         {
           "outboundTag": "dns-out",
@@ -2177,31 +2603,31 @@
           "domain": [
             "geosite:youtube"
           ],
-          "outboundTag": "proxy-04"
+          "outboundTag": "proxy-05"
         },
         {
           "domain": [
             "geosite:telegram"
           ],
-          "outboundTag": "proxy-04"
+          "outboundTag": "proxy-05"
         },
         {
           "ip": [
             "geoip:telegram"
           ],
-          "outboundTag": "proxy-04"
+          "outboundTag": "proxy-05"
         },
         {
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -2226,13 +2652,13 @@
           "domain": [
             "geosite:ru-blocked"
           ],
-          "outboundTag": "proxy-04"
+          "outboundTag": "proxy-05"
         },
         {
           "ip": [
             "geoip:ru-blocked"
           ],
-          "outboundTag": "proxy-04"
+          "outboundTag": "proxy-05"
         },
         {
           "network": "tcp,udp",
@@ -2324,7 +2750,7 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
       },
       {
         "protocol": "freedom",
@@ -2365,7 +2791,7 @@
           "inboundTag": [
             "dns"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "outboundTag": "dns-out",
@@ -2428,31 +2854,31 @@
           "domain": [
             "geosite:youtube"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:telegram"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "ip": [
             "geoip:telegram"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -2477,13 +2903,298 @@
           "domain": [
             "geosite:ru-blocked"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "ip": [
             "geoip:ru-blocked"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "direct"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        {
+          "address": "223.5.5.5",
+          "domains": [
+            "domain:cn"
+          ],
+          "skipFallback": true
+        },
+        "https://dns.alidns.com/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "usa.example.com",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22",
+            "serverName": "usa.example.com"
+          }
+        },
+        "tag": "proxy-07"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "usa.example.com",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "xhttp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality",
+          "xhttpSettings": {
+            "mode": "stream-one",
+            "path": "/golden-path"
+          }
+        },
+        "tag": "proxy-06"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "🇺🇸 Hysteria2",
+    "routing": {
+      "domainStrategy": "IPIfNonMatch",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "223.5.5.5"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:dns.alidns.com"
+          ],
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-07"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:usa.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "udp",
+          "outboundTag": "block",
+          "port": "443"
+        },
+        {
+          "domain": [
+            "domain:sber.ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "regexp:^.*\\.tinkoff\\.ru$"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "10.0.0.0/8"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ads-all"
+          ],
+          "outboundTag": "block"
+        },
+        {
+          "domain": [
+            "geosite:youtube"
+          ],
+          "outboundTag": "proxy-07"
+        },
+        {
+          "domain": [
+            "geosite:telegram"
+          ],
+          "outboundTag": "proxy-07"
+        },
+        {
+          "ip": [
+            "geoip:telegram"
+          ],
+          "outboundTag": "proxy-07"
+        },
+        {
+          "domain": [
+            "geosite:category-ai-!cn"
+          ],
+          "outboundTag": "proxy-06"
+        },
+        {
+          "domain": [
+            "geosite:google-gemini"
+          ],
+          "outboundTag": "proxy-06"
+        },
+        {
+          "domain": [
+            "geosite:category-public-tracker"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ru",
+            "geosite:ru-available-only-inside"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:category-ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "geosite:ru-blocked"
+          ],
+          "outboundTag": "proxy-07"
+        },
+        {
+          "ip": [
+            "geoip:ru-blocked"
+          ],
+          "outboundTag": "proxy-07"
         },
         {
           "network": "tcp,udp",
@@ -2572,7 +3283,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-06"
+        "tag": "proxy-08"
       },
       {
         "protocol": "vless",
@@ -2604,7 +3315,7 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
       },
       {
         "protocol": "freedom",
@@ -2645,7 +3356,7 @@
           "inboundTag": [
             "dns"
           ],
-          "outboundTag": "proxy-06"
+          "outboundTag": "proxy-08"
         },
         {
           "outboundTag": "dns-out",
@@ -2708,31 +3419,31 @@
           "domain": [
             "geosite:youtube"
           ],
-          "outboundTag": "proxy-06"
+          "outboundTag": "proxy-08"
         },
         {
           "domain": [
             "geosite:telegram"
           ],
-          "outboundTag": "proxy-06"
+          "outboundTag": "proxy-08"
         },
         {
           "ip": [
             "geoip:telegram"
           ],
-          "outboundTag": "proxy-06"
+          "outboundTag": "proxy-08"
         },
         {
           "domain": [
             "geosite:category-ai-!cn"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
             "geosite:google-gemini"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "proxy-06"
         },
         {
           "domain": [
@@ -2757,13 +3468,13 @@
           "domain": [
             "geosite:ru-blocked"
           ],
-          "outboundTag": "proxy-06"
+          "outboundTag": "proxy-08"
         },
         {
           "ip": [
             "geoip:ru-blocked"
           ],
-          "outboundTag": "proxy-06"
+          "outboundTag": "proxy-08"
         },
         {
           "network": "tcp,udp",

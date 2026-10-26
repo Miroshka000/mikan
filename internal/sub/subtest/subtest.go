@@ -136,11 +136,19 @@ func TwoNodes() User {
 	return u
 }
 
+// The nodes' certificate pins: a SHA-256 in hex, as the panel keeps it and the apps take
+// it. Xray leaves out a self-signed server without a real one.
+var (
+	PinSingle = strings.Repeat("ab12", 16)
+	PinNL     = strings.Repeat("aa11", 16)
+	PinUS     = strings.Repeat("bb22", 16)
+)
+
 // Single is a subscription of one node with a pinned self-signed certificate.
 func Single() User {
 	return User{
 		Build: build.Profile{Keys: Keys, Inbounds: Inbounds(1, 1, false),
-			Nodes: []model.Node{{ID: 1, Endpoint: model.Endpoint{Host: "203.0.113.7", PinSHA256: "ab12"}}}},
+			Nodes: []model.Node{{ID: 1, Endpoint: model.Endpoint{Host: "203.0.113.7", PinSHA256: PinSingle}}}},
 		Direct: []string{"203.0.113.7", "vpn.example.com"},
 	}
 }
@@ -158,8 +166,8 @@ func Multi() User {
 	return User{
 		Build: build.Profile{Keys: Keys, Inbounds: ins, Fingerprint: "chrome",
 			Nodes: []model.Node{
-				{ID: 1, Name: "🇳🇱 Нидерланды", Endpoint: model.Endpoint{Host: "203.0.113.7", PinSHA256: "aa11"}},
-				{ID: 2, Name: "🇺🇸 США", Endpoint: model.Endpoint{Host: "usa.example.com", SNI: "usa.example.com", PinSHA256: "bb22"}},
+				{ID: 1, Name: "🇳🇱 Нидерланды", Endpoint: model.Endpoint{Host: "203.0.113.7", PinSHA256: PinNL}},
+				{ID: 2, Name: "🇺🇸 США", Endpoint: model.Endpoint{Host: "usa.example.com", SNI: "usa.example.com", PinSHA256: PinUS}},
 			}},
 		Direct: []string{"203.0.113.7", "usa.example.com", "vpn.example.com"},
 	}

@@ -48,7 +48,8 @@
     "observatory": {
       "subjectSelector": [
         "proxy-1",
-        "proxy-2"
+        "proxy-2",
+        "proxy-3"
       ],
       "probeUrl": "https://www.gstatic.com/generate_204",
       "probeInterval": "300s",
@@ -88,6 +89,39 @@
         "tag": "proxy-1"
       },
       {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "203.0.113.7",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12"
+          }
+        },
+        "tag": "proxy-2"
+      },
+      {
         "protocol": "vless",
         "settings": {
           "vnext": [
@@ -114,7 +148,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-2"
+        "tag": "proxy-3"
       },
       {
         "protocol": "freedom",
@@ -136,7 +170,8 @@
           "tag": "Авто",
           "selector": [
             "proxy-1",
-            "proxy-2"
+            "proxy-2",
+            "proxy-3"
           ],
           "strategy": {
             "type": "leastPing"
@@ -395,31 +430,35 @@
     },
     "outbounds": [
       {
-        "protocol": "vless",
+        "protocol": "hysteria",
         "settings": {
-          "vnext": [
-            {
-              "address": "203.0.113.7",
-              "port": 8443,
-              "users": [
-                {
-                  "encryption": "none",
-                  "flow": "xtls-rprx-vision",
-                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
-                }
-              ]
-            }
-          ]
+          "address": "203.0.113.7",
+          "port": 443,
+          "version": 2
         },
         "streamSettings": {
-          "network": "tcp",
-          "realitySettings": {
-            "fingerprint": "chrome",
-            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
-            "serverName": "www.example.com",
-            "shortId": "a1b2c3d4"
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
           },
-          "security": "reality"
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12ab12"
+          }
         },
         "tag": "proxy-2"
       },
@@ -436,7 +475,7 @@
         "tag": "dns-out"
       }
     ],
-    "remarks": "VLESS Vision",
+    "remarks": "Hysteria2",
     "routing": {
       "domainStrategy": "AsIs",
       "rules": [
@@ -489,6 +528,152 @@
         {
           "network": "tcp,udp",
           "outboundTag": "proxy-2"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://dns.google/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 8443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "flow": "xtls-rprx-vision",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality"
+        },
+        "tag": "proxy-3"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "VLESS Vision",
+    "routing": {
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:dns.google"
+          ],
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-3"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy-3"
         }
       ]
     }

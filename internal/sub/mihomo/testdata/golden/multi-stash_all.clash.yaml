@@ -45,7 +45,7 @@ proxies:
     port: 443
     alpn:
       - h3
-    fingerprint: aa11
+    fingerprint: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
     obfs: salamander
     obfs-password: golden-obfs-password
     password: S3cr3t+/=
@@ -57,7 +57,7 @@ proxies:
     alpn:
       - h3
     congestion-controller: bbr
-    fingerprint: aa11
+    fingerprint: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
     password: S3cr3t+/=
     skip-cert-verify: false
     udp-relay-mode: native
@@ -94,7 +94,7 @@ proxies:
     server: 203.0.113.7
     port: 2083
     client-fingerprint: chrome
-    fingerprint: aa11
+    fingerprint: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
     password: S3cr3t+/=
     skip-cert-verify: false
     tls: true
@@ -140,7 +140,7 @@ proxies:
     port: 443
     alpn:
       - h3
-    fingerprint: bb22
+    fingerprint: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22
     obfs: salamander
     obfs-password: golden-obfs-password
     password: S3cr3t+/=
@@ -153,7 +153,7 @@ proxies:
     alpn:
       - h3
     congestion-controller: bbr
-    fingerprint: bb22
+    fingerprint: bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22
     password: S3cr3t+/=
     skip-cert-verify: false
     sni: usa.example.com

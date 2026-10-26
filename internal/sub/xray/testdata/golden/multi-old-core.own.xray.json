@@ -70,6 +70,39 @@
         "tag": "proxy-01"
       },
       {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "203.0.113.7",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+          }
+        },
+        "tag": "proxy-02"
+      },
+      {
         "protocol": "vless",
         "settings": {
           "vnext": [
@@ -96,7 +129,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "trojan",
@@ -119,7 +152,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-03"
+        "tag": "proxy-04"
       },
       {
         "protocol": "vless",
@@ -152,7 +185,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "vless",
@@ -184,7 +217,41 @@
             "path": "/golden-path"
           }
         },
-        "tag": "proxy-05"
+        "tag": "proxy-06"
+      },
+      {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "usa.example.com",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22",
+            "serverName": "usa.example.com"
+          }
+        },
+        "tag": "proxy-07"
       },
       {
         "protocol": "vless",
@@ -213,7 +280,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-06"
+        "tag": "proxy-08"
       },
       {
         "protocol": "freedom",
@@ -238,7 +305,9 @@
             "proxy-03",
             "proxy-04",
             "proxy-05",
-            "proxy-06"
+            "proxy-06",
+            "proxy-07",
+            "proxy-08"
           ],
           "strategy": {
             "type": "leastPing"
@@ -248,8 +317,8 @@
         {
           "selector": [
             "proxy-01",
-            "proxy-02",
-            "proxy-04"
+            "proxy-03",
+            "proxy-05"
           ],
           "strategy": {
             "type": "random"
@@ -444,7 +513,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "vless",
@@ -477,7 +546,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "freedom",
@@ -498,8 +567,259 @@
         {
           "selector": [
             "proxy-01",
-            "proxy-02",
-            "proxy-04"
+            "proxy-03",
+            "proxy-05"
+          ],
+          "strategy": {
+            "type": "random"
+          },
+          "tag": "🔒 VLESS"
+        },
+        {
+          "selector": [
+            "block"
+          ],
+          "strategy": {
+            "type": "random"
+          },
+          "tag": "🇯🇵 Япония"
+        }
+      ],
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:usa.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "balancerTag": "🔒 VLESS",
+          "domain": [
+            "geosite:youtube"
+          ]
+        },
+        {
+          "balancerTag": "🇯🇵 Япония",
+          "domain": [
+            "geosite:openai"
+          ]
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "servers": [
+        "https://1.1.1.1/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "observatory": {
+      "probeInterval": "5m",
+      "probeUrl": "https://www.gstatic.com/generate_204",
+      "subjectSelector": [
+        "proxy"
+      ]
+    },
+    "outbounds": [
+      {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "203.0.113.7",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "xhttp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality",
+          "xhttpSettings": {
+            "mode": "stream-one",
+            "path": "/golden-path"
+          }
+        },
+        "tag": "proxy-01"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 8443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "flow": "xtls-rprx-vision",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality"
+        },
+        "tag": "proxy-03"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 2053,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "grpcSettings": {
+            "health_check_timeout": 10,
+            "idle_timeout": 15,
+            "serviceName": "goldengrpc"
+          },
+          "network": "grpc",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality"
+        },
+        "tag": "proxy-05"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "remarks": "🇳🇱 Hysteria2",
+    "routing": {
+      "balancers": [
+        {
+          "selector": [
+            "proxy-01",
+            "proxy-03",
+            "proxy-05"
           ],
           "strategy": {
             "type": "random"
@@ -691,7 +1011,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "vless",
@@ -724,7 +1044,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "freedom",
@@ -745,8 +1065,8 @@
         {
           "selector": [
             "proxy-01",
-            "proxy-02",
-            "proxy-04"
+            "proxy-03",
+            "proxy-05"
           ],
           "strategy": {
             "type": "random"
@@ -932,7 +1252,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "vless",
@@ -965,7 +1285,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "freedom",
@@ -986,8 +1306,8 @@
         {
           "selector": [
             "proxy-01",
-            "proxy-02",
-            "proxy-04"
+            "proxy-03",
+            "proxy-05"
           ],
           "strategy": {
             "type": "random"
@@ -1183,7 +1503,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "vless",
@@ -1216,7 +1536,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "freedom",
@@ -1237,8 +1557,8 @@
         {
           "selector": [
             "proxy-01",
-            "proxy-02",
-            "proxy-04"
+            "proxy-03",
+            "proxy-05"
           ],
           "strategy": {
             "type": "random"
@@ -1433,7 +1753,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "vless",
@@ -1466,7 +1786,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "freedom",
@@ -1487,8 +1807,260 @@
         {
           "selector": [
             "proxy-01",
-            "proxy-02",
-            "proxy-04"
+            "proxy-03",
+            "proxy-05"
+          ],
+          "strategy": {
+            "type": "random"
+          },
+          "tag": "🔒 VLESS"
+        },
+        {
+          "selector": [
+            "block"
+          ],
+          "strategy": {
+            "type": "random"
+          },
+          "tag": "🇯🇵 Япония"
+        }
+      ],
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "ip": [
+            "203.0.113.7/32"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:usa.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "balancerTag": "🔒 VLESS",
+          "domain": [
+            "geosite:youtube"
+          ]
+        },
+        {
+          "balancerTag": "🇯🇵 Япония",
+          "domain": [
+            "geosite:openai"
+          ]
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "servers": [
+        "https://1.1.1.1/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "observatory": {
+      "probeInterval": "5m",
+      "probeUrl": "https://www.gstatic.com/generate_204",
+      "subjectSelector": [
+        "proxy"
+      ]
+    },
+    "outbounds": [
+      {
+        "protocol": "hysteria",
+        "settings": {
+          "address": "usa.example.com",
+          "port": 443,
+          "version": 2
+        },
+        "streamSettings": {
+          "finalmask": {
+            "udp": [
+              {
+                "settings": {
+                  "password": "golden-obfs-password"
+                },
+                "type": "salamander"
+              }
+            ]
+          },
+          "hysteriaSettings": {
+            "auth": "S3cr3t+/=",
+            "version": 2
+          },
+          "network": "hysteria",
+          "security": "tls",
+          "tlsSettings": {
+            "alpn": [
+              "h3"
+            ],
+            "pinnedPeerCertSha256": "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22",
+            "serverName": "usa.example.com"
+          }
+        },
+        "tag": "proxy"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "xhttp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality",
+          "xhttpSettings": {
+            "mode": "stream-one",
+            "path": "/golden-path"
+          }
+        },
+        "tag": "proxy-01"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 8443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "flow": "xtls-rprx-vision",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality"
+        },
+        "tag": "proxy-03"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "203.0.113.7",
+              "port": 2053,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "grpcSettings": {
+            "health_check_timeout": 10,
+            "idle_timeout": 15,
+            "serviceName": "goldengrpc"
+          },
+          "network": "grpc",
+          "realitySettings": {
+            "fingerprint": "chrome",
+            "publicKey": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw",
+            "serverName": "www.example.com",
+            "shortId": "a1b2c3d4"
+          },
+          "security": "reality"
+        },
+        "tag": "proxy-05"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      }
+    ],
+    "remarks": "🇺🇸 Hysteria2",
+    "routing": {
+      "balancers": [
+        {
+          "selector": [
+            "proxy-01",
+            "proxy-03",
+            "proxy-05"
           ],
           "strategy": {
             "type": "random"
@@ -1680,7 +2252,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-02"
+        "tag": "proxy-03"
       },
       {
         "protocol": "vless",
@@ -1713,7 +2285,7 @@
           },
           "security": "reality"
         },
-        "tag": "proxy-04"
+        "tag": "proxy-05"
       },
       {
         "protocol": "freedom",
@@ -1734,8 +2306,8 @@
         {
           "selector": [
             "proxy-01",
-            "proxy-02",
-            "proxy-04"
+            "proxy-03",
+            "proxy-05"
           ],
           "strategy": {
             "type": "random"

@@ -171,9 +171,9 @@ func TestRouting(t *testing.T) {
 }
 
 func TestMultiNodeProfile(t *testing.T) {
-	u := subtest.Defaults("aa11")
-	nl := model.Node{ID: 1, Name: "🇳🇱 Нидерланды", Endpoint: model.Endpoint{Host: "203.0.113.7", PinSHA256: "aa11"}}
-	us := model.Node{ID: 2, Name: "🇺🇸 США", Endpoint: model.Endpoint{Host: "usa.example.com", SNI: "usa.example.com", PinSHA256: "bb22"}}
+	u := subtest.Defaults(subtest.PinNL)
+	nl := model.Node{ID: 1, Name: "🇳🇱 Нидерланды", Endpoint: model.Endpoint{Host: "203.0.113.7", PinSHA256: subtest.PinNL}}
+	us := model.Node{ID: 2, Name: "🇺🇸 США", Endpoint: model.Endpoint{Host: "usa.example.com", SNI: "usa.example.com", PinSHA256: subtest.PinUS}}
 	u.Build.Nodes = []model.Node{nl, us}
 	more := subtest.Inbounds(2, 100, false)[:2]
 	more[1].Name, more[1].Named = "Особый", true
@@ -213,7 +213,7 @@ func TestMultiNodeProfile(t *testing.T) {
 		t.Fatalf("each node is reached at its own address: %v", server)
 	}
 	for _, p := range cfg.Proxies {
-		if p["name"] == "Особый" && (p["sni"] != "usa.example.com" || p["fingerprint"] != "bb22") {
+		if p["name"] == "Особый" && (p["sni"] != "usa.example.com" || p["fingerprint"] != subtest.PinUS) {
 			t.Fatalf("Hysteria2 on the US node pins its own certificate: %v", p)
 		}
 	}
