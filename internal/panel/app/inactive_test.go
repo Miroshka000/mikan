@@ -36,7 +36,7 @@ func TestInactiveServer(t *testing.T) {
 	}
 	fetch := func() string {
 		t.Helper()
-		_, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "Happ/3.4.1"})
+		_, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken+"?format=uri", nil, map[string]string{"User-Agent": "Happ/3.4.1"})
 		links, _ := base64.StdEncoding.DecodeString(string(body))
 		return string(links)
 	}

@@ -45,7 +45,7 @@ import (
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/panel/support"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbackup"
@@ -54,6 +54,10 @@ import (
 	"mikan/internal/panel/warp"
 	"mikan/internal/panel/webhooks"
 	"mikan/internal/release"
+	"mikan/internal/sub/apps"
+	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
+	"mikan/internal/sub/serve"
 )
 
 // Panel is the fully wired HTTP side of the panel, without the listener.
@@ -362,11 +366,16 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	deps.Importer = importer
 	p.Importer = importer
 	// The subscriptions' handler comes later; the preview reaches it once it is there.
-	var subHandler *subs.Handler
-	deps.RoutesPreview = func(ctx context.Context, req subs.PreviewRequest) ([]byte, error) {
+	var subHandler *subsrc.Handler
+	deps.RoutesPreview = func(ctx context.Context, req subsrc.PreviewRequest) (subsrc.Preview, error) {
 		return subHandler.Preview(ctx, req)
 	}
-	deps.CheckTemplate = func(ctx context.Context, src string) error { return subHandler.CheckTemplate(ctx, src) }
+	deps.CheckTemplate = func(ctx context.Context, core submodel.Core, src string) error {
+		return subHandler.CheckTemplate(ctx, core, src)
+	}
+	deps.TemplatePreview = func(ctx context.Context, req subsrc.TemplatePreview) (subsrc.Preview, error) {
+		return subHandler.PreviewTemplate(ctx, req)
+	}
 	deps.HappLink = func(ctx context.Context, u db.User) (string, error) { return subHandler.HappLink(ctx, u) }
 	apiHandler, _, err := api.New(deps)
 	if err != nil {
@@ -381,72 +390,83 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		p.subPage, subPageHandler = sp, sp
 	}
 	pages := subpage.NewService(st.Q)
-	buildSubCfg := func(ctx context.Context) (subs.Config, error) {
+	buildSubCfg := func(ctx context.Context) (subsrc.Config, error) {
 		ep, err := set.Endpoint(ctx)
 		if err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		brand, _, err := settings.Get[string](ctx, set, settings.KeyBrand)
 		if err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		if brand == "" {
 			brand = "VPN"
 		}
 		support, _, err := settings.Get[string](ctx, set, settings.KeySupportURL)
 		if err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		lang, err := set.Lang(ctx)
 		if err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
-		var domainName, subDomain, publicHost, routing, fingerprint, rules string
-		var groups subs.Groups
+		var domainName, subDomain, publicHost, mode, fingerprint, rules string
+		var groups submodel.GroupNames
 		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeySubDomain: &subDomain, settings.KeyPublicHost: &publicHost, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
-			settings.KeyRouting: &routing, settings.KeyFingerprint: &fingerprint, settings.KeyRules: &rules} {
+			settings.KeyRouting: &mode, settings.KeyFingerprint: &fingerprint, settings.KeyRules: &rules} {
 			if *dst, err = set.String(ctx, key); err != nil {
-				return subs.Config{}, err
+				return subsrc.Config{}, err
 			}
 		}
-		cfg := subs.Config{Brand: brand, SupportURL: support, Groups: groups, Routing: subs.ParseRouting(routing), Fingerprint: fingerprint,
-			Direct: []string{publicHost, domainName, subDomain}, Lang: lang, Rules: subs.ServedRules(rules, groups.WithDefaults(lang))}
-		if cfg.Routes, _, err = settings.Get[subs.Routes](ctx, set, settings.KeyRoutes); err != nil {
-			return subs.Config{}, err
+		cfg := subsrc.Config{Config: serve.Config{Brand: brand, SupportURL: support, Groups: groups, Mode: routing.ParseMode(mode), Fingerprint: fingerprint,
+			Direct: []string{publicHost, domainName, subDomain}, Lang: lang, Rules: routing.ServedRules(rules, groups.WithDefaults(lang))}}
+		if cfg.Routes, _, err = settings.Get[routing.Routes](ctx, set, settings.KeyRoutes); err != nil {
+			return subsrc.Config{}, err
 		}
-		if cfg.Template, err = set.String(ctx, settings.KeyTemplate); err != nil {
-			return subs.Config{}, err
+		if cfg.Templates, err = subsrc.LoadTemplates(ctx, st.Q); err != nil {
+			return subsrc.Config{}, err
 		}
 		if cfg.Binding, err = set.On(ctx, settings.DeviceBinding); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		if cfg.RequireHWID, err = set.On(ctx, settings.RequireHWID); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		cfg.SubBase = subBase(ctx)
 		var legacyKind string
 		if legacyKind, err = set.String(ctx, settings.KeyLegacySubKind); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		cfg.Legacy.Kind = panelimport.Kind(legacyKind)
 		if cfg.Legacy.Secret, err = set.String(ctx, settings.KeyLegacySubSecret); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		if cfg.App.Enabled, err = set.On(ctx, settings.AppBranding); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		if cfg.Happ.HideSettings, err = set.On(ctx, settings.HappHide); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		if cfg.InactiveServer, err = set.On(ctx, settings.InactiveServer); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
+		}
+		if cfg.XrayJSON, err = set.On(ctx, settings.XrayJSON); err != nil {
+			return subsrc.Config{}, err
 		}
 		if cfg.InactiveText, err = set.String(ctx, settings.KeyInactiveText); err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
+		policy, err := subsrc.LoadPolicy(ctx, st.Q, set, o.Log)
+		if err != nil {
+			return subsrc.Config{}, err
+		}
+		if cfg.Responses, err = apps.NewResponder(policy); err != nil {
+			return subsrc.Config{}, err
+		}
+		cfg.LogDays = subsrc.LogDays(ctx, set)
 		tariffs, err := st.Q.ListTariffs(ctx)
 		if err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		cfg.Tariffs = make(map[int64]string, len(tariffs))
 		for _, t := range tariffs {
@@ -454,16 +474,16 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		for key, dst := range map[string]*string{settings.KeySubTitle: &cfg.Title, settings.KeyAnnounce: &cfg.Announce, settings.KeyAnnounceURL: &cfg.AnnounceURL,
 			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL,
-			settings.KeyHappRouting: &cfg.Happ.Routing, settings.KeyHappProvider: &cfg.Happ.ProviderID, settings.KeyHappCrypt: &cfg.Happ.Crypt} {
+			settings.KeyHappRouting: &cfg.Happ.Routing, settings.KeyHappProvider: &cfg.Happ.ProviderID, settings.KeyHappCrypt: &cfg.HappCrypt} {
 			if *dst, err = set.String(ctx, key); err != nil {
-				return subs.Config{}, err
+				return subsrc.Config{}, err
 			}
 		}
 		// The apps take the logo uploaded for the page when no link of its own is given.
 		if cfg.App.Enabled && cfg.App.LogoURL == "" && cfg.SubBase != "" {
 			assets, err := pages.Assets(ctx)
 			if err != nil {
-				return subs.Config{}, err
+				return subsrc.Config{}, err
 			}
 			if a, ok := assets[subpage.AssetLogo]; ok {
 				cfg.App.LogoURL = cfg.SubBase + "/" + subpage.AssetPath(subpage.AssetLogo, a.Hash)
@@ -471,15 +491,15 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		nodes, err := st.Q.ListNodes(ctx)
 		if err != nil {
-			return subs.Config{}, err
+			return subsrc.Config{}, err
 		}
 		for _, n := range nodes {
 			if n.Enabled == 0 {
 				continue
 			}
-			sn := subs.Node{ID: n.ID, Name: n.Name, Endpoint: subs.Endpoint{Host: ep.Host, SNI: domainName}}
+			sn := submodel.Node{ID: n.ID, Name: n.Name, Endpoint: submodel.Endpoint{Host: ep.Host, SNI: domainName}}
 			if n.Address != "" {
-				sn.Endpoint = subs.Endpoint{Host: domain.NodeHost(n), SNI: n.Domain}
+				sn.Endpoint = submodel.Endpoint{Host: domain.NodeHost(n), SNI: n.Domain}
 				cfg.Direct = append(cfg.Direct, n.PublicHost, n.Domain)
 			}
 			sn.Endpoint.SNIRouter = n.SniRouter != 0
@@ -521,8 +541,8 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		return g
 	}}
-	subCfg := func(ctx context.Context) (subs.Config, error) { return cache.get(ctx, buildSubCfg) }
-	subHandler = subs.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
+	subCfg := func(ctx context.Context) (subsrc.Config, error) { return cache.get(ctx, buildSubCfg) }
+	subHandler = subsrc.NewHandler(st, subCfg, subPageHandler, o.Now, deps.Devices, o.TrustProxy)
 	subHandler.SetBalancer(deps.Balancer)
 	subHandler.SetLogger(o.Log)
 	subHandler.SetTelegram(p.Gateway)
@@ -672,11 +692,11 @@ type configCache struct {
 	mu  sync.Mutex
 	at  time.Time
 	g   uint64
-	cfg subs.Config
+	cfg subsrc.Config
 	ok  bool
 }
 
-func (c *configCache) get(ctx context.Context, build func(context.Context) (subs.Config, error)) (subs.Config, error) {
+func (c *configCache) get(ctx context.Context, build func(context.Context) (subsrc.Config, error)) (subsrc.Config, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	now, g := c.now(), c.gen()
@@ -685,7 +705,7 @@ func (c *configCache) get(ctx context.Context, build func(context.Context) (subs
 	}
 	cfg, err := build(ctx)
 	if err != nil {
-		return subs.Config{}, err
+		return subsrc.Config{}, err
 	}
 	c.cfg, c.g, c.at, c.ok = cfg, g, now, true
 	return cfg, nil

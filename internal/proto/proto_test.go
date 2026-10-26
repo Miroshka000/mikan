@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 	"testing"
 )
@@ -41,8 +40,10 @@ func code(err error) string {
 	return ""
 }
 
+// The default presets' templates load in the node as they are stored; what their apps get
+// is internal/sub/build's.
 func TestPresetsRender(t *testing.T) {
-	priv, pub := realityKey(t)
+	priv, _ := realityKey(t)
 	reality := `reality-config:
   dest: www.microsoft.com:443
   private-key: ` + priv + `
@@ -70,44 +71,19 @@ func TestPresetsRender(t *testing.T) {
 		if l["name"] != "in-"+preset || l["port"] != "443" || l["listen"] != "0.0.0.0" || l[extKey] != nil {
 			t.Fatalf("%s listener: %v", preset, l)
 		}
-		c, err := ClientConfig(tpl, ClientInput{Name: "N", Host: "203.0.113.7", Port: 443, PortSpec: "443", PinSHA256: "ab12", Slot: slots[0]})
-		if err != nil {
-			t.Fatalf("%s client: %v", preset, err)
-		}
-		u, err := url.Parse(c.URI)
-		if err != nil {
-			t.Fatalf("%s uri: %v", preset, err)
-		}
-		q := u.Query()
 		switch preset {
 		case "vless_reality_vision":
 			us := l["users"].([]map[string]any)
 			if len(us) != 2 || us[0]["flow"] != "xtls-rprx-vision" || us[0]["username"] != "s000001" || l["certificate"] != nil {
 				t.Fatalf("vision users: %v", l)
 			}
-			if q.Get("pbk") != pub || q.Get("flow") != "xtls-rprx-vision" || q.Get("type") != "tcp" || q.Get("sni") != "www.microsoft.com" || c.Mihomo["udp"] != true {
-				t.Fatalf("vision client: %s %v", c.URI, c.Mihomo)
-			}
-		case "vless_reality_xhttp":
-			if q.Get("type") != "xhttp" || q.Get("path") != "/x7k2" || q.Get("mode") != "stream-one" || q.Get("flow") != "" || c.Mihomo["udp"] != true {
-				t.Fatalf("xhttp client: %s %v", c.URI, c.Mihomo)
-			}
-			if opts := c.Mihomo["xhttp-opts"].(map[string]any); opts["reuse-settings"] == nil {
-				t.Fatalf("xhttp must multiplex: %v", opts)
-			}
 		case "hysteria2":
 			if users := l["users"].(map[string]string); users["s000001"] != "S3cr3t+/=" || l["certificate"] != cert.CertPath {
 				t.Fatalf("hy2 listener: %v", l)
 			}
-			if u.Scheme != "hysteria2" || q.Get("obfs") != "salamander" || q.Get("pinSHA256") != "ab12" || c.Mihomo["fingerprint"] != "ab12" {
-				t.Fatalf("hy2 client: %s %v", c.URI, c.Mihomo)
-			}
 		case "tuic_v5":
 			if users := l["users"].(map[string]string); users[slots[0].UUID] != "S3cr3t+/=" {
 				t.Fatalf("tuic users keyed by uuid: %v", l)
-			}
-			if pw, _ := u.User.Password(); u.Scheme != "tuic" || pw != "S3cr3t+/=" || q.Get("allow_insecure") != "1" || c.Mihomo["congestion-controller"] != "bbr" {
-				t.Fatalf("tuic client: %s %v", c.URI, c.Mihomo)
 			}
 		}
 	}
@@ -140,7 +116,7 @@ func TestRealityReplayWindow(t *testing.T) {
 }
 
 // VLESS Encryption: the listener keeps the private keys, clients get the public halves
-// with a full handshake (1rtt), in both subscription formats.
+// with a full handshake (1rtt).
 func TestVLESSEncryption(t *testing.T) {
 	priv, _ := realityKey(t)
 	x := make([]byte, 32)
@@ -175,15 +151,6 @@ func TestVLESSEncryption(t *testing.T) {
 	if err != nil || l["decryption"] != "mlkem768x25519plus.native.600s."+b64(x) {
 		t.Fatalf("listener keeps the decryption: %v %v", err, l["decryption"])
 	}
-	c, err := ClientConfig(tpl, ClientInput{Name: "PQ", Host: "203.0.113.7", Port: 2096, Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	enc := "mlkem768x25519plus.native.1rtt." + b64(xk.PublicKey().Bytes())
-	u, _ := url.Parse(c.URI)
-	if c.Mihomo["encryption"] != enc || u.Query().Get("encryption") != enc || strings.Contains(c.URI, b64(x)) {
-		t.Fatalf("client: %v\n%s", c.Mihomo["encryption"], c.URI)
-	}
 	if code(Validate(mustParse(t, "type: vless\ndecryption: nope\n"+src[strings.Index(src, "reality-config"):]), Options{})) != "vless_decryption" {
 		t.Fatal("a broken decryption must be refused")
 	}
@@ -202,50 +169,6 @@ func toFloat(v any) float64 {
 		return n
 	}
 	return -1
-}
-
-// A self-signed node certificate is pinned in links too: Xray apps read pcs, Hysteria2
-// apps pinSHA256. TUIC links have no pin field.
-func TestSelfSignedLinksCarryThePin(t *testing.T) {
-	in := ClientInput{Name: "X", Host: "203.0.113.7", Port: 2083, PinSHA256: "ab12", Slot: slots[0]}
-	for src, want := range map[string]string{
-		"type: trojan\nmikan: {tls: node}\n":             "pcs=ab12",
-		"type: anytls\n":                                 "pcs=ab12",
-		"type: vless\nws-path: /v\nmikan: {tls: node}\n": "pcs=ab12",
-		"type: hysteria2\n":                              "pinSHA256=ab12",
-	} {
-		c, err := ClientConfig(mustParse(t, src), in)
-		if err != nil {
-			t.Fatalf("%s: %v", src, err)
-		}
-		link := c.URI
-		if !strings.Contains(link, want) || c.Mihomo["fingerprint"] != "ab12" {
-			t.Errorf("%s: %s lacks %s (mihomo %v)", src, link, want, c.Mihomo["fingerprint"])
-		}
-	}
-}
-
-func TestXHTTPSettingsReachTheClient(t *testing.T) {
-	priv, _ := realityKey(t)
-	src := "type: vless\nxhttp-config: {path: /x, mode: stream-one, x-padding-bytes: 2000-3000, x-padding-obfs-mode: true, sc-max-buffered-posts: 30}\n" +
-		"reality-config:\n  dest: www.microsoft.com:443\n  private-key: " + priv + "\n  short-id: [a1b2]\n  server-names: [www.microsoft.com]\n"
-	c, err := ClientConfig(mustParse(t, src), ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts := c.Mihomo["xhttp-opts"].(map[string]any)
-	if opts["x-padding-bytes"] != "2000-3000" || opts["x-padding-obfs-mode"] != true || opts["sc-max-buffered-posts"] != nil {
-		t.Fatalf("xhttp-opts: %v", opts)
-	}
-	u, _ := url.Parse(c.URI)
-	if extra := u.Query().Get("extra"); extra != `{"xPaddingBytes":"2000-3000","xPaddingObfsMode":true}` {
-		t.Fatalf("link extra: %q", extra)
-	}
-
-	plain, err := ClientConfig(mustParse(t, strings.Replace(src, ", x-padding-bytes: 2000-3000, x-padding-obfs-mode: true", "", 1)), ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	if err != nil || strings.Contains(plain.URI, "extra=") {
-		t.Fatalf("no shared settings, no extra: %v %s", err, plain.URI)
-	}
 }
 
 func TestValidateRefusesDangerousTemplates(t *testing.T) {
@@ -296,32 +219,34 @@ func TestSelfStealDest(t *testing.T) {
 	}
 }
 
+// The listeners of the other transports and protocols; what their apps get is
+// internal/sub/build's.
 func TestNewTypes(t *testing.T) {
 	priv, _ := realityKey(t)
 	cert := Cert{CertPath: "/c", KeyPath: "/k"}
-	in := ClientInput{Name: "X", Host: "vpn.example.com", Port: 2053, SNI: "vpn.example.com", Slot: slots[0]}
-	cases := map[string]func(Client, map[string]any){
-		"type: vless\ngrpc-service-name: api\nreality-config: {dest: www.microsoft.com:443, private-key: " + priv + ", short-id: [ab], server-names: [www.microsoft.com]}\n": func(c Client, l map[string]any) {
-			if !strings.Contains(c.URI, "type=grpc") || !strings.Contains(c.URI, "serviceName=api") || c.Mihomo["network"] != "grpc" {
-				t.Errorf("grpc: %s %v", c.URI, c.Mihomo)
+	cases := map[string]func(map[string]any){
+		"type: vless\ngrpc-service-name: api\nreality-config: {dest: www.microsoft.com:443, private-key: " + priv + ", short-id: [ab], server-names: [www.microsoft.com]}\n": func(l map[string]any) {
+			if l["grpc-service-name"] != "api" || l["certificate"] != nil {
+				t.Errorf("grpc: %v", l)
 			}
 		},
-		"type: trojan\nws-path: /t\nmikan: {tls: node}\n": func(c Client, l map[string]any) {
-			if l["certificate"] != "/c" || !strings.HasPrefix(c.URI, "trojan://") || c.Mihomo["sni"] != "vpn.example.com" || c.Mihomo["password"] != "S3cr3t+/=" {
-				t.Errorf("trojan: %s %v %v", c.URI, c.Mihomo, l)
+		"type: trojan\nws-path: /t\nmikan: {tls: node}\n": func(l map[string]any) {
+			if l["certificate"] != "/c" {
+				t.Errorf("trojan: %v", l)
 			}
 			if us := l["users"].([]map[string]any); us[0]["password"] != "S3cr3t+/=" {
 				t.Errorf("trojan users: %v", us)
 			}
 		},
-		"type: anytls\n": func(c Client, l map[string]any) {
-			if l["certificate"] != "/c" || !strings.HasPrefix(c.URI, "anytls://") || c.Mihomo["sni"] != "vpn.example.com" {
-				t.Errorf("anytls: %s %v", c.URI, c.Mihomo)
+		"type: anytls\n": func(l map[string]any) {
+			if l["certificate"] != "/c" {
+				t.Errorf("anytls: %v", l)
 			}
 		},
-		"type: vless\nws-path: /v\nmikan: {tls: node, client: {server: cdn.example.com, port: 443}}\n": func(c Client, l map[string]any) {
-			if c.Mihomo["server"] != "cdn.example.com" || c.Mihomo["port"] != 443 || !strings.HasPrefix(c.URI, "vless://") {
-				t.Errorf("vless override: %s %v", c.URI, c.Mihomo)
+		"type: vless\nws-path: /v\nmikan: {tls: node, client: {server: cdn.example.com, port: 443}}\n": func(l map[string]any) {
+			// The apps' own address is theirs: the node listens where it does.
+			if l["port"] != "2053" || l[extKey] != nil {
+				t.Errorf("vless override: %v", l)
 			}
 		},
 	}
@@ -331,11 +256,7 @@ func TestNewTypes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", src, err)
 		}
-		c, err := ClientConfig(tpl, in)
-		if err != nil {
-			t.Fatalf("%s: %v", src, err)
-		}
-		check(c, l)
+		check(l)
 	}
 }
 
@@ -352,22 +273,5 @@ func TestParseErrorsAreCodes(t *testing.T) {
 	}
 	if _, err := Parse("# only a comment\n"); code(err) != "config_empty" {
 		t.Fatalf("got %v", err)
-	}
-}
-
-// A REALITY server that requires X25519MLKEM768 gets clients that offer it; the others
-// leave it to the app.
-func TestRealityRequiredPostQuantum(t *testing.T) {
-	priv, _ := realityKey(t)
-	src := "type: vless\nreality-config:\n  dest: www.microsoft.com:443\n  private-key: " + priv + "\n  short-id: [a1b2]\n  server-names: [www.microsoft.com]\n"
-	in := ClientInput{Name: "X", Host: "vpn.example.com", Port: 443, Slot: slots[0]}
-	for extra, want := range map[string]any{"": nil, "  require-x25519mlkem768: true\n": true} {
-		c, err := ClientConfig(mustParse(t, src+extra), in)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := c.Mihomo["reality-opts"].(map[string]any)["support-x25519mlkem768"]; got != want {
-			t.Fatalf("%q: support-x25519mlkem768 %v, want %v", extra, got, want)
-		}
 	}
 }

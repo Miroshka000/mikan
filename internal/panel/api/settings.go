@@ -19,8 +19,12 @@ import (
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/proto"
+	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
+	"mikan/internal/sub/serve"
+	"mikan/internal/sub/xray"
 	"mikan/internal/textutil"
 )
 
@@ -34,6 +38,8 @@ type SettingsView struct {
 	AppBranding    bool   `json:"app_branding" doc:"Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки"`
 	InactiveServer bool   `json:"sub_inactive_server" doc:"Подписка, которая не может подключиться (кончился срок или трафик, отключена), получает вместо серверов одну запись с объяснением"`
 	InactiveText   string `json:"sub_inactive_text" doc:"Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки"`
+	XrayJSON       bool   `json:"sub_xray_json" doc:"Happ и INCY получают полные конфиги Xray (JSON) вместо ссылок: маршрутизация, DNS и «Авто» панели доходят до них; запрос с ?format= получает свой формат в любом случае"`
+	SubLogDays     int    `json:"sub_log_days" doc:"Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен"`
 	SiteTemplate   string `json:"site_template" enum:",maintenance,cats" doc:"Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер"`
 	SiteOwn        bool   `json:"site_own" doc:"В data/panel/www есть своя страница: шаблон не действует"`
 	BrandAccent    string `json:"brand_accent" doc:"Цвет бренда #RRGGBB; пусто — цвет приложения"`
@@ -42,26 +48,25 @@ type SettingsView struct {
 	Domain         string `json:"domain"`
 	SubDomain      string `json:"sub_domain" doc:"Свой домен для ссылок подписки; пусто — адрес панели"`
 	// SubCertificate is the subscription domain's own certificate; absent in development.
-	SubCertificate *acme.Status `json:"sub_certificate,omitempty" doc:"Сертификат домена подписки: kind off — домен не задан"`
-	PanelPort      int          `json:"panel_port"`
-	SubPort        int          `json:"sub_port" doc:"Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае"`
-	SubPortError   string       `json:"sub_port_error,omitempty" doc:"sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели"`
-	QuietHourUTC   int          `json:"quiet_hour_utc" doc:"Час (UTC), когда пополняется пул слотов: переподключение QUIC-клиентов"`
-	AdminURL       string       `json:"admin_url"`
-	SubBaseURL     string       `json:"sub_base_url"`
-	SubGroupMain   string       `json:"sub_group_main" doc:"Главная группа в Clash-приложениях"`
-	SubGroupAuto   string       `json:"sub_group_auto" doc:"Группа автовыбора самого быстрого подключения"`
-	SubRules       string       `json:"sub_rules" doc:"Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий"`
-	RuleTargets    []string     `json:"rule_targets" doc:"Куда правило может направить трафик: DIRECT, REJECT, REJECT-DROP, PROXY и группы"`
-	SubRouting     string       `json:"sub_routing" enum:"ru_direct,all,blocked" doc:"Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую"`
-	SubTemplate    string       `json:"sub_template" doc:"Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types}"`
-	SubRoutes      subs.Routes  `json:"sub_routes" doc:"Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog"`
-	Fingerprint    string       `json:"client_fingerprint" doc:"Отпечаток TLS (uTLS) у клиентов, если у подключения не задан свой: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized или своё значение"`
-	AutoPort       bool         `json:"auto_port" doc:"Переносить подключение на другой порт, если клиенты перестали до него доходить"`
-	AutoSNI        bool         `json:"auto_sni" doc:"Менять сайт маскировки REALITY, если он перестал подходить"`
-	WideScan       bool         `json:"wide_sni_scan" doc:"Искать сайты маскировки REALITY не только в /24 ноды, но и в соседних /24 её /16, до 20 найденных сайтов или 2 минут. Много подключений: хостер может принять это за сканирование сети"`
-	AnyPort        bool         `json:"any_port" doc:"Когда запасные порты (2053, 2083…) заняты, панель сама берёт любой свободный из 20000-32767: для нового подключения без порта и при автопереносе. Эти порты установщик в файрволе не открывает"`
-	SupportAccess  bool         `json:"support_access" doc:"Разрешить доступ для поддержки (Настройки → Безопасность). Выключено: новый доступ не выдать, действующий закрывается. MIKAN_SUPPORT_ACCESS=off в .env сервера выключает его независимо от этой настройки"`
+	SubCertificate *acme.Status   `json:"sub_certificate,omitempty" doc:"Сертификат домена подписки: kind off — домен не задан"`
+	PanelPort      int            `json:"panel_port"`
+	SubPort        int            `json:"sub_port" doc:"Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае"`
+	SubPortError   string         `json:"sub_port_error,omitempty" doc:"sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели"`
+	QuietHourUTC   int            `json:"quiet_hour_utc" doc:"Час (UTC), когда пополняется пул слотов: переподключение QUIC-клиентов"`
+	AdminURL       string         `json:"admin_url"`
+	SubBaseURL     string         `json:"sub_base_url"`
+	SubGroupMain   string         `json:"sub_group_main" doc:"Главная группа в Clash-приложениях"`
+	SubGroupAuto   string         `json:"sub_group_auto" doc:"Группа автовыбора самого быстрого подключения"`
+	SubRules       string         `json:"sub_rules" doc:"Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий"`
+	RuleTargets    []string       `json:"rule_targets" doc:"Куда правило может направить трафик: DIRECT, REJECT, REJECT-DROP, PROXY и группы"`
+	SubRouting     string         `json:"sub_routing" enum:"ru_direct,all,blocked" doc:"Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую"`
+	SubRoutes      routing.Routes `json:"sub_routes" doc:"Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog"`
+	Fingerprint    string         `json:"client_fingerprint" doc:"Отпечаток TLS (uTLS) у клиентов, если у подключения не задан свой: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized или своё значение"`
+	AutoPort       bool           `json:"auto_port" doc:"Переносить подключение на другой порт, если клиенты перестали до него доходить"`
+	AutoSNI        bool           `json:"auto_sni" doc:"Менять сайт маскировки REALITY, если он перестал подходить"`
+	WideScan       bool           `json:"wide_sni_scan" doc:"Искать сайты маскировки REALITY не только в /24 ноды, но и в соседних /24 её /16, до 20 найденных сайтов или 2 минут. Много подключений: хостер может принять это за сканирование сети"`
+	AnyPort        bool           `json:"any_port" doc:"Когда запасные порты (2053, 2083…) заняты, панель сама берёт любой свободный из 20000-32767: для нового подключения без порта и при автопереносе. Эти порты установщик в файрволе не открывает"`
+	SupportAccess  bool           `json:"support_access" doc:"Разрешить доступ для поддержки (Настройки → Безопасность). Выключено: новый доступ не выдать, действующий закрывается. MIKAN_SUPPORT_ACCESS=off в .env сервера выключает его независимо от этой настройки"`
 	// Devices: see domain.Devices.
 	DeviceBinding bool `json:"device_binding" doc:"Привязывать подписку к устройствам: у каждого устройства свои ключи"`
 	RequireHWID   bool `json:"device_require_hwid" doc:"Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место)"`
@@ -77,7 +82,7 @@ type SettingsView struct {
 	ACMEEABKID  string `json:"acme_eab_kid" doc:"Google Trust Services: keyId ключа EAB"`
 	ACMEEABHMAC bool   `json:"acme_eab_hmac_set" doc:"Google Trust Services: ключ HMAC сохранён (сам ключ не показывается)"`
 
-	// Happ: see subs.Happ.
+	// Happ: see serve.Happ.
 	HappRouting      string `json:"happ_routing" doc:"Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; auto — панель собирает его сама из маршрутизации Clash-профиля (Настройки → Маршрутизация); уходит только в Happ заголовком routing"`
 	HappProviderID   string `json:"happ_provider_id" doc:"Provider ID с happ-proxy.com; без него Happ не принимает hide-settings"`
 	HappHideSettings bool   `json:"happ_hide_settings" doc:"Скрыть в Happ настройки серверов подписки (нужен Provider ID)"`
@@ -86,8 +91,7 @@ type SettingsView struct {
 
 type settingsOutput struct{ Body SettingsView }
 
-// The size limits of the body are the huma tags: sub_template takes up to 524288 bytes (512 KiB),
-// the largest template there is, as a full profile with rule lists is a few dozen kilobytes.
+// The size limits of the body are the huma tags.
 type patchSettingsInput struct {
 	Body patchSettingsBody
 }
@@ -104,6 +108,8 @@ type patchSettingsBody = struct {
 	AppBranding    *bool                `json:"app_branding,omitempty"`
 	InactiveServer *bool                `json:"sub_inactive_server,omitempty"`
 	InactiveText   *string              `json:"sub_inactive_text,omitempty" maxLength:"120"`
+	XrayJSON       *bool                `json:"sub_xray_json,omitempty"`
+	SubLogDays     *int                 `json:"sub_log_days,omitempty" minimum:"0" maximum:"90"`
 	SiteTemplate   *string              `json:"site_template,omitempty" enum:",maintenance,cats"`
 	BrandAccent    *string              `json:"brand_accent,omitempty" maxLength:"7" doc:"#RRGGBB или пусто"`
 	BrandLogoURL   *string              `json:"brand_logo_url,omitempty" maxLength:"500" doc:"https://… или пусто"`
@@ -118,8 +124,7 @@ type patchSettingsBody = struct {
 	SubGroupMain   *string              `json:"sub_group_main,omitempty" maxLength:"200"`
 	SubGroupAuto   *string              `json:"sub_group_auto,omitempty" maxLength:"200"`
 	SubRouting     *string              `json:"sub_routing,omitempty" enum:"ru_direct,all,blocked"`
-	SubRoutes      *subs.Routes         `json:"sub_routes,omitempty"`
-	SubTemplate    *string              `json:"sub_template,omitempty" maxLength:"524288" doc:"Свой профиль Clash; пусто — вернуть встроенный"`
+	SubRoutes      *routing.Routes      `json:"sub_routes,omitempty"`
 	SubRules       *string              `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила Clash, до 500 строк; ошибка указывает номер строки"`
 	Fingerprint    *string              `json:"client_fingerprint,omitempty" pattern:"^[a-z0-9_]{1,32}$" doc:"Из списка или своё: латиница в нижнем регистре, цифры и _, до 32 символов"`
 	AutoPort       *bool                `json:"auto_port,omitempty"`
@@ -190,13 +195,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	get(settings.KeyGroupAuto, &v.SubGroupAuto)
 	get(settings.KeyRouting, &v.SubRouting)
 	get(settings.KeyRules, &v.SubRules)
-	v.SubRouting = string(subs.ParseRouting(v.SubRouting))
+	v.SubRouting = string(routing.ParseMode(v.SubRouting))
 	if err == nil {
-		v.SubRoutes, _, err = settings.Get[subs.Routes](ctx, h.d.Settings, settings.KeyRoutes)
-	}
-	// An own profile may hold the admin's own proxies, a controller secret or DNS tokens.
-	if !hidesSecrets(ctx) {
-		get(settings.KeyTemplate, &v.SubTemplate)
+		v.SubRoutes, _, err = settings.Get[routing.Routes](ctx, h.d.Settings, settings.KeyRoutes)
 	}
 	get(settings.KeyFingerprint, &v.Fingerprint)
 	if !proto.ValidFingerprint(v.Fingerprint) {
@@ -208,9 +209,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if v.DefaultLang, err = h.d.Settings.Lang(ctx); err != nil {
 		return v, err
 	}
-	g := subs.Groups{Main: v.SubGroupMain, Auto: v.SubGroupAuto}.WithDefaults(v.DefaultLang)
+	g := submodel.GroupNames{Main: v.SubGroupMain, Auto: v.SubGroupAuto}.WithDefaults(v.DefaultLang)
 	v.SubGroupMain, v.SubGroupAuto = g.Main, g.Auto
-	v.RuleTargets = subs.RuleTargets(g)
+	v.RuleTargets = routing.RuleTargets(g)
 	if v.DefaultLang == "" {
 		v.DefaultLang = "auto"
 	}
@@ -256,7 +257,11 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if v.InactiveServer, err = h.d.Settings.On(ctx, settings.InactiveServer); err != nil {
 		return v, err
 	}
+	if v.XrayJSON, err = h.d.Settings.On(ctx, settings.XrayJSON); err != nil {
+		return v, err
+	}
 	get(settings.KeyInactiveText, &v.InactiveText)
+	v.SubLogDays = subsrc.LogDays(ctx, h.d.Settings)
 	get(settings.KeySiteTemplate, &v.SiteTemplate)
 	if h.d.DataDir != "" {
 		v.SiteOwn = server.HasOwnSite(filepath.Join(h.d.DataDir, "www"))
@@ -359,10 +364,10 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			details = append(details, fieldDetail("body.sub_domain", "sub_domain_invalid", nil))
 		}
 	}
-	if b.SupportURL != nil && strings.TrimSpace(*b.SupportURL) != "" && !textutil.ValidLink(strings.TrimSpace(*b.SupportURL), subs.AppLinks) {
+	if b.SupportURL != nil && strings.TrimSpace(*b.SupportURL) != "" && !textutil.ValidLink(strings.TrimSpace(*b.SupportURL), serve.AppLinks) {
 		details = append(details, fieldDetail("body.support_url", "support_url_invalid", nil))
 	}
-	if b.AnnounceURL != nil && *b.AnnounceURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.AnnounceURL), subs.AppLinks) {
+	if b.AnnounceURL != nil && *b.AnnounceURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.AnnounceURL), serve.AppLinks) {
 		details = append(details, fieldDetail("body.sub_announce_url", "support_url_invalid", nil))
 	}
 	// A {word} that is no variable stays as text: an old announcement may hold one.
@@ -370,19 +375,19 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		details = append(details, fieldDetail("body.sub_title", "one_line", nil))
 	}
 	// The announcement keeps its lines on the page and in the Mini App, a few of them.
-	if b.Announce != nil && strings.Count(*b.Announce, "\n") >= subs.AnnounceLines {
+	if b.Announce != nil && strings.Count(*b.Announce, "\n") >= serve.AnnounceLines {
 		details = append(details, fieldDetail("body.sub_announce", "announce_lines", nil))
 	}
-	if b.BrandAccent != nil && *b.BrandAccent != "" && !subs.ValidAccent(strings.TrimSpace(*b.BrandAccent)) {
+	if b.BrandAccent != nil && *b.BrandAccent != "" && !serve.ValidAccent(strings.TrimSpace(*b.BrandAccent)) {
 		details = append(details, fieldDetail("body.brand_accent", "color_invalid", nil))
 	}
-	if b.BrandLogoURL != nil && *b.BrandLogoURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.BrandLogoURL), subs.LogoLinks) {
+	if b.BrandLogoURL != nil && *b.BrandLogoURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.BrandLogoURL), serve.LogoLinks) {
 		details = append(details, fieldDetail("body.brand_logo_url", "url_invalid", nil))
 	}
-	if b.HappRouting != nil && strings.TrimSpace(*b.HappRouting) != "" && !subs.ValidHappRouting(strings.TrimSpace(*b.HappRouting)) {
+	if b.HappRouting != nil && strings.TrimSpace(*b.HappRouting) != "" && !xray.ValidHappRouting(strings.TrimSpace(*b.HappRouting)) {
 		details = append(details, fieldDetail("body.happ_routing", "happ_routing", nil))
 	}
-	if b.HappProvider != nil && strings.TrimSpace(*b.HappProvider) != "" && !subs.ValidHappProviderID(strings.TrimSpace(*b.HappProvider)) {
+	if b.HappProvider != nil && strings.TrimSpace(*b.HappProvider) != "" && !serve.ValidHappProviderID(strings.TrimSpace(*b.HappProvider)) {
 		details = append(details, fieldDetail("body.happ_provider_id", "happ_provider_id", nil))
 	}
 	if b.HappHide != nil && *b.HappHide {
@@ -398,7 +403,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 	}
 	if b.SubGroupMain != nil || b.SubGroupAuto != nil || b.SubRules != nil {
-		cur, err := subs.LoadGroups(ctx, h.d.Settings)
+		cur, err := subsrc.LoadGroups(ctx, h.d.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -422,8 +427,8 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			}
 			rules = &saved
 		}
-		if _, err := subs.ParseRules(*rules, next); err != nil {
-			var re *subs.RuleError
+		if _, err := routing.ParseRules(*rules, next); err != nil {
+			var re *routing.RuleError
 			if !errors.As(err, &re) {
 				return nil, err
 			}
@@ -451,16 +456,6 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		if err := b.SubRoutes.Check(exists); err != nil {
 			details = append(details, fieldDetail("body.sub_routes", err.Error(), nil))
-		}
-	}
-	if b.SubTemplate != nil && strings.TrimSpace(*b.SubTemplate) != "" && h.d.CheckTemplate != nil {
-		err := h.d.CheckTemplate(ctx, *b.SubTemplate)
-		var te *subs.TemplateError
-		switch {
-		case errors.As(err, &te):
-			details = append(details, fieldDetail("body.sub_template", te.Code, te.Detail))
-		case err != nil && !errors.Is(err, subs.ErrNoProxies):
-			return nil, err
 		}
 	}
 	if b.ACMECA != nil || b.ACMEEmail != nil || b.ACMEEABKID != nil || b.ACMEEABHMAC != nil {
@@ -633,16 +628,16 @@ func (h *handlers) checkSubPort(ctx context.Context, port int) (*huma.ErrorDetai
 
 // checkGroups: a profile with a group named like a proxy, a built-in policy or the
 // other group does not load in any Clash app.
-func (h *handlers) checkGroups(ctx context.Context, g subs.Groups) []error {
+func (h *handlers) checkGroups(ctx context.Context, g submodel.GroupNames) []error {
 	var out []error
-	if err := subs.ValidName(g.Main); err != nil {
+	if err := submodel.ValidName(g.Main); err != nil {
 		out = append(out, fieldDetail("body.sub_group_main", err.Error(), nil))
 	}
-	if err := subs.ValidName(g.Auto); err != nil {
+	if err := submodel.ValidName(g.Auto); err != nil {
 		out = append(out, fieldDetail("body.sub_group_auto", err.Error(), nil))
 	}
-	if strings.EqualFold(g.Auto, subs.AliasGroup) {
-		out = append(out, fieldDetail("body.sub_group_auto", "group_alias_taken", subs.AliasGroup))
+	if strings.EqualFold(g.Auto, submodel.AliasGroup) {
+		out = append(out, fieldDetail("body.sub_group_auto", "group_alias_taken", submodel.AliasGroup))
 	}
 	if strings.EqualFold(g.Main, g.Auto) {
 		out = append(out, fieldDetail("body.sub_group_auto", "groups_same", nil))
@@ -664,10 +659,10 @@ func (h *handlers) checkGroups(ctx context.Context, g subs.Groups) []error {
 // checkSubName validates an inbound's name in the subscription and returns an error
 // code, "" when the name is fine.
 func (h *handlers) checkSubName(ctx context.Context, name string) string {
-	if err := subs.ValidName(name); err != nil {
+	if err := submodel.ValidName(name); err != nil {
 		return err.Error()
 	}
-	g, err := subs.LoadGroups(ctx, h.d.Settings)
+	g, err := subsrc.LoadGroups(ctx, h.d.Settings)
 	if err != nil {
 		return ""
 	}

@@ -212,7 +212,7 @@ func TestSupportGateOfTheRegisteredOperations(t *testing.T) {
 	for _, id := range []string{"create-node", "rekey-node", "import-node-warp", "set-certificate", "set-node-certificate", "set-sub-certificate",
 		"import-run", "import-preview", "update-legacy-links", "update-payment-settings", "refund-payment", "mark-payment-refunded",
 		"decide-topup", "adjust-balance", "set-bot-addon", "add-addon-source", "refresh-addon-source", "install-external-addon",
-		"update-exit-dns", "put-traffic-detail", "update-sub-page"} {
+		"update-exit-dns", "put-traffic-detail", "update-sub-page", "put-sub-apps", "put-sub-rules"} {
 		op := ops[id]
 		if op == nil {
 			t.Errorf("%s is not registered", id)

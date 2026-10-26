@@ -15,8 +15,8 @@ import (
 	"mikan/internal/panel/presets"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
 	"mikan/internal/proto"
+	"mikan/internal/sub/apps"
 )
 
 type InboundView struct {
@@ -227,7 +227,7 @@ func (h *handlers) viewInbound(ctx context.Context, in db.Inbound, last map[int6
 		v.Type, v.Network = t.Type(), t.Network()
 		v.Shared = proto.Shared(t)
 		v.NodeCert = t.NodeCert()
-		for _, f := range subs.AppsFor(proto.NeedsOf(t)) {
+		for _, f := range apps.For(proto.NeedsOf(t)) {
 			v.Apps = append(v.Apps, string(f))
 		}
 		v.Dest, v.ServerNames = presets.Dest(t)

@@ -48,8 +48,8 @@ func (e *DomainError) Unwrap() error { return e.Err }
 // NodeRules are what a node is checked against besides its own fields.
 type NodeRules struct {
 	// Name checks the form of a node's name and that it repeats no group of the
-	// subscription (subs.Groups.CheckName); the groups live in subs, which imports domain,
-	// so the caller brings the check. nil asks nothing.
+	// subscription (model.GroupNames.CheckName of internal/sub); the saved names are read by
+	// subsrc, which imports domain, so the caller brings the check. nil asks nothing.
 	Name func(name string) error
 	// DNS checks that a node's domain leads to the node, over the network and so outside
 	// any transaction. nil asks nothing: tests, and a panel without the check.

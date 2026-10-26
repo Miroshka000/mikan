@@ -154,3 +154,37 @@ func anyStrings(v any) []string {
 	}
 	return out
 }
+
+// Happ gets the xray JSON profile while sub_xray_json is on, as it is by default, and its
+// links once the admin turns it off; the settings say which.
+func TestXrayJSONSwitch(t *testing.T) {
+	k := newKeyHarness(t)
+	ctx := t.Context()
+	clock := func() time.Time { return k.now }
+	tariffs, _ := k.st.Q.ListTariffs(ctx)
+	u, err := domain.NewUsers(k.st, domain.NewPool(k.st, clock), noChanges{}, clock).Create(ctx, domain.CreateInput{Name: "a", TariffID: tariffs[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetch := func() (*http.Response, []byte) {
+		t.Helper()
+		k.now = k.now.Add(time.Minute) // past the settings cache
+		return k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "Happ/3.6.0/Android/1", "X-Hwid": "phone-0123456789"})
+	}
+	var configs []map[string]any
+	if resp, raw := fetch(); resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/json") ||
+		json.Unmarshal(raw, &configs) != nil || len(configs) == 0 || configs[0]["remarks"] == nil {
+		t.Fatalf("on by default: %d %v %.200s", resp.StatusCode, resp.Header, raw)
+	}
+	var view struct {
+		XrayJSON bool `json:"sub_xray_json"`
+	}
+	resp, raw := k.do(http.MethodPatch, k.api+"/settings", map[string]any{"sub_xray_json": false}, k.csrf)
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(raw, &view) != nil || view.XrayJSON {
+		t.Fatalf("switching off: %d %s", resp.StatusCode, raw)
+	}
+	resp, raw = fetch()
+	if links, err := base64.StdEncoding.DecodeString(string(raw)); err != nil || !strings.Contains(string(links), "vless://") {
+		t.Fatalf("off: %v %.200s", resp.Header, raw)
+	}
+}

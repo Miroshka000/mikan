@@ -30,6 +30,8 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/warp"
 	"mikan/internal/proto"
+	"mikan/internal/sub/build"
+	"mikan/internal/sub/mihomo"
 )
 
 // Node is the subset of the node API the syncer needs.
@@ -1027,16 +1029,16 @@ func (s *Syncer) exitTo(ctx context.Context, src, id int64) (nodeapi.Exit, error
 	if err != nil {
 		return nodeapi.Exit{}, err
 	}
-	c, err := proto.ClientConfig(t, proto.ClientInput{Name: nodeapi.ExitName(id), Host: host, Port: port, Slot: proto.Slot{Name: domain.RelayUserName(src), UUID: key}})
+	p, err := build.Proxy(t, build.Input{Name: nodeapi.ExitName(id), Host: host, Port: port, Keys: proto.Slot{Name: domain.RelayUserName(src), UUID: key}})
 	if err != nil {
 		return nodeapi.Exit{}, err
 	}
 	// Node to node is Citrus on both ends: the key exchange is post-quantum, said here
 	// rather than left to the core's default (mihomo's was the other way).
-	if ro, ok := c.Mihomo["reality-opts"].(map[string]any); ok {
-		ro["support-x25519mlkem768"] = true
+	if p.TLS != nil && p.TLS.Reality != nil {
+		p.TLS.Reality.MLKEM = true
 	}
-	raw, _ := json.Marshal(c.Mihomo)
+	raw, _ := json.Marshal(mihomo.Proxy(p))
 	return nodeapi.Exit{Name: nodeapi.ExitName(id), Proxy: raw}, nil
 }
 

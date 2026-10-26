@@ -3,14 +3,14 @@ package proto
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"net/url"
 	"strings"
 	"testing"
 )
 
 // The protocols of mihomo's newer cores: TrustTunnel, ShadowQUIC and Mieru check every
 // user, and so does Shadowsocks-2022 with an AES method; Sudoku, Snell and
-// Shadowsocks-2022 with ChaCha20 have one key for everyone.
+// Shadowsocks-2022 with ChaCha20 have one key for everyone. What their apps get is
+// internal/sub/build's.
 func TestExtraTypes(t *testing.T) {
 	key := make([]byte, 16)
 	if _, err := rand.Read(key); err != nil {
@@ -23,13 +23,12 @@ func TestExtraTypes(t *testing.T) {
 	}
 	ssKey32 := base64.StdEncoding.EncodeToString(key32)
 	cert := Cert{CertPath: "/c", KeyPath: "/k"}
-	in := ClientInput{Name: "X", Host: "vpn.example.com", Port: 4443, SNI: "vpn.example.com", Slot: slots[0]}
 	cases := []struct {
 		src    string
 		shared bool
-		check  func(c Client, l map[string]any)
+		check  func(l map[string]any)
 	}{
-		{"type: trusttunnel\ncongestion-controller: bbr\n", false, func(c Client, l map[string]any) {
+		{"type: trusttunnel\ncongestion-controller: bbr\n", false, func(l map[string]any) {
 			us, _ := l["users"].([]map[string]any)
 			if len(us) != 2 || us[0]["username"] != "s000001" || us[0]["password"] != "S3cr3t+/=" || l["certificate"] != "/c" {
 				t.Errorf("trusttunnel listener: %v", l)
@@ -37,85 +36,45 @@ func TestExtraTypes(t *testing.T) {
 			if n, _ := l["network"].([]any); len(n) != 1 || n[0] != "tcp" {
 				t.Errorf("trusttunnel runs HTTP/2 over TCP only: %v", l["network"])
 			}
-			m := c.Mihomo
-			if m["type"] != "trusttunnel" || m["username"] != "s000001" || m["password"] != "S3cr3t+/=" || m["sni"] != "vpn.example.com" || m["client-fingerprint"] != "chrome" || m["udp"] != true || m["tls"] != nil {
-				t.Errorf("trusttunnel client: %v", m)
-			}
-			if c.URI != "" {
-				t.Errorf("no share link format: %s", c.URI)
-			}
 		}},
-		{"type: shadowquic\njls-upstream: {addr: www.google.com:443, sni: www.google.com}\nalpn: [h3]\n", false, func(c Client, l map[string]any) {
+		{"type: shadowquic\njls-upstream: {addr: www.google.com:443, sni: www.google.com}\nalpn: [h3]\n", false, func(l map[string]any) {
 			us, _ := l["users"].([]map[string]any)
 			if len(us) != 2 || us[1]["username"] != "s000002" || us[1]["password"] != "x" || l["certificate"] != nil {
 				t.Errorf("shadowquic listener: %v", l)
 			}
-			m := c.Mihomo
-			if m["type"] != "shadowquic" || m["username"] != "s000001" || m["password"] != "S3cr3t+/=" || m["sni"] != "www.google.com" || m["udp"] != true {
-				t.Errorf("shadowquic client: %v", m)
-			}
-			if a, _ := m["alpn"].([]string); len(a) != 1 || a[0] != "h3" {
-				t.Errorf("shadowquic alpn: %v", m["alpn"])
-			}
 		}},
-		{"type: mieru\n", false, func(c Client, l map[string]any) {
+		{"type: mieru\n", false, func(l map[string]any) {
 			us, _ := l["users"].(map[string]string)
 			if len(us) != 2 || us["s000001"] != "S3cr3t+/=" || l["transport"] != "TCP" {
 				t.Errorf("mieru listener: %v", l)
 			}
-			m := c.Mihomo
-			// The Citrus server knows who sends UDP over Mieru: UDP on.
-			if m["type"] != "mieru" || m["transport"] != "TCP" || m["username"] != "s000001" || m["password"] != "S3cr3t+/=" || m["udp"] != true {
-				t.Errorf("mieru client: %v", m)
-			}
 		}},
-		{"type: shadowsocks\ncipher: 2022-blake3-aes-128-gcm\npassword: " + ssKey + "\n", false, func(c Client, l map[string]any) {
+		{"type: shadowsocks\ncipher: 2022-blake3-aes-128-gcm\npassword: " + ssKey + "\n", false, func(l map[string]any) {
 			// A key per user (EIH): the listener's password is the server's key, each user
-			// has one of its own, and the app gets both.
+			// has one of its own.
 			us, _ := l["users"].([]map[string]any)
-			own := ssUserKey("2022-blake3-aes-128-gcm", "S3cr3t+/=")
+			own := SSUserKey("2022-blake3-aes-128-gcm", "S3cr3t+/=")
 			if l["password"] != ssKey || len(us) != 2 || us[0]["name"] != "s000001" || us[0]["password"] != own || us[1]["password"] == own {
 				t.Errorf("shadowsocks listener: %v", l)
 			}
 			if k, err := base64.StdEncoding.DecodeString(own); err != nil || len(k) != 16 {
 				t.Errorf("a user key fits the cipher: %q", own)
 			}
-			m := c.Mihomo
-			if m["type"] != "ss" || m["cipher"] != "2022-blake3-aes-128-gcm" || m["password"] != ssKey+":"+own || m["udp"] != true ||
-				m["udp-over-tcp"] != true || m["udp-over-tcp-version"] != 2 {
-				t.Errorf("shadowsocks client: %v", m)
-			}
-			u, err := url.Parse(c.URI)
-			if err != nil || u.Scheme != "ss" || u.User.Username() != "2022-blake3-aes-128-gcm" || u.Host != "vpn.example.com:4443" {
-				t.Fatalf("ss link: %s %v", c.URI, err)
-			}
-			if p, _ := u.User.Password(); p != ssKey+":"+own {
-				t.Errorf("ss link key: %q", p)
-			}
 		}},
-		{"type: shadowsocks\ncipher: 2022-blake3-chacha20-poly1305\npassword: " + ssKey32 + "\n", true, func(c Client, l map[string]any) {
+		{"type: shadowsocks\ncipher: 2022-blake3-chacha20-poly1305\npassword: " + ssKey32 + "\n", true, func(l map[string]any) {
 			// ChaCha20 has no identity header: one key for everyone.
 			if _, has := l["users"]; has {
 				t.Errorf("one key, no users: %v", l)
 			}
-			if m := c.Mihomo; m["password"] != ssKey32 || m["udp"] != true || m["udp-over-tcp"] != true {
-				t.Errorf("shadowsocks client: %v", m)
-			}
 		}},
-		{"type: sudoku\nkey: 6f1a44b8-c4e1-4a36-9d62-0b4ddc4c7c4f\naead-method: chacha20-poly1305\npadding-min: 2\npadding-max: 7\ntable-type: prefer_ascii\nenable-pure-downlink: false\n", true, func(c Client, l map[string]any) {
+		{"type: sudoku\nkey: 6f1a44b8-c4e1-4a36-9d62-0b4ddc4c7c4f\naead-method: chacha20-poly1305\npadding-min: 2\npadding-max: 7\ntable-type: prefer_ascii\nenable-pure-downlink: false\n", true, func(l map[string]any) {
 			if _, has := l["users"]; has {
 				t.Errorf("one key, no users: %v", l)
 			}
-			m := c.Mihomo
-			if m["type"] != "sudoku" || m["key"] != "6f1a44b8-c4e1-4a36-9d62-0b4ddc4c7c4f" || m["aead-method"] != "chacha20-poly1305" || m["table-type"] != "prefer_ascii" || m["padding-max"] != 7 ||
-				m["enable-pure-downlink"] != false || m["udp"] != true {
-				t.Errorf("sudoku client: %v", m)
-			}
 		}},
-		{"type: snell\npsk: p5k-Secret\nversion: 3\n", true, func(c Client, l map[string]any) {
-			m := c.Mihomo
-			if m["type"] != "snell" || m["psk"] != "p5k-Secret" || m["version"] != 3 || m["udp"] != true || l["udp"] != true || c.URI != "" {
-				t.Errorf("snell client: %v %s", m, c.URI)
+		{"type: snell\npsk: p5k-Secret\nversion: 3\n", true, func(l map[string]any) {
+			if l["version"] != 3 || l["udp"] != true {
+				t.Errorf("snell listener: %v", l)
 			}
 		}},
 	}
@@ -131,11 +90,10 @@ func TestExtraTypes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s listener: %v", tc.src, err)
 		}
-		c, err := ClientConfig(tpl, in)
-		if err != nil {
-			t.Fatalf("%s client: %v", tc.src, err)
-		}
-		tc.check(c, l)
+		tc.check(l)
+	}
+	if v := SnellVersion(mustParse(t, "type: snell\npsk: x\n")); v != 3 {
+		t.Errorf("snell without a version speaks %d, want 3", v)
 	}
 }
 

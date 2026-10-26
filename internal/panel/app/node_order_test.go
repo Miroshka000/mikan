@@ -72,7 +72,7 @@ func TestNodeOrder(t *testing.T) {
 		// The panel keeps the server list for a few seconds; a reorder drops it at once
 		// when nodes run, and here the clock moves on instead.
 		h.now = h.now.Add(time.Minute)
-		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "Happ/3.4.1"})
+		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken+"?format=uri", nil, map[string]string{"User-Agent": "Happ/3.4.1"})
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("subscription: %d", resp.StatusCode)
 		}

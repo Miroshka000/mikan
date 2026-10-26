@@ -48,6 +48,11 @@ export const qk = {
   speedTests: (node: number) => ["speedtests", node] as const,
   subPage: ["sub-page"] as const,
   subDocs: ["sub-docs"] as const,
+  subApps: ["sub-apps"] as const,
+  subRules: ["sub-rules"] as const,
+  subTemplates: ["sub-templates"] as const,
+  subTemplate: (id: number) => ["sub-templates", "one", id] as const,
+  userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
   lifecycle: ["lifecycle"] as const,
   // Under the users: a change of any of them may move who the removal reaches.
@@ -483,4 +488,33 @@ export function useSpeedTests(node: number | undefined) {
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/speedtests", { params: { path: { id: node! }, query: { limit: SPEEDTESTS_LIMIT } }, signal })),
     enabled: !!node,
   });
+}
+
+/** The known apps and which of them the admin turned away. */
+export function useSubApps() {
+  return useQuery({ queryKey: qk.subApps, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-apps", { signal })) });
+}
+
+/** The response rules of the subscription, and what the editor needs to keep within their limits. */
+export function useSubRules() {
+  return useQuery({ queryKey: qk.subRules, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-rules", { signal })) });
+}
+
+/** The subscription templates of every core, without their texts, and how many a core may have. */
+export function useSubTemplates() {
+  return useQuery({ queryKey: qk.subTemplates, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates", { signal })) });
+}
+
+/** One subscription template with its text; its text is hidden from a key or an operator not shown secrets. */
+export function useSubTemplate(id: number | undefined) {
+  return useQuery({
+    queryKey: qk.subTemplate(id ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/{id}", { params: { path: { id: id! } }, signal })),
+    enabled: id !== undefined,
+  });
+}
+
+/** The latest requests of a user's subscription, newest first. */
+export function useUserSubLog(id: number) {
+  return useQuery({ queryKey: qk.userSubLog(id), queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/sub-log", { params: { path: { id }, query: { limit: 50 } }, signal })) });
 }
