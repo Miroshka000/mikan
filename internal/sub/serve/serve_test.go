@@ -220,7 +220,11 @@ func TestRulePage(t *testing.T) {
 // A real server lets the handler take the connection: the client gets nothing.
 func TestRuleDropsTheConnection(t *testing.T) {
 	sub := newSub(t, apps.Policy{NoBuiltin: true, Rules: []apps.Rule{rule("drop", "badbot", apps.Action{Respond: apps.RespondDrop})}})
+	// The client sees the connection closed before the handler has returned: the log is read
+	// once it has.
+	done := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer close(done)
 		handlerOf(sub).Serve(w, r, testToken)
 	}))
 	defer srv.Close()
@@ -231,6 +235,7 @@ func TestRuleDropsTheConnection(t *testing.T) {
 		resp.Body.Close()
 		t.Fatalf("an answer came: %d", resp.StatusCode)
 	}
+	<-done
 	if e := oneEntry(t, sub); e.Outcome != OutcomeDropped || e.Rule != "drop" || e.App != "" {
 		t.Errorf("%+v", e)
 	}
