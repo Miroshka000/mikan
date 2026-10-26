@@ -1728,7 +1728,7 @@
     "routesDnsProxyHint": "How the app finds the VPN servers themselves, one per line (proxy-server-nameserver).",
     "routesDnsPolicy": "DNS of your own for domains",
     "routesDnsPolicyHint": "A line per \"domains: servers separated by commas\", e.g. +.cn: https://dns.alidns.com/dns-query (nameserver-policy).",
-    "routesNote": "Clash apps (Koala Clash, FlClash, Clash Verge, ClashFest) get all of it. The official sing-box apps (SFA, SFI, SFM) a config with the groups, services and DNS, without XHTTP and servers with a self-signed certificate. Happ and INCY the sites and IPs when Subscription → Happ is set to From the routing settings. v2RayTun, v2rayNG, Hiddify and Karing get links only: they route by their own settings.",
+    "routesNote": "Clash apps (Koala Clash, FlClash, Clash Verge, ClashFest) get all of it. The official sing-box apps (SFA, SFI, SFM) a config with the groups, services and DNS, without XHTTP and servers with a self-signed certificate. Happ and INCY the routing and DNS inside their Xray configs (Subscription → Apps), and with links instead of configs only the sites and IPs, when the Happ card (Subscription → General) is set to From the routing settings. v2RayTun, v2rayNG, Hiddify and Karing get links only: they route by their own settings.",
     "routesPreview": "What the app gets",
     "routesPreviewSub": "The Clash profile of a client with every protocol and these settings, before they are saved. Its keys are placeholders.",
     "routesNotesTitle": "In other apps",

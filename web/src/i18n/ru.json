@@ -1728,7 +1728,7 @@
     "routesDnsProxyHint": "Чем приложение узнаёт адреса самих серверов VPN, по одному в строке (proxy-server-nameserver).",
     "routesDnsPolicy": "Свои DNS для доменов",
     "routesDnsPolicyHint": "По строке «домены: серверы через запятую», например +.cn: https://dns.alidns.com/dns-query (nameserver-policy).",
-    "routesNote": "Clash-приложения (Koala Clash, FlClash, Clash Verge, ClashFest) получают всё. Официальные приложения sing-box (SFA, SFI, SFM) получают конфиг с группами, сервисами и DNS, без XHTTP и серверов с самоподписанным сертификатом. Happ и INCY получают сайты и IP, если в «Подписка → Happ» выбрано «Из настроек маршрутизации». v2RayTun, v2rayNG, Hiddify и Karing получают только ссылки: маршрутизация у них своя.",
+    "routesNote": "Clash-приложения (Koala Clash, FlClash, Clash Verge, ClashFest) получают всё. Официальные приложения sing-box (SFA, SFI, SFM) получают конфиг с группами, сервисами и DNS, без XHTTP и серверов с самоподписанным сертификатом. Happ и INCY получают маршрутизацию и DNS внутри конфигов Xray (Подписка → Приложения), а со ссылками вместо конфигов только сайты и IP, если в карточке Happ (Подписка → Основное) выбрано «Из настроек маршрутизации». v2RayTun, v2rayNG, Hiddify и Karing получают только ссылки: маршрутизация у них своя.",
     "routesPreview": "Что получит приложение",
     "routesPreviewSub": "Профиль Clash клиента со всеми протоколами и этими настройками, ещё до сохранения. Ключи в нём условные.",
     "routesNotesTitle": "В других приложениях",
