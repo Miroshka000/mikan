@@ -204,8 +204,9 @@ func TestEveryAnswerButA2xxKeepsTheCursorBack(t *testing.T) {
 			r := newReceiver(t)
 			ep := w.endpoint(r)
 			t.Cleanup(func() { _ = w.s.Delete(context.Background(), ep.ID) })
-			id := w.emit(events.PaymentPaid, 1)
+			// The answer is set before the event: a worker quick to send it would get 204.
 			r.forever(status)
+			id := w.emit(events.PaymentPaid, 1)
 			if taken {
 				eventually(t, "the cursor moves", func() bool { return w.get(ep.ID).LastID == id })
 				row, _ := w.row(ep.ID, id)
