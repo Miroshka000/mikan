@@ -10,6 +10,7 @@ package corecheck
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"mikan/internal/sub/routing"
 )
@@ -66,12 +68,20 @@ func find(env, name, image string) core {
 	if err != nil {
 		return core{why: "neither $" + env + ", " + name + " on the PATH nor docker to check the configs with"}
 	}
-	if exec.Command(docker, "image", "inspect", image).Run() != nil {
-		if out, err := exec.Command(docker, "pull", image).CombinedOutput(); err != nil {
+	if _, err := dockerOutput(30*time.Second, docker, "image", "inspect", image); err != nil {
+		if out, err := dockerOutput(10*time.Minute, docker, "pull", image); err != nil {
 			return core{why: "no " + image + " image to check the configs with: " + lastLine(out), fatal: os.Getenv("CI") != ""}
 		}
 	}
 	return core{bin: docker, image: image}
+}
+
+// dockerOutput runs docker within d: a daemon that does not answer must not hold the tests
+// until their own timeout.
+func dockerOutput(d time.Duration, docker string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	return exec.CommandContext(ctx, docker, args...).CombinedOutput()
 }
 
 var (
@@ -138,6 +148,9 @@ func Xray(t testing.TB, raw []byte) {
 	var configs []json.RawMessage
 	if err := json.Unmarshal(raw, &configs); err != nil {
 		t.Fatal(err)
+	}
+	if len(configs) == 0 {
+		t.Fatalf("no xray config to check in %s", raw)
 	}
 	dir := tempDir(t)
 	geodata(t, dir)
