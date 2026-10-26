@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
+import { useSubTemplates } from "../../../api/hooks";
 import { Card } from "../../../components/layout";
 import { Button, Field, Pill } from "../../../components/ui";
 import { t } from "../../../i18n";
@@ -81,6 +82,7 @@ export function RuleTester({ rules, builtin, onResult }: { rules: Schemas["Rule"
 }
 
 function Answer({ r }: { r: Result }) {
+  const templates = useSubTemplates().data?.templates ?? [];
   const respond =
     r.respond === "serve"
       ? t("settings.subRules.test.serve")
@@ -103,6 +105,12 @@ function Answer({ r }: { r: Result }) {
         <Pill tone={r.respond === "serve" ? "ok" : r.respond === "stub" || r.respond === "html" ? "warn" : "bad"}>{respond}</Pill>
         {r.format ? <span className="mono">{r.format}</span> : null}
       </dd>
+      {r.respond === "serve" && r.format && r.format !== "uri" ? (
+        <>
+          <dt className="text-[var(--ink-500)]">{t("settings.subRules.test.template")}</dt>
+          <dd className="break-words">{r.template ? (templates.find((x) => x.id === r.template)?.name ?? `#${r.template}`) : t("settings.subRules.test.builtinProfile")}</dd>
+        </>
+      ) : null}
       {r.text ? (
         <>
           <dt className="text-[var(--ink-500)]">{t("settings.subRules.test.text")}</dt>

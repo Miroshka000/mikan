@@ -36,6 +36,7 @@ export function cleanRule(r: Rule): Rule {
   const out: Action = { respond: a.respond };
   if (takes(a, "serve", "stub") && a.format) out.format = a.format;
   if (takes(a, "serve") && a.skip_hwid) out.skip_hwid = true;
+  if (takes(a, "serve") && a.template) out.template = a.template;
   if (takes(a, "stub") && a.text?.trim()) out.text = a.text.trim();
   if (takes(a, "html")) out.html = a.html ?? "";
   if (takes(a, "serve", "stub", "403", "404", "html") && a.headers?.length) out.headers = a.headers;

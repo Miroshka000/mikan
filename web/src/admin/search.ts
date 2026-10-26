@@ -23,11 +23,11 @@ export type UsersSearch = {
 };
 
 export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "security", "support", "system", "import"] as const;
-/** The parts of the sections that have them: the subscription (its settings, its apps, how it answers requests), the subscription page's editor and the routing. */
+/** The parts of the sections that have them: the subscription (its settings, its apps, how it answers requests, its templates), the subscription page's editor and the routing. */
 export const SETTINGS_PARTS = {
-  subscription: ["main", "clients", "responses"],
+  subscription: ["main", "clients", "responses", "templates"],
   page:["look", "brand", "blocks", "apps", "docs", "css"],
-  routing: ["mode", "lists", "rules", "dns", "advanced", "yaml"],
+  routing: ["mode", "lists", "rules", "dns", "advanced"],
 } as const;
 export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string };
 

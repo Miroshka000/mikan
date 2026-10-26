@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useBlocker } from "@tanstack/react-router";
+import { Link, useBlocker } from "@tanstack/react-router";
 import { Eye, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
-import { useExitDns, useNodes } from "../../../api/hooks";
+import { useExitDns, useNodes, useSubTemplates } from "../../../api/hooks";
 import { Card, SaveBar } from "../../../components/layout";
 import { Confirm, Drawer } from "../../../components/overlay";
 import { SwitchRow } from "../../../components/switch";
@@ -14,15 +14,14 @@ import { ExitDnsFields, exitDnsDraftOf, useSaveExitDns, type ExitDnsDraft } from
 import { RulesEditor } from "./rules";
 import { CoreBalance, tidyServers } from "./balance";
 import { useSaveSettings } from "./shared";
-import { TemplateCard } from "./template";
 import { Select } from "../../../components/select";
 
 type Routes = Schemas["Routes"];
 type DNS = NonNullable<Routes["dns"]>;
 type List = NonNullable<Routes["lists"]>[number];
 
-/** The parts of the routing, each in the section's menu; "yaml" is the own Clash profile. */
-export const ROUTING_PARTS = ["mode", "lists", "rules", "dns", "advanced", "yaml"] as const;
+/** The parts of the routing, each in the section's menu. The own profiles are the subscription templates. */
+export const ROUTING_PARTS = ["mode", "lists", "rules", "dns", "advanced"] as const;
 export type RoutingPart = (typeof ROUTING_PARTS)[number];
 
 // As many own lists as the server takes (subs.MaxLists).
@@ -105,8 +104,9 @@ function partOf(e: ApiError): RoutingPart | null {
 /**
  * The routing of the subscriptions, a part at a time: the mode and the services, the own
  * lists and the apps past the tunnel, the own rules, DNS on the device and at the exit, the
- * server groups and fine tuning, the own Clash profile. One draft for all of it, saved from
- * one bar; the profile a client gets opens beside it on demand.
+ * server groups and fine tuning. One draft for all of it, saved from one bar; the profile a
+ * client gets opens beside it on demand. A default Clash template takes its place for the
+ * Clash apps, and the section says so.
  */
 export function RoutingSection({ s, part, onPart }: { s: Schemas["SettingsView"]; part: RoutingPart; onPart: (p: RoutingPart) => void }) {
   const save = useSaveSettings();
@@ -119,7 +119,6 @@ export function RoutingSection({ s, part, onPart }: { s: Schemas["SettingsView"]
   // The DNS fields keep their own text, so they are put back with the rest.
   const [dnsText, setDnsText] = useState(() => dnsTextOf(routes.dns));
   const [preview, setPreview] = useState(false);
-  const [yaml, setYaml] = useState(s.sub_template);
   const dirty = routingDirty || exit.dirty;
   const discard = () => {
     reset();
@@ -144,11 +143,11 @@ export function RoutingSection({ s, part, onPart }: { s: Schemas["SettingsView"]
   };
   const apiErr = save.error instanceof ApiError ? save.error : null;
   const errors = apiErr?.fields ?? {};
-  const starter = () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: draft.mode, sub_routes: draft.routes, starter: true } })).then((r) => r.profile);
-  const live = s.sub_template.trim() !== "";
-  // The settings show one tab at a time: leaving the routing (or the page) drops the draft
-  // and the own profile being edited, so ask first. Its parts are one draft.
-  const unsaved = dirty || yaml !== s.sub_template;
+  const templates = useSubTemplates();
+  const live = !!templates.data?.templates.some((x) => x.core === "mihomo" && x.default);
+  // The settings show one tab at a time: leaving the routing (or the page) drops the draft,
+  // so ask first. Its parts are one draft.
+  const unsaved = dirty;
   const leave = useBlocker({
     shouldBlockFn: ({ current, next }) => unsaved && (current.pathname !== next.pathname || (next.search as { tab?: string }).tab !== "routing"),
     enableBeforeUnload: () => unsaved,
@@ -158,12 +157,19 @@ export function RoutingSection({ s, part, onPart }: { s: Schemas["SettingsView"]
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">{live ? <Pill tone="warn">{t("settings.routesYamlOn")}</Pill> : null}</div>
+        <div className="min-w-0">{live ? <Pill tone="warn">{t("settings.routesTemplateOn")}</Pill> : null}</div>
         <Button size="sm" onClick={() => setPreview(true)} aria-haspopup="dialog">
           <Eye size={16} aria-hidden /> {t("settings.routesShowProfile")}
         </Button>
       </div>
-      {live && part !== "yaml" ? <div className="banner info">{t("settings.routesYamlLive")}</div> : null}
+      {live ? (
+        <div className="banner info flex-wrap">
+          <span className="min-w-0 flex-1">{t("settings.routesTemplateLive")}</span>
+          <Link to="/settings" search={{ tab: "subscription", part: "templates" }} className="btn btn-glass btn-sm">
+            {t("settings.routesToTemplates")}
+          </Link>
+        </div>
+      ) : null}
 
       {part === "mode" ? <ModePart mode={draft.mode} setMode={(mode) => setDraft((d) => ({ ...d, mode }))} routes={routes} setRoutes={setRoutes} /> : null}
       {part === "lists" ? <ListsPart routes={routes} setRoutes={setRoutes} error={serversRefused(apiErr) ? undefined : errors.sub_routes} /> : null}
@@ -206,15 +212,13 @@ export function RoutingSection({ s, part, onPart }: { s: Schemas["SettingsView"]
       {part === "advanced" ? (
         <AdvancedPart routes={routes} setRoutes={setRoutes} error={serversRefused(apiErr) ? errors.sub_routes : undefined} ofCore={apiErr?.codes.sub_routes !== "routes_servers"} />
       ) : null}
-      {part === "yaml" ? <TemplateCard s={s} text={yaml} setText={setYaml} starter={starter} /> : null}
-
-      {part !== "yaml" ? <p className="px-1 text-xs text-[var(--ink-500)]">{t("settings.routesNote")}</p> : null}
+      <p className="px-1 text-xs text-[var(--ink-500)]">{t("settings.routesNote")}</p>
 
       <SaveBar dirty={dirty} saving={save.isPending || saveExit.isPending} onSave={submit} onReset={discard} />
 
       <Drawer open={preview} onOpenChange={setPreview} title={t("settings.routesPreview")}>
         <div className="pt-4">
-          {preview ? <PreviewCard mode={draft.mode} routes={draft.routes} rules={part === "yaml" ? undefined : draft.rules} template={part === "yaml" ? yaml : undefined} /> : null}
+          {preview ? <PreviewCard mode={draft.mode} routes={draft.routes} rules={draft.rules} /> : null}
         </div>
       </Drawer>
       <Confirm
@@ -472,16 +476,11 @@ function AdvancedPart({ routes, setRoutes, error, ofCore }: { routes: Routes; se
   );
 }
 
-// The profile a user with every connection gets, before anything is saved: the unsaved
-// rules too, or the own profile being edited.
-function PreviewCard({ mode, routes, rules, template }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes; rules?: string; template?: string }) {
+// The built-in profile a user with every connection gets, before anything is saved: the
+// unsaved rules too.
+function PreviewCard({ mode, routes, rules }: { mode: Schemas["SettingsView"]["sub_routing"]; routes: Routes; rules: string }) {
   const preview = useMutation({
-    mutationFn: () =>
-      unwrap(
-        api.POST("/api/v1/settings/routes/preview", {
-          body: { sub_routing: mode, sub_routes: routes, ...(rules !== undefined ? { sub_rules: rules } : {}), ...(template?.trim() ? { sub_template: template } : {}) },
-        }),
-      ),
+    mutationFn: () => unwrap(api.POST("/api/v1/settings/routes/preview", { body: { sub_routing: mode, sub_routes: routes, sub_rules: rules } })),
   });
   // Shown at once when the panel opens; the button asks again after more changes.
   const { mutate } = preview;

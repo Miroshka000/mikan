@@ -13,6 +13,8 @@ describe("cleanRule", () => {
   });
   it("keeps the profile's own options on serve and the page on html", () => {
     expect(cleanRule(rule({ respond: "serve", format: "uri", skip_hwid: true, html: "<p>" })).do).toEqual({ respond: "serve", format: "uri", skip_hwid: true });
+    expect(cleanRule(rule({ respond: "serve", template: 3 })).do).toEqual({ respond: "serve", template: 3 });
+    expect(cleanRule(rule({ respond: "serve", template: 0 })).do).toEqual({ respond: "serve" });
     expect(cleanRule(rule({ respond: "html", html: "<h1>Happ</h1>", text: "t" })).do).toEqual({ respond: "html", html: "<h1>Happ</h1>" });
   });
   it("sends no headers with a dropped connection, nor an empty list", () => {

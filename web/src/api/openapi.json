@@ -2208,6 +2208,39 @@
         ],
         "type": "object"
       },
+      "CreateSubTemplateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray",
+            "maxLength": 524288,
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "default": {
+            "description": "Сделать шаблоном ядра по умолчанию",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "core",
+          "name",
+          "body"
+        ],
+        "type": "object"
+      },
       "CreateSupportGrantInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -6453,11 +6486,6 @@
             "maxLength": 65536,
             "type": "string"
           },
-          "sub_template": {
-            "description": "Свой профиль Clash; пусто — вернуть встроенный",
-            "maxLength": 524288,
-            "type": "string"
-          },
           "sub_title": {
             "description": "Переменные — см. SettingsView.sub_title",
             "maxLength": 200,
@@ -6476,6 +6504,25 @@
           },
           "wide_sni_scan": {
             "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "PatchSubTemplateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 524288,
+            "type": "string"
+          },
+          "default": {
+            "description": "true — шаблон ядра по умолчанию, false — у ядра снова встроенный профиль",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
           }
         },
         "type": "object"
@@ -7062,6 +7109,53 @@
           "no_link",
           "statuses",
           "on_hold"
+        ],
+        "type": "object"
+      },
+      "PreviewSubTemplateInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Шаблон; пусто — встроенный профиль ядра",
+            "maxLength": 524288,
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "starter": {
+            "description": "Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами, или пример для sing-box и Xray",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "core"
+        ],
+        "type": "object"
+      },
+      "PreviewSubTemplateOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "notes": {
+            "description": "Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "type": "array"
+          },
+          "profile": {
+            "description": "Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "notes"
         ],
         "type": "object"
       },
@@ -8181,10 +8275,6 @@
       "RoutesPreviewInputBody": {
         "additionalProperties": false,
         "properties": {
-          "starter": {
-            "description": "Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами",
-            "type": "boolean"
-          },
           "sub_group_auto": {
             "description": "Имя группы автовыбора вместо сохранённого",
             "maxLength": 200,
@@ -8209,11 +8299,6 @@
           "sub_rules": {
             "description": "Свои правила вместо сохранённых",
             "maxLength": 65536,
-            "type": "string"
-          },
-          "sub_template": {
-            "description": "Свой профиль Clash: показать его вместо встроенного",
-            "maxLength": 524288,
             "type": "string"
           }
         },
@@ -8814,10 +8899,6 @@
             "description": "Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий",
             "type": "string"
           },
-          "sub_template": {
-            "description": "Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types}",
-            "type": "string"
-          },
           "sub_title": {
             "description": "Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего, {devices} — привязанные устройства (2/3); без срока или лимита — ∞",
             "type": "string"
@@ -8867,7 +8948,6 @@
           "sub_rules",
           "rule_targets",
           "sub_routing",
-          "sub_template",
           "sub_routes",
           "client_fingerprint",
           "auto_port",
@@ -9524,6 +9604,11 @@
             "format": "int64",
             "type": "integer"
           },
+          "template": {
+            "description": "Шаблон подписки, из которого собран профиль; 0 — встроенный профиль",
+            "format": "int64",
+            "type": "integer"
+          },
           "text": {
             "description": "Текст заглушки",
             "type": "string"
@@ -9539,7 +9624,8 @@
           "format",
           "headers",
           "skip_hwid",
-          "text"
+          "text",
+          "template"
         ],
         "type": "object"
       },
@@ -9572,6 +9658,143 @@
           "builtin",
           "formats",
           "limits"
+        ],
+        "type": "object"
+      },
+      "SubTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Текст шаблона; пусто, когда он скрыт",
+            "type": "string"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "hidden": {
+            "description": "Текст скрыт от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rules": {
+            "description": "Правила ответа, которые выбирают этот шаблон",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name",
+          "default",
+          "size",
+          "updated_at",
+          "rules",
+          "body",
+          "hidden"
+        ],
+        "type": "object"
+      },
+      "SubTemplateHead": {
+        "additionalProperties": false,
+        "properties": {
+          "core": {
+            "description": "Ядро: mihomo (Clash, YAML), singbox или xray (JSON)",
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "default": {
+            "description": "Приложения этого ядра получают его, если правило ответа не выбрало другой",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rules": {
+            "description": "Правила ответа, которые выбирают этот шаблон",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "size": {
+            "description": "Размер текста в байтах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name",
+          "default",
+          "size",
+          "updated_at",
+          "rules"
+        ],
+        "type": "object"
+      },
+      "SubTemplatesView": {
+        "additionalProperties": false,
+        "properties": {
+          "max": {
+            "description": "Сколько шаблонов может быть у одного ядра",
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_size": {
+            "description": "Наибольший размер текста шаблона в байтах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "templates": {
+            "description": "По ядрам, в порядке создания",
+            "items": {
+              "$ref": "#/components/schemas/SubTemplateHead"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates",
+          "max",
+          "max_size"
         ],
         "type": "object"
       },
@@ -17926,6 +18149,249 @@
         "tags": [
           "sub-rules"
         ]
+      }
+    },
+    "/api/v1/sub-templates": {
+      "get": {
+        "operationId": "list-sub-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplatesView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Шаблоны подписки по ядрам",
+        "tags": [
+          "sub-templates"
+        ]
+      },
+      "post": {
+        "operationId": "create-sub-template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubTemplateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplate"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Новый шаблон подписки",
+        "tags": [
+          "sub-templates"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/sub-templates/preview": {
+      "post": {
+        "description": "Ничего не меняет: показывает, что получит пользователь со всеми подключениями.",
+        "operationId": "preview-sub-template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewSubTemplateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewSubTemplateOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Профиль из шаблона, без сохранения",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
+    "/api/v1/sub-templates/{id}": {
+      "delete": {
+        "operationId": "delete-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить шаблон подписки",
+        "tags": [
+          "sub-templates"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "get-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplate"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Шаблон подписки с текстом",
+        "tags": [
+          "sub-templates"
+        ]
+      },
+      "patch": {
+        "operationId": "update-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchSubTemplateInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubTemplate"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить шаблон подписки или сделать его шаблоном по умолчанию",
+        "tags": [
+          "sub-templates"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/support/enter": {

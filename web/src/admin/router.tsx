@@ -118,10 +118,11 @@ export function createAppRouter(queryClient: QueryClient) {
     },
     validateSearch: (s: Record<string, unknown>): SettingsSearch => {
       // Sections that moved keep their old links working: the Clash rules are a part of the
-      // routing now, its old simple view is the mode, the torrent blocker is an addon (its
-      // link goes on in beforeLoad).
+      // routing now, its old simple view is the mode, the own YAML is a subscription
+      // template, the torrent blocker is an addon (its link goes on in beforeLoad).
       if (s.tab === "rules") return { tab: "routing", part: "rules" };
       if (s.tab === "routing" && s.part === "simple") return { tab: "routing", part: "mode" };
+      if (s.tab === "routing" && s.part === "yaml") return { tab: "subscription", part: "templates" };
       if (s.tab === "routing" && s.part === "torrent") return { tab: "routing", part: "torrent" };
       const tab = SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general";
       const parts: readonly string[] | undefined = (SETTINGS_PARTS as Record<string, readonly string[]>)[tab];

@@ -1941,6 +1941,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sub-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Шаблоны подписки по ядрам */
+        get: operations["list-sub-templates"];
+        put?: never;
+        /** Новый шаблон подписки */
+        post: operations["create-sub-template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-templates/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Профиль из шаблона, без сохранения
+         * @description Ничего не меняет: показывает, что получит пользователь со всеми подключениями.
+         */
+        post: operations["preview-sub-template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Шаблон подписки с текстом */
+        get: operations["get-sub-template"];
+        put?: never;
+        post?: never;
+        /** Удалить шаблон подписки */
+        delete: operations["delete-sub-template"];
+        options?: never;
+        head?: never;
+        /** Изменить шаблон подписки или сделать его шаблоном по умолчанию */
+        patch: operations["update-sub-template"];
+        trace?: never;
+    };
     "/api/v1/support/enter": {
         parameters: {
             query?: never;
@@ -3673,6 +3730,15 @@ export interface components {
             host: string;
             name: string;
         };
+        CreateSubTemplateInputBody: {
+            /** @description Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray */
+            body: string;
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            /** @description Сделать шаблоном ядра по умолчанию */
+            default?: boolean;
+            name: string;
+        };
         CreateSupportGrantInputBody: {
             /** @description Одноразовый код из обращения в боте поддержки: без него доступ не открывается */
             code: string;
@@ -5214,8 +5280,6 @@ export interface components {
             sub_routing?: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash, до 500 строк; ошибка указывает номер строки */
             sub_rules?: string;
-            /** @description Свой профиль Clash; пусто — вернуть встроенный */
-            sub_template?: string;
             /** @description Переменные — см. SettingsView.sub_title */
             sub_title?: string;
             sub_xray_json?: boolean;
@@ -5223,6 +5287,12 @@ export interface components {
             /** @description https://… или tg://… */
             support_url?: string;
             wide_sni_scan?: boolean;
+        };
+        PatchSubTemplateInputBody: {
+            body?: string;
+            /** @description true — шаблон ядра по умолчанию, false — у ядра снова встроенный профиль */
+            default?: boolean;
+            name?: string;
         };
         PatchTelegramInputBody: {
             config?: components["schemas"]["Config"];
@@ -5463,6 +5533,20 @@ export interface components {
             taken: components["schemas"]["List"];
             /** Format: int64 */
             total: number;
+        };
+        PreviewSubTemplateInputBody: {
+            /** @description Шаблон; пусто — встроенный профиль ядра */
+            body?: string;
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            /** @description Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами, или пример для sing-box и Xray */
+            starter?: boolean;
+        };
+        PreviewSubTemplateOutputBody: {
+            /** @description Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть */
+            notes: components["schemas"]["Note"][];
+            /** @description Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки */
+            profile: string;
         };
         ProbeView: {
             /** Format: date-time */
@@ -5839,8 +5923,6 @@ export interface components {
             services: components["schemas"]["RouteService"][];
         };
         RoutesPreviewInputBody: {
-            /** @description Встроенный профиль с этими sub_routing и sub_routes как начало своего: без серверов, группы просят их сами */
-            starter?: boolean;
             /** @description Имя группы автовыбора вместо сохранённого */
             sub_group_auto?: string;
             /** @description Имя главной группы вместо сохранённого */
@@ -5850,8 +5932,6 @@ export interface components {
             sub_routing: "ru_direct" | "all" | "blocked";
             /** @description Свои правила вместо сохранённых */
             sub_rules?: string;
-            /** @description Свой профиль Clash: показать его вместо встроенного */
-            sub_template?: string;
         };
         RoutesPreviewOutputBody: {
             /** @description Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид */
@@ -6077,8 +6157,6 @@ export interface components {
             sub_routing: "ru_direct" | "all" | "blocked";
             /** @description Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий */
             sub_rules: string;
-            /** @description Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types} */
-            sub_template: string;
             /** @description Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего, {devices} — привязанные устройства (2/3); без срока или лимита — ∞ */
             sub_title: string;
             /** @description Happ и INCY получают полные конфиги Xray (JSON) вместо ссылок: маршрутизация, DNS и «Авто» панели доходят до них; запрос с ?format= получает свой формат в любом случае */
@@ -6331,6 +6409,11 @@ export interface components {
              * @description Код ответа; 0 — соединение закрыто без ответа
              */
             status: number;
+            /**
+             * Format: int64
+             * @description Шаблон подписки, из которого собран профиль; 0 — встроенный профиль
+             */
+            template: number;
             /** @description Текст заглушки */
             text: string;
         };
@@ -6341,6 +6424,59 @@ export interface components {
             formats: string[];
             limits: components["schemas"]["SubRuleLimits"];
             rules: components["schemas"]["Rule"][];
+        };
+        SubTemplate: {
+            /** @description Текст шаблона; пусто, когда он скрыт */
+            body: string;
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            default: boolean;
+            /** @description Текст скрыт от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты */
+            hidden: boolean;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description Правила ответа, которые выбирают этот шаблон */
+            rules: string[];
+            /** Format: int64 */
+            size: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SubTemplateHead: {
+            /**
+             * @description Ядро: mihomo (Clash, YAML), singbox или xray (JSON)
+             * @enum {string}
+             */
+            core: "mihomo" | "singbox" | "xray";
+            /** @description Приложения этого ядра получают его, если правило ответа не выбрало другой */
+            default: boolean;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description Правила ответа, которые выбирают этот шаблон */
+            rules: string[];
+            /**
+             * Format: int64
+             * @description Размер текста в байтах
+             */
+            size: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SubTemplatesView: {
+            /**
+             * Format: int64
+             * @description Сколько шаблонов может быть у одного ядра
+             */
+            max: number;
+            /**
+             * Format: int64
+             * @description Наибольший размер текста шаблона в байтах
+             */
+            max_size: number;
+            /** @description По ядрам, в порядке создания */
+            templates: components["schemas"]["SubTemplateHead"][];
         };
         SupportEnterInputBody: {
             /** @description Токен из ссылки доступа (после #) */
@@ -11820,6 +11956,196 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubRuleTest"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-sub-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubTemplatesView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-sub-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubTemplate"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "preview-sub-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewSubTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewSubTemplateOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sub-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubTemplate"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-sub-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-sub-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchSubTemplateInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubTemplate"];
                 };
             };
             /** @description Error */

@@ -3,7 +3,7 @@ import { useBlocker } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { api, unwrap, type Schemas } from "../../../api/client";
-import { qk, useSubRules } from "../../../api/hooks";
+import { qk, useSubRules, useSubTemplates } from "../../../api/hooks";
 import { Card, SaveBar } from "../../../components/layout";
 import { Confirm } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
@@ -16,6 +16,7 @@ import { useDraft } from "../../../lib/draft";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { cleanRule } from "../../../lib/sub-rules";
 import { RuleTester } from "./sub-rules-test";
+import { CORES, coreName } from "./sub-templates";
 import { HeaderNames, WhenEditor, blankCond } from "./sub-rules-when";
 
 type Rule = Schemas["Rule"];
@@ -296,6 +297,7 @@ function ActionEditor({ id, at, a, onChange, errors, limits, formats }: { id: st
           </Select>
         </Field>
       ) : null}
+      {has("serve") ? <TemplateSelect id={id} at={at} a={a} set={set} errors={errors} /> : null}
       {has("serve") ? <SwitchRow label={t("settings.subRules.skipHwid")} sub={t("settings.subRules.skipHwidSub")} checked={!!a.skip_hwid} onChange={(skip_hwid) => set({ skip_hwid })} /> : null}
       {has("stub") ? (
         <Field label={t("settings.subRules.stubText")} htmlFor={`${id}-text`} hint={t("settings.subRules.stubTextHint")} error={errors[`${at}.text`]}>
@@ -343,5 +345,36 @@ function ActionEditor({ id, at, a, onChange, errors, limits, formats }: { id: st
         </div>
       ) : null}
     </div>
+  );
+}
+
+// The cores whose templates a profile of the format is made of: its own, and Clash's, which
+// sing-box and Xray read when they have none of their own. The links have no template.
+const FORMAT_CORES: Record<string, Schemas["SubTemplateHead"]["core"][]> = { clash: ["mihomo"], singbox: ["singbox", "mihomo"], xray: ["xray", "mihomo"], uri: [] };
+
+/** The template the profile is made of, by the cores the rule's format reads; none: the core's default. */
+function TemplateSelect({ id, at, a, set, errors }: { id: string; at: string; a: Action; set: (patch: Partial<Action>) => void; errors: Record<string, string> }) {
+  const all = useSubTemplates().data?.templates ?? [];
+  const cores = a.format ? (FORMAT_CORES[a.format] ?? CORES) : CORES;
+  // A template a change of the format left out stays listed, so that the select shows what is saved.
+  const listed = all.filter((x) => cores.includes(x.core) || x.id === a.template);
+  if (cores.length === 0 && !a.template) return null;
+  return (
+    <Field label={t("settings.subRules.template")} htmlFor={`${id}-template`} hint={t("settings.subRules.templateHint")} error={errors[`${at}.template`]}>
+      <Select id={`${id}-template`} className="input max-w-[320px]" value={String(a.template ?? 0)} onChange={(e) => set({ template: Number(e.target.value) || undefined })}>
+        <option value="0">{t("settings.subRules.templateDefault")}</option>
+        {CORES.filter((c) => listed.some((x) => x.core === c)).map((c) => (
+          <optgroup key={c} label={coreName(c)}>
+            {listed
+              .filter((x) => x.core === c)
+              .map((x) => (
+                <option key={x.id} value={String(x.id)}>
+                  {x.default ? `${x.name} · ${t("settings.subTemplates.default")}` : x.name}
+                </option>
+              ))}
+          </optgroup>
+        ))}
+      </Select>
+    </Field>
   );
 }

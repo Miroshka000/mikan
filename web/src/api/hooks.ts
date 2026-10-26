@@ -50,6 +50,8 @@ export const qk = {
   subDocs: ["sub-docs"] as const,
   subApps: ["sub-apps"] as const,
   subRules: ["sub-rules"] as const,
+  subTemplates: ["sub-templates"] as const,
+  subTemplate: (id: number) => ["sub-templates", "one", id] as const,
   userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
   nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
@@ -474,6 +476,20 @@ export function useSubApps() {
 /** The response rules of the subscription, and what the editor needs to keep within their limits. */
 export function useSubRules() {
   return useQuery({ queryKey: qk.subRules, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-rules", { signal })) });
+}
+
+/** The subscription templates of every core, without their texts, and how many a core may have. */
+export function useSubTemplates() {
+  return useQuery({ queryKey: qk.subTemplates, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates", { signal })) });
+}
+
+/** One subscription template with its text; its text is hidden from a key or an operator not shown secrets. */
+export function useSubTemplate(id: number | undefined) {
+  return useQuery({
+    queryKey: qk.subTemplate(id ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/{id}", { params: { path: { id: id! } }, signal })),
+    enabled: id !== undefined,
+  });
 }
 
 /** The latest requests of a user's subscription, newest first. */
