@@ -7,7 +7,7 @@ name: release
 #     update check and the installer trust, and install.sh for the one-line install;
 #   - the release's entry in the signed release index (index.json on the "updates"
 #     pre-release), where updaters look first; "from" comes from .github/upgrade-from;
-#   - a stable release only: the SDKs (sdk/), mikan-sdk on npm and on PyPI, built from the
+#   - a stable release only: the SDKs (sdk/), @getmikan/sdk on npm and mikan-sdk on PyPI, built from the
 #     spec of the tagged commit and numbered as the release, once the release is published
 #     (sdk/README.md lists what the npm token and PyPI's trusted publisher need).
 # A stable manifest must pass the legacy contract (mikan-release legacy-check) before it
@@ -388,8 +388,10 @@ jobs:
             sdk/dist/*.tar.gz
           if-no-files-found: error
 
-  # npm takes the package with the repository's NPM_TOKEN secret (a token that may publish
-  # mikan-sdk) and signs where it came from: the provenance needs the id-token permission.
+  # npm takes @getmikan/sdk by trusted publishing (this repository and release.yml, set up
+  # in the package's settings on npm) or, until that is set up, with the repository's
+  # NPM_TOKEN secret; npm tries the first and falls back to the token. Either way it signs
+  # where the package came from: the provenance and the trust need the id-token permission.
   sdk-npm:
     needs: sdk
     runs-on: ubuntu-24.04
@@ -405,12 +407,14 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      # The version has a hyphen (0.5.2-0), which npm takes for a pre-release and refuses to
-      # publish without a tag: latest is said.
+      # Trusted publishing needs npm 11.5.1 or later, whatever Node bundles.
+      - name: npm
+        run: npm install -g npm@11.21.1
+      # The version is a plain one (0.5.201 for the panel's 0.5.2.1, see sdk/build.sh).
       - name: publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish dist/mikan-sdk-*.tgz --provenance --access public --tag latest
+        run: npm publish dist/getmikan-sdk-*.tgz --provenance --access public --tag latest
 
   # PyPI trusts this workflow (trusted publishing, set up on PyPI for the project, this
   # repository, release.yml and the environment pypi): no token is kept anywhere.
