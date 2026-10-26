@@ -3,6 +3,10 @@ title: Subscription specification
 description: "Every header and field mikan reads from an app's request and sends with a subscription: meaning, format and examples. For app authors and for services that serve subscriptions of their own."
 ---
 
+:::note[New in 0.5.2.1]
+The specification appeared in 0.5.2.1, together with the Xray format, the response rules and the term that waits for the first connection described in it.
+:::
+
 This page describes everything mikan reads from a subscription request and sends in the answer: headers, a URL parameter and fields. It is for authors of apps who want to show the term, traffic, an announcement and device places, and for anyone building a subscription service with the same behaviour. What each setting turns on is in [Subscription page and apps](/mikan/en/subscriptions/page/), [Happ](/mikan/en/subscriptions/happ/) and [Plans and users](/mikan/en/billing/plans/#devices).
 
 HTTP header names are case-insensitive, so read them without regard to case. They are written here the way the apps' documents name them. A value of the form `base64:` followed by a string is base64 (the standard alphabet, with `=`) of text in UTF-8.
@@ -24,7 +28,7 @@ What the panel reads from the request:
 | header | `X-Device-Model` | The device's model, up to 60 characters |
 | header | `X-Mikan-Features` | What the Mikan app can show, see [Server groups for the Mikan app](#server-groups-for-the-mikan-app) |
 
-The panel reads no other headers. For example, it has no use for `x-app-version`: the app and the version of its core come from `User-Agent`. The device values are stripped of control characters and cut to their length.
+The panel reads no other headers by itself. For example, it has no use for `x-app-version`: the app and the version of its core come from `User-Agent`. The exception is the administrator's [response rules](#response-rules): a rule may test any header of the request. The device values are stripped of control characters and cut to their length.
 
 ### The app
 
@@ -35,7 +39,7 @@ The panel gives an app only the protocols it can run, and tells it by `User-Agen
 | Stash | starts with `stash` | Clash |
 | Hiddify and apps on sing-box | contains `hiddify`, `karing`, `sing-box`, `singbox`, `nekobox`, `nekoray`, `husi`, `throne`, `deskbox` or `inhive`; starts with `sfa`, `sfi`, `sfm` or `sft` | links; the official sing-box apps (`sfa`, `sfi`, `sfm`, `sft`) that name a core of `sing-box 1.12.0` or newer get a whole sing-box config |
 | Apps on mihomo | contains `mihomo`, `clash`, `koala`, `kabosu`, `verge`, `prizrak`, `flowvy`, `murge` or `rabbit` | Clash |
-| Apps on Xray | contains `happ`, `v2raytun`, `incy`, `v2rayng`, `v2rayn`, `onexray`, `v2box`, `simplexray` or `renoarx` | links |
+| Apps on Xray | contains `happ`, `v2raytun`, `incy`, `v2rayng`, `v2rayn`, `onexray`, `v2box`, `simplexray` or `renoarx` | links; Happ and INCY get the Xray format, see [The Xray format](#the-xray-format) |
 | Others | everything else | links or the subscription page, see [Answer format](#answer-format); `streisand`, `shadowrocket` and `foxray` always get links |
 
 The panel reads the core's version from `User-Agent` when the app names it: `mihomo/1.19.31` or `clash.meta/1.19.31`, `sing-box 1.14.2` (for example `SFA (sing-box 1.14.2; language en_US)`), `HiddifyNext/4.1.1`. For `Koala-Clash/1.4.0` the core is known from the app's version. The version decides which protocols and parameters are sent: a core that does not know one yet would get a profile it rejects whole. What each app gets is in [the presets table](/mikan/en/protocols/presets/#who-gets-what).
@@ -44,19 +48,33 @@ The panel reads the core's version from `User-Agent` when the app names it: `mih
 
 The format is chosen in this order:
 
-1. The `format` parameter in the URL, if there is one:
+1. The format a [response rule](#response-rules) forces on the app, if the rule that matches names one.
+2. The `format` parameter in the URL, if there is one:
 
 | Value of `format` | Format | Content-Type |
 |---|---|---|
 | `clash`, `mihomo`, `yaml` | a Clash profile (YAML) | `text/yaml; charset=utf-8` |
 | `singbox`, `sing-box` | a whole sing-box config (JSON) | `application/json; charset=utf-8` |
+| `xray`, `json`, `v2ray-json` | an array of whole Xray configs (JSON), see [The Xray format](#the-xray-format) | `application/json; charset=utf-8` |
 | `uri`, `v2ray`, `base64` | links such as `vless://`, one to a line, the whole list in base64 | `text/plain; charset=utf-8` |
 | `html` | the subscription page | a page |
 
-2. Without the parameter: by `User-Agent`, as in the table above.
-3. An app from the "Others" row (except `streisand`, `shadowrocket` and `foxray`) gets the subscription page if `Accept` has `text/html`, and the list of links if it does not.
+3. Without the parameter: by `User-Agent`, as in the table above. Happ and INCY get the Xray format in place of links while [the switch](#the-xray-format) is on.
+4. An app from the "Others" row (except `streisand`, `shadowrocket` and `foxray`) gets the subscription page if `Accept` has `text/html`, and the list of links if it does not.
 
 The subscription page also goes to messengers that build a preview of a pasted link (Telegram, WhatsApp and the like) when the URL has no `format`. The page itself is not part of this specification.
+
+### Response rules
+
+The administrator's rules (**Settings → Subscription → Response rules**) look at the request for an existing subscription before any profile is made. A rule tests the request's headers, any of them by name (`User-Agent`, `X-Device-Os`, one of the administrator's own): equal to a value, containing it or matching a regular expression. The tests are joined with "and" and "or". The rules are checked from the top down, and the first that matches decides. What it can do:
+
+- serve the profile as usual, with what the rule changes: the format (see [Answer format](#answer-format)), the template the profile is made from, headers added to the answer, and keys for a device that sends no ID, whatever the panel asks of devices;
+- answer with a notice in place of the servers, see [A notice in place of the servers](#a-notice-in-place-of-the-servers);
+- answer `403` or `404`, show a page of the administrator's own (`text/html`, with a policy that forbids scripts on it) or close the connection with no answer at all.
+
+The built-in protection comes after the administrator's rules: ShadowsocksR clients and discontinued Clash apps (Clash for Windows, Clash for Android, ClashX other than its Meta fork) get the notice, because no profile of the panel suits their cores. It can be turned off in the same window. The apps the administrator blocked in **Settings → Subscription → Apps** get the same notice last. A request that no rule matches is served as usual, and a token that is not among the subscriptions gets the `404` described below whatever the rules say.
+
+Every fetch of a profile goes into a log: the time, the address, `User-Agent`, the app, the rule that decided, the format and the outcome, with no token and no key. How long it is kept is set in **Settings → Subscription → General → Request log**, and the log itself is in the user's card.
 
 ### Device
 
@@ -110,7 +128,7 @@ The fields of `Subscription-Userinfo`:
 
 - `upload` and `download`: how much of the main traffic the client sent and received in the current period, in bytes;
 - `total`: how much traffic is available to the client. It is the limit, and when traffic packages are left, the larger of the limit and what was used, plus what is left of the packages. `0` means "no limit";
-- `expire`: the end of the term, Unix time in seconds. `0` means "no expiry".
+- `expire`: the end of the term, Unix time in seconds. `0` means "no expiry". For a term that waits for its first connection (see [Term from the first connection](/mikan/en/billing/lifecycle/#term-from-the-first-connection)) it is the end the term would have if it began now: the panel moves it forward every ten minutes, so the app sees the whole term ahead until the client's first traffic starts it.
 
 `Profile-Title` is the **Subscription name in apps** field with the variables filled in, see [the table of variables](/mikan/en/subscriptions/page/#subscription-name-in-apps). Empty, or empty after filling: the service name. The result is one line of up to 200 characters. Clash apps name the profile after the file, so the file name is taken from this title too, see [Profile](#profile).
 
@@ -147,9 +165,28 @@ The fields of `Subscription-Userinfo`:
 |---|---|---|
 | Clash | `text/yaml; charset=utf-8` | `attachment; filename*=UTF-8''<name>.yaml` |
 | sing-box | `application/json; charset=utf-8` | `attachment; filename*=UTF-8''<name>.json` |
+| Xray | `application/json; charset=utf-8` | none |
 | links | `text/plain; charset=utf-8` | none |
 
 The file name is made of the profile's title (`Profile-Title`): the characters `/ \ : * ? " < > |` and control characters turn into spaces, the ends are trimmed, and an empty name becomes `mikan`. In `filename*` it is written in UTF-8 percent-encoding, as in the example above.
+
+### The Xray format
+
+The body is a JSON array of whole Xray configs, for apps that run Xray-core and take a list of configs in place of links. The array is the client's choice of a server, so the panel's routing, DNS and automatic choice reach the app, which a list of links cannot carry. Every element is a complete config: its `remarks` is the name the app shows, it has a SOCKS inbound on port 10808 and an HTTP one on 10809, the servers it needs, and the panel's routing and DNS in Xray's own terms. The list goes in this order:
+
+1. a config per automatic group: the automatic choice, then the countries (and the groups of an own Clash template, as far as Xray can read them). Its `remarks` is the group's name, and an Xray balancer tests the group's servers and picks the best;
+2. a config per server, named as the server is in the other formats.
+
+The rules of a config may send a service to a server or a group that is not its own, so besides its own a config holds the servers and balancers its rules name. A template of your own for Xray ([Subscription templates](/mikan/en/subscriptions/templates/)) makes the list its own way.
+
+Which apps get the format:
+
+- **Happ and INCY**, while **Settings → Subscription → Apps → Xray configs for Happ and INCY → Serve Xray configs** is on. It is on by default (the setting `sub_xray_json`). Off, they get links like the other Xray apps, and a link with `?format=xray` still gives them configs.
+- **Any app**, if the link says `?format=xray`, `?format=json` or `?format=v2ray-json`, whatever the switch says. A link with `?format=uri` gives Happ and INCY links even with the switch on.
+- **An app a response rule names**: a rule can force the `xray` format.
+- **A client of an old link** of a panel the users were imported from, if the client type after the token is `v2ray-json`, `v2ray_json`, `xray-json`, `xray_json` or `json`, for example `/sub/<token>/v2ray-json`. On such links the type is the format: `clash`, `clash-meta`, `clash_meta`, `clashmeta`, `mihomo` and `stash` give Clash; `v2ray`, `links`, `links-base64`, `links_base64`, `base64`, `xray-base64` and `xray_base64` give links; a type mikan has no format for (`sing-box`, for example) is left to `User-Agent`. An explicit `?format=` on the same link wins. More about old links is in [Import](/mikan/en/operations/import/).
+
+The other Xray apps (v2RayTun, v2rayNG, v2rayN and the like) get links until the format is checked on them. A notice in place of the servers goes out as links in this format too (see [below](#a-notice-in-place-of-the-servers)): one placeholder server needs no routing. Of the headers of a profile, `Content-Disposition` and `X-Mikan-Groups` do not go with this format.
 
 ### Server groups for the Mikan app
 
@@ -191,7 +228,7 @@ The same JSON decoded:
 
 The list holds the groups the client may use: `own` always, an exhausted one too; `unlimited` with servers in the profile or with traffic used; `main` only with servers to name.
 
-The header goes only with a Clash profile or a list of links. It is not on a sing-box config, a notice in place of the servers, or an answer to `HEAD`. The value is at most 1536 characters long, because a reverse proxy in front of the panel (nginx by default) answers with an error when the headers do not fit its buffer. If it is longer, the `main` groups go first (they hold names only) and `proxies` of the others becomes `null`, then groups are dropped from the end one by one. If nothing fits, there is no header. If the panel could not read the groups, the profile still goes out without the header, and the app shows the groups of its last fetch.
+The header goes only with a Clash profile or a list of links. It is not on a sing-box or an Xray config, a notice in place of the servers, or an answer to `HEAD`. The value is at most 1536 characters long, because a reverse proxy in front of the panel (nginx by default) answers with an error when the headers do not fit its buffer. If it is longer, the `main` groups go first (they hold names only) and `proxies` of the others becomes `null`, then groups are dropped from the end one by one. If nothing fits, there is no header. If the panel could not read the groups, the profile still goes out without the header, and the app shows the groups of its last fetch.
 
 ### Branding in apps
 
@@ -238,7 +275,7 @@ hide-settings: 1
 
 ### A notice in place of the servers
 
-When there are no keys or the profile is empty, the panel answers `200` with a profile in the same format that holds one placeholder server: its name explains the reason (in the panel's language) and shows where the servers would be. The headers of the term, traffic, page, announcement, branding and Happ are the same as in an ordinary answer, `Content-Type` follows the format, and `Content-Disposition` and `X-Mikan-Groups` are absent. The binding headers of the table above are added to them.
+When there are no keys or the profile is empty, the panel answers `200` with a profile in the same format (links, for the Xray format) that holds one placeholder server: its name explains the reason (in the panel's language) and shows where the servers would be. The headers of the term, traffic, page, announcement, branding and Happ are the same as in an ordinary answer, `Content-Type` follows the format, and `Content-Disposition` and `X-Mikan-Groups` are absent. The binding headers of the table above are added to them.
 
 | Reason | Additional headers |
 |---|---|
@@ -247,6 +284,7 @@ When there are no keys or the profile is empty, the panel answers `200` with a p
 | The administrator blocked the device | none |
 | The subscriber unbound the device: a pause or for good | none |
 | The subscription has no servers this app can run | none |
+| The app is turned away: it is blocked in **Settings → Subscription → Apps**, or a [response rule](#response-rules) or the built-in protection gives the notice | none |
 | The term is over, the traffic is used up or the subscription is off, and **Show a notice in place of the servers** is on | none |
 
 The notice for the last reason can have a text of your own, see [When a subscription does not work](/mikan/en/subscriptions/page/#when-a-subscription-does-not-work).
