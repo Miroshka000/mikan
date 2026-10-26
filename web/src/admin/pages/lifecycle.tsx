@@ -8,7 +8,7 @@ import { Confirm, Drawer } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
 import { SwitchRow } from "../../components/switch";
 import { useToast } from "../../components/toast";
-import { ErrorState, Pill, Skeleton } from "../../components/ui";
+import { Button, ErrorState, Pill, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
 import { ago, dateShort, days, num } from "../../lib/format";
 import { LimitPicker } from "./user/limit-picker";
@@ -183,11 +183,22 @@ function ConfirmRemoval({ l, removal, saving, onClose, onConfirm }: { l: Lifecyc
       onOpenChange={(v) => !v && onClose()}
       title={l.removal.on ? t("lifecycle.confirmFurtherTitle", { days: days(removal.days) }) : t("lifecycle.confirmTitle", { days: days(removal.days) })}
       text={
-        list.data
-          ? list.data.due === 0
-            ? t("lifecycle.confirmNobody")
-            : `${t("lifecycle.confirmText", { n: list.data.due })} ${t("lifecycle.confirmWho", { names: list.data.due > NAMES_SHOWN ? `${names}…` : names })}`
-          : t("lifecycle.reachLoading")
+        list.isError ? (
+          <span className="flex flex-wrap items-center gap-2">
+            {t("common.loadFailed")}
+            <Button size="sm" variant="ghost" loading={list.isFetching} onClick={() => list.refetch()}>
+              {t("common.retry")}
+            </Button>
+          </span>
+        ) : list.data ? (
+          list.data.due === 0 ? (
+            t("lifecycle.confirmNobody")
+          ) : (
+            `${t("lifecycle.confirmText", { n: list.data.due })} ${t("lifecycle.confirmWho", { names: list.data.due > NAMES_SHOWN ? `${names}…` : names })}`
+          )
+        ) : (
+          t("lifecycle.reachLoading")
+        )
       }
       confirm={t("lifecycle.confirm")}
       danger

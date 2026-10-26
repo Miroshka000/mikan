@@ -115,7 +115,13 @@ function TemplateList({ v, core, setCore, onOpen }: { v: View; core: Core; setCo
                 {x.rules.length > 0 ? <span className="block text-xs break-words text-[var(--ink-500)]">{t("settings.subTemplates.usedBy", { rules: x.rules.join(", ") })}</span> : null}
               </button>
               <div className="flex flex-wrap items-center gap-1">
-                <Button size="sm" variant="ghost" loading={setDefault.isPending && setDefault.variables?.id === x.id} onClick={() => setDefault.mutate({ id: x.id, on: !x.default })}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={setDefault.isPending && setDefault.variables?.id === x.id}
+                  disabled={setDefault.isPending && setDefault.variables?.id !== x.id}
+                  onClick={() => setDefault.mutate({ id: x.id, on: !x.default })}
+                >
                   {x.default ? t("settings.subTemplates.unsetDefault") : t("settings.subTemplates.makeDefault")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => onOpen({ core, id: x.id })}>

@@ -91,7 +91,8 @@ function ClientsCard({ v }: { v: Schemas["SubAppsView"] }) {
             <div className="text-xs text-[var(--ink-500)]">{t("settings.subApps.preview")}</div>
             <div className="mt-1 text-[13px] break-words">{v.preview}</div>
           </div>
-          <FormActions dirty={dirty} saving={save.isPending && save.variables?.text !== v.text} onReset={reset} />
+          {/* One save carries the switches and the text: the text waits while a switch saves, or it would send the old switches back. */}
+          <FormActions dirty={dirty} saving={save.isPending && save.variables?.text !== v.text} disabled={save.isPending} onReset={reset} />
         </form>
       </Card>
     </div>

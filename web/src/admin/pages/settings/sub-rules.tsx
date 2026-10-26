@@ -354,15 +354,33 @@ const FORMAT_CORES: Record<string, Schemas["SubTemplateHead"]["core"][]> = { cla
 
 /** The template the profile is made of, by the cores the rule's format reads; none: the core's default. */
 function TemplateSelect({ id, at, a, set, errors }: { id: string; at: string; a: Action; set: (patch: Partial<Action>) => void; errors: Record<string, string> }) {
-  const all = useSubTemplates().data?.templates ?? [];
+  const templates = useSubTemplates();
+  const all = templates.data?.templates ?? [];
   const cores = a.format ? (FORMAT_CORES[a.format] ?? CORES) : CORES;
   // A template a change of the format left out stays listed, so that the select shows what is saved.
   const listed = all.filter((x) => cores.includes(x.core) || x.id === a.template);
   if (cores.length === 0 && !a.template) return null;
   return (
     <Field label={t("settings.subRules.template")} htmlFor={`${id}-template`} hint={t("settings.subRules.templateHint")} error={errors[`${at}.template`]}>
-      <Select id={`${id}-template`} className="input max-w-[320px]" value={String(a.template ?? 0)} onChange={(e) => set({ template: Number(e.target.value) || undefined })}>
+      {templates.isError ? (
+        <span className="flex flex-wrap items-center gap-2 text-[13px]">
+          {t("common.loadFailed")}
+          <Button size="sm" variant="ghost" loading={templates.isFetching} onClick={() => templates.refetch()}>
+            {t("common.retry")}
+          </Button>
+        </span>
+      ) : (
+      <Select
+        id={`${id}-template`}
+        className="input max-w-[320px]"
+        value={String(a.template ?? 0)}
+        disabled={templates.isPending}
+        aria-busy={templates.isPending}
+        onChange={(e) => set({ template: Number(e.target.value) || undefined })}
+      >
         <option value="0">{t("settings.subRules.templateDefault")}</option>
+        {/* The saved template stays shown while the list loads, or if it is gone from it. */}
+        {a.template && !listed.some((x) => x.id === a.template) ? <option value={String(a.template)}>{t("settings.subRules.templateMissing", { id: a.template })}</option> : null}
         {CORES.filter((c) => listed.some((x) => x.core === c)).map((c) => (
           <optgroup key={c} label={coreName(c)}>
             {listed
@@ -375,6 +393,7 @@ function TemplateSelect({ id, at, a, set, errors }: { id: string; at: string; a:
           </optgroup>
         ))}
       </Select>
+      )}
     </Field>
   );
 }

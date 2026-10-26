@@ -1,7 +1,8 @@
 // What the subscription page's endpoints send. They are not in openapi.json (they are
 // public routes of the subscription server, not the admin API), so the shapes are written
-// here by hand: keep them in step with internal/panel/subs/handler.go (/<sub>/info, the
-// Mini App's /tg/session) and sub/shop.tsx (/tg/shop, /tg/pay).
+// here by hand: keep them in step with internal/panel/subsrc/handler.go (/<sub>/info),
+// internal/panel/subsrc/miniapp.go (the Mini App's /tg/session) and sub/shop.tsx (/tg/shop,
+// /tg/pay).
 
 export type Info = {
   name: string;

@@ -49,17 +49,20 @@ export function WebhookDrawer({ target, onClose, onSecret }: { target: Webhook |
   // address is the one the list had when the form was opened, so a refresh of the list does not
   // take the form from under the hand that types.
   const { reset: resetSave } = save;
+  // By the target, not the address: closing and opening a new form again leaves the address
+  // null both times, and the new form must still start empty.
   useEffect(() => {
-    setName(edited?.name ?? "");
-    setUrl(edited?.url ?? "");
-    setAll(!edited || edited.events.length === 0);
-    setPicked(new Set(edited?.events ?? []));
-    setEnabled(edited?.enabled ?? true);
-    setAllowLocal(edited?.allow_local ?? false);
+    const from = target === "new" ? null : target;
+    setName(from?.name ?? "");
+    setUrl(from?.url ?? "");
+    setAll(!from || from.events.length === 0);
+    setPicked(new Set(from?.events ?? []));
+    setEnabled(from?.enabled ?? true);
+    setAllowLocal(from?.allow_local ?? false);
     setRotating(false);
     setDeleting(false);
     resetSave();
-  }, [edited, resetSave]);
+  }, [target, resetSave]);
 
   const errors = fieldErrors(save.error);
   const submit = (e: FormEvent) => {

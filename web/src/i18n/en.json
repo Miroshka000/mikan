@@ -2580,6 +2580,7 @@
       "template": "Template",
       "templateHint": "The profile is made of it when it is a template of the app's core. Otherwise the app gets its core's default template, and sing-box and Xray with no default of their own take the Clash template chosen here.",
       "templateDefault": "The core's default template",
+      "templateMissing": "Template #{id}",
       "skipHwid": "Do not require a device ID",
       "skipHwidSub": "An app with no ID gets its keys even if the panel requires an ID of every app: such devices share one place.",
       "stubText": "Text of the entry",

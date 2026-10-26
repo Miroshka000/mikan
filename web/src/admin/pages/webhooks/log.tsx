@@ -1,5 +1,5 @@
 // The log of an address: what was sent to it and how each delivery went, newest first.
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Send } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, unwrap } from "../../../api/client";
@@ -27,7 +27,9 @@ export function LogDrawer({ target, onClose }: { target: Webhook | null; onClose
       unwrap(api.GET("/api/v1/webhooks/{id}/deliveries", { params: { path: { id }, query: { before: pageParam || undefined, limit: PAGE, status: status || undefined } }, signal })),
     getNextPageParam: (last) => last.next || undefined,
     enabled: !!target,
-    placeholderData: keepPreviousData,
+    // A new status filter keeps the rows while it loads; another address never shows the
+    // last one's deliveries.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[2] === id ? prev : undefined),
     // A retry or a new event shows by itself while the log is open.
     refetchInterval: 10_000,
   });
