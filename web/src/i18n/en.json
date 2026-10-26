@@ -3386,7 +3386,7 @@
     "eventsAllHint": "Every event the panel sends, and the ones that come with later versions.",
     "eventsChosenHint": "Only the ticked ones.",
     "eventsNone": "Tick at least one event, or choose all events",
-    "eventsFromNow": "Events you add are sent from this moment on: the older ones are not.",
+    "eventsFromNow": "Events you add go from the address's place in the queue: when it is up to date, from this moment on; when it lags behind, the waiting events of the added types go too.",
     "groups": {
       "payments": "Payments and balance",
       "subscribers": "Subscribers",

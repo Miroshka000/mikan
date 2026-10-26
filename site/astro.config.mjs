@@ -117,6 +117,7 @@ export default defineConfig({
 						{ slug: 'subscriptions/happ' },
 						{ slug: 'subscriptions/routing' },
 						{ slug: 'subscriptions/templates' },
+						{ slug: 'subscriptions/clients' },
 						{ slug: 'subscriptions/spec' },
 					],
 				},

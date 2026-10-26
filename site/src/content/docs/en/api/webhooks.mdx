@@ -169,7 +169,7 @@ printf '%s.%s' "$TIMESTAMP" "$BODY" | openssl dgst -sha256 -hmac "$SECRET"
 - **Events are kept for 7 days.** A receiver that was down for a day gets everything it missed, in order, when it is back. An address that is turned off gets nothing, and the events wait for it for the same 7 days. An event the address did not take in that time is marked "Not sent" in the log.
 - **Delivery is at least once.** If an answer is lost on the way, the same event comes again. Keep the `id` of the events you took and skip the ones you have seen.
 - **Answer quickly.** The panel waits 10 seconds for an answer, and the next event does not go until this one is over. Parse and do the heavy work after answering.
-- **A new address gets events from the moment it is made**, past ones are not sent. A type added to the choice works the same way: it counts from that moment, and the week's history of that type is not sent.
+- **A new address gets events from the moment it is made**, past ones are not sent. A type added to the choice goes from the address's place in the queue: when the address is up to date, from that moment; when it lags behind, the waiting events of that type go too (none older than a week).
 
 The **Deliveries** log of an address shows what was sent and when, what code the receiver answered with and why it did not take the event (the address is closed, the name does not resolve, the connection was refused, no answer in time, a TLS error, a redirect, an error code). Rows are kept for 7 days after the last attempt.
 
