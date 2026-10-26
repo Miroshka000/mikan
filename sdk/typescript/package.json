@@ -1,5 +1,5 @@
 {
-  "name": "mikan-sdk",
+  "name": "@getmikan/sdk",
   "version": "0.0.0",
   "description": "Typed TypeScript client for the mikan panel API",
   "license": "GPL-3.0-only",

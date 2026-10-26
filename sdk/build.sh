@@ -38,12 +38,31 @@ stage_docs() {
 }
 
 build_typescript() {
-  # npm versions have three numbers, a panel release four: the fourth goes after a hyphen
-  # (0.5.2.0 is 0.5.2-0 there). The SDK follows its panel exactly, so it is pinned to one,
-  # never taken by a range.
+  # npm versions have three numbers, a panel release four: the last two make npm's third
+  # (0.5.2.1 is 0.5.201 there, 0.5.3.0 is 0.5.300), a plain version that orders as the
+  # panel's releases do and that npm update follows. A hyphen would make every version a
+  # pre-release to npm. The fourth number must stay under 100 for this.
   case "$version" in
-    *.*.*.*) npm_version="${version%.*}-${version##*.}" ;;
-    *) npm_version="$version" ;;
+    *.*.*.*)
+      head="${version%.*}"
+      patch="${head##*.}"
+      rev="${version##*.}"
+      if [ "$rev" -ge 100 ]; then
+        echo "sdk: $version: npm takes the fourth number into the third, it must be under 100" >&2
+        exit 1
+      fi
+      npm_version="${head%.*}.$((patch * 100 + rev))"
+      ;;
+    *)
+      # Only the check build (0.0.0) has three numbers: a release with three would take the
+      # npm version of the four-number one after it (0.5.2 and 0.5.2.0 both make 0.5.200),
+      # and npm never takes a version twice.
+      if [ "$version" != 0.0.0 ]; then
+        echo "sdk: $version: npm takes releases with four numbers only (like 0.5.2.0)" >&2
+        exit 1
+      fi
+      npm_version=0.0.0
+      ;;
   esac
 
   cd "$here/typescript"

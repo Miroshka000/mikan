@@ -1,13 +1,13 @@
-# mikan-sdk
+# @getmikan/sdk
 
 A typed TypeScript client for the API of the [mikan](https://github.com/Miroshka000/mikan) panel. The types are generated from the panel's own OpenAPI spec with [openapi-typescript](https://openapi-ts.dev/), the calls go through [openapi-fetch](https://openapi-ts.dev/openapi-fetch/) (the pair the admin panel's own web client uses): a path, its method, and the parameters and bodies the API takes, all checked by the compiler.
 
-Every stable release of the panel has an SDK of the same number: install the one that matches your panel (Settings → System → Updates shows it). npm versions have three numbers and a panel release has four, so the fourth goes after a hyphen: for a panel 0.5.3.0 the SDK is `0.5.3-0`. npm calls such a version a pre-release, so name it exactly and do not use a range.
+Every stable release of the panel has an SDK of the same number: install the one that matches your panel (Settings → System → Updates shows it). npm versions have three numbers and a panel release has four, so npm's third is the panel's third times 100 plus its fourth: for a panel 0.5.2.1 the SDK is `0.5.201`, for 0.5.3.0 it is `0.5.300`. Name the version exactly, not a range.
 
 ## Install
 
 ```sh
-npm install mikan-sdk@<version>
+npm install @getmikan/sdk@<version>
 ```
 
 It needs Node 18 or later, or any runtime with `fetch`.
@@ -17,7 +17,7 @@ It needs Node 18 or later, or any runtime with `fetch`.
 Make a key in the panel: Settings → Security → API → New key. It looks like `mk_...` and is shown once. The client needs the key and the API address as the panel's API page shows it, `https://<panel>:<port>/<secret path>/api/v1`, with nothing after `/api/v1`.
 
 ```ts
-import { createClient } from "mikan-sdk";
+import { createClient } from "@getmikan/sdk";
 
 const mikan = createClient({
   baseUrl: "https://vpn.example.com:8443/SECRET-PATH/api/v1",

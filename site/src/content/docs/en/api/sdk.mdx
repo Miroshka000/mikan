@@ -9,17 +9,18 @@ import { TabItem, Tabs } from '@astrojs/starlight/components';
 The TypeScript and Python SDKs are new in 0.5.2.1.
 :::
 
-The panel's API has two ready clients, both named `mikan-sdk`: on [npm](https://www.npmjs.com/package/mikan-sdk) for TypeScript and on [PyPI](https://pypi.org/project/mikan-sdk/) for Python. A [build](https://github.com/Miroshka000/mikan/tree/main/sdk) makes them from the same OpenAPI file the [methods reference](/mikan/en/api/reference/) is built from, so the methods, the parameters and the answers are the same. Every stable release of the panel gets an SDK of the same number; pre-releases (`-rc`) get none.
+The panel's API has two ready clients: [`@getmikan/sdk`](https://www.npmjs.com/package/@getmikan/sdk) on npm for TypeScript and [`mikan-sdk`](https://pypi.org/project/mikan-sdk/) on PyPI for Python. A [build](https://github.com/Miroshka000/mikan/tree/main/sdk) makes them from the same OpenAPI file the [methods reference](/mikan/en/api/reference/) is built from, so the methods, the parameters and the answers are the same. Every stable release of the panel gets an SDK of the same number; pre-releases (`-rc`) get none.
 
 ## Version
 
-Take the SDK of the same number as your panel (**Settings → System → Updates**). A panel has four numbers and npm versions have three, so the fourth goes after a hyphen:
+Take the SDK of the same number as your panel (**Settings → System → Updates**). A panel has four numbers and npm versions have three, so npm joins the third and the fourth into one: the third times 100, plus the fourth.
 
 | Panel | npm | PyPI |
 |---|---|---|
-| `0.5.3.0` | `0.5.3-0` | `0.5.3.0` |
+| `0.5.2.1` | `0.5.201` | `0.5.2.1` |
+| `0.5.3.0` | `0.5.300` | `0.5.3.0` |
 
-npm takes such a version for a pre-release, so name it exactly instead of giving a range (`^`, `~`). The exact number matters on its merits too: the Python client reads answers strictly and can refuse an answer when the SDK does not match the panel: a value of an enumeration the client does not know yet, or a required field the panel does not send. The TypeScript client does not check answers, its types work at build time only.
+Name the version exactly instead of giving a range (`^`, `~`): the Python client reads answers strictly and can refuse an answer when the SDK does not match the panel: a value of an enumeration the client does not know yet, or a required field the panel does not send. The TypeScript client does not check answers, its types work at build time only.
 
 ## Install
 
@@ -27,7 +28,7 @@ npm takes such a version for a pre-release, so name it exactly instead of giving
 <TabItem label="TypeScript">
 
 ```bash
-npm install mikan-sdk@<version>
+npm install @getmikan/sdk@<version>
 ```
 
 It needs Node 18 or later, or any runtime with `fetch`.
@@ -54,7 +55,7 @@ The client needs an API key (`mk_...`, [how to make one](/mikan/en/api/#keys)) a
 <TabItem label="TypeScript">
 
 ```ts
-import { createClient } from "mikan-sdk";
+import { createClient } from "@getmikan/sdk";
 
 const mikan = createClient({
   baseUrl: "https://vpn.example.com:8443/SECRET-PATH/api/v1",
