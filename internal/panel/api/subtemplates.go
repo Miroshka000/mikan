@@ -108,9 +108,10 @@ func (h *handlers) registerSubTemplates() {
 		Description: "Ничего не меняет: показывает, что получит пользователь со всеми подключениями.", Tags: tags}, h.previewSubTemplate)
 }
 
-// templateRules are the names of the response rules that name each template.
-func (h *handlers) templateRules(ctx context.Context) (map[int64][]string, error) {
-	rules, err := subsrc.LoadRules(ctx, h.d.Store.Q)
+// templateRules are the names of the response rules that name each template, read through q
+// (a transaction's, when the answer decides a change).
+func templateRules(ctx context.Context, q *db.Queries) (map[int64][]string, error) {
+	rules, err := subsrc.LoadRules(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +129,7 @@ func (h *handlers) listSubTemplates(ctx context.Context, _ *struct{}) (*subTempl
 	if err != nil {
 		return nil, err
 	}
-	named, err := h.templateRules(ctx)
+	named, err := templateRules(ctx, h.d.Store.Q)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +150,7 @@ func rulesOf(named map[int64][]string, id int64) []string {
 
 // subTemplateView is row as the API gives it: without its text where secrets are hidden.
 func (h *handlers) subTemplateView(ctx context.Context, row db.SubTemplate) (SubTemplate, error) {
-	named, err := h.templateRules(ctx)
+	named, err := templateRules(ctx, h.d.Store.Q)
 	if err != nil {
 		return SubTemplate{}, err
 	}
@@ -222,6 +223,10 @@ func (h *handlers) createSubTemplate(ctx context.Context, in *createSubTemplateI
 	}
 	var row db.SubTemplate
 	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+		// Two creates at once must not both count 19 and make 21.
+		if err := q.LockSubTemplates(ctx); err != nil {
+			return err
+		}
 		n, err := q.CountSubTemplates(ctx, in.Body.Core)
 		if err != nil {
 			return err
@@ -276,6 +281,11 @@ func (h *handlers) patchSubTemplate(ctx context.Context, in *patchSubTemplateInp
 		}
 	}
 	err = h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+		// Two "make default" at once would both clear the old default and one would fail on
+		// the index of one default per core.
+		if err := q.LockSubTemplates(ctx); err != nil {
+			return err
+		}
 		if b.Name != nil || b.Body != nil {
 			if row, err = q.UpdateSubTemplate(ctx, db.UpdateSubTemplateParams{ID: row.ID, Name: name, Body: body, UpdatedAt: h.d.Now().Unix()}); err != nil {
 				return err
@@ -303,21 +313,31 @@ func (h *handlers) patchSubTemplate(ctx context.Context, in *patchSubTemplateInp
 }
 
 func (h *handlers) deleteSubTemplate(ctx context.Context, in *subTemplateIDInput) (*struct{}, error) {
-	named, err := h.templateRules(ctx)
+	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+		// Under the lock the rules saved now are all the rules there are (putSubRules).
+		if err := q.LockSubTemplates(ctx); err != nil {
+			return err
+		}
+		named, err := templateRules(ctx, q)
+		if err != nil {
+			return err
+		}
+		// A rule that named a template gone would be left out of the policy whole, with its
+		// headers and its format: the admin changes the rule first.
+		if rules := named[in.ID]; len(rules) > 0 {
+			return huma.Error409Conflict("template_in_use", &huma.ErrorDetail{Location: "path.id", Message: "template_in_use", Value: strings.Join(rules, ", ")})
+		}
+		n, err := q.DeleteSubTemplate(ctx, in.ID)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return huma.Error404NotFound("not_found")
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
-	}
-	// A rule that named a template gone would be left out of the policy whole, with its
-	// headers and its format: the admin changes the rule first.
-	if rules := named[in.ID]; len(rules) > 0 {
-		return nil, huma.Error409Conflict("template_in_use", &huma.ErrorDetail{Location: "path.id", Message: "template_in_use", Value: strings.Join(rules, ", ")})
-	}
-	n, err := h.d.Store.Q.DeleteSubTemplate(ctx, in.ID)
-	if err != nil {
-		return nil, err
-	}
-	if n == 0 {
-		return nil, huma.Error404NotFound("not_found")
 	}
 	settings.Touch()
 	h.audit(ctx, sessionOf(ctx).AdminID, "sub_template.delete", "sub_template", strconv.FormatInt(in.ID, 10), nil)

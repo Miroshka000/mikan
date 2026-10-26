@@ -10,6 +10,7 @@ import (
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/subsrc"
 )
 
 // The subscription templates over the API: a Clash one started from the built-in profile,
@@ -71,6 +72,19 @@ func TestSubTemplatesOverHTTP(t *testing.T) {
 		t.Fatalf("bad preview: %d %s", code, raw)
 	}
 	clash := create("mihomo", "Clash", own, true)
+
+	// A change of the text is checked as a new template is, and a good one is kept.
+	at := api + "/sub-templates/" + strconv.FormatInt(clash.ID, 10)
+	if resp, raw := h.do(http.MethodPatch, at, map[string]any{"body": bad}, csrf); resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(raw), "template_rule_target") {
+		t.Fatalf("bad change: %d %s", resp.StatusCode, raw)
+	}
+	edited := own + "# edited\n"
+	resp, raw = h.do(http.MethodPatch, at, map[string]any{"body": edited}, csrf)
+	var changed template
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(raw, &changed) != nil || changed.Body != edited || !changed.Default {
+		t.Fatalf("change: %d %s", resp.StatusCode, raw)
+	}
+	own = edited
 
 	clock := func() time.Time { return h.now }
 	tariffs, _ := h.st.Q.ListTariffs(ctx)
@@ -162,5 +176,28 @@ func TestSubTemplatesOverHTTP(t *testing.T) {
 	resp, raw = h.do(http.MethodGet, api+"/sub-templates", nil, nil)
 	if resp.StatusCode != http.StatusOK || strings.Contains(string(raw), `"Clash"`) || !strings.Contains(string(raw), `"rules":["happ"]`) {
 		t.Fatalf("the list: %d %s", resp.StatusCode, raw)
+	}
+
+	// A core holds at most subsrc.MaxTemplates templates: the next one is refused.
+	var heads struct {
+		Templates []struct {
+			Core string `json:"core"`
+		} `json:"templates"`
+	}
+	if err := json.Unmarshal(raw, &heads); err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, x := range heads.Templates {
+		if x.Core == "mihomo" {
+			n++
+		}
+	}
+	for i := n; i < subsrc.MaxTemplates; i++ {
+		create("mihomo", "Clash "+strconv.Itoa(i), own, false)
+	}
+	resp, raw = h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "One too many", "body": own}, csrf)
+	if resp.StatusCode != http.StatusConflict || !strings.Contains(string(raw), "template_limit") {
+		t.Fatalf("over the limit: %d %s", resp.StatusCode, raw)
 	}
 }

@@ -31,3 +31,9 @@ UPDATE sub_templates SET is_default = true WHERE id = $1;
 
 -- name: DeleteSubTemplate :execrows
 DELETE FROM sub_templates WHERE id = $1;
+
+-- name: LockSubTemplates :exec
+-- Serialises what changes the templates or the rules that name them: the count per core
+-- against the limit, the one default per core, and a template deleted while a rule that
+-- names it is saved. Held to the end of the transaction.
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-sub-templates', 0));

@@ -177,6 +177,18 @@ func (q *Queries) ListSubTemplates(ctx context.Context) ([]SubTemplate, error) {
 	return items, nil
 }
 
+const lockSubTemplates = `-- name: LockSubTemplates :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-sub-templates', 0))
+`
+
+// Serialises what changes the templates or the rules that name them: the count per core
+// against the limit, the one default per core, and a template deleted while a rule that
+// names it is saved. Held to the end of the transaction.
+func (q *Queries) LockSubTemplates(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, lockSubTemplates)
+	return err
+}
+
 const setSubTemplateDefault = `-- name: SetSubTemplateDefault :exec
 UPDATE sub_templates SET is_default = true WHERE id = $1
 `

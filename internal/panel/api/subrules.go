@@ -213,8 +213,9 @@ var listIndex = regexp.MustCompile(`\.(\d+)`)
 
 // checkSubRules refuses the rules that would not work: the first thing wrong is named by its
 // place in the body, as the schema names the places of its own errors (rules[2].when.op).
-func (h *handlers) checkSubRules(ctx context.Context, rules []apps.Rule, field string) error {
-	templates, err := subsrc.TemplateIDs(ctx, h.d.Store.Q)
+// The templates the rules name are read through q: a saving transaction's own.
+func checkSubRules(ctx context.Context, q *db.Queries, rules []apps.Rule, field string) error {
+	templates, err := subsrc.TemplateIDs(ctx, q)
 	if err != nil {
 		return err
 	}
@@ -227,10 +228,15 @@ func (h *handlers) checkSubRules(ctx context.Context, rules []apps.Rule, field s
 }
 
 func (h *handlers) putSubRules(ctx context.Context, in *putSubRulesInput) (*subRulesOutput, error) {
-	if err := h.checkSubRules(ctx, in.Body.Rules, "rules"); err != nil {
-		return nil, err
-	}
 	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+		// A template the rules name is not deleted between the check and the save
+		// (deleteSubTemplate takes the same lock).
+		if err := q.LockSubTemplates(ctx); err != nil {
+			return err
+		}
+		if err := checkSubRules(ctx, q, in.Body.Rules, "rules"); err != nil {
+			return err
+		}
 		if err := subsrc.SaveRules(ctx, q, in.Body.Rules); err != nil {
 			return err
 		}
@@ -260,7 +266,7 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 		return nil, err
 	}
 	if in.Body.Rules != nil {
-		if err := h.checkSubRules(ctx, *in.Body.Rules, "rules"); err != nil {
+		if err := checkSubRules(ctx, h.d.Store.Q, *in.Body.Rules, "rules"); err != nil {
 			return nil, err
 		}
 		p.Rules = *in.Body.Rules
