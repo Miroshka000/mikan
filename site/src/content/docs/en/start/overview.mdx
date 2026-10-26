@@ -1,18 +1,18 @@
 ---
 title: What is mikan
-description: A VPN panel on the mihomo core for running your own VPN service. What it consists of and how it works.
+description: A VPN panel on the Citrus core for running your own VPN service. What it consists of and how it works.
 ---
 
 import { LinkCard, CardGrid } from '@astrojs/starlight/components';
 
-mikan is a panel for your own VPN service, built on the [mihomo](https://github.com/MetaCubeX/mihomo) core. In it you add protocols and nodes, create users with plans, hand out subscriptions and sell access through a Telegram bot. The panel is free, the code is open under GPL-3.0, and the interface is in Russian and English.
+mikan is a panel for your own VPN service, built on the [Citrus](https://github.com/getmikan/Citrus) core, our fork of [mihomo](https://github.com/MetaCubeX/mihomo). In it you add protocols and nodes, create users with plans, hand out subscriptions and sell access through a Telegram bot. The panel is free, the code is open under GPL-3.0, and the interface is in Russian and English.
 
 ## What it consists of
 
 Three small containers from one image run on the server:
 
 - **Panel**: the admin UI, subscriptions, the Telegram bot and the API. Written in Go.
-- **Node**: mihomo is built into it as a library. It accepts client connections and counts traffic.
+- **Node**: Citrus is built into it as a library. It accepts client connections and counts traffic.
 - **PostgreSQL 18**: the panel's database.
 
 The panel and the node run separately, so updating or restarting the panel does not drop the VPN. The panel server always has its own node, and remote nodes on other servers connect with a key.
@@ -21,7 +21,7 @@ The panel and the node run separately, so updating or restarting the panel does 
 Browser ── HTTPS, secret link ──▶ mikan panel
                                     │  unix socket / TLS with pinning
                                     ▼
-VPN apps ── REALITY, QUIC… ──▶ mikan nodes (mihomo inside)
+VPN apps ── REALITY, QUIC… ──▶ mikan nodes (Citrus inside)
     └──────── subscription ──────────▶ panel
 ```
 
@@ -29,7 +29,7 @@ On a production server with clients, the panel takes about 14 MB of memory, the 
 
 ## What it can do
 
-- **Accounting to the byte.** mihomo is built into the node, so traffic is counted per connection for every user. Plans by duration and gigabytes, a payment day, a device limit and device binding.
+- **Accounting to the byte.** Citrus is built into the node, so traffic is counted per connection for every user. Plans by duration and gigabytes, a payment day, a device limit and device binding.
 - **Fifteen protocols.** VLESS REALITY (Vision, XHTTP, gRPC, post-quantum), Hysteria2, TUIC, AnyTLS, Trojan, TrustTunnel, ShadowQUIC, Mieru and more. Each one is added from a preset, and keys are created for you.
 - **Automatic fixes against blocking.** If clients from different networks stop reaching a protocol, the panel moves it to a free port or changes the REALITY camouflage site.
 - **A subscription for each app.** Happ, v2RayTun, Koala Clash, Clash Verge, Hiddify and others get only the protocols they can run.

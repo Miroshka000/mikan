@@ -8,6 +8,7 @@ export const links = {
 	license: 'https://github.com/Miroshka000/mikan/blob/main/LICENSE',
 	sponsor: 'https://web.tribute.tg/d/REA',
 	mihomo: 'https://github.com/MetaCubeX/mihomo',
+	citrus: 'https://github.com/getmikan/Citrus',
 };
 
 // Two lines, so the command fits the hero without wrapping in odd places; bash reads the
@@ -23,7 +24,7 @@ const docs = (lang: Lang, path: string) => `${import.meta.env.BASE_URL}${lang ==
 export const strings = {
 	ru: {
 		hero: {
-			title: 'Своя VPN-панель на ядре mihomo',
+			title: 'Своя VPN-панель на ядре Citrus',
 			lead: 'Протоколы, ноды, подписки и Telegram-бот с оплатой в одной панели. Ставится одной командой, сама переживает блокировки. Бесплатная, с открытым кодом под GPL-3.0.',
 			requirements: 'Ubuntu 22.04+ или Debian 12+, amd64 или arm64. Установщик сам ставит Docker и в конце выдаёт ссылку на админку.',
 			primary: 'Установить',
@@ -46,8 +47,8 @@ export const strings = {
 			title: 'Что внутри',
 			items: [
 				{
-					title: 'Ядро mihomo внутри ноды',
-					text: 'mihomo встроен как библиотека, поэтому трафик считается по каждому соединению каждого пользователя. Тарифы по сроку и гигабайтам, лимит устройств и привязка к ним.',
+					title: 'Ядро Citrus внутри ноды',
+					text: 'Citrus, наш форк mihomo, встроен как библиотека, поэтому трафик считается по каждому соединению каждого пользователя. Тарифы по сроку и гигабайтам, лимит устройств и привязка к ним.',
 					href: docs('ru', 'start/overview/'),
 				},
 				{
@@ -134,7 +135,7 @@ export const strings = {
 		},
 		footer: {
 			label: 'Ссылки проекта',
-			license: 'mikan: свободная программа под GNU GPL v3. Внутри mihomo (GPL-3.0).',
+			license: 'mikan: свободная программа под GNU GPL v3. Внутри Citrus, форк mihomo (GPL-3.0).',
 			releases: 'Релизы',
 			issues: 'Сообщить о проблеме',
 			sponsor: 'Поддержать',
@@ -142,7 +143,7 @@ export const strings = {
 	},
 	en: {
 		hero: {
-			title: 'Your own VPN panel on the mihomo core',
+			title: 'Your own VPN panel on the Citrus core',
 			lead: 'Protocols, nodes, subscriptions and a Telegram bot that takes payments, in one panel. One command to install, survives blocking on its own. Free and open source under GPL-3.0.',
 			requirements: 'Ubuntu 22.04+ or Debian 12+, amd64 or arm64. The installer sets up Docker by itself and prints your admin link at the end.',
 			primary: 'Install',
@@ -165,8 +166,8 @@ export const strings = {
 			title: 'What is inside',
 			items: [
 				{
-					title: 'mihomo inside the node',
-					text: 'mihomo is embedded as a library, so traffic is counted per user on every connection. Plans by time and gigabytes, device limits and device binding.',
+					title: 'Citrus inside the node',
+					text: 'Citrus, our fork of mihomo, is embedded as a library, so traffic is counted per user on every connection. Plans by time and gigabytes, device limits and device binding.',
 					href: docs('en', 'start/overview/'),
 				},
 				{
@@ -253,7 +254,7 @@ export const strings = {
 		},
 		footer: {
 			label: 'Project links',
-			license: 'mikan is free software under the GNU GPL v3. It embeds mihomo (GPL-3.0).',
+			license: 'mikan is free software under the GNU GPL v3. It embeds Citrus, a fork of mihomo (GPL-3.0).',
 			releases: 'Releases',
 			issues: 'Report a problem',
 			sponsor: 'Sponsor',
