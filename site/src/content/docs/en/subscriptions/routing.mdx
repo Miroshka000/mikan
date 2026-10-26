@@ -3,7 +3,7 @@ title: Routing in Clash
 description: Route modes, services, DNS, custom Clash rules and torrent blocking.
 ---
 
-Everything on this page applies to **Clash apps on mihomo**: Koala Clash, Clash Verge, FlClash, ClashFest, SlothClash and others. Happ, v2RayTun, Hiddify and other Xray and sing-box apps don't get these routes.
+The routes of this page go into every profile an app takes whole: **Clash apps on mihomo** (Koala Clash, Clash Verge, FlClash, ClashFest, SlothClash and others), sing-box apps that take a whole config, and Happ and INCY with Xray configs on. Each core writes them in its own terms, and what it cannot say as it is goes in the nearest form. Apps that get a list of links (v2RayTun, v2rayNG, Hiddify, Karing and others) don't get these routes. The names of the settings and the syntax of the rules below are Clash's.
 
 ## Mode
 
@@ -37,6 +37,10 @@ Some apps (Happ, v2RayTun, v2rayNG and others on the Xray core) look a site's ad
 Nodes older than 0.5.2.0 skip this setting; after `mikan update` it works by itself.
 
 ## Your own Clash profile
+
+:::note[New in 0.5.2.1]
+The templates replace the one own profile of earlier versions: it became the default Clash template, and sing-box and Xray got templates of their own.
+:::
 
 A whole mihomo config of your own (DNS, fake-ip, TUN, sniffer, groups, rules) is a subscription template in **Settings → Subscription → Templates**. While Clash has a default template, the settings of this page don't reach Clash apps, and the **Routing** section says so at the top. How to write templates and how response rules pick them: [Subscription templates](/mikan/en/subscriptions/templates/).
 
