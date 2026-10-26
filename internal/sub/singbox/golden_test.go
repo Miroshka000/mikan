@@ -9,6 +9,7 @@ import (
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
+	"mikan/internal/sub/subtest/corecheck"
 )
 
 // goldenProfile is the variant's user in its app: the admin's rules the app's core takes.
@@ -30,6 +31,7 @@ func TestGoldenSingBox(t *testing.T) {
 					t.Fatal(err)
 				}
 				subtest.Golden(t, v.Name+"_"+string(mode)+".singbox.json", raw)
+				t.Run("sing-box", func(t *testing.T) { corecheck.SingBox(t, raw) })
 			})
 		}
 	}
@@ -48,6 +50,7 @@ func TestGoldenTemplate(t *testing.T) {
 				t.Fatal(err)
 			}
 			subtest.Golden(t, v.Name+".template.singbox.json", sb)
+			t.Run("sing-box", func(t *testing.T) { corecheck.SingBox(t, sb) })
 		})
 	}
 }

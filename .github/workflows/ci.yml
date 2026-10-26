@@ -93,12 +93,21 @@ jobs:
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
       # The xray JSON tests run every config through a real xray-core; without one they skip,
       # so the release pinned here (by the hash of its archive) is what they check against.
+      # It moves together with the image internal/sub/subtest/corecheck uses without one.
       - name: xray-core for the xray JSON checks
         run: |
           curl -fsSL -o "$RUNNER_TEMP/xray.zip" https://github.com/XTLS/Xray-core/releases/download/v26.10.21/Xray-linux-64.zip
           echo "0eec3ed4163c273d8c8bf821f7d219e257921cf584aa3fb970715e458e631978  $RUNNER_TEMP/xray.zip" | sha256sum -c -
           unzip -q -o "$RUNNER_TEMP/xray.zip" xray -d "$RUNNER_TEMP/xray"
           echo "XRAY=$RUNNER_TEMP/xray/xray" >> "$GITHUB_ENV"
+      # The sing-box golden tests run every config through sing-box check the same way; the
+      # release here and the image in internal/sub/subtest/corecheck move together.
+      - name: sing-box for the sing-box config checks
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/sing-box.tar.gz" https://github.com/SagerNet/sing-box/releases/download/v1.12.23/sing-box-1.12.23-linux-amd64.tar.gz
+          echo "2cd63a932ee847685e71d037f6a8d86c8b414b8070645fdeb334a1cd413c1aa7  $RUNNER_TEMP/sing-box.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/sing-box.tar.gz" -C "$RUNNER_TEMP" sing-box-1.12.23-linux-amd64/sing-box
+          echo "SINGBOX=$RUNNER_TEMP/sing-box-1.12.23-linux-amd64/sing-box" >> "$GITHUB_ENV"
       # Every package, with the race detector: the panel's background writers, sync and
       # bot share state across goroutines. -race needs cgo, and the runner has gcc. The app
       # package alone takes 8 to 10 minutes under -race: past go test's 10 by default.

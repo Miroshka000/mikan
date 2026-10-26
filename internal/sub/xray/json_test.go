@@ -11,6 +11,7 @@ import (
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
+	"mikan/internal/sub/subtest/corecheck"
 )
 
 // xrayConfig is the part of an xray JSON config the tests read.
@@ -45,7 +46,7 @@ func render(t *testing.T, p mihomo.Profile, m routing.Mode, tpl model.Template) 
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatal(err)
 	}
-	t.Run("xray", func(t *testing.T) { checkXray(t, raw) })
+	t.Run("xray", func(t *testing.T) { corecheck.Xray(t, raw) })
 	return out
 }
 
@@ -389,7 +390,7 @@ func TestXrayJSONCommonGeodata(t *testing.T) {
 		if m != routing.All && !strings.Contains(string(raw), `"geoip:ru"`) {
 			t.Errorf("%s: the Russian IPs go direct", m)
 		}
-		t.Run(string(m), func(t *testing.T) { checkXray(t, raw) })
+		t.Run(string(m), func(t *testing.T) { corecheck.Xray(t, raw) })
 	}
 }
 

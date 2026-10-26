@@ -11,6 +11,7 @@ import (
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
+	"mikan/internal/sub/subtest/corecheck"
 )
 
 // own is the own sing-box template src as the template it is.
@@ -28,6 +29,7 @@ func TestGoldenOwnTemplate(t *testing.T) {
 				t.Fatal(err)
 			}
 			subtest.Golden(t, v.Name+".own.singbox.json", raw)
+			t.Run("sing-box", func(t *testing.T) { corecheck.SingBox(t, raw) })
 		})
 	}
 }
