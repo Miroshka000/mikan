@@ -19,6 +19,7 @@ func TestMihomoParsesTheProfile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		coreAccepts(t, raw)
 		rc, err := config.UnmarshalRawConfig(raw)
 		if err != nil {
 			t.Fatalf("%s: %v\n%s", m, err, raw)
