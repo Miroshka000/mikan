@@ -300,13 +300,6 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
@@ -528,13 +521,6 @@
         {
           "domain": [
             "geosite:category-public-tracker"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
           ],
           "outboundTag": "direct"
         },
@@ -767,13 +753,6 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
@@ -992,13 +971,6 @@
         {
           "domain": [
             "geosite:category-public-tracker"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
           ],
           "outboundTag": "direct"
         },

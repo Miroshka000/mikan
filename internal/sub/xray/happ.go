@@ -47,7 +47,7 @@ func ValidHappRouting(s string) bool {
 }
 
 // happProfile is Happ's routing profile (happ.su/main/dev-docs), which INCY reads too
-// (docs.incy.cc/en/routing). LastUpdated and ChunkFiles are INCY's alone.
+// (docs.incy.cc/en/routing); ChunkFiles is INCY's own spelling of UseChunkFiles.
 type happProfile struct {
 	Name              string            `json:"Name"`
 	GlobalProxy       string            `json:"GlobalProxy"` // "true": what no list takes goes through the proxy
@@ -85,23 +85,21 @@ func HappRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) st
 	return happLink(name, rules, final)
 }
 
-// incyStamp is the LastUpdated of the profile INCY gets. INCY keeps a profile it saved
-// until one of the same name comes with a later stamp, and loads the geodata again only
-// then (docs.incy.cc/en/routing), so the stamp moves forward with any change INCY has to
-// take: the profile's own fields or the geodata (a test keeps it after the release
-// routing.RunetfreedomGeoIP names). Changes of the settings' rules do not move it: the
-// Xray configs carry the panel's routing themselves.
-const incyStamp = 1792972800 // 2026-10-26
+// routingStamp is the profile's LastUpdated. INCY keeps a profile it saved until one of
+// the same name comes with a later stamp, and loads the geodata again only then
+// (docs.incy.cc/en/routing); Happ loads it again for a later one, else once a week at most.
+// So the stamp moves forward with any change the apps have to take: the profile's own
+// fields or the geodata (a test keeps it after the release routing.RunetfreedomGeoIP
+// names). Changes of the settings' rules do not move it: the Xray configs carry the
+// panel's routing themselves.
+const routingStamp = 1792972800 // 2026-10-26
 
-// IncyRoutingOf is HappRoutingOf for INCY, in its own scheme. Asked to (UseChunkFiles),
-// INCY cuts the geodata down to the categories of the profile's lists, and an Xray config
-// of the panel names others (its DNS, a template's rules): one cut away fails the whole
-// config. So INCY keeps the files whole, and the stamp makes it replace the profile it
-// saved before, cut files and all.
+// IncyRoutingOf is HappRoutingOf for INCY, in its own scheme, with UseChunkFiles in INCY's
+// spelling too.
 func IncyRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) string {
 	rules, final := happRules(p, m, src)
 	r, whole := happProfileOf(name, rules, final), false
-	r.LastUpdated, r.UseChunkFiles, r.ChunkFiles = strconv.Itoa(incyStamp), "false", &whole
+	r.ChunkFiles = &whole
 	return routingLink("incy", r)
 }
 
@@ -151,7 +149,11 @@ func routingLink(scheme string, p happProfile) string {
 // one condition Happ's lists hold go to the lists of its target (direct, blocked, or through
 // the proxy for any group).
 func happProfileOf(name string, rules []routing.Rule, final routing.Target) happProfile {
-	r := happProfile{Name: name, GlobalProxy: "true", UseChunkFiles: "true",
+	// The geo files stay whole: an app asked to (UseChunkFiles) cuts them down to the
+	// categories of the profile's lists (INCY; Happ keeps the "selected tags"), and an Xray
+	// config of the panel names others (its DNS, a template's rules), one cut away failing
+	// the whole config.
+	r := happProfile{Name: name, GlobalProxy: "true", UseChunkFiles: "false", LastUpdated: strconv.Itoa(routingStamp),
 		RemoteDNS: "1.1.1.1", RemoteDNSType: "DoH", RemoteDNSDomain: "https://1.1.1.1/dns-query", RemoteDNSIP: "1.1.1.1",
 		DomesticDNS: "77.88.8.8", DomesticDNSType: "DoH", DomesticDNSDomain: "https://77.88.8.8/dns-query", DomesticDNSIP: "77.88.8.8",
 		GeoipURL: routing.RunetfreedomGeoIP, GeositeURL: routing.RunetfreedomGeosite, DNSHosts: map[string]string{},

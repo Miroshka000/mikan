@@ -6,7 +6,6 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/sub/mihomo"
 	submodel "mikan/internal/sub/model"
-	"mikan/internal/sub/routing"
 	"mikan/internal/sub/singbox"
 	"mikan/internal/sub/xray"
 )
@@ -77,16 +76,6 @@ type TemplatePreview struct {
 	Starter bool
 }
 
-// previewGeodata is the geodata the preview of an Xray config names categories of: what Happ
-// and INCY get with the panel's own routing profile, which loads runetfreedom's files, when
-// the panel sends it (serve's appGeodata), what every geodata has otherwise.
-func previewGeodata(cfg Config) routing.Geodata {
-	if cfg.Happ.Routing == xray.HappRoutingAuto {
-		return routing.Runetfreedom
-	}
-	return routing.Common
-}
-
 // PreviewTemplate is the profile a user given every inbound gets of the template (its keys
 // are placeholders), and, of a Clash one, what sing-box and xray make of its groups.
 func (h *Handler) PreviewTemplate(ctx context.Context, req TemplatePreview) (Preview, error) {
@@ -112,7 +101,7 @@ func (h *Handler) PreviewTemplate(ctx context.Context, req TemplatePreview) (Pre
 			out.Profile, err = mihomo.Render(prof, g, cfg.Mode)
 		}
 		if err == nil {
-			out.Notes = append(singbox.Notes(prof, g, cfg.Mode, t), xray.Notes(prof, g, cfg.Mode, t, previewGeodata(cfg))...)
+			out.Notes = append(singbox.Notes(prof, g, cfg.Mode, t), xray.Notes(prof, g, cfg.Mode, t)...)
 		}
 	case submodel.CoreSingBox:
 		if req.Starter {
@@ -123,7 +112,7 @@ func (h *Handler) PreviewTemplate(ctx context.Context, req TemplatePreview) (Pre
 		if req.Starter {
 			return Preview{Profile: xray.Example(g)}, nil
 		}
-		out.Profile, err = xray.Render(prof, g, cfg.Mode, t, previewGeodata(cfg))
+		out.Profile, err = xray.Render(prof, g, cfg.Mode, t)
 	default:
 		err = submodel.TemplateErr("template_core", string(req.Core))
 	}

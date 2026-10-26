@@ -88,7 +88,7 @@ func TestOwnXrayTemplate(t *testing.T) {
 	if b := balancer(auto, "⚡ Авто"); b == nil || len(b.Selector) != len(outs) {
 		t.Fatalf("the choice takes every server: %+v", b)
 	}
-	if Notes(p, model.GroupNames{}, routing.All, own(subtest.OwnXrayTemplate), routing.Runetfreedom) != nil {
+	if Notes(p, model.GroupNames{}, routing.All, own(subtest.OwnXrayTemplate)) != nil {
 		t.Fatal("notes of balancers the admin wrote for xray")
 	}
 }

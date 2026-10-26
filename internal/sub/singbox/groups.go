@@ -11,6 +11,9 @@ import (
 // The core's name in the notes of the admin panel's preview.
 const core = "singbox"
 
+// urltestIdle is sing-box's idle timeout of a urltest group in seconds when none is given.
+const urltestIdle = 30 * 60
+
 // note is what sing-box made of the group: a code of model.Note, the preview's words.
 func note(group, code string) model.Note { return model.Note{Core: core, Group: group, Code: code} }
 
@@ -92,6 +95,11 @@ func convertGroups(groups []model.Group, tags map[string]bool) converted {
 			}
 			if g.Interval > 0 {
 				o["interval"] = strconv.Itoa(g.Interval) + "s"
+				// sing-box refuses an interval longer than the idle timeout (30 minutes by
+				// default), and the panel takes up to a day.
+				if g.Interval > urltestIdle {
+					o["idle_timeout"] = strconv.Itoa(2*g.Interval) + "s"
+				}
 			}
 			if g.Tolerance > 0 {
 				o["tolerance"] = g.Tolerance

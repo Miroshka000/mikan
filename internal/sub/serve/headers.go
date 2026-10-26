@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"mikan/internal/sub/apps"
-	"mikan/internal/sub/routing"
 	"mikan/internal/sub/xray"
 	"mikan/internal/textutil"
 )
@@ -266,16 +265,6 @@ func appHeaders(hd http.Header, ua string, cfg Config, clash string) {
 		}
 		happHeaders(hd, happ)
 	}
-}
-
-// appGeodata is the geodata an app runs an Xray config with: runetfreedom's when the panel
-// sends Happ or INCY its own routing profile (appHeaders), which loads those files; what
-// every usual geodata has otherwise, since the app keeps files of its own then.
-func appGeodata(ua string, cfg Config) routing.Geodata {
-	if cfg.Happ.Routing == xray.HappRoutingAuto && (apps.IsINCY(ua) || apps.IsHapp(ua)) {
-		return routing.Runetfreedom
-	}
-	return routing.Common
 }
 
 // happHeaders are the provider headers Happ reads.

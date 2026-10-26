@@ -28,14 +28,17 @@ const (
 
 // Render is the xray JSON profile of p made of the template t: an own xray one as the admin
 // wrote it (Template), an own Clash one read as xray can, the panel's routing for none. Its
-// rules and DNS name only the categories geo, the app's geodata, has.
+// rules and DNS name only the categories every usual geodata has (routing.Common): an app
+// runs the config with the geo files it has at the moment, and one it lacks fails the whole
+// config. runetfreedom's files, which the routing profile names, come later if ever (a first
+// fetch, a 90 MB download that may break off), and an app may cut its files down.
 // model.ErrNoProxies when xray carries none of p's proxies; a template that does not render
 // for p is a *model.TemplateError, and the caller decides what goes out in its place.
-func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template, geo routing.Geodata) ([]byte, error) {
+func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
 	if t.Core == model.CoreXray {
 		return Template(p, t.Body)
 	}
-	pl, err := planOf(p, g, m, t, geo)
+	pl, err := planOf(p, g, m, t)
 	if err != nil {
 		return nil, err
 	}
@@ -46,11 +49,11 @@ func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 // (Balance), for the admin panel's preview: of the own Clash profile t, or of the built-in
 // groups. The main group is no select in xray: its choices are the app's list of configs.
 // An own xray template has its balancers as the admin wrote them: no notes.
-func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template, geo routing.Geodata) []model.Note {
+func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
 	if t.Core == model.CoreXray {
 		return nil
 	}
-	pl, err := planOf(p, g, m, t, geo)
+	pl, err := planOf(p, g, m, t)
 	if err != nil {
 		return nil
 	}
@@ -71,7 +74,6 @@ type plan struct {
 	final     routing.Target // where what no rule takes goes
 	resolve   bool           // a rule matches an IP the app resolves a name for
 	dns       routing.Resolvers
-	geo       routing.Geodata // what the app's geodata has, which the rules and the DNS name
 	servers   routing.Servers
 	// choice are the names of the main group, which stands for the user's choice: in each
 	// config it goes to the config's own server or balancer.
@@ -96,7 +98,7 @@ type rule struct {
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
 // none (or of another core's).
-func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template, geo routing.Geodata) (plan, error) {
+func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
 	g = g.WithDefaults(p.Lang)
 	outs := outboundsOf(p.Proxies)
 	if len(outs) == 0 {
@@ -111,7 +113,7 @@ func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 	}
 	p.Proxies = carried
 	if t.Core != model.CoreMihomo {
-		return builtin(p, g, m, outs, geo), nil
+		return builtin(p, g, m, outs), nil
 	}
 	// The profile as a current mihomo would get it, as for sing-box: the rules of every list,
 	// the ones xray has a form of are kept.
@@ -120,7 +122,7 @@ func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 	if err != nil {
 		return plan{}, err
 	}
-	return template(parts, g, outs, p.Routes.Servers, geo), nil
+	return template(parts, g, outs, p.Routes.Servers), nil
 }
 
 // outboundsOf are the outbounds of the proxies xray carries, tagged.
@@ -138,10 +140,11 @@ func outboundsOf(ps []model.Proxy) []tagged {
 
 // builtin is the plan of the panel's routing: the intent with what xray can match of it,
 // and the built-in groups over it.
-func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode, outs []tagged, geo routing.Geodata) plan {
-	// The blocked mode is made of runetfreedom's lists of what is blocked: an app without
-	// them gets RU direct, as the apps that take no rule lists do (Intent.Plain).
-	if sites, _ := geo.List("mikan-blocked"); m == routing.Blocked && len(sites) == 0 {
+func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode, outs []tagged) plan {
+	// The blocked mode is made of runetfreedom's lists of what is blocked, which the usual
+	// geodata lacks: the configs get RU direct, as the apps that take no rule lists do
+	// (Intent.Plain).
+	if m == routing.Blocked {
 		m = routing.RUDirect
 	}
 	in := routing.NewIntent(m, p.Rules, p.Routes)
@@ -150,7 +153,7 @@ func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode, outs []tagged
 	for _, r := range in.Routes {
 		var keep []routing.Match
 		for _, x := range r.Rules {
-			if fields([]routing.Match{x}, geo) != nil {
+			if fields([]routing.Match{x}, routing.Common) != nil {
 				keep = append(keep, x)
 			}
 		}
@@ -160,7 +163,7 @@ func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode, outs []tagged
 		}
 	}
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.XrayBalance(), routes, p.Lang)
-	pl := plan{outbounds: outs, groups: gs.List, dns: in.Resolvers(), servers: in.Servers, geo: geo,
+	pl := plan{outbounds: outs, groups: gs.List, dns: in.Resolvers(), servers: in.Servers,
 		choice: map[string]bool{g.Main: true, model.AliasGroup: true}}
 	to := func(t routing.Target, route int) routing.Target {
 		if name := gs.Of(t, route); name != "" {
@@ -189,9 +192,9 @@ func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode, outs []tagged
 // template is the plan of an own Clash profile: its rules up to the first MATCH, its groups
 // and DNS. Its main group is the one MATCH goes to, else the panel's main group by name,
 // else its first.
-func template(parts mihomo.Parts, g model.GroupNames, outs []tagged, s routing.Servers, geo routing.Geodata) plan {
+func template(parts mihomo.Parts, g model.GroupNames, outs []tagged, s routing.Servers) plan {
 	// What no rule takes goes direct in mihomo.
-	pl := plan{outbounds: outs, groups: parts.Groups, dns: parts.DNS, servers: s, geo: geo, final: routing.Target{Kind: routing.ToDirect}}
+	pl := plan{outbounds: outs, groups: parts.Groups, dns: parts.DNS, servers: s, final: routing.Target{Kind: routing.ToDirect}}
 	for _, r := range parts.Rules {
 		if len(r.When) == 0 {
 			pl.final = r.To
@@ -236,12 +239,12 @@ func template(parts mihomo.Parts, g model.GroupNames, outs []tagged, s routing.S
 
 // add is a rule of the conditions to t, when xray matches them.
 func (pl *plan) add(when []routing.Match, t routing.Target) {
-	f := fields(when, pl.geo)
+	f := fields(when, routing.Common)
 	if f == nil {
 		return
 	}
 	pl.rules = append(pl.rules, rule{fields: f, to: t})
-	pl.resolve = pl.resolve || resolves(when, pl.geo)
+	pl.resolve = pl.resolve || resolves(when, routing.Common)
 }
 
 // names are the proxies xray carries, by the names the groups hold.
@@ -326,7 +329,7 @@ func (pl plan) config(name string, choice Ref, b Balancing) map[string]any {
 		}
 		return choice, true
 	}
-	dns, rules := dnsOf(pl.dns, pl.geo, via, choice)
+	dns, rules := dnsOf(pl.dns, routing.Common, via, choice)
 	// The apps' own queries go to xray's DNS, after its own queries went out above.
 	rules = append(rules, map[string]any{"port": "53", "outboundTag": dnsOutTag})
 	for _, r := range pl.rules {

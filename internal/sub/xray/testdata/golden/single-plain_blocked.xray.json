@@ -243,20 +243,20 @@
           "outboundTag": "direct"
         },
         {
-          "balancerTag": "Авто",
           "domain": [
-            "geosite:ru-blocked"
-          ]
+            "geosite:category-ru"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:ru"
+          ],
+          "outboundTag": "direct"
         },
         {
           "balancerTag": "Авто",
-          "ip": [
-            "geoip:ru-blocked"
-          ]
-        },
-        {
-          "network": "tcp,udp",
-          "outboundTag": "direct"
+          "network": "tcp,udp"
         }
       ]
     }
@@ -421,19 +421,19 @@
         },
         {
           "domain": [
-            "geosite:ru-blocked"
+            "geosite:category-ru"
           ],
-          "outboundTag": "proxy-1"
+          "outboundTag": "direct"
         },
         {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-1"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-1"
         }
       ]
     }
@@ -599,19 +599,19 @@
         },
         {
           "domain": [
-            "geosite:ru-blocked"
+            "geosite:category-ru"
           ],
-          "outboundTag": "proxy-2"
+          "outboundTag": "direct"
         },
         {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-2"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-2"
         }
       ]
     }
@@ -773,19 +773,19 @@
         },
         {
           "domain": [
-            "geosite:ru-blocked"
+            "geosite:category-ru"
           ],
-          "outboundTag": "proxy-3"
+          "outboundTag": "direct"
         },
         {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-3"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-3"
         }
       ]
     }

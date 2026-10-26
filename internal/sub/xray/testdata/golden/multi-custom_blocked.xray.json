@@ -467,32 +467,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "balancerTag": "Fast",
-          "domain": [
-            "geosite:ru-blocked"
-          ]
-        },
-        {
-          "balancerTag": "Fast",
           "ip": [
-            "geoip:ru-blocked"
-          ]
+            "geoip:ru"
+          ],
+          "outboundTag": "direct"
         },
         {
-          "network": "tcp,udp",
-          "outboundTag": "direct"
+          "balancerTag": "Fast",
+          "network": "tcp,udp"
         }
       ]
     }
@@ -895,32 +882,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "balancerTag": "🇳🇱 Нидерланды",
-          "domain": [
-            "geosite:ru-blocked"
-          ]
-        },
-        {
-          "balancerTag": "🇳🇱 Нидерланды",
           "ip": [
-            "geoip:ru-blocked"
-          ]
+            "geoip:ru"
+          ],
+          "outboundTag": "direct"
         },
         {
-          "network": "tcp,udp",
-          "outboundTag": "direct"
+          "balancerTag": "🇳🇱 Нидерланды",
+          "network": "tcp,udp"
         }
       ]
     }
@@ -1232,32 +1206,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "balancerTag": "🇺🇸 США",
-          "domain": [
-            "geosite:ru-blocked"
-          ]
-        },
-        {
-          "balancerTag": "🇺🇸 США",
           "ip": [
-            "geoip:ru-blocked"
-          ]
+            "geoip:ru"
+          ],
+          "outboundTag": "direct"
         },
         {
-          "network": "tcp,udp",
-          "outboundTag": "direct"
+          "balancerTag": "🇺🇸 США",
+          "network": "tcp,udp"
         }
       ]
     }
@@ -1515,32 +1476,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-01"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-01"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-01"
         }
       ]
     }
@@ -1799,32 +1747,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-02"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-02"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-02"
         }
       ]
     }
@@ -2079,32 +2014,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-03"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-03"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-03"
         }
       ]
     }
@@ -2353,32 +2275,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-04"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-04"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-04"
         }
       ]
     }
@@ -2637,32 +2546,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-05"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-05"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-05"
         }
       ]
     }
@@ -2888,32 +2784,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-06"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-06"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-06"
         }
       ]
     }
@@ -3173,32 +3056,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-07"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-07"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-07"
         }
       ]
     }
@@ -3453,32 +3323,19 @@
         },
         {
           "domain": [
-            "geosite:category-ru",
-            "geosite:ru-available-only-inside"
-          ],
-          "outboundTag": "direct"
-        },
-        {
-          "domain": [
             "geosite:category-ru"
           ],
           "outboundTag": "direct"
         },
         {
-          "domain": [
-            "geosite:ru-blocked"
-          ],
-          "outboundTag": "proxy-08"
-        },
-        {
           "ip": [
-            "geoip:ru-blocked"
+            "geoip:ru"
           ],
-          "outboundTag": "proxy-08"
+          "outboundTag": "direct"
         },
         {
           "network": "tcp,udp",
-          "outboundTag": "direct"
+          "outboundTag": "proxy-08"
         }
       ]
     }

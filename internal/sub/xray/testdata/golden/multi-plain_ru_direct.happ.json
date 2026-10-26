@@ -1,7 +1,8 @@
 {
   "Name": "VPN",
   "GlobalProxy": "true",
-  "UseChunkFiles": "true",
+  "LastUpdated": "1792972800",
+  "UseChunkFiles": "false",
   "RemoteDns": "1.1.1.1",
   "DomesticDns": "77.88.8.8",
   "RemoteDNSType": "DoH",

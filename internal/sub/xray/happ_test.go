@@ -144,8 +144,9 @@ func variantProfile(v subtest.Variant) mihomo.Profile {
 	return mihomo.Profile{Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
 }
 
-// INCY gets Happ's profile in its own scheme, with the geodata kept whole and a stamp that
-// makes it replace the profile it saved; the stamp is no older than the geodata it loads.
+// Both apps keep the geo files whole and take the profile again for a later stamp; INCY
+// gets the same profile in its own scheme, with UseChunkFiles in its own spelling too. The
+// stamp is no older than the geodata it loads.
 func TestIncyRoutingOf(t *testing.T) {
 	for _, mode := range subtest.Modes {
 		p := variantProfile(subtest.Variants[0])
@@ -155,20 +156,20 @@ func TestIncyRoutingOf(t *testing.T) {
 			t.Fatalf("not INCY's scheme: %s", link)
 		}
 		incy, happ := decodeHapp(t, "happ://"+rest), decodeHapp(t, HappRoutingOf("VPN", p, mode, ""))
-		if incy.UseChunkFiles != "false" || incy.ChunkFiles == nil || *incy.ChunkFiles || incy.LastUpdated != strconv.Itoa(incyStamp) {
-			t.Fatalf("%s: INCY's own fields: %+v", mode, incy)
+		if happ.UseChunkFiles != "false" || happ.ChunkFiles != nil || happ.LastUpdated != strconv.Itoa(routingStamp) {
+			t.Fatalf("%s: Happ's profile: %+v", mode, happ)
 		}
-		if happ.UseChunkFiles != "true" || happ.ChunkFiles != nil || happ.LastUpdated != "" {
-			t.Fatalf("%s: Happ got INCY's fields: %+v", mode, happ)
+		if incy.ChunkFiles == nil || *incy.ChunkFiles {
+			t.Fatalf("%s: INCY's spelling: %+v", mode, incy)
 		}
-		happ.UseChunkFiles, happ.ChunkFiles, happ.LastUpdated = incy.UseChunkFiles, incy.ChunkFiles, incy.LastUpdated
+		happ.ChunkFiles = incy.ChunkFiles
 		if !reflect.DeepEqual(incy, happ) {
 			t.Fatalf("%s: INCY's profile is not Happ's:\n%+v\n%+v", mode, incy, happ)
 		}
 	}
 	pin := path.Base(path.Dir(routing.RunetfreedomGeoIP))
-	if at, err := time.Parse("200601021504", pin); err != nil || incyStamp < at.Unix() {
-		t.Fatalf("incyStamp %d is older than the geodata release %s (%v): move it forward", incyStamp, pin, err)
+	if at, err := time.Parse("200601021504", pin); err != nil || routingStamp < at.Unix() {
+		t.Fatalf("routingStamp %d is older than the geodata release %s (%v): move it forward", routingStamp, pin, err)
 	}
 }
 

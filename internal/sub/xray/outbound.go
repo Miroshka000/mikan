@@ -138,10 +138,10 @@ func pinned(pin string) bool {
 }
 
 // hysteria is a Hysteria2 outbound, xray's hysteria of version 2: the password and the
-// node's certificate, with the obfuscation and the port hopping as masks of its packets.
-// The hopping mask dials the sockets itself, so it goes last, under the obfuscation; it
-// moves to a new local socket and a new port of the range at every hop, as Hysteria's own
-// client does. Gecko is mihomo's alone.
+// node's certificate, with the obfuscation as a mask of its packets. The port hopping stays
+// out: its mask (udpHop) is in Xray from v26.9.9 only, the apps do not say their core's
+// version, and an older core refuses the whole config; the node's own port takes the
+// client all the same. Gecko is mihomo's alone.
 func hysteria(p model.Proxy, o map[string]any) (map[string]any, bool) {
 	ss := map[string]any{"network": "hysteria", "hysteriaSettings": map[string]any{"version": 2, "auth": p.Password}}
 	if p.TLS == nil {
@@ -156,9 +156,6 @@ func hysteria(p model.Proxy, o map[string]any) (map[string]any, bool) {
 			return nil, false
 		}
 		masks = append(masks, map[string]any{"type": "salamander", "settings": map[string]any{"password": ob.Password}})
-	}
-	if p.Ports != "" {
-		masks = append(masks, map[string]any{"type": "udphop", "settings": map[string]any{"mode": "intervallocal,intervalremote", "remotePorts": p.Ports}})
 	}
 	if len(masks) > 0 {
 		ss["finalmask"] = map[string]any{"udp": masks}

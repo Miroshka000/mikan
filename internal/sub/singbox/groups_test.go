@@ -20,7 +20,7 @@ func TestConvertGroups(t *testing.T) {
 		{Name: "pick", Type: model.Select, Members: []string{"fast", "DIRECT", "REJECT", "gone", "a"}},
 		{Name: "fast", Type: model.URLTest, Members: []string{"a", "b"}, URL: routing.ProbeURL, Interval: 120, Tolerance: 80},
 		{Name: "first", Type: model.Fallback, Members: []string{"a", "b"}},
-		{Name: "spread", Type: model.LoadBalance, Members: []string{"a", "b"}},
+		{Name: "spread", Type: model.LoadBalance, Members: []string{"a", "b"}, Interval: 3600},
 		{Name: "exits", Type: model.URLTest, Members: []string{"b", "c"}},
 		{Name: "cascade", Type: model.Chain, Members: []string{"entry", "exits"}},
 		{Name: "broken", Type: model.Chain, Members: []string{"entry", "nowhere"}},
@@ -41,6 +41,10 @@ func TestConvertGroups(t *testing.T) {
 	}
 	if byTag["first"]["type"] != "urltest" || byTag["spread"]["type"] != "urltest" {
 		t.Fatalf("the nearest: %v %v", byTag["first"], byTag["spread"])
+	}
+	// sing-box refuses an interval past the idle timeout, 30 minutes unless given.
+	if fast, spread := byTag["fast"], byTag["spread"]; fast["idle_timeout"] != nil || spread["interval"] != "3600s" || spread["idle_timeout"] != "7200s" {
+		t.Fatalf("idle timeout: %v %v", fast, spread)
 	}
 	if cascade := byTag["cascade"]; cascade["type"] != "selector" || !slices.Equal(cascade["outbounds"].([]string), []string{"exits"}) {
 		t.Fatalf("a chain goes out of its exit: %v", cascade)

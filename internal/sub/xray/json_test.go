@@ -37,7 +37,7 @@ func profileOf(u subtest.User) mihomo.Profile {
 // render is the xray JSON profile of p, each config checked by xray.
 func render(t *testing.T, p mihomo.Profile, m routing.Mode, tpl model.Template) []xrayConfig {
 	t.Helper()
-	raw, err := Render(p, model.GroupNames{}, m, tpl, routing.Runetfreedom)
+	raw, err := Render(p, model.GroupNames{}, m, tpl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,10 +166,10 @@ func TestJSONOutbounds(t *testing.T) {
 	masks, _ := json.Marshal(get(hy2, "streamSettings", "finalmask"))
 	if hy2["protocol"] != "hysteria" || get(hy2, "settings", "version") != float64(2) || get(hy2, "streamSettings", "hysteriaSettings", "auth") != "pw" ||
 		get(hy2, "streamSettings", "tlsSettings", "pinnedPeerCertSha256") != pin ||
-		string(masks) != `{"udp":[{"settings":{"password":"obfs"},"type":"salamander"},{"settings":{"mode":"intervallocal,intervalremote","remotePorts":"20000-30000"},"type":"udphop"}]}` {
-		t.Fatalf("hysteria2: %v, masks %s", hy2, masks)
+		string(masks) != `{"udp":[{"settings":{"password":"obfs"},"type":"salamander"}]}` {
+		t.Fatalf("hysteria2 (no port hopping: older cores refuse its mask): %v, masks %s", hy2, masks)
 	}
-	if _, err := Render(mihomo.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, model.Template{}, routing.Runetfreedom); !errors.Is(err, model.ErrNoProxies) {
+	if _, err := Render(mihomo.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, model.Template{}); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("nothing xray carries: %v", err)
 	}
 }
@@ -362,22 +362,22 @@ rules:
 // app's list of configs and has none.
 func TestJSONNotes(t *testing.T) {
 	p := profileOf(subtest.TwoNodes())
-	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}, routing.Runetfreedom); len(n) != 0 {
+	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 0 {
 		t.Fatalf("built-in: %+v", n)
 	}
 	p.Routes.Servers = routing.Servers{Auto: "fallback"}
-	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}, routing.Runetfreedom); len(n) != 1 || n[0].Group != "Авто" || n[0].Code != "fallback_fastest" {
+	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 1 || n[0].Group != "Авто" || n[0].Code != "fallback_fastest" {
 		t.Fatalf("fallback: %+v", n)
 	}
 }
 
-// Without the panel's routing profile the app keeps geodata of its own: the configs name
-// only what every usual geodata has, and the blocked mode, made of runetfreedom's lists of
-// what is blocked, turns into RU direct (an app would fail on ru-blocked otherwise).
+// An app runs the configs with the geo files it has: they name only what every usual
+// geodata has, and the blocked mode, made of runetfreedom's lists of what is blocked, turns
+// into RU direct (an app would fail on ru-blocked otherwise).
 func TestXrayJSONCommonGeodata(t *testing.T) {
 	v := subtest.Variants[slices.IndexFunc(subtest.Variants, func(v subtest.Variant) bool { return v.Name == "multi-custom" })]
 	for _, m := range subtest.Modes {
-		raw, err := Render(profileOf(v.User()), v.Groups, m, model.Template{}, routing.Common)
+		raw, err := Render(profileOf(v.User()), v.Groups, m, model.Template{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -390,9 +390,6 @@ func TestXrayJSONCommonGeodata(t *testing.T) {
 			t.Errorf("%s: the Russian IPs go direct", m)
 		}
 		t.Run(string(m), func(t *testing.T) { checkXray(t, raw) })
-	}
-	if raw, _ := Render(profileOf(v.User()), v.Groups, routing.Blocked, model.Template{}, routing.Runetfreedom); !strings.Contains(string(raw), "geosite:ru-blocked") {
-		t.Fatal("runetfreedom's files keep the blocked lists")
 	}
 }
 

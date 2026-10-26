@@ -52,7 +52,7 @@ func TestGoldenXrayTemplate(t *testing.T) {
 
 func goldenXray(t *testing.T, v subtest.Variant, mode routing.Mode, tpl model.Template, file string) {
 	t.Helper()
-	raw, err := Render(profileOf(v.User()), v.Groups, mode, tpl, routing.Runetfreedom)
+	raw, err := Render(profileOf(v.User()), v.Groups, mode, tpl)
 	if err != nil {
 		t.Fatal(err)
 	}
