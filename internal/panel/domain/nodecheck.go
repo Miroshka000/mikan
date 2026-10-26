@@ -148,6 +148,9 @@ type NodePatch struct {
 	// FrontPage is the built-in page (frontpage.Templates) strangers get on the node's own
 	// domain through the shared 443; "" none.
 	FrontPage *string
+	// InAuto: the node's servers are in the subscriptions' automatic choice; off for a
+	// server the apps must not pick on their own (one for whitelist-only networks).
+	InAuto *bool
 	// APILockdown: the node's API answers only the panel; APIAllow the networks the admin
 	// adds to the panel's own addresses (NormalizeAPIAllow). Not on the panel's own node,
 	// which the panel reaches over its socket.
@@ -262,6 +265,11 @@ func UpdateNode(ctx context.Context, st *store.Store, id int64, p NodePatch, now
 				return fieldErr("front_page", "bad_front_page")
 			}
 			if err := q.SetNodeFrontPage(ctx, db.SetNodeFrontPageParams{FrontPage: *p.FrontPage, UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
+				return err
+			}
+		}
+		if p.InAuto != nil {
+			if err := q.SetNodeNoAuto(ctx, db.SetNodeNoAutoParams{NoAuto: Flag(!*p.InAuto), UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
 				return err
 			}
 		}

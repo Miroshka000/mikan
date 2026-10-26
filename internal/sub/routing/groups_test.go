@@ -52,3 +52,27 @@ func TestBuildGroups(t *testing.T) {
 		t.Fatalf("a main group named PROXY is its own alias: %+v", one.List)
 	}
 }
+
+// A node kept out of the automatic choice (a whitelist server, or one that does not answer)
+// keeps its country group and its servers in the main group; with every node kept out, the
+// choice takes them all rather than none.
+func TestAutoLeavesNodesOut(t *testing.T) {
+	ps := []model.Proxy{{Name: "🇳🇱 VLESS", Node: 1}, {Name: "🇳🇱 VLESS [WL]", Node: 2}, {Name: "🇺🇸 VLESS", Node: 3}}
+	nodes := []model.Node{{ID: 1, Name: "🇳🇱 Нидерланды"}, {ID: 2, Name: "🇳🇱 Нидерланды [WL]", NoAuto: true}, {ID: 3, Name: "🇺🇸 США"}}
+	g := model.GroupNames{Main: "VPN", Auto: "Авто"}
+	b := Balance{Type: model.URLTest, URL: ProbeURL, Interval: 60, Tolerance: 50}
+	gs := BuildGroups(ps, nodes, g, Servers{}, b, nil, "")
+	main, auto, wl := gs.List[0], gs.List[1], gs.List[3]
+	if !slices.Equal(auto.Members, []string{"🇳🇱 VLESS", "🇺🇸 VLESS"}) {
+		t.Fatalf("auto: %v", auto.Members)
+	}
+	if wl.Name != "🇳🇱 Нидерланды [WL]" || !slices.Equal(wl.Members, []string{"🇳🇱 VLESS [WL]"}) || !slices.Contains(main.Members, "🇳🇱 VLESS [WL]") || !slices.Contains(main.Members, wl.Name) {
+		t.Fatalf("the node stays to pick by hand: main %v, its group %+v", main.Members, wl)
+	}
+	for i := range nodes {
+		nodes[i].NoAuto = true
+	}
+	if all := BuildGroups(ps, nodes, g, Servers{}, b, nil, ""); !slices.Equal(all.List[1].Members, []string{"🇳🇱 VLESS", "🇳🇱 VLESS [WL]", "🇺🇸 VLESS"}) {
+		t.Fatalf("every node out: %v", all.List[1].Members)
+	}
+}

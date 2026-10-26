@@ -272,6 +272,7 @@ type Node struct {
 	ApiLockdown  int64
 	ApiAllow     []string
 	FrontPage    string
+	NoAuto       int64
 }
 
 type NodeAssignment struct {

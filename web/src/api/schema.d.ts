@@ -5004,6 +5004,8 @@ export interface components {
             http_redirect: boolean;
             /** Format: int64 */
             id: number;
+            /** @description Серверы ноды входят в «Авто» подписки; выключено — только в списке и группе страны, например сервер для белых списков */
+            in_auto: boolean;
             /** Format: int64 */
             inbounds: number;
             /**
@@ -5521,6 +5523,8 @@ export interface components {
             host?: string;
             /** @description Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели */
             http_redirect?: boolean;
+            /** @description Серверы ноды в «Авто» подписки; false — только в списке и группе страны */
+            in_auto?: boolean;
             name?: string;
             /** @description Публичное имя ноды; пустое — не публиковать её в канале */
             public_name?: string;

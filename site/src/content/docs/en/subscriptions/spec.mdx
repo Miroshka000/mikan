@@ -179,6 +179,11 @@ The body is a JSON array of whole Xray configs, for apps that run Xray-core and 
 
 The rules of a config may send a service to a server or a group that is not its own, so besides its own a config holds the servers and balancers its rules name. A template of your own for Xray ([Subscription templates](/mikan/en/subscriptions/templates/)) makes the list its own way.
 
+An app takes the categories of sites and IPs (`geosite:`, `geoip:`) from its own geo files, and a category they lack fails the whole config. So the configs name only what the app surely has:
+
+- Happ and INCY with the profile "From the routing settings" (see [below](#happ-and-incy)) load runetfreedom's geo files, and the configs name any of their categories;
+- the others, and Happ and INCY without that profile, get only the categories both runetfreedom's and Loyalsoldier's files have (the apps keep Loyalsoldier's themselves). Those lack the lists of what is blocked (`ru-blocked`) and `ru-available-only-inside`, so in such configs the "Only what is blocked" mode works as "Russian sites direct".
+
 Which apps get the format:
 
 - **Happ and INCY**, while **Settings → Subscription → Apps → Xray configs for Happ and INCY → Serve Xray configs** is on. It is on by default (the setting `sub_xray_json`). Off, they get links like the other Xray apps, and a link with `?format=xray` still gives them configs.

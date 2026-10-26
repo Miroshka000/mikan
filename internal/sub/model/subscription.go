@@ -28,6 +28,9 @@ type Node struct {
 	Endpoint Endpoint
 	// SSOneKey: the node is older than the Shadowsocks-2022 key per user (build.Input).
 	SSOneKey bool
+	// NoAuto keeps the node's servers out of the automatic choice: the admin's word (a
+	// server for whitelist-only networks), or the node does not answer the panel.
+	NoAuto bool
 }
 
 // Inbound is one inbound of a node as the subscription sees it.

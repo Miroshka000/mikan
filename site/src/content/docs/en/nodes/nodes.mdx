@@ -157,6 +157,12 @@ Every second the node looks at who is downloading now and splits the channel eve
 
 Once it is on, the node's clients reconnect once; the apps do it themselves. While sharing is on, Vision runs without the kernel's splice: a bit more CPU.
 
+## In auto select
+
+In **Edit node** the **In auto select** switch, on by default. Turn it off for a server the apps must not pick on their own, such as one for whitelists. The node's servers leave the "Auto" group in every subscription format (Clash, sing-box, Xray) and stay in the list and in their country's group, to pick by hand. With it off on every node, "Auto" takes all the servers.
+
+A node that does not answer the panel for over 5 minutes leaves "Auto" by itself and comes back once it answers. The apps learn of it with their next subscription update.
+
 ## Front page for strangers
 
 In **Edit node** → **Front page for strangers**: "Maintenance" or "Cats clicker", the same pages as the panel's first page. A stranger who opens the server in a browser sees it instead of a bare 404:

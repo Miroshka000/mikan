@@ -543,7 +543,7 @@ func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		return Preview{}, err
 	}
 	none := submodel.Template{}
-	return Preview{Profile: body, Notes: append(singbox.Notes(prof, g, req.Mode, none), xray.Notes(prof, g, req.Mode, none)...)}, nil
+	return Preview{Profile: body, Notes: append(singbox.Notes(prof, g, req.Mode, none), xray.Notes(prof, g, req.Mode, none, previewGeodata(cfg))...)}, nil
 }
 
 // sample is the profile of a user given every inbound, with placeholder keys.

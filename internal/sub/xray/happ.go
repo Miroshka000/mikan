@@ -167,7 +167,7 @@ func happProfileOf(name string, rules []routing.Rule, final routing.Target) happ
 			continue
 		}
 		var sites, ips []string
-		for _, f := range matchOf(rule.When[0]) {
+		for _, f := range matchOf(rule.When[0], routing.Runetfreedom) {
 			s, _ := f["domain"].([]string)
 			i, _ := f["ip"].([]string)
 			sites, ips = append(sites, s...), append(ips, i...)

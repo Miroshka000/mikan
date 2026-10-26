@@ -37,7 +37,7 @@ func profileOf(u subtest.User) mihomo.Profile {
 // render is the xray JSON profile of p, each config checked by xray.
 func render(t *testing.T, p mihomo.Profile, m routing.Mode, tpl model.Template) []xrayConfig {
 	t.Helper()
-	raw, err := Render(p, model.GroupNames{}, m, tpl)
+	raw, err := Render(p, model.GroupNames{}, m, tpl, routing.Runetfreedom)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +169,7 @@ func TestJSONOutbounds(t *testing.T) {
 		string(masks) != `{"udp":[{"settings":{"password":"obfs"},"type":"salamander"},{"settings":{"mode":"intervallocal,intervalremote","remotePorts":"20000-30000"},"type":"udphop"}]}` {
 		t.Fatalf("hysteria2: %v, masks %s", hy2, masks)
 	}
-	if _, err := Render(mihomo.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, model.Template{}); !errors.Is(err, model.ErrNoProxies) {
+	if _, err := Render(mihomo.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, model.Template{}, routing.Runetfreedom); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("nothing xray carries: %v", err)
 	}
 }
@@ -362,11 +362,57 @@ rules:
 // app's list of configs and has none.
 func TestJSONNotes(t *testing.T) {
 	p := profileOf(subtest.TwoNodes())
-	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 0 {
+	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}, routing.Runetfreedom); len(n) != 0 {
 		t.Fatalf("built-in: %+v", n)
 	}
 	p.Routes.Servers = routing.Servers{Auto: "fallback"}
-	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 1 || n[0].Group != "Авто" || n[0].Code != "fallback_fastest" {
+	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}, routing.Runetfreedom); len(n) != 1 || n[0].Group != "Авто" || n[0].Code != "fallback_fastest" {
 		t.Fatalf("fallback: %+v", n)
+	}
+}
+
+// Without the panel's routing profile the app keeps geodata of its own: the configs name
+// only what every usual geodata has, and the blocked mode, made of runetfreedom's lists of
+// what is blocked, turns into RU direct (an app would fail on ru-blocked otherwise).
+func TestXrayJSONCommonGeodata(t *testing.T) {
+	v := subtest.Variants[slices.IndexFunc(subtest.Variants, func(v subtest.Variant) bool { return v.Name == "multi-custom" })]
+	for _, m := range subtest.Modes {
+		raw, err := Render(profileOf(v.User()), v.Groups, m, model.Template{}, routing.Common)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range []string{"ru-available-only-inside", "ru-blocked"} {
+			if strings.Contains(string(raw), c) {
+				t.Errorf("%s: %s, which Loyalsoldier's geodata lacks", m, c)
+			}
+		}
+		if m != routing.All && !strings.Contains(string(raw), `"geoip:ru"`) {
+			t.Errorf("%s: the Russian IPs go direct", m)
+		}
+		t.Run(string(m), func(t *testing.T) { checkXray(t, raw) })
+	}
+	if raw, _ := Render(profileOf(v.User()), v.Groups, routing.Blocked, model.Template{}, routing.Runetfreedom); !strings.Contains(string(raw), "geosite:ru-blocked") {
+		t.Fatal("runetfreedom's files keep the blocked lists")
+	}
+}
+
+// A node kept out of the automatic choice is not in the "Auto" balancer: its selector lists
+// the exact tags of the other node's servers.
+func TestXrayAutoLeavesNodesOut(t *testing.T) {
+	u := subtest.TwoNodes()
+	u.Build.Nodes[1].NoAuto = true
+	cs := render(t, profileOf(u), routing.All, model.Template{})
+	auto := cs[0]
+	if auto.Remarks != "Авто" || len(auto.Routing.Balancers) == 0 {
+		t.Fatalf("the first config: %q %+v", auto.Remarks, auto.Routing.Balancers)
+	}
+	sel := auto.Routing.Balancers[0].Selector
+	if len(sel) == 0 {
+		t.Fatal("an empty choice")
+	}
+	for _, tag := range sel {
+		if out, _ := json.Marshal(auto.outbound(t, tag)); strings.Contains(string(out), "198.51.100.9") {
+			t.Fatalf("the US node's server %s is in the choice: %s", tag, out)
+		}
 	}
 }

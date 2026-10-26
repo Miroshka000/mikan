@@ -125,7 +125,7 @@ export function KeyDrawer({ joined, onClose, actions }: { joined: Joined | null;
 export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, front_page: "", api_lockdown: false, api_allow: "" });
+  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, front_page: "", in_auto: true, api_lockdown: false, api_allow: "" });
   const balance = useBalance();
   const [errors, setErrors] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -133,7 +133,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
       // The server as it was given, not the address for clients (its domain when it has one):
       // the field saves the server.
       setForm({ name: node.name, public_name: node.public_name, host: node.server_host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "",
-        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, front_page: node.front_page, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", ") });
+        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, front_page: node.front_page, in_auto: node.in_auto, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", ") });
       setErrors({});
     }
   }, [node]);
@@ -161,7 +161,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!node) return;
-    const body: Schemas["PatchNodeInputBody"] = { public_name: form.public_name.trim(), enabled: form.enabled, fair_share: form.fair_share };
+    const body: Schemas["PatchNodeInputBody"] = { public_name: form.public_name.trim(), enabled: form.enabled, in_auto: form.in_auto, fair_share: form.fair_share };
     // A node without a name of its own (the panel's, shown as "Own node") keeps none: an empty
     // field is no new name, and saving the rest must not fail on it.
     if (form.name.trim() || node.name) body.name = form.name.trim();
@@ -235,6 +235,9 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
         <Field label={t("nodes.serving")} hint={t("nodes.servingHint")}>
           <Switch checked={form.enabled} onChange={(v) => setForm((f) => ({ ...f, enabled: v }))} label={t("nodes.serving")} />
         </Field>
+        <div className="dr-sec">
+          <SwitchRow className="pt-0" label={t("nodes.inAuto")} sub={t("nodes.inAutoHint")} checked={form.in_auto} onChange={(v) => setForm((f) => ({ ...f, in_auto: v }))} />
+        </div>
         <div className="dr-sec">
           <SwitchRow className="pt-0" label={t("nodes.fairShare")} sub={t("nodes.fairShareHint")} checked={form.fair_share} onChange={(v) => setForm((f) => ({ ...f, fair_share: v }))} />
           <Field label={t("nodes.channel")} htmlFor="e-channel" hint={form.fair_share ? t("nodes.channelHint") : t("nodes.channelHintOff")} error={errors.channel_mbps}>

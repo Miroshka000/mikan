@@ -503,14 +503,18 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 				cfg.Direct = append(cfg.Direct, n.PublicHost, n.Domain)
 			}
 			sn.Endpoint.SNIRouter = n.SniRouter != 0
+			var hv nodesync.HealthView
+			known := false
+			if p.Nodes != nil && n.Address != "" {
+				hv, known = p.Nodes.Health(n.ID)
+			}
 			// A node older than the Shadowsocks-2022 key per user runs one key for everyone: its
 			// links carry that one until it is updated. A version that is not a release (a
 			// build of the source) is taken as new.
-			if p.Nodes != nil && n.Address != "" {
-				if hv, ok := p.Nodes.Health(n.ID); ok && release.Valid(hv.Health.Version) && release.Newer(ssUsersSince, hv.Health.Version) {
-					sn.SSOneKey = true
-				}
+			if known && release.Valid(hv.Health.Version) && release.Newer(ssUsersSince, hv.Health.Version) {
+				sn.SSOneKey = true
 			}
+			sn.NoAuto = outOfAuto(n.NoAuto, hv, known, o.Now())
 			if o.TLS != nil {
 				if c, err := o.TLS.Pick(n); err == nil {
 					sn.Endpoint.PinSHA256 = c.Pin
@@ -684,6 +688,18 @@ func runAll(ctx context.Context, workers ...func(context.Context)) {
 // another process (the server CLI); this process's own changes drop the cache at once.
 // ssUsersSince is the first release whose nodes run Shadowsocks-2022 with a key per user.
 const ssUsersSince = "0.5.1.1-rc.11"
+
+// nodeDownForAuto is how long a node may not answer the panel before its servers leave the
+// subscriptions' automatic choice: a restart or a short outage does not move them.
+const nodeDownForAuto = 5 * time.Minute
+
+// outOfAuto says whether a node's servers stay out of the subscriptions' automatic choice:
+// the admin's word (noAuto), or the panel's last check (hv, when known) has found the node
+// silent for nodeDownForAuto. The apps fetch the subscription only now and then, so a node
+// that is back returns with the next fetch.
+func outOfAuto(noAuto int64, hv nodesync.HealthView, known bool, now time.Time) bool {
+	return noAuto != 0 || known && !hv.OK && !hv.Since.IsZero() && now.Sub(hv.Since) >= nodeDownForAuto
+}
 
 const configCacheTTL = 10 * time.Second
 

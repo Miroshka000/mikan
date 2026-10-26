@@ -12,20 +12,22 @@ import (
 
 // The routing of an xray JSON config is the panel's (routing.Intent) as xray matches it:
 // sites by xray's own prefixes (full:, domain:, keyword:, regexp:), IPs, ports, networks,
-// and the geodata of runetfreedom, the one Happ and INCY load. What xray has no match for is
-// left out: a category runetfreedom lacks (it would fail the whole config), process names,
-// a rule list it cannot download (the panel's own ones become their nearest categories).
+// and the categories of the geodata the app has (routing.Geodata). What xray has no match
+// for is left out: a category that geodata lacks (it would fail the whole config), process
+// names, a rule list it cannot download (the panel's own ones become their nearest
+// categories).
 
 // fields are the conditions of a rule as xray's routing rules carry them, nil when xray
-// cannot match them all. xray takes the fields of a rule together and the values of a field
-// one or another, so several conditions make one rule, and a list of sites and IPs two.
-func fields(when []routing.Match) []map[string]any {
+// cannot match them all with the categories geo has. xray takes the fields of a rule
+// together and the values of a field one or another, so several conditions make one rule,
+// and a list of sites and IPs two.
+func fields(when []routing.Match, geo routing.Geodata) []map[string]any {
 	if len(when) == 0 {
 		return nil
 	}
 	out := []map[string]any{{}}
 	for _, m := range when {
-		alts := matchOf(m)
+		alts := matchOf(m, geo)
 		if len(alts) == 0 {
 			return nil
 		}
@@ -52,7 +54,7 @@ func fields(when []routing.Match) []map[string]any {
 
 // resolves says whether a rule of the conditions makes the app resolve a name to match an
 // IP: an IP condition without no-resolve.
-func resolves(when []routing.Match) bool {
+func resolves(when []routing.Match, geo routing.Geodata) bool {
 	for _, m := range when {
 		if m.NoResolve {
 			continue
@@ -61,7 +63,7 @@ func resolves(when []routing.Match) bool {
 		case "GEOIP", "IP-CIDR", "IP-CIDR6":
 			return true
 		case "RULE-SET":
-			if _, ips := routing.RunetfreedomList(m.Value); len(ips) > 0 {
+			if _, ips := geo.List(m.Value); len(ips) > 0 {
 				return true
 			}
 		}
@@ -72,8 +74,8 @@ func resolves(when []routing.Match) bool {
 var portList = regexp.MustCompile(`^\d+(-\d+)?(,\d+(-\d+)?)*$`)
 
 // matchOf is one condition as xray matches it: one set of fields, or two for a list of
-// sites and IPs; none for what xray has no form of.
-func matchOf(m routing.Match) []map[string]any {
+// sites and IPs; none for what xray has no form of, or a category geo lacks.
+func matchOf(m routing.Match, geo routing.Geodata) []map[string]any {
 	one := func(k string, v any) []map[string]any { return []map[string]any{{k: v}} }
 	v := strings.TrimSpace(m.Value)
 	switch m.Type {
@@ -90,14 +92,14 @@ func matchOf(m routing.Match) []map[string]any {
 	case "DOMAIN-WILDCARD":
 		return one("domain", []string{"regexp:" + wildcard(v, ".*")})
 	case "GEOSITE":
-		if v = strings.ToLower(v); routing.RunetfreedomHas("geosite", v) {
+		if v = strings.ToLower(v); geo.Has("geosite", v) {
 			return one("domain", []string{"geosite:" + v})
 		}
 	case "GEOIP":
 		switch v = strings.ToLower(v); {
 		case v == "lan":
 			return one("ip", []string{"geoip:private"})
-		case routing.RunetfreedomHas("geoip", v):
+		case geo.Has("geoip", v):
 			return one("ip", []string{"geoip:" + v})
 		}
 	case "IP-CIDR", "IP-CIDR6":
@@ -121,7 +123,7 @@ func matchOf(m routing.Match) []map[string]any {
 			return one("network", v)
 		}
 	case "RULE-SET":
-		sites, ips := routing.RunetfreedomList(v)
+		sites, ips := geo.List(v)
 		var out []map[string]any
 		if len(sites) > 0 {
 			out = append(out, map[string]any{"domain": sites})
@@ -161,7 +163,7 @@ const dnsTag = "dns"
 // past the tunnel or through the group after its "#" (via says what a group goes to in
 // this config), any other query of it through rest. A server xray has no form of is left
 // out: DNS over TLS, and DNS over QUIC through the tunnel.
-func dnsOf(r routing.Resolvers, via func(group string) (Ref, bool), rest Ref) (map[string]any, []map[string]any) {
+func dnsOf(r routing.Resolvers, geo routing.Geodata, via func(group string) (Ref, bool), rest Ref) (map[string]any, []map[string]any) {
 	type route struct {
 		to          Ref
 		ips, domain []string
@@ -250,7 +252,7 @@ func dnsOf(r routing.Resolvers, via func(group string) (Ref, bool), rest Ref) (m
 		}
 	}
 	for _, p := range r.Policy {
-		if domains := policyDomains(p.Match); len(domains) > 0 {
+		if domains := policyDomains(p.Match, geo); len(domains) > 0 {
 			for _, s := range p.Servers {
 				add(s, domains)
 			}
@@ -282,12 +284,12 @@ func dnsOf(r routing.Resolvers, via func(group string) (Ref, bool), rest Ref) (m
 // policyDomains are the names a DNS policy's key covers (mihomo's nameserver-policy) as
 // xray's DNS reads them: "geosite:" and "rule-set:" keys list categories and lists after
 // the prefix, the others domains ("+." with every subdomain, "*." one label deep); none
-// for what xray has no form of.
-func policyDomains(key string) []string {
+// for what xray has no form of, or a category geo lacks.
+func policyDomains(key string, geo routing.Geodata) []string {
 	var out []string
 	if rest, ok := strings.CutPrefix(key, "geosite:"); ok {
 		for _, v := range strings.Split(rest, ",") {
-			if v = strings.ToLower(strings.TrimSpace(v)); routing.RunetfreedomHas("geosite", v) {
+			if v = strings.ToLower(strings.TrimSpace(v)); geo.Has("geosite", v) {
 				out = append(out, "geosite:"+v)
 			}
 		}
@@ -295,7 +297,7 @@ func policyDomains(key string) []string {
 	}
 	if rest, ok := strings.CutPrefix(key, "rule-set:"); ok {
 		for _, v := range strings.Split(rest, ",") {
-			sites, _ := routing.RunetfreedomList(strings.TrimSpace(v))
+			sites, _ := geo.List(strings.TrimSpace(v))
 			out = append(out, sites...)
 		}
 		return out

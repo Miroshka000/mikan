@@ -200,7 +200,7 @@ func readFrame(p mihomo.Profile, src string) (frame, error) {
 	// The panel's and the nodes' hosts go direct before anything the admin wrote.
 	var head []any
 	for _, r := range routing.HostRules(p.Direct) {
-		for _, fl := range fields(r.When) {
+		for _, fl := range fields(r.When, routing.Common) {
 			if freedom == "" {
 				freedom = freeTag(directTag, tags)
 				f.own = append(f.own, map[string]any{"tag": freedom, "protocol": "freedom"})

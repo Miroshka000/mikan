@@ -341,7 +341,8 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		_, _ = w.Write(body)
 	case FormatXray:
 		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
-		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return xray.Render(prof, cfg.Groups, cfg.Mode, t) })
+		geo := appGeodata(ua, cfg)
+		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return xray.Render(prof, cfg.Groups, cfg.Mode, t, geo) })
 		if err != nil {
 			return h.profileFailed(w, cfg, format, err)
 		}

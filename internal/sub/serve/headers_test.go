@@ -240,6 +240,27 @@ func TestHappHeaders(t *testing.T) {
 	}
 }
 
+// Happ and INCY given the panel's routing profile load runetfreedom's files; without it, as
+// any other app, they keep files of their own.
+func TestAppGeodata(t *testing.T) {
+	auto := Config{Happ: Happ{Routing: "auto"}}
+	for _, c := range []struct {
+		ua   string
+		cfg  Config
+		full bool
+	}{
+		{"INCY/3.8.1/Android", auto, true},
+		{"Happ/3.6.0", auto, true},
+		{"INCY/3.7.9/iOS", Config{}, false},
+		{"Happ/3.6.0", Config{Happ: Happ{Routing: "happ://routing/off"}}, false},
+		{"v2RayTun/5.1", auto, false},
+	} {
+		if got := appGeodata(c.ua, c.cfg).Has("geosite", "ru-blocked"); got != c.full {
+			t.Errorf("%s with %q: runetfreedom's files %v", c.ua, c.cfg.Happ.Routing, got)
+		}
+	}
+}
+
 const gib = int64(1) << 30
 
 func decodeGroups(t *testing.T, v string) AppGroups {

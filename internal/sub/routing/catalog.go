@@ -43,25 +43,58 @@ var (
 	//go:embed runetfreedom/geosite.txt
 	runetfreedomSites string
 	//go:embed runetfreedom/geoip.txt
-	runetfreedomIPs   string
-	runetfreedomNames = sync.OnceValue(func() [2]map[string]bool {
-		read := func(s string) map[string]bool {
-			m := map[string]bool{}
-			for _, l := range strings.Split(s, "\n") {
-				if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
-					m[l] = true
-				}
-			}
-			return m
-		}
-		return [2]map[string]bool{read(runetfreedomSites), read(runetfreedomIPs)}
-	})
+	runetfreedomIPs string
+	//go:embed loyalsoldier/geosite.txt
+	loyalsoldierSites string
+	//go:embed loyalsoldier/geoip.txt
+	loyalsoldierIPs string
 )
 
-// RunetfreedomHas says whether runetfreedom's geodata has the category; kind is "geosite"
-// or "geoip", name in lower case.
-func RunetfreedomHas(kind, name string) bool {
-	names := runetfreedomNames()
+// Geodata is the geodata an Xray config names categories of, as the app has it. The apps
+// load runetfreedom's files only when the panel's routing profile names them (Happ and INCY
+// with "From the routing settings"); otherwise they keep their own, Loyalsoldier's as a
+// rule, and a category those lack (ru-blocked) fails the whole config.
+type Geodata struct {
+	names func() [2]map[string]bool // sites, IPs
+}
+
+var (
+	// Runetfreedom is runetfreedom's geodata (RunetfreedomGeosite, RunetfreedomGeoIP).
+	Runetfreedom = Geodata{sync.OnceValue(func() [2]map[string]bool {
+		return [2]map[string]bool{readNames(runetfreedomSites), readNames(runetfreedomIPs)}
+	})}
+	// Common is what runetfreedom's and Loyalsoldier's geodata both have: what an app has
+	// whichever of the two it loads.
+	Common = Geodata{sync.OnceValue(func() [2]map[string]bool {
+		rf := Runetfreedom.names()
+		both := func(a, b map[string]bool) map[string]bool {
+			out := map[string]bool{}
+			for k := range a {
+				if b[k] {
+					out[k] = true
+				}
+			}
+			return out
+		}
+		return [2]map[string]bool{both(rf[0], readNames(loyalsoldierSites)), both(rf[1], readNames(loyalsoldierIPs))}
+	})}
+)
+
+// readNames are the categories of a list, a name a line, "#" a comment.
+func readNames(s string) map[string]bool {
+	m := map[string]bool{}
+	for _, l := range strings.Split(s, "\n") {
+		if l = strings.TrimSpace(l); l != "" && !strings.HasPrefix(l, "#") {
+			m[l] = true
+		}
+	}
+	return m
+}
+
+// Has says whether the geodata has the category; kind is "geosite" or "geoip", name in
+// lower case.
+func (g Geodata) Has(kind, name string) bool {
+	names := g.names()
 	switch kind {
 	case "geosite":
 		return names[0][name]
@@ -84,10 +117,18 @@ var runetfreedomLists = map[string][2][]string{
 	"mikan-games":       {{"geosite:category-games"}, nil},
 }
 
-// RunetfreedomList is what runetfreedom's geodata has for a rule list of the panel's: the
-// sites' and the IPs' categories ("geosite:category-ru"), none for a list of its own or of
-// apps.
-func RunetfreedomList(name string) (sites, ips []string) {
+// List is what the geodata has for a rule list of the panel's: the sites' and the IPs'
+// categories ("geosite:category-ru"), none for a list of its own or of apps.
+func (g Geodata) List(name string) (sites, ips []string) {
 	x := runetfreedomLists[name]
-	return x[0], x[1]
+	has := func(kind string, refs []string) []string {
+		var out []string
+		for _, r := range refs {
+			if g.Has(kind, strings.TrimPrefix(r, kind+":")) {
+				out = append(out, r)
+			}
+		}
+		return out
+	}
+	return has("geosite", x[0]), has("geoip", x[1])
 }

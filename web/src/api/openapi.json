@@ -5142,6 +5142,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "in_auto": {
+            "description": "Серверы ноды входят в «Авто» подписки; выключено — только в списке и группе страны, например сервер для белых списков",
+            "type": "boolean"
+          },
           "inbounds": {
             "format": "int64",
             "type": "integer"
@@ -5254,6 +5258,7 @@
           "http_redirect",
           "sni_router",
           "front_page",
+          "in_auto",
           "api_lockdown",
           "api_allow",
           "capacity",
@@ -6594,6 +6599,10 @@
           },
           "http_redirect": {
             "description": "Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели",
+            "type": "boolean"
+          },
+          "in_auto": {
+            "description": "Серверы ноды в «Авто» подписки; false — только в списке и группе страны",
             "type": "boolean"
           },
           "name": {

@@ -17,12 +17,13 @@ type Groups struct {
 }
 
 // BuildGroups are the groups of the built-in profile over ps: the main group, where the user
-// picks the automatic choice, a country or a server; the automatic choice (b); with several
-// nodes a group per country, the fastest of its servers, unless s.NoCountries; a group per
-// route sent to a node of ps (routes are those of the intent the app takes, in order); and
-// PROXY, the main group by the name Clash apps assume for it. A group whose name another
-// has already is left out, and a route of one node goes to the main group then: the profile
-// must load whatever the admin typed.
+// picks the automatic choice, a country or a server; the automatic choice (b) of the servers
+// of nodes not kept out of it (all of them when every node is); with several nodes a group
+// per country, the fastest of its servers, unless s.NoCountries; a group per route sent to a
+// node of ps (routes are those of the intent the app takes, in order); and PROXY, the main
+// group by the name Clash apps assume for it. A group whose name another has already is left
+// out, and a route of one node goes to the main group then: the profile must load whatever
+// the admin typed.
 func BuildGroups(ps []model.Proxy, nodes []model.Node, g model.GroupNames, s Servers, b Balance, routes []Route, lang string) Groups {
 	names := make([]string, len(ps))
 	for i, x := range ps {
@@ -36,7 +37,7 @@ func BuildGroups(ps []model.Proxy, nodes []model.Node, g model.GroupNames, s Ser
 	for _, c := range countries {
 		selector = append(selector, c.Name)
 	}
-	auto := model.Group{Name: g.Auto, Type: b.Type, Members: names, URL: b.URL, Interval: b.Interval}
+	auto := model.Group{Name: g.Auto, Type: b.Type, Members: autoMembers(ps, nodes, names), URL: b.URL, Interval: b.Interval}
 	if b.Type == model.URLTest {
 		auto.Tolerance = b.Tolerance
 	}
@@ -98,6 +99,31 @@ func (gs Groups) Of(t Target, route int) string {
 		return t.Group
 	}
 	return ""
+}
+
+// autoMembers are the names of ps the automatic choice takes: those of nodes not kept out of
+// it (model.Node.NoAuto). An empty choice breaks the profile, so with every node kept out it
+// takes all of them, as before.
+func autoMembers(ps []model.Proxy, nodes []model.Node, names []string) []string {
+	out := map[int64]bool{}
+	for _, n := range nodes {
+		if n.NoAuto {
+			out[n.ID] = true
+		}
+	}
+	if len(out) == 0 {
+		return names
+	}
+	var in []string
+	for i, x := range ps {
+		if !out[x.Node] {
+			in = append(in, names[i])
+		}
+	}
+	if len(in) == 0 {
+		return names
+	}
+	return in
 }
 
 // countryGroups pick the fastest proxy of each node when there are several nodes. A node

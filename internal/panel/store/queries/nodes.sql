@@ -28,6 +28,9 @@ UPDATE nodes SET sni_router = $1, updated_at = $2 WHERE id = $3;
 -- name: SetNodeFrontPage :exec
 UPDATE nodes SET front_page = $1, updated_at = $2 WHERE id = $3;
 
+-- name: SetNodeNoAuto :exec
+UPDATE nodes SET no_auto = $1, updated_at = $2 WHERE id = $3;
+
 -- name: SetNodeAPILockdown :exec
 UPDATE nodes SET api_lockdown = $1, api_allow = $2, updated_at = $3 WHERE id = $4;
 
