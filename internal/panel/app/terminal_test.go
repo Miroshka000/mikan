@@ -201,7 +201,7 @@ func TestSupportTerminalSession(t *testing.T) {
 	if resp, body := op.enter(g.Token); resp.StatusCode != http.StatusOK {
 		t.Fatalf("enter: %d %s", resp.StatusCode, body)
 	}
-	for _, how := range []struct {
+	for i, how := range []struct {
 		name string
 		open func() (*term, *http.Response, error)
 	}{
@@ -242,6 +242,9 @@ func TestSupportTerminalSession(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("%s: the agent's session stayed open", name)
 		}
+		// The panel frees the terminal after the agent sees the stream end, and writes the end
+		// last: the next session opens after that line, or it would find the terminal busy.
+		waitAudit(t, s.harness, "support.terminal.end", i+1)
 	}
 
 	starts := waitAudit(t, s.harness, "support.terminal.start", 2)
