@@ -178,6 +178,8 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 		return reach{}, err
 	}
 	out := reach{all: all, access: access, grants: grants}
+	// serves: the client may use in now, and its group, if any, still serves the client.
+	serves := func(in db.Inbound) bool { return access.Usable(in) && !(in.PoolID.Valid && spent[in.PoolID.Int64]) }
 	on := map[int64]bool{}
 	for _, n := range cfg.Nodes {
 		on[n.ID] = true
@@ -188,7 +190,7 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 	for _, in := range all {
 		// A node whose only protocols are in a group closed or spent for the client serves it
 		// nothing: it is no candidate of a balance group either.
-		if on[in.NodeID] && access.Usable(in) && !(in.PoolID.Valid && spent[in.PoolID.Int64]) {
+		if on[in.NodeID] && serves(in) {
 			nodes[in.NodeID] = true
 		}
 	}
@@ -202,7 +204,7 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 		}
 	}
 	for _, in := range all {
-		if in.Enabled == 0 || !nodes[in.NodeID] || !access.Allows(in) || in.PoolID.Valid && spent[in.PoolID.Int64] {
+		if !nodes[in.NodeID] || !serves(in) {
 			continue
 		}
 		out.inbounds = append(out.inbounds, in)
