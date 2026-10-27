@@ -119,7 +119,8 @@ func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error)
 }
 
 // Fetched: the block detector trusts a device only once it took a profile with an
-// inbound's current port and target (see autotune.Detect).
+// inbound's current port and target (see autotune.Detect). The handler tells it once the
+// profile went out, with a context the client's hanging up does not cancel.
 func (s *subscription) Fetched(ctx context.Context, ip string) {
 	_ = s.h.st.Q.RecordSubFetch(ctx, db.RecordSubFetchParams{UserID: s.u.ID, Ip: ip, FetchedAt: s.h.now().Unix()})
 }
