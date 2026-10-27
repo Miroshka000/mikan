@@ -270,13 +270,19 @@ func (m *Monitor) deliver(ctx context.Context, st *persistentState, cfg AlertsCo
 
 // sendPending makes one pass over the queue to out: a message that is stale, switched off in
 // cfg or refused for good is dropped, one whose time has not come stays as it is, one that
-// failed is kept for a later try with its attempt counted.
+// failed is kept for a later try with its attempt counted. Once Discord asked to wait (a 429),
+// its other messages of the pass wait as long, with no attempt counted: the webhook's limit is
+// one for all of them.
 func (m *Monitor) sendPending(ctx context.Context, st *persistentState, cfg AlertsConfig, out outlets) {
 	keep := st.Pending[:0]
+	var discordUntil int64 // when Discord takes messages again, after a 429 in this pass
 	for _, d := range st.Pending {
 		now := m.now().Unix()
 		if d.CreatedAt != 0 && now-d.CreatedAt > int64(deliveryMaxAge/time.Second) {
 			continue
+		}
+		if d.Target == targetDiscord && discordUntil > now {
+			d.NextAttemptAt = max(d.NextAttemptAt, discordUntil)
 		}
 		if d.NextAttemptAt != 0 && d.NextAttemptAt > now || out.tg == nil && d.Target != targetDiscord {
 			keep = append(keep, d)
@@ -324,6 +330,9 @@ func (m *Monitor) sendPending(ctx context.Context, st *persistentState, cfg Aler
 			}
 			if retryDelivery(&d, now, err) {
 				keep = append(keep, d)
+				if code, _ := answerOf(err); d.Target == targetDiscord && code == 429 {
+					discordUntil = d.NextAttemptAt
+				}
 			}
 			if m.log != nil {
 				m.log.Warn("infrastructure alerts: delivery", "target", d.Target, "err", err)

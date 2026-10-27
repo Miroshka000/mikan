@@ -24,6 +24,7 @@ func TestConfigValidatesGroup(t *testing.T) {
 	}{
 		{"", 0, true}, {"-1001234567890", 0, true}, {" -1001234567890 ", 42, true}, {"@team_chat", 7, true},
 		{"", 42, false}, {"-1001234567890", -1, false}, {"team", 0, false}, {"-", 0, false},
+		{"123456789", 0, false}, // a private chat, not a group
 	} {
 		c := AlertsConfig{GroupChat: tc.group, GroupThread: tc.thread}
 		if err := c.Validate(); (err == nil) != tc.valid {

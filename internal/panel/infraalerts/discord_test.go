@@ -146,6 +146,38 @@ func TestSendPendingDiscordOnItsOwn(t *testing.T) {
 	}
 }
 
+// After Discord's 429 the pass posts no more to it: its other messages wait as long as it
+// asked, and no attempt of theirs is counted.
+func TestSendPendingDiscordLimitHoldsTheRest(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	m := quietMonitor(now)
+	disc := &fakeDiscord{err: &DiscordError{Code: 429, RetryAfter: 90 * time.Second}}
+	m.discord = disc
+	cfg := Default()
+	cfg.AdminEnabled = true
+	st := persistentState{Pending: []delivery{
+		{Key: "discord|a", Target: targetDiscord, Of: targetAdmin, Text: "a", CreatedAt: now.Unix()},
+		{Key: "discord|b", Target: targetDiscord, Of: targetAdmin, Text: "b", CreatedAt: now.Unix()},
+		{Key: "discord|c", Target: targetDiscord, Of: targetAdmin, Text: "c", CreatedAt: now.Unix(), NextAttemptAt: now.Unix() + 600},
+	}}
+	m.sendPending(context.Background(), &st, cfg, outlets{discord: testHook})
+	if len(disc.got()) != 1 {
+		t.Fatalf("posted after the 429: %q", disc.got())
+	}
+	want := []struct {
+		attempts int
+		next     int64
+	}{{1, now.Unix() + 90}, {0, now.Unix() + 90}, {0, now.Unix() + 600}}
+	if len(st.Pending) != len(want) {
+		t.Fatalf("pending = %+v", st.Pending)
+	}
+	for i, w := range want {
+		if d := st.Pending[i]; d.Attempts != w.attempts || d.NextAttemptAt != w.next {
+			t.Errorf("%s: attempts %d, next %d; want %d, %d", d.Key, d.Attempts, d.NextAttemptAt, w.attempts, w.next)
+		}
+	}
+}
+
 // With the bot off, what a round finds still reaches Discord.
 func TestRoundWithoutTheBotReachesDiscord(t *testing.T) {
 	st, ctx := testMonitorStore(t)
@@ -245,6 +277,8 @@ func TestParseDiscordWebhook(t *testing.T) {
 		{"https://discord.com/api/webhooks/123456/AbC-d_e", true},
 		{" https://discordapp.com/api/v10/webhooks/1/x ", true},
 		{"https://canary.discord.com/api/webhooks/1/x?thread_id=99", true},
+		{"https://Discord.COM/api/webhooks/1/x", true},
+		{"https://DISCORD.com.evil.example/api/webhooks/1/x", false},
 		{"http://discord.com/api/webhooks/1/x", false},
 		{"https://discord.com.evil.example/api/webhooks/1/x", false},
 		{"https://evil.example/api/webhooks/1/x", false},
@@ -257,7 +291,8 @@ func TestParseDiscordWebhook(t *testing.T) {
 		{"", false},
 	} {
 		got, err := ParseDiscordWebhook(c.in)
-		if (err == nil) != c.ok || c.ok && got != strings.TrimSpace(c.in) {
+		want := strings.Replace(strings.TrimSpace(c.in), "Discord.COM", "discord.com", 1) // the host in lower case
+		if (err == nil) != c.ok || c.ok && got != want {
 			t.Errorf("ParseDiscordWebhook(%q) = %q, %v; want ok=%v", c.in, got, err, c.ok)
 		}
 	}
@@ -267,7 +302,7 @@ func TestDiscordText(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
 		{"🔴 <b>n&lt;1&gt; &amp; m</b> — down", "🔴 **n<1> & m** — down"},
 		{"<b>a*b_c</b> ~x~ `y` |z|", `**a\*b\_c** \~x\~ ` + "\\`y\\`" + ` \|z\|`},
-		{"<i>i</i> <code>a*b</code> <a href=\"https://x.example/?a=1&amp;b=2\">link</a>", "*i* `a*b` [link](https://x.example/?a=1&b=2)"},
+		{"<i>i</i> <code>a*b</code> <a href=\"https://x.example/?a=1&amp;b=2\">link</a>", "*i* `a*b` [link](<https://x.example/?a=1&b=2>)"},
 		{"<tg-spoiler>s</tg-spoiler> 1 < 2", "s 1 < 2"},
 		{"@everyone", "@everyone"},
 	} {

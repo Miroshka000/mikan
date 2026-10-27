@@ -46,6 +46,7 @@ func ParseDiscordWebhook(s string) (string, error) {
 	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" || u.Fragment != "" || !discordPath.MatchString(u.Path) {
 		return "", ErrDiscordWebhook
 	}
+	u.Host = strings.ToLower(u.Host) // a host is the same in any case; kept as Discord writes it
 	switch u.Hostname() {
 	case "discord.com", "discordapp.com", "canary.discord.com", "ptb.discord.com":
 	default:
@@ -174,7 +175,7 @@ func (c *DiscordClient) do(ctx context.Context, method, hook string, body []byte
 }
 
 // DiscordText turns a message in Telegram HTML into Discord's Markdown: bold, italic and code
-// keep their marks, a link becomes [text](address), the rest of the tags go, and the text
+// keep their marks, a link becomes [text](<address>), the rest of the tags go, and the text
 // between them is unescaped and has Discord's own marks escaped, so a node called a*b stays
 // a*b. Longer than Discord takes, it is cut.
 func DiscordText(s string) string {
@@ -226,7 +227,7 @@ func DiscordText(s string) string {
 			}
 			out.WriteString("[")
 		case "/a":
-			out.WriteString("](" + href + ")")
+			out.WriteString("](<" + href + ">)") // in <…>: no preview under the alert
 			href = ""
 		}
 	}

@@ -136,6 +136,11 @@ func (c *AlertsConfig) Validate() error {
 	if c.PublicChannel != "" && !validChat(c.PublicChannel) || c.GroupChat != "" && !validChat(c.GroupChat) {
 		return ErrConfig
 	}
+	// A group's numeric ID is negative; a positive one is a private chat, such as the admin's
+	// own, which would get every alert twice.
+	if c.GroupChat != "" && c.GroupChat[0] != '@' && c.GroupChat[0] != '-' {
+		return ErrConfig
+	}
 	if c.GroupThread < 0 || c.GroupThread > 0 && c.GroupChat == "" {
 		return ErrConfig
 	}
