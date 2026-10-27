@@ -23,7 +23,7 @@ func goldenProfile(v subtest.Variant) mihomo.Profile {
 // the tests' stand-in for GitHub makes them (subtest has the golden files' story).
 func TestGoldenSingBox(t *testing.T) {
 	lists(t)
-	for _, v := range subtest.Variants {
+	for _, v := range subtest.CoreVariants {
 		for _, mode := range subtest.Modes {
 			t.Run(v.Name+"/"+string(mode), func(t *testing.T) {
 				raw, err := Render(context.Background(), goldenProfile(v), v.Groups, mode, model.Template{})
@@ -40,7 +40,7 @@ func TestGoldenSingBox(t *testing.T) {
 // The sing-box config made of the admin's own Clash profile on the two-node user.
 func TestGoldenTemplate(t *testing.T) {
 	lists(t)
-	for _, v := range subtest.Variants {
+	for _, v := range subtest.CoreVariants {
 		if strings.HasPrefix(v.Name, "single") {
 			continue // the template names the second node's group
 		}

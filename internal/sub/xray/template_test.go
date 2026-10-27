@@ -15,16 +15,16 @@ import (
 // own is the own xray template src as the template it is.
 func own(src string) model.Template { return model.Template{Core: model.CoreXray, Body: src} }
 
-// The list made of the admin's own xray template on the two-node users, each config checked
-// by xray.
+// The list made of the admin's own xray template on the two-node users, of all their
+// inbounds as the links are, each config checked by xray.
 func TestGoldenOwnXrayTemplate(t *testing.T) {
-	for _, v := range subtest.Variants {
+	for _, v := range subtest.CoreVariants {
 		if strings.HasPrefix(v.Name, "single") {
 			continue // the template names the second node's group
 		}
 		t.Run(v.Name, func(t *testing.T) {
 			t.Parallel()
-			goldenXray(t, v, routing.All, own(subtest.OwnXrayTemplate), v.Name+".own.xray.json")
+			goldenXray(t, v.Base(), v.Groups, routing.All, own(subtest.OwnXrayTemplate), v.Name+".own.xray.json")
 		})
 	}
 }

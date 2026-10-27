@@ -405,11 +405,15 @@ func TestGRPCKeepalive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		own, _, err := TemplateConfig(p, subtest.OwnTemplate)
-		if err != nil {
-			t.Fatal(err)
+		cfgs := map[string]map[string]any{"built-in": built}
+		if p.Routable() { // Stash gets no own profile
+			own, _, err := TemplateConfig(p, subtest.OwnTemplate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfgs["own"] = own
 		}
-		for name, cfg := range map[string]map[string]any{"built-in": built, "own": own} {
+		for name, cfg := range cfgs {
 			var opts map[string]any
 			switch ps := cfg["proxies"].(type) {
 			case []map[string]any:

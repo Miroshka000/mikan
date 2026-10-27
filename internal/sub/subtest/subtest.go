@@ -18,6 +18,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -217,24 +218,35 @@ type Variant struct {
 	Groups model.GroupNames
 }
 
-// User is the variant's user.
+// User is the variant's user, with the inbounds its app can use, as serve gives them: a
+// zero App takes them all.
 func (v Variant) User() User {
 	u := v.Base()
 	if v.Custom {
 		u.Rules, u.Routes, u.Lang = Rules, Routes(), "en"
 	}
+	if v.App.Family != "" {
+		u.Build.Inbounds = build.ForApp(u.Build.Inbounds, v.App, true)
+	}
 	return u
 }
 
-// Variants are the users of the golden files; the last takes no rule lists.
-var Variants = []Variant{
+// CoreVariants are the users of the golden files of sing-box and xray: one node or two,
+// with the admin's settings or without. The apps of the other Variants are mihomo's, told
+// apart only by what a Clash profile carries.
+var CoreVariants = []Variant{
 	{"single-plain", Single, false, apps.App{}, model.GroupNames{}},
 	{"single-custom", Single, true, apps.App{Family: apps.FamilyMihomo, Core: apps.Version{1, 19, 32}}, model.GroupNames{Main: "Прокси", Auto: "Fast"}},
 	{"multi-plain", Multi, false, apps.App{}, model.GroupNames{}},
 	{"multi-custom", Multi, true, apps.App{Family: apps.FamilyMihomo, Core: apps.Version{1, 19, 32}}, model.GroupNames{Main: "Прокси", Auto: "Fast"}},
-	{"multi-old-core", Multi, true, apps.App{Family: apps.FamilyMihomo, Core: apps.Version{1, 18, 0}}, model.GroupNames{}},
-	{"multi-stash", Multi, true, apps.App{Family: apps.FamilyStash}, model.GroupNames{}},
 }
+
+// Variants are the users of the mihomo golden files: CoreVariants, then an old core, which
+// gets no XHTTP or AnyTLS, and Stash, which takes no rule lists.
+var Variants = append(slices.Clip(CoreVariants),
+	Variant{"multi-old-core", Multi, true, apps.App{Family: apps.FamilyMihomo, Core: apps.Version{1, 18, 0}}, model.GroupNames{}},
+	Variant{"multi-stash", Multi, true, apps.App{Family: apps.FamilyStash}, model.GroupNames{}},
+)
 
 // Clash is the admin's own Clash profile src as the template it is.
 func Clash(src string) model.Template { return model.Template{Core: model.CoreMihomo, Body: src} }

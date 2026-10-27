@@ -19,7 +19,7 @@ func own(src string) model.Template { return model.Template{Core: model.CoreSing
 
 // The config made of the admin's own sing-box template on the two-node users.
 func TestGoldenOwnTemplate(t *testing.T) {
-	for _, v := range subtest.Variants {
+	for _, v := range subtest.CoreVariants {
 		if strings.HasPrefix(v.Name, "single") {
 			continue // the template names the second node's group
 		}
