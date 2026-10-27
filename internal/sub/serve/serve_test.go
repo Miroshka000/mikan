@@ -281,6 +281,25 @@ func TestAnswersAreNotStored(t *testing.T) {
 	}
 }
 
+// A rule saved with a Cache-Control of its own, before apps.CheckRules refused one, does not
+// make an answer storable: a CDN that kept a refusal would refuse after the rule is gone.
+func TestRuleCacheControlIsNoStore(t *testing.T) {
+	own := []apps.Header{{Name: "Cache-Control", Value: "public, max-age=86400"}, {Name: "X-Own", Value: "1"}}
+	sub := newSub(t, apps.Policy{NoBuiltin: true, Rules: []apps.Rule{
+		rule("serve", "happ", apps.Action{Headers: own}),
+		rule("stub", "incy", apps.Action{Respond: apps.RespondStub, Headers: own}),
+		rule("403", "curl", apps.Action{Respond: apps.Respond403, Headers: own}),
+		rule("404", "wget", apps.Action{Respond: apps.Respond404, Headers: own}),
+		rule("page", "mozilla", apps.Action{Respond: apps.RespondHTML, HTML: "<h1>Use Happ</h1>", Headers: own}),
+	}})
+	for _, ua := range []string{"Happ/3.4.1", "INCY/1.0", "curl/8.9", "Wget/1.21", "Mozilla/5.0"} {
+		w := fetch(t, sub, ua)
+		if got := w.Header().Values("Cache-Control"); len(got) != 1 || got[0] != "no-store" || w.Header().Get("X-Own") != "1" {
+			t.Errorf("%s: %d %v", ua, w.Code, w.Header())
+		}
+	}
+}
+
 // A real server lets the handler take the connection: the client gets nothing.
 func TestRuleDropsTheConnection(t *testing.T) {
 	sub := newSub(t, apps.Policy{NoBuiltin: true, Rules: []apps.Rule{rule("drop", "badbot", apps.Action{Respond: apps.RespondDrop})}})

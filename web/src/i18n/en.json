@@ -650,6 +650,7 @@
       "resp_html": "The page is empty or longer than 16 KB",
       "resp_headers_many": "Too many headers: at most {value}",
       "resp_header_name": "The header \"{value}\" cannot be set: its name is taken by the protocol or is written wrong",
+      "resp_header_cache": "A rule cannot set Cache-Control: no answer of the subscription is kept by caches, so that a refusal does not outlive its rule",
       "resp_header_value": "A header value: Latin letters, digits and signs, up to 512 characters, no line breaks",
       "app_unknown": "There is no such app in the list: {value}"
     },
