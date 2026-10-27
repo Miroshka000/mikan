@@ -3,7 +3,6 @@
 package build
 
 import (
-	"encoding/json"
 	"net"
 	"strconv"
 
@@ -32,6 +31,8 @@ type Input struct {
 }
 
 // Proxy is the client side of the template t for in: what the apps of the user dial.
+// The proxy may share maps with t (Sudoku's httpmask, Snell's obfs-opts), so the caller
+// passes a template of its own, as parseTemplate and proto.Parse give.
 func Proxy(t proto.Template, in Input) (model.Proxy, error) {
 	if err := proto.Validate(t, proto.Options{AnyDest: true}); err != nil {
 		return model.Proxy{}, err
@@ -90,8 +91,7 @@ func security(p *model.Proxy, t proto.Template, ext proto.Ext, in Input) error {
 	if tls.SNI == "" {
 		tls.SNI = in.SNI
 	}
-	switch t.Type() {
-	case "vless", "trojan", "anytls", "trusttunnel": // QUIC protocols have no uTLS
+	if proto.UsesFingerprint(t) { // QUIC protocols have no uTLS
 		tls.Fingerprint = fingerprint(ext, in)
 	}
 	// Through a CDN the apps see its certificate, never the node's.
@@ -212,12 +212,13 @@ func keys(p *model.Proxy, t proto.Template, ext proto.Ext, in Input) error {
 		if b, ok := t["enable-pure-downlink"].(bool); ok {
 			sd.PureDownlink = &b
 		}
-		sd.HTTPMask = section(t, "httpmask")
+		sd.HTTPMask, _ = t["httpmask"].(map[string]any)
 		p.Sudoku, p.UDP = sd, true
 	case "snell":
 		// Snell carries UDP from v3 on.
 		v := proto.SnellVersion(t)
-		p.Snell, p.UDP = &model.Snell{PSK: str(t["psk"]), Version: v, ObfsOpts: section(t, "obfs-opts")}, v >= 3
+		obfs, _ := t["obfs-opts"].(map[string]any)
+		p.Snell, p.UDP = &model.Snell{PSK: str(t["psk"]), Version: v, ObfsOpts: obfs}, v >= 3
 	default:
 		return &proto.Error{Code: "config_type", Field: "type"}
 	}
@@ -271,22 +272,4 @@ func toInt(v any) (int, bool) {
 		}
 	}
 	return 0, false
-}
-
-// section is a copy of a mapping of the template, nil without one: the proxy must not
-// share it with the template, which is kept for the next subscription.
-func section(t proto.Template, key string) map[string]any {
-	m, ok := t[key].(map[string]any)
-	if !ok {
-		return nil
-	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return m
-	}
-	var out map[string]any
-	if json.Unmarshal(b, &out) != nil {
-		return m
-	}
-	return out
 }
