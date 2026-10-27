@@ -15,7 +15,7 @@ const core = "singbox"
 const urltestIdle = 30 * 60
 
 // note is what sing-box made of the group: a code of model.Note, the preview's words.
-func note(group, code string) model.Note { return model.Note{Core: core, Group: group, Code: code} }
+func note(group, code string) model.Note { return model.Note{Core: core, Subject: group, Code: code} }
 
 // converted are the groups as sing-box carries them.
 type converted struct {
@@ -160,4 +160,47 @@ func Notes(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 		}
 	}
 	return convertGroups(pl.groups, tags).notes
+}
+
+// Dropped are what sing-box leaves out of p's profile as Render makes it (config), for the
+// admin panel's preview: the proxies it cannot carry (proxy_unsupported), the rules of a
+// condition it has no counterpart for or to a group it has none of (rule_unsupported), the
+// lists it cannot read (list_unsupported) and the DNS policies it cannot write
+// (dns_policy_unsupported); a policy's key that loses only some of its names is not told.
+// Nothing is downloaded: a list sing-box could read is taken as
+// read, whether or not it would download. An own sing-box template is as the admin wrote it:
+// none.
+func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
+	if t.Core == model.CoreSingBox {
+		return nil
+	}
+	pl, err := planOf(p, g, m, t)
+	if err != nil {
+		return nil
+	}
+	sets := ruleSets{lists: pl.lists, used: map[string]map[string]any{}, preview: true}
+	tags := map[string]bool{"direct": true}
+	for _, x := range pl.proxies {
+		if o, ok := singboxOutbound(x); ok {
+			tags[str(o["tag"])] = true
+		} else {
+			sets.drop("proxy_unsupported", str(x["name"]))
+		}
+	}
+	for _, gr := range convertGroups(pl.groups, tags).outbounds {
+		tags[str(gr["tag"])] = true
+	}
+	// The rules as config takes them: up to the first MATCH.
+	for _, r := range pl.rules {
+		if len(r.When) == 0 {
+			break
+		}
+		if _, ok := action(r.To, tags); !ok {
+			sets.drop("rule_unsupported", r.Clash(r.To.Group))
+			continue
+		}
+		sets.rule(r)
+	}
+	dnsOf(pl.dns, tags, &sets, "")
+	return sets.dropped
 }

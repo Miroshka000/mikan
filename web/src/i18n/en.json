@@ -654,6 +654,7 @@
       "resp_html": "The page is empty or longer than 16 KB",
       "resp_headers_many": "Too many headers: at most {value}",
       "resp_header_name": "The header \"{value}\" cannot be set: its name is taken by the protocol or is written wrong",
+      "resp_header_cache": "A rule cannot set the cache headers (Cache-Control, CDN-Cache-Control, Cloudflare-CDN-Cache-Control, Surrogate-Control): no answer of the subscription is kept by caches, so that a refusal does not outlive its rule",
       "resp_header_value": "A header value: Latin letters, digits and signs, up to 512 characters, no line breaks",
       "app_unknown": "There is no such app in the list: {value}"
     },
@@ -3048,6 +3049,8 @@
     "removeToken": "Remove token",
     "removeTitle": "Remove the bot token?",
     "removeText": "The bot stops answering. Subscription links stay, with a new token everything works as before.",
+    "ownBot": "The same bot can answer with your own code on aiogram, grammY or another framework: Addons → Developer mode, kind \"Telegram bot\". The token stays here.",
+    "ownBotDocs": "How to connect your own bot",
     "err": {
       "token_invalid": "Telegram refused the token: check it with @BotFather",
       "token_revoked": "The token was revoked in @BotFather: paste a new one",
@@ -3940,6 +3943,15 @@
     "ownTrust": "I understand this code is not verified by mikan, and I trust it",
     "ownTrustHint": "It cannot be installed without this tick.",
     "ownUpdate": "Update",
+    "ownBot": {
+      "title": "Your own bot on aiogram, grammY and other frameworks",
+      "step1": "Connect the bot in Telegram → Connection with the token from @BotFather. The token stays with the panel, your code never needs it.",
+      "step2": "Install an addon with the \"Telegram bot\" permission. The button below fills the form for a bot on long polling.",
+      "step3": "Start the bot with the address of the Bot API proxy and the addon's token. Both are on the server in /opt/mikan/addons/state.json (root only): panel_api, and adapters → the addon's name → panel_token.",
+      "step4": "In the addon's row: More actions → Hand the bot over.",
+      "fill": "Fill for a bot",
+      "docs": "The guide on the site"
+    },
     "unofficial": "unofficial · {title}",
     "unofficialHint": "From the source \"{title}\", not the mikan catalog: nobody has reviewed this code",
     "originSigned": "An addon from the source \"{title}\", not from the mikan catalog. The source's signature only says the file is from its author, not that the code is safe: mikan has not reviewed it. The image is pinned by its digest. Every update has to be confirmed again, and more permissions approved.",

@@ -34,6 +34,11 @@ func (s *ruleSets) rule(r routing.Rule) (map[string]any, bool) {
 	for _, m := range r.When {
 		c, ok := s.condition(m)
 		if !ok {
+			if m.Type == "RULE-SET" {
+				s.drop("list_unsupported", m.Value)
+			} else {
+				s.drop("rule_unsupported", m.Type+","+m.Value)
+			}
 			return nil, false
 		}
 		parts = append(parts, c)
