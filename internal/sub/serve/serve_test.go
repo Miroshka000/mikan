@@ -37,13 +37,15 @@ type fakeSub struct {
 	keysErr     error
 	keys        []Device
 	inboundsErr error
+	pool        int64 // the group of the first inbound; 0: the main traffic
 	bound       int64
 	boundErr    error
 	boundCalls  int
 	groups      AppGroups
 	groupsErr   error
-	groupsOf    [][]model.Proxy // the proxies each call of Groups was given
+	groupsCalls int
 	fetched     int
+	fetchedErrs []error // the error of the context of each call of Fetched
 	log         []LogEntry
 }
 
@@ -62,11 +64,16 @@ func (f *fakeSub) Inbounds(context.Context) ([]model.Inbound, error) {
 	if f.inboundsErr != nil {
 		return nil, f.inboundsErr
 	}
-	return subtest.Defaults("").Build.Inbounds, nil
+	ins := subtest.Defaults("").Build.Inbounds
+	ins[0].Pool = f.pool
+	return ins, nil
 }
-func (f *fakeSub) Fetched(context.Context, string) { f.fetched++ }
-func (f *fakeSub) Groups(_ context.Context, ps []model.Proxy) (AppGroups, error) {
-	f.groupsOf = append(f.groupsOf, ps)
+func (f *fakeSub) Fetched(ctx context.Context, _ string) {
+	f.fetched++
+	f.fetchedErrs = append(f.fetchedErrs, ctx.Err())
+}
+func (f *fakeSub) Groups(context.Context) (AppGroups, error) {
+	f.groupsCalls++
 	return f.groups, f.groupsErr
 }
 func (f *fakeSub) Record(_ context.Context, e LogEntry) { f.log = append(f.log, e) }
@@ -240,6 +247,37 @@ func TestRulePage(t *testing.T) {
 	}
 	if w := fetchAs(t, sub, http.MethodHead, "/"+testToken, "Mozilla/5.0"); w.Code != 200 || w.Body.Len() != 0 {
 		t.Errorf("HEAD: %d %q", w.Code, w.Body)
+	}
+}
+
+// No answer to a subscription is kept by a cache: not the profile, its HEAD, a stub, nor
+// what a rule answers in its place.
+func TestAnswersAreNotStored(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true, Blocked: []string{"shadowrocket"}, Rules: []apps.Rule{
+		rule("no curl", "curl", apps.Action{Respond: apps.Respond403}),
+		rule("no wget", "wget", apps.Action{Respond: apps.Respond404}),
+		rule("page", "mozilla", apps.Action{Respond: apps.RespondHTML, HTML: "<h1>Use Happ</h1>"}),
+	}})
+	for _, c := range []struct {
+		name, method, ua string
+		code             int
+		outcome          Outcome
+	}{
+		{"GET", http.MethodGet, "Happ/3.4.1", 200, OutcomeServed},
+		{"HEAD", http.MethodHead, "Happ/3.4.1", 200, ""},
+		{"stub", http.MethodGet, "Shadowrocket/2592 CFNetwork/1568", 200, OutcomeStub},
+		{"403", http.MethodGet, "curl/8.9", 403, OutcomeBlocked},
+		{"404", http.MethodGet, "Wget/1.21", 404, OutcomeBlocked},
+		{"page", http.MethodGet, "Mozilla/5.0", 200, OutcomeBlocked},
+	} {
+		sub.log = nil
+		w := fetchAs(t, sub, c.method, "/"+testToken, c.ua)
+		if w.Code != c.code || w.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: %d %v", c.name, w.Code, w.Header())
+		}
+		if c.outcome != "" && oneEntry(t, sub).Outcome != c.outcome {
+			t.Errorf("%s: %+v", c.name, sub.log)
+		}
 	}
 }
 
@@ -629,22 +667,24 @@ func testGroups() AppGroups {
 	return AppGroups{V: 1, Groups: []AppGroup{{ID: 7, Name: "Video", Mode: GroupOwn, Limit: ptr(10 << 30), Left: ptr(3 << 30), State: "active", Proxies: []string{"NL"}}}}
 }
 
-// The Mikan app that asks for the groups gets X-Mikan-Groups beside the profile, of the
-// proxies that profile has; any other request goes without it, and without asking.
+// The Mikan app that asks for the groups gets X-Mikan-Groups beside the profile, the
+// servers of each named as that profile has them; any other request goes without it, and
+// without asking.
 func TestGroupsHeader(t *testing.T) {
 	for _, target := range []string{"/" + testToken, "/" + testToken + "?format=clash"} {
 		sub := newSub(t, apps.Policy{NoBuiltin: true})
-		sub.groups = testGroups()
+		sub.groups, sub.pool = testGroups(), 7
 		w := fetchAs(t, sub, http.MethodGet, target, "MikanApp/1.0", FeaturesHeader, "routes, groups")
-		if want := testGroups().header(); w.Code != 200 || w.Header().Get(GroupsHeader) != want {
-			t.Errorf("%s: %d %q, want %q", target, w.Code, w.Header().Get(GroupsHeader), want)
+		if w.Code != 200 || w.Header().Get(GroupsHeader) == "" || sub.groupsCalls != 1 {
+			t.Fatalf("%s: %d %v, %d calls", target, w.Code, w.Header(), sub.groupsCalls)
 		}
-		if len(sub.groupsOf) != 1 || len(sub.groupsOf[0]) == 0 {
-			t.Errorf("%s: Groups asked of %v", target, sub.groupsOf)
+		// The source's "NL" is no server of the profile: the group has the one in it alone.
+		if g := decodeGroups(t, w.Header().Get(GroupsHeader)).Groups; len(g) != 1 || !slices.Equal(g[0].Proxies, []string{"VLESS XHTTP"}) {
+			t.Errorf("%s: groups %+v", target, g)
 		}
 		w = fetchAs(t, sub, http.MethodGet, target, "MikanApp/1.0")
-		if _, ok := w.Header()[GroupsHeader]; ok || len(sub.groupsOf) != 1 {
-			t.Errorf("%s: groups sent unasked: %v, %d calls", target, w.Header(), len(sub.groupsOf))
+		if _, ok := w.Header()[GroupsHeader]; ok || sub.groupsCalls != 1 {
+			t.Errorf("%s: groups sent unasked: %v, %d calls", target, w.Header(), sub.groupsCalls)
 		}
 	}
 }
@@ -729,24 +769,60 @@ func TestPanelFailuresAre500(t *testing.T) {
 	}
 }
 
-// Fetched is recorded once the inbounds are read, before the profile is made: a profile
-// that turns out to have nothing in it counts all the same.
-func TestFetchedBeforeTheProfile(t *testing.T) {
+// Fetched is recorded once a profile went out, and only then: the block detector must not
+// trust a device that got a stub or nothing, whatever the request asked for.
+func TestFetchedOnceTheProfileWentOut(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		method  string
+		target  string
+		ua      string
+		set     func(*fakeSub)
+		fetched int
+	}{
+		{"clash", http.MethodGet, "/" + testToken + "?format=clash", "Happ/3.4.1", nil, 1},
+		{"links", http.MethodGet, "/" + testToken, "Happ/3.4.1", nil, 1},
+		{"HEAD", http.MethodHead, "/" + testToken, "Happ/3.4.1", nil, 0},
+		{"a rule's stub", http.MethodGet, "/" + testToken, "Happ/3.4.1", func(s *fakeSub) {
+			s.cfg.Responses, _ = apps.NewResponder(apps.Policy{NoBuiltin: true, Blocked: []string{"happ"}})
+		}, 0},
+		{"device limit", http.MethodGet, "/" + testToken, "Happ/3.4.1", func(s *fakeSub) { s.keysErr = ErrDeviceLimit }, 0},
+		{"nothing to connect to", http.MethodGet, "/" + testToken, "Happ/3.4.1", func(s *fakeSub) { s.cfg.Nodes = nil }, 0},
+	} {
+		sub := newSub(t, apps.Policy{NoBuiltin: true})
+		if c.set != nil {
+			c.set(sub)
+		}
+		w := fetchAs(t, sub, c.method, c.target, c.ua)
+		if w.Code != 200 || sub.fetched != c.fetched {
+			t.Errorf("%s: %d, Fetched %d times, want %d", c.name, w.Code, sub.fetched, c.fetched)
+		}
+	}
+}
+
+// A client that hangs up as the profile is written still took it: the record does not go
+// with the request's context.
+func TestFetchedOutlivesTheClient(t *testing.T) {
 	sub := newSub(t, apps.Policy{NoBuiltin: true})
-	fetch(t, sub, "Happ/3.4.1")
-	if sub.fetched != 1 {
-		t.Errorf("served: Fetched %d times", sub.fetched)
+	ctx, cancel := context.WithCancel(context.Background())
+	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/"+testToken, nil)
+	r.Header.Set("User-Agent", "Happ/3.4.1")
+	w := httptest.NewRecorder()
+	handlerOf(sub).Serve(&hangUp{ResponseRecorder: w, cancel: cancel}, r, testToken)
+	if w.Code != 200 || len(sub.fetchedErrs) != 1 || sub.fetchedErrs[0] != nil {
+		t.Errorf("%d, Fetched with %v", w.Code, sub.fetchedErrs)
 	}
-	fetchAs(t, sub, http.MethodHead, "/"+testToken, "Happ/3.4.1")
-	if sub.fetched != 1 {
-		t.Errorf("HEAD: Fetched %d times", sub.fetched)
-	}
-	sub = newSub(t, apps.Policy{NoBuiltin: true})
-	sub.cfg.Nodes = nil
-	fetch(t, sub, "Happ/3.4.1")
-	if e := oneEntry(t, sub); e.Outcome != OutcomeStub || sub.fetched != 1 {
-		t.Errorf("nothing to connect to: %+v, Fetched %d times", e, sub.fetched)
-	}
+}
+
+// hangUp is a client that hangs up as soon as the body is written.
+type hangUp struct {
+	*httptest.ResponseRecorder
+	cancel context.CancelFunc
+}
+
+func (h *hangUp) Write(b []byte) (int, error) {
+	defer h.cancel()
+	return h.ResponseRecorder.Write(b)
 }
 
 // {devices} counts the bound devices only with binding on and a text that uses it.
@@ -796,8 +872,8 @@ func TestFetchShowsBoundDevices(t *testing.T) {
 			t.Errorf("%s: %q, want %q", k, got, v)
 		}
 	}
-	// Once for the title, once for the branding.
-	if sub.boundCalls != 2 {
+	// Once for the title and the branding both.
+	if sub.boundCalls != 1 {
 		t.Errorf("counted %d times", sub.boundCalls)
 	}
 	// Devices that cannot be counted leave the count out, the limit in.

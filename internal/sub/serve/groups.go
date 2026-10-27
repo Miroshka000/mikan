@@ -1,5 +1,7 @@
 package serve
 
+import "mikan/internal/sub/model"
+
 // AppGroups is the JSON of X-Mikan-Groups. V changes only when an app that reads version 1
 // would read the new one wrong; fields are only ever added.
 type AppGroups struct {
@@ -35,4 +37,30 @@ type AppGroup struct {
 	// Proxies are the names of the group's servers in this very profile; null when the names
 	// did not fit in the header.
 	Proxies []string `json:"proxies"`
+}
+
+// named is g with the servers of each group named among ps, the proxies of the profile the
+// app gets, and without the groups left with nothing to show: one on the main traffic with
+// no servers to name, one apart without a limit with no servers and no traffic used. An own
+// limit stays with no servers: the app must explain that it ran out.
+func (g AppGroups) named(ps []model.Proxy) AppGroups {
+	names := map[int64][]string{}
+	for _, x := range ps {
+		if x.Pool != 0 {
+			names[x.Pool] = append(names[x.Pool], x.Name)
+		}
+	}
+	groups := g.Groups
+	g.Groups = nil
+	for _, x := range groups {
+		x.Proxies = names[x.ID]
+		if x.Proxies == nil {
+			x.Proxies = []string{} // no servers; null is for names that did not fit
+		}
+		if len(x.Proxies) == 0 && (x.Mode == GroupMain || x.Mode == GroupUnlimited && x.Used == 0) {
+			continue
+		}
+		g.Groups = append(g.Groups, x)
+	}
+	return g
 }
