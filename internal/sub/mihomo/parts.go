@@ -12,8 +12,9 @@ import (
 // Parts are the admin's own Clash profile filled for a user, read apart from the core: for
 // a core that writes them its own way (sing-box), as it writes the panel's routing.
 type Parts struct {
-	// Proxies are the profile's, the panel's and the template's own, as mihomo writes them.
-	Proxies []map[string]any
+	// Proxies are the profile's in its order: the template's own the model holds
+	// (ReadProxy), then the panel's that went in.
+	Proxies []model.Proxy
 	Groups  []model.Group
 	// Rules are in order; MATCH reads as a rule of no conditions. A rule ReadRule cannot read
 	// (OR, NOT) is left out.
@@ -25,16 +26,20 @@ type Parts struct {
 
 // TemplateParts are the parts of the profile Template makes of src for p.
 func TemplateParts(p profile.Profile, src string) (Parts, error) {
-	cfg, _, err := templateConfig(p, src)
+	cfg, in, err := templateConfig(p, src)
 	if err != nil {
 		return Parts{}, err
 	}
 	var out Parts
-	for _, x := range anyList(cfg["proxies"]) {
+	all := anyList(cfg["proxies"])
+	for _, x := range all[:len(all)-len(in)] { // the template's own come first
 		if m, ok := x.(map[string]any); ok {
-			out.Proxies = append(out.Proxies, m)
+			if y, ok := ReadProxy(m); ok {
+				out.Proxies = append(out.Proxies, y)
+			}
 		}
 	}
+	out.Proxies = append(out.Proxies, in...)
 	for _, x := range anyList(cfg["proxy-groups"]) {
 		if g, ok := groupOfMap(x); ok {
 			out.Groups = append(out.Groups, g)
@@ -61,12 +66,12 @@ func groupOfMap(x any) (model.Group, bool) {
 	if g.Name == "" {
 		return g, false
 	}
-	g.Interval, g.Tolerance = seconds(m["interval"]), seconds(m["tolerance"])
+	g.Interval, g.Tolerance = number(m["interval"]), number(m["tolerance"])
 	return g, true
 }
 
-// seconds is a number the YAML holds as a number or a string.
-func seconds(v any) int {
+// number is a number the YAML holds as a number or a string; 0 for none.
+func number(v any) int {
 	switch x := v.(type) {
 	case int:
 		return x

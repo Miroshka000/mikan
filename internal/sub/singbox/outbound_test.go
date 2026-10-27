@@ -16,6 +16,107 @@ import (
 	"mikan/internal/sub/subtest/corecheck"
 )
 
+// carried is a proxy of an own Clash profile as sing-box gets it: read into the model, then
+// written as an outbound.
+func carried(m map[string]any) (map[string]any, bool) {
+	p, ok := mihomo.ReadProxy(m)
+	if !ok {
+		return nil, false
+	}
+	return singboxOutbound(p)
+}
+
+// Each protocol sing-box speaks is its outbound; what it cannot carry is none.
+func TestOutbound(t *testing.T) {
+	const host = `"server":"203.0.113.7","server_port":443`
+	for _, c := range []struct {
+		name string
+		in   model.Proxy
+		want string // the outbound's JSON, "" for none
+	}{
+		{"VLESS REALITY", model.Proxy{Name: "V", Type: "vless", Server: "203.0.113.7", Port: 443, UUID: "u", Flow: "xtls-rprx-vision", UDP: true,
+			TLS:       &model.TLS{SNI: "www.google.com", Fingerprint: "chrome", Reality: &model.Reality{PublicKey: "k", ShortID: "ab", MLKEM: true}},
+			Transport: &model.Transport{Network: "tcp"}},
+			`{"flow":"xtls-rprx-vision","packet_encoding":"xudp",` + host + `,"tag":"V","tls":{"enabled":true,"reality":{"enabled":true,"public_key":"k","short_id":"ab"},"server_name":"www.google.com","utls":{"enabled":true,"fingerprint":"chrome"}},"type":"vless","uuid":"u"}`},
+		{"VLESS gRPC without TLS", model.Proxy{Name: "V", Type: "vless", Server: "203.0.113.7", Port: 443, UUID: "u", UDP: true,
+			Transport: &model.Transport{Network: "grpc", Service: "api"}},
+			`{"packet_encoding":"xudp",` + host + `,"tag":"V","transport":{"idle_timeout":"15s","ping_timeout":"10s","service_name":"api","type":"grpc"},"type":"vless","uuid":"u"}`},
+		{"Trojan WebSocket of no UDP", model.Proxy{Name: "T", Type: "trojan", Server: "203.0.113.7", Port: 443, Password: "p",
+			TLS:       &model.TLS{SNI: "a.example", Insecure: true},
+			Transport: &model.Transport{Network: "ws", Path: "/w", Host: "cdn.example"}},
+			`{"network":"tcp","password":"p",` + host + `,"tag":"T","tls":{"enabled":true,"insecure":true,"server_name":"a.example"},"transport":{"headers":{"Host":"cdn.example"},"path":"/w","type":"ws"},"type":"trojan"}`},
+		{"Hysteria2", model.Proxy{Name: "H", Type: "hysteria2", Server: "203.0.113.7", Port: 443, Ports: "20000-30000, 40000", Password: "p", ALPN: []string{"h3"},
+			Obfs: &model.Obfs{Type: "salamander", Password: "o"}, TLS: &model.TLS{SNI: "a.example", Fingerprint: "chrome"}},
+			`{"obfs":{"password":"o","type":"salamander"},"password":"p","server":"203.0.113.7","server_ports":["20000:30000","40000"],"tag":"H","tls":{"alpn":["h3"],"enabled":true,"server_name":"a.example"},"type":"hysteria2"}`},
+		{"TUIC", model.Proxy{Name: "U", Type: "tuic", Server: "203.0.113.7", Port: 443, UUID: "u", Password: "p", ALPN: []string{"h3"}, Congestion: "bbr"},
+			`{"congestion_control":"bbr","password":"p",` + host + `,"tag":"U","tls":{"alpn":["h3"],"enabled":true},"type":"tuic","udp_relay_mode":"native","uuid":"u"}`},
+		{"AnyTLS", model.Proxy{Name: "A", Type: "anytls", Server: "203.0.113.7", Port: 443, Password: "p", UDP: true, TLS: &model.TLS{SNI: "a.example", Fingerprint: "chrome"}},
+			`{"password":"p",` + host + `,"tag":"A","tls":{"enabled":true,"server_name":"a.example","utls":{"enabled":true,"fingerprint":"chrome"}},"type":"anytls"}`},
+		{"Shadowsocks", model.Proxy{Name: "S", Type: "shadowsocks", Server: "203.0.113.7", Port: 443, Cipher: "2022-blake3-aes-128-gcm", Password: "k", UDP: true, UDPOverTCP: 2},
+			`{"method":"2022-blake3-aes-128-gcm","password":"k",` + host + `,"tag":"S","type":"shadowsocks","udp_over_tcp":{"enabled":true,"version":2}}`},
+		{"VLESS Encryption", model.Proxy{Name: "V", Type: "vless", Server: "203.0.113.7", Port: 443, UUID: "u", Encryption: "mlkem768x25519plus.native.0rtt.k"}, ""},
+		{"XHTTP", model.Proxy{Name: "V", Type: "vless", Server: "203.0.113.7", Port: 443, UUID: "u", TLS: &model.TLS{},
+			Transport: &model.Transport{Network: "xhttp", XHTTP: &model.XHTTP{}}}, ""},
+		{"a pinned certificate", model.Proxy{Name: "T", Type: "trojan", Server: "203.0.113.7", Port: 443, Password: "p", TLS: &model.TLS{Pin: "ab"}}, ""},
+		{"Gecko", model.Proxy{Name: "H", Type: "hysteria2", Server: "203.0.113.7", Port: 443, Password: "p", Obfs: &model.Obfs{Type: "gecko", Password: "o"}}, ""},
+		{"Mieru", model.Proxy{Name: "M", Type: "mieru", Server: "203.0.113.7", Port: 443, Username: "u", Password: "p"}, ""},
+		{"Snell", model.Proxy{Name: "N", Type: "snell", Server: "203.0.113.7", Port: 443, Snell: &model.Snell{PSK: "k", Version: 3}}, ""},
+	} {
+		o, ok := singboxOutbound(c.in)
+		if ok != (c.want != "") {
+			t.Errorf("%s: carried %v: %v", c.name, ok, o)
+			continue
+		}
+		if raw, _ := json.Marshal(o); ok && string(raw) != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.name, raw, c.want)
+		}
+	}
+}
+
+// A proxy of the admin's own Clash profile stays in the config sing-box gets: an outbound,
+// a member of its group and the entry of its chain, the panel's servers dialing through it.
+func TestOwnProfileProxies(t *testing.T) {
+	lists(t)
+	src := `proxies:
+  - {name: вход, type: trojan, server: 198.51.100.7, port: 443, password: x, sni: entry.example, tls: true, skip-cert-verify: true, udp: true}
+proxy-groups:
+  - {name: Сеть, type: select, proxies: [Цепь, вход, DIRECT]}
+  - {name: Серверы, type: url-test, include-all-proxies: true}
+  - {name: Цепь, type: chain, proxies: [вход, Серверы]}
+rules:
+  - MATCH,Сеть
+`
+	prof := profileOf(subtest.TwoNodes())
+	raw, err := Render(context.Background(), prof, model.GroupNames{}, routing.All, subtest.Clash(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c sbConfig
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.Fatal(err)
+	}
+	entry := outbound(c, "вход")
+	if tls, _ := entry["tls"].(map[string]any); entry["type"] != "trojan" || entry["server"] != "198.51.100.7" ||
+		tls["server_name"] != "entry.example" || tls["insecure"] != true {
+		t.Fatalf("the template's own proxy: %v", entry)
+	}
+	if !slices.Contains(anyList(outbound(c, "Сеть")["outbounds"]), any("вход")) {
+		t.Fatalf("the group: %v", outbound(c, "Сеть"))
+	}
+	dialed := 0
+	for _, p := range prof.Proxies {
+		if o := outbound(c, p.Name); o != nil {
+			if dialed++; o["detour"] != "вход" {
+				t.Errorf("%s dials past the chain's entry: %v", p.Name, o)
+			}
+		}
+	}
+	if dialed == 0 {
+		t.Fatalf("no server of the panel's: %v", c.Outbounds)
+	}
+	corecheck.SingBox(t, raw)
+}
+
 // Shadowsocks wraps UDP in UDP over TCP when the server asks for it, of mihomo's version 1
 // when none is given; one of a plugin or smux is left out, as sing-box would dial a server
 // that does not answer, and one of a version mihomo refuses too.
@@ -47,7 +148,7 @@ func TestShadowsocks(t *testing.T) {
 		{"smux", ss(map[string]any{"smux": map[string]any{"enabled": true, "protocol": "h2mux"}}), false, nil},
 		{"smux turned off", ss(map[string]any{"smux": map[string]any{"enabled": false}}), true, nil},
 	} {
-		o, ok := singboxOutbound(c.in)
+		o, ok := carried(c.in)
 		if ok != c.ok {
 			t.Errorf("%s: carried %v, want %v: %v", c.name, ok, c.ok, o)
 			continue
@@ -95,7 +196,7 @@ rules:
 
 // REALITY dials with uTLS, of the panel's fingerprint when the proxy names none.
 func TestRealityFingerprint(t *testing.T) {
-	o, ok := singboxOutbound(map[string]any{"name": "R", "type": "vless", "server": "203.0.113.7", "port": 443, "uuid": subtest.Keys.UUID,
+	o, ok := carried(map[string]any{"name": "R", "type": "vless", "server": "203.0.113.7", "port": 443, "uuid": subtest.Keys.UUID,
 		"tls": true, "servername": "www.google.com", "reality-opts": map[string]any{"public-key": "k", "short-id": "ab"}})
 	if !ok {
 		t.Fatal("no outbound")
@@ -110,7 +211,7 @@ func TestRealityFingerprint(t *testing.T) {
 func TestGRPCKeepaliveAsMihomo(t *testing.T) {
 	m := mihomo.Proxy(model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
 		Transport: &model.Transport{Network: "grpc", Service: "api"}})
-	o, ok := singboxOutbound(m)
+	o, ok := carried(m)
 	if !ok {
 		t.Fatal("no outbound")
 	}

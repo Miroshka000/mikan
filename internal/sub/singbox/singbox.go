@@ -6,8 +6,9 @@
 // forms that version brought in and 1.14 requires. Its rules, rule sets and DNS are the
 // panel's routing (routing.Intent) as sing-box writes it, so Settings → Routing reaches
 // it; an own Clash profile is read the same way (mihomo.TemplateParts), and an own sing-box
-// template is the config as the admin wrote it (Template). The proxies are mihomo's, whose
-// fields sing-box reads. What sing-box has no counterpart for is left out:
+// template is the config as the admin wrote it (Template). The proxies are the model's, an own
+// Clash profile's own read into it (mihomo.ReadProxy). What sing-box
+// has no counterpart for is left out:
 // XHTTP and the mihomo-only protocols (build.ForApp leaves them out already), a self-signed
 // certificate pinned by its hash (sing-box pins a public key, from 1.13 on), .mrs lists,
 // rule types of mihomo's own, logic rules but AND.
@@ -67,7 +68,7 @@ func Stub(name, main string) []byte {
 
 // plan is what a config is made of, whether of the panel's routing or of an own profile.
 type plan struct {
-	proxies []map[string]any // as mihomo writes them
+	proxies []model.Proxy
 	groups  []model.Group
 	// rules are in order, each to a policy or a group (routing.ToGroup); a rule of no
 	// conditions (MATCH) ends them.
@@ -109,12 +110,9 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	// counterpart, and neither have the conditions that read it.
 	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return !pr.Since.Known() })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.SingBoxBalance(), routes, p.Lang)
-	pl := plan{groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
+	pl := plan{proxies: p.Proxies, groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
 	// The panel's own nameservers only: one the admin gave without "#group" goes as given.
 	pl.tunnelDNS = pl.dns.FakeIP && len(in.DNS.Nameserver) == 0
-	for _, x := range p.Proxies {
-		pl.proxies = append(pl.proxies, mihomo.Proxy(x))
-	}
 	for _, r := range routes {
 		for _, pr := range r.Lists {
 			pl.lists[pr.Name] = pr

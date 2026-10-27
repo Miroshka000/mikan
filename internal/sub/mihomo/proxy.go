@@ -138,6 +138,9 @@ func tls(y map[string]any, p model.Proxy) {
 		}
 		y["reality-opts"] = opts
 	}
+	if t.Insecure {
+		y["skip-cert-verify"] = true
+	}
 	if t.Pin != "" {
 		// A self-signed certificate is pinned, and only it is taken.
 		y["fingerprint"], y["skip-cert-verify"] = t.Pin, false
