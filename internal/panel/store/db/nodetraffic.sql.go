@@ -185,6 +185,25 @@ func (q *Queries) NodeTrafficHourly(ctx context.Context, arg NodeTrafficHourlyPa
 	return items, nil
 }
 
+const nodeTrafficSinceDay = `-- name: NodeTrafficSinceDay :one
+SELECT CAST(COALESCE(sum(up + down + relay_up + relay_down), 0) AS BIGINT) FROM node_traffic_daily
+WHERE node_id = $1 AND day >= $2
+`
+
+type NodeTrafficSinceDayParams struct {
+	NodeID int64
+	Day    int64
+}
+
+// Everything a node carried since a day: its users' bytes and its relay's for the other
+// nodes' cascades, both ways. It is the server's traffic its provider counts.
+func (q *Queries) NodeTrafficSinceDay(ctx context.Context, arg NodeTrafficSinceDayParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, nodeTrafficSinceDay, arg.NodeID, arg.Day)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const pruneNodeTrafficDaily = `-- name: PruneNodeTrafficDaily :exec
 DELETE FROM node_traffic_daily WHERE day < $1
 `
