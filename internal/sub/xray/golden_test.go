@@ -39,6 +39,13 @@ func TestGoldenXrayJSON(t *testing.T) {
 	}
 }
 
+// The xray JSON profile of a user with an inbound of each kind the default presets leave
+// out, in the mode All alone: the protocols xray has no word for are not in it.
+func TestGoldenXrayEveryType(t *testing.T) {
+	v := subtest.EveryTypeVariant
+	goldenXray(t, v.User(), v.Groups, routing.All, model.Template{}, v.Name+"_"+string(routing.All)+".xray.json")
+}
+
 // The xray JSON profile made of the admin's own Clash profile on the two-node users.
 func TestGoldenXrayTemplate(t *testing.T) {
 	for _, v := range subtest.CoreVariants {
