@@ -424,7 +424,7 @@ func TestGRPCKeepalive(t *testing.T) {
 	}
 }
 
-// A proxy name saved with a line break in front, before the panel refused it, does not
+// A proxy name with a line break in front, written to the database past the panel, does not
 // fail the profile: the encoder cannot write such a name, so build drops the character.
 func TestProxyNameWithLineBreakRenders(t *testing.T) {
 	u := subtest.TwoNodes()

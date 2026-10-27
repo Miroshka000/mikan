@@ -16,7 +16,8 @@ import (
 
 // Names that show in Clash apps (a node's, a protocol's own, the groups') are refused with
 // a line break or another control character inside, and spaces and line breaks around
-// them are trimmed. A name saved with one before still leaves the subscription whole.
+// them are trimmed. One written to the database past the panel still leaves the
+// subscription whole.
 func TestNamesWithControlCharacters(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
@@ -60,7 +61,7 @@ func TestNamesWithControlCharacters(t *testing.T) {
 		t.Fatalf("display name %q, want Fast", in.DisplayName)
 	}
 
-	// Saved before the panel refused it: the YAML encoder cannot write a name that starts
+	// Written to the database past the panel: the YAML encoder cannot write a name that starts
 	// with a line break, and the user would lose the whole profile.
 	if _, err := h.st.DB.ExecContext(ctx, "UPDATE inbounds SET display_name = $1 WHERE id = $2", "\nFast", ins[0].ID); err != nil {
 		t.Fatal(err)
