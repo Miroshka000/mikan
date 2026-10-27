@@ -49,8 +49,8 @@ func TestBalance(t *testing.T) {
 	if byTag["turn"].Strategy.Type != "roundRobin" || byTag["hash"].Strategy.Type != "random" {
 		t.Fatalf("load-balance: %+v %+v", byTag["turn"], byTag["hash"])
 	}
-	for name, want := range map[string]Ref{"pick": {Tag: "fast", Balancer: true}, "cascade": {Tag: "exits", Balancer: true}, "through": {Tag: "c"},
-		"off": {Tag: "direct"}, "alias": {Tag: "fast", Balancer: true}} {
+	for name, want := range map[string]Ref{"pick": {Tag: "fast", Balancer: true}, "cascade": {Tag: "chain1-hop2-exits", Balancer: true},
+		"through": {Tag: "chain2-hop2-c"}, "off": {Tag: "direct"}, "alias": {Tag: "fast", Balancer: true}} {
 		if got := b.Refs[name]; got != want {
 			t.Errorf("%s goes to %+v, want %+v", name, got, want)
 		}
@@ -58,16 +58,91 @@ func TestBalance(t *testing.T) {
 	if _, ok := b.Refs["none"]; ok || byTag["none"].Tag != "" {
 		t.Fatal("a group of nothing xray has is no balancer")
 	}
-	// The exits dial through the entry; a balancer as a hop before another is its first server.
-	if b.Dialers["b"] != "entry" || b.Dialers["c"] != "entry" || len(b.Dialers) != 2 {
-		t.Fatalf("dialers: %v", b.Dialers)
+	// The exits are copies that dial through the entry, under a copy of their balancer; the
+	// proxies and the exits' own balancer stay as they are. A balancer as a hop before another
+	// is its first server: c dials through a in "through", and through nothing elsewhere.
+	if !slices.Equal(b.Copies, []Copy{{"chain1-hop2-", "b", "entry"}, {"chain1-hop2-", "c", "entry"}, {"chain2-hop2-", "c", "a"}}) {
+		t.Fatalf("copies: %v", b.Copies)
 	}
-	want := []string{"pick:select_first", "first:fallback_fastest", "hash:balance_random", "through:chain_group_hop", "through:chain_dialer_taken"}
+	if exits := byTag["chain1-hop2-exits"]; exits.Strategy.Type != "leastPing" || !slices.Equal(exits.Selector, []string{"chain1-hop2-b", "chain1-hop2-c"}) ||
+		!slices.Equal(byTag["exits"].Selector, []string{"b", "c"}) {
+		t.Fatalf("the exits' copy: %+v, the exits: %+v", exits, byTag["exits"])
+	}
+	want := []string{"pick:select_first", "first:fallback_fastest", "hash:balance_random", "through:chain_group_hop"}
 	if got := codes(b); !slices.Equal(got, want) {
 		t.Fatalf("notes: %q", got)
 	}
 	if o := b.Observatory; o == nil || o.ProbeURL != routing.ProbeURL || o.ProbeInterval != "60s" || !o.EnableConcurrency || o.SubjectSelector != nil || b.BurstObservatory != nil {
 		t.Fatalf("observatory: %+v %+v", o, b.BurstObservatory)
+	}
+}
+
+// A chain as a hop is entered by its first hop (model.Entries), and its hops are copied once
+// more: entry, a, then b, whatever the inner chain dials on its own.
+func TestBalanceNestedChain(t *testing.T) {
+	groups := []model.Group{
+		{Name: "inner", Type: model.Chain, Members: []string{"a", "b"}},
+		{Name: "outer", Type: model.Chain, Members: []string{"entry", "inner"}},
+		{Name: "mixed", Type: model.URLTest, Members: []string{"inner", "c"}},
+		{Name: "wide", Type: model.Chain, Members: []string{"entry", "mixed"}},
+	}
+	b := Balance(groups, groupTags, routing.Servers{})
+	want := []Copy{
+		{"chain1-hop2-", "b", "a"},
+		{"chain2-hop2-", "a", "entry"}, {"chain2-hop3-", "b", "chain2-hop2-a"},
+		{"chain3-hop2-", "a", "entry"}, {"chain3-hop3-", "b", "chain3-hop2-a"}, {"chain3-hop2-", "c", "entry"},
+	}
+	if !slices.Equal(b.Copies, want) {
+		t.Fatalf("copies: %v", b.Copies)
+	}
+	for name, want := range map[string]Ref{"inner": {Tag: "chain1-hop2-b"}, "outer": {Tag: "chain2-hop3-b"}, "mixed": {Tag: "mixed", Balancer: true},
+		"wide": {Tag: "chain3-hop2-mixed", Balancer: true}} {
+		if got := b.Refs[name]; got != want {
+			t.Errorf("%s goes to %+v, want %+v", name, got, want)
+		}
+	}
+	byTag := map[string]Balancer{}
+	for _, x := range b.Balancers {
+		byTag[x.Tag] = x
+	}
+	if !slices.Equal(byTag["mixed"].Selector, []string{"chain1-hop2-b", "c"}) || !slices.Equal(byTag["chain3-hop2-mixed"].Selector, []string{"chain3-hop3-b", "chain3-hop2-c"}) {
+		t.Fatalf("balancers: %+v", b.Balancers)
+	}
+	// What dials through the hop before a chain's second hop is what model.Entries enters it by.
+	byName := map[string]model.Group{}
+	for _, g := range groups {
+		byName[g.Name] = g
+	}
+	for chain, hop := range map[string]string{"chain2-hop2-": "inner", "chain3-hop2-": "mixed"} {
+		var got []string
+		for _, x := range b.Copies {
+			if x.Prefix == chain && x.Dialer == "entry" {
+				got = append(got, x.Of)
+			}
+		}
+		if want := model.Entries(hop, byName, func(s string) bool { return groupTags[s] }); !slices.Equal(got, want) {
+			t.Errorf("%s dials %q through the entry, model.Entries has %q", hop, got, want)
+		}
+	}
+	// No dialer is taken; the copy of a balancer tells nothing again.
+	if got := codes(b); !slices.Equal(got, []string{"mixed:balance_flat"}) {
+		t.Fatalf("notes: %q", got)
+	}
+}
+
+// The hops are counted per chain: a chain made while another is cascading (here past DIRECT,
+// cascade called before the hops were made) leaves the other's numbers be. Balance makes
+// every hop before a chain's cascade, so this is the converter's own guard.
+func TestCascadeHopsPerChain(t *testing.T) {
+	c := converter{byName: map[string]model.Group{}, tags: groupTags, refs: map[string]Ref{}, busy: map[string]bool{}, hops: map[int]int{}, copied: map[string]bool{},
+		out: Balancing{Refs: map[string]Ref{}}}
+	long := model.Group{Name: "long", Type: model.Chain, Members: []string{"a", "b", "c", "DIRECT", "short", "c"}}
+	c.byName["short"] = model.Group{Name: "short", Type: model.Chain, Members: []string{"entry", "a"}}
+	c.chains, c.hops[1] = 1, 1
+	r, ok := c.cascade(long, 1, nil)
+	want := []Copy{{"chain1-hop2-", "b", "a"}, {"chain1-hop3-", "c", "chain1-hop2-b"}, {"chain2-hop2-", "a", "entry"}, {"chain1-hop5-", "c", "chain2-hop2-a"}}
+	if !ok || r != (Ref{Tag: "chain1-hop5-c"}) || !slices.Equal(c.out.Copies, want) {
+		t.Fatalf("%+v %v: copies %v", r, ok, c.out.Copies)
 	}
 }
 
