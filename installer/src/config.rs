@@ -256,6 +256,16 @@ pub fn write_private(path: &Path, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// Whether name is the temporary file write_private makes for file, `.<file>.<pid>.<nanos>.tmp`:
+/// a write cut short before its rename (a kill, a power cut) leaves it next to the file.
+pub fn leftover_of(name: &str, file: &str) -> bool {
+    let Some(rest) = name.strip_prefix('.').and_then(|n| n.strip_prefix(file)).and_then(|n| n.strip_suffix(".tmp")) else {
+        return false;
+    };
+    let parts: Vec<&str> = rest.split('.').collect();
+    matches!(parts[..], ["", pid, nanos] if [pid, nanos].iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit())))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,5 +372,23 @@ mod tests {
         assert_eq!(fs::read_to_string(&f).unwrap(), "A=3\n");
         assert_eq!(fs::read_dir(&d).unwrap().count(), 2, "no temporary file stays");
         fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn a_leftover_is_told_by_its_name() {
+        assert!(leftover_of(".node_join.4242.1761523200123456789.tmp", "node_join"));
+        for other in [
+            "node_join",
+            ".node_join.tmp",
+            ".node_join.1.tmp",
+            ".node_join.1.2.3.tmp",
+            ".node_join.x.2.tmp",
+            ".node_join..2.tmp",
+            ".node_join.1.2.tmp.x",
+            ".database_url.1.2.tmp",
+            ".node_joinx.1.2.tmp",
+        ] {
+            assert!(!leftover_of(other, "node_join"), "{other}");
+        }
     }
 }

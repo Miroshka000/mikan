@@ -122,15 +122,33 @@ enum Squeeze {
     Fast,
 }
 
+/// What tar leaves out of every archive. What the node's panel and the updater say to each
+/// other (data/node/update) is of the moment: a restore must not bring back an old request,
+/// or a status that says an update runs. The panel's own directory is not a member at all.
+/// A secret's write cut short leaves its temporary file in secrets/, which is no secret: each
+/// goes by its own name, as a pattern matches below any directory in GNU's tar and BusyBox's
+/// alike, and only GNU's takes --anchored.
+fn excludes(root: &Path) -> Vec<String> {
+    let mut out = vec!["--exclude=data/node/update".to_owned()];
+    if let Ok(dir) = fs::read_dir(root.join(config::SECRETS)) {
+        out.extend(
+            dir.flatten()
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|n| secret_leftover(n))
+                .map(|n| format!("--exclude={}/{n}", config::SECRETS)),
+        );
+    }
+    out
+}
+
 /// tar of members (paths below root) into a new private archive in dir.
 fn pack(root: &Path, dir: &Path, kind: &str, members: &[String], squeeze: Squeeze) -> Result<PathBuf> {
     let (file, path) = create(dir, kind)?;
-    // What the node's panel and the updater say to each other (data/node/update) is of the
-    // moment: a restore must not bring back an old request, or a status that says an update
-    // runs. The panel's own directory is not a member at all.
     let out = match squeeze {
         Squeeze::Normal => Command::new("tar")
-            .args(["-czf", "-", "--exclude=data/node/update", "-C"])
+            .args(["-czf", "-"])
+            .args(excludes(root))
+            .arg("-C")
             .arg(root)
             .args(members)
             .stdin(Stdio::null())
@@ -164,7 +182,9 @@ fn pack(root: &Path, dir: &Path, kind: &str, members: &[String], squeeze: Squeez
 /// failed.
 fn fast_tar(root: &Path, members: &[String], file: File) -> std::io::Result<std::process::Output> {
     let mut tar = Command::new("tar")
-        .args(["-cf", "-", "--exclude=data/node/update", "-C"])
+        .args(["-cf", "-"])
+        .args(excludes(root))
+        .arg("-C")
         .arg(root)
         .args(members)
         .stdin(Stdio::null())
@@ -271,8 +291,14 @@ pub fn backups() -> Vec<PathBuf> {
     list.into_iter().map(|(_, p)| p).collect()
 }
 
+/// Whether f, a name in secrets/, is what a secret's write cut short left there.
+fn secret_leftover(f: &str) -> bool {
+    config::SECRET_KEYS.iter().any(|s| config::leftover_of(f, s.file))
+}
+
 /// Whether an archive path is one a restore takes: relative, without "..", and one of the
-/// settings files, a secret's file in secrets/, or inside the panel's or the node's data.
+/// settings files, a secret's file in secrets/ (or the leftover of its write, which the
+/// archives made before it was left out hold), or inside the panel's or the node's data.
 fn allowed_name(name: &str) -> bool {
     let n = name.strip_prefix("./").unwrap_or(name).trim_end_matches('/');
     if n.is_empty() || n.split('/').any(|c| c.is_empty() || c == ".." || c == ".") {
@@ -284,7 +310,7 @@ fn allowed_name(name: &str) -> bool {
         || n.starts_with("data/node/")
         || n.strip_prefix(config::SECRETS)
             .and_then(|f| f.strip_prefix('/'))
-            .is_some_and(|f| config::SECRET_KEYS.iter().any(|s| s.file == f))
+            .is_some_and(|f| config::SECRET_KEYS.iter().any(|s| s.file == f) || secret_leftover(f))
 }
 
 /// Judges the two listings of an archive (`tar -tzf`, names; `tar -tvzf`, with types).
@@ -369,6 +395,17 @@ fn verify_tree(dir: &Path, depth: usize) -> Result<()> {
             verify_tree(&entry.path(), depth + 1)?;
         } else if !meta.is_file() {
             bail!("{} is not a plain file", entry.path().display());
+        }
+    }
+    Ok(())
+}
+
+/// The leftovers of secrets' writes an older archive brought along do not go back.
+fn drop_leftovers(stage: &Path) -> Result<()> {
+    let Ok(dir) = fs::read_dir(stage.join(config::SECRETS)) else { return Ok(()) };
+    for entry in dir.flatten() {
+        if entry.file_name().to_str().is_some_and(secret_leftover) {
+            fs::remove_file(entry.path()).with_context(|| format!("remove {}", entry.path().display()))?;
         }
     }
     Ok(())
@@ -598,6 +635,7 @@ pub fn restore(file: &Path, no_db_snapshot: bool, say: &mut dyn FnMut(&str)) -> 
     let stage = Stage::new(root)?;
     extract(file, &stage.0)?;
     verify_tree(&stage.0, 0)?;
+    drop_leftovers(&stage.0)?;
     let items = if config::installed(&stage.0) {
         let mut items = plan(&stage.0)?;
         let mut archived = Config::load(&stage.0)?;
@@ -825,6 +863,51 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    // A node's join key writes to a temporary file in secrets/ first: one a kill left there
+    // stays out of the archive, and an archive of before that holds one is still restored,
+    // without it. Both were refused for ".node_join.<pid>.<nanos>.tmp".
+    #[test]
+    fn a_node_backup_leaves_out_what_a_cut_write_left_in_secrets() {
+        let root = tmpdir("node-secrets");
+        let mut c = Config::new(&root);
+        c.set("MIKAN_MODE", "node").unwrap();
+        c.set("MIKAN_NODE_JOIN", "mk1.abcdef").unwrap();
+        c.save().unwrap();
+        file(&root, "data/node/state.json", "{}");
+        let leftover = format!("{}/.node_join.4242.1761523200123456789.tmp", config::SECRETS);
+        file(&root, &leftover, "mk1.half");
+        // only secrets/ itself: a like name in the node's data is the node's own file
+        file(&root, "data/node/secrets/.keep.tmp", "node's");
+        let mut members: Vec<String> = TOP.iter().filter(|m| exists(&root, m)).map(|s| (*s).to_owned()).collect();
+        members.push("data/node".into());
+        let dir = backups_dir(&root).unwrap();
+        for squeeze in [Squeeze::Normal, Squeeze::Fast] {
+            let a = pack(&root, &dir, "mikan", &members, squeeze).unwrap();
+            let names = String::from_utf8_lossy(&Command::new("tar").arg("-tzf").arg(&a).output().unwrap().stdout).into_owned();
+            assert!(names.lines().any(|n| n == "secrets/node_join") && !names.contains(".node_join."), "{names}");
+            assert!(names.lines().any(|n| n == "data/node/secrets/.keep.tmp"), "{names}");
+            check_archive(&a).unwrap();
+        }
+        // an archive made before the leftover was left out
+        let old = dir.join("old.tar.gz");
+        let mut tar = Command::new("tar");
+        tar.arg("-czf").arg(&old).arg("-C").arg(&root).args(&members);
+        assert!(tar.status().unwrap().success());
+        check_archive(&old).unwrap();
+        let stage = Stage::new(&root).unwrap();
+        extract(&old, &stage.0).unwrap();
+        verify_tree(&stage.0, 0).unwrap();
+        assert!(stage.0.join(&leftover).exists());
+        drop_leftovers(&stage.0).unwrap();
+        assert!(!stage.0.join(&leftover).exists(), "the leftover does not go back");
+        let to: Vec<&str> = plan(&stage.0).unwrap().iter().map(|(_, r)| *r).collect();
+        assert!(to.contains(&config::SECRETS) && to.contains(&"data/node"), "{to:?}");
+        let back = Config::load(&stage.0).unwrap();
+        assert_eq!((back.get("MIKAN_MODE"), back.get("MIKAN_NODE_JOIN")), (Some("node"), Some("mk1.abcdef")));
+        drop(stage);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     // The node's talk with the updater is no part of a backup: the pre-update backup is made
     // while its status says "running", and a restore must not bring that back.
     #[test]
@@ -973,7 +1056,13 @@ mod tests {
             check_listing(&names, &verbose)
         };
         assert!(with("data/panel/ok", "-").is_ok());
-        for n in ["secrets/", "secrets/postgres_password", "secrets/database_url", "secrets/node_join"] {
+        for n in [
+            "secrets/",
+            "secrets/postgres_password",
+            "secrets/database_url",
+            "secrets/node_join",
+            "secrets/.node_join.4242.1761523200123456789.tmp",
+        ] {
             assert!(with(n, if n.ends_with('/') { "d" } else { "-" }).is_ok(), "{n}");
         }
         for (n, why) in [
@@ -985,6 +1074,7 @@ mod tests {
             ("data/panel/../../x", "nested dots"),
             ("evil", "a stranger"),
             ("secrets/evil", "a file no secret is kept in"),
+            ("secrets/.evil.1.2.tmp", "the leftover of no secret"),
             ("secrets/postgres_password/x", "below a secret"),
             ("secrets/../etc/passwd", "a way out of secrets"),
             ("secretsx/postgres_password", "a lookalike of secrets"),
