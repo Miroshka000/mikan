@@ -104,7 +104,8 @@ func fillTemplate(cfg map[string]any, p Profile) ([]model.Proxy, error) {
 		names = append(names, x)
 	}
 	cfg["proxies"] = proxies
-	_, providers := cfg["proxy-providers"]
+	pp, _ := cfg["proxy-providers"].(map[string]any)
+	providers := len(pp) > 0
 	groups, _ := cfg["proxy-groups"].([]any)
 	for _, g := range groups {
 		if m, ok := g.(map[string]any); ok {

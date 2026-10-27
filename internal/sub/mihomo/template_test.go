@@ -224,6 +224,9 @@ func TestTemplateIncludeAllNextToProviders(t *testing.T) {
 			func(model.Proxy) bool { return true }, "map[filter:^none include-all-providers:true]"},
 		{"no providers", "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^🇳🇱\", exclude-type: hysteria2}",
 			func(x model.Proxy) bool { return typeOf(x) == "hysteria2" }, "map[]"},
+		// mihomo has no providers to give such a group.
+		{"empty proxy-providers, nothing picked", "proxy-providers: {}\n{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^none\"}",
+			func(model.Proxy) bool { return true }, "map[]"},
 		{"no providers, nothing picked", "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^none\"}",
 			func(model.Proxy) bool { return true }, "map[]"},
 	} {
