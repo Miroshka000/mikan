@@ -128,6 +128,10 @@ func TestTemplateThatDoesNotRender(t *testing.T) {
 		if w.Code != http.StatusOK || w.Body.String() != builtIn.Body.String() {
 			t.Errorf("%s: %d, not the built-in profile:\n%.400s", c.core, w.Code, w.Body)
 		}
+		// The built-in profile went out in its place: the device took a profile both times.
+		if sub.fetched != 2 {
+			t.Errorf("%s: Fetched %d times, want 2", c.core, sub.fetched)
+		}
 		msg := `msg="subscription: an own template does not render, the built-in profile goes out" template=5 core=` + string(c.core)
 		if n := strings.Count(logged, "level=WARN"); n != 1 || !strings.Contains(logged, msg) {
 			t.Errorf("%s: %d warnings: %s", c.core, n, logged)
