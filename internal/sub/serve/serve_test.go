@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +20,9 @@ import (
 	"mikan/internal/proto"
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
+	"mikan/internal/sub/xray"
 )
 
 const testToken = "0123456789abcdefghijklmn"
@@ -756,5 +760,51 @@ func TestFetchShowsBoundDevices(t *testing.T) {
 	w = fetch(t, sub, "Happ/3.4.1", "X-Hwid", "abc")
 	if _, ok := w.Header()["X-Brand-Current-Devices"]; ok || w.Header().Get("X-Brand-Max-Devices") != "3" {
 		t.Errorf("not counted: %v", w.Header())
+	}
+}
+
+// ownClash is an admin's own Clash profile with a rule of its own to tell it by.
+const ownClash = "proxy-groups:\n  - {name: Net, type: select, include-all-proxies: true}\nrules:\n  - DOMAIN-SUFFIX,mine.example,DIRECT\n  - MATCH,Net\n"
+
+// Stash takes no own profile: with a Clash template of the admin's it gets the built-in
+// profile, the same as without one.
+func TestStashGetsTheBuiltInProfile(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true})
+	const stash = "Stash/3.1.1 Clash/1.9.0"
+	builtIn := fetch(t, sub, stash).Body.String()
+	sub.cfg.Templates = []model.Template{{ID: 1, Core: model.CoreMihomo, Default: true, Body: ownClash}}
+	if w := fetch(t, sub, "mihomo/1.19.31"); !strings.Contains(w.Body.String(), "mine.example") {
+		t.Fatalf("a mihomo app gets the template:\n%s", w.Body)
+	}
+	if w := fetch(t, sub, stash); w.Code != http.StatusOK || w.Body.String() != builtIn {
+		t.Fatalf("Stash: %d\n%s", w.Code, w.Body)
+	}
+}
+
+// Happ and INCY, which take no Clash profile, read their routing of the Clash template all
+// the same: the one the Clash profile of the request would be made of.
+func TestHappRoutingOfTheClashTemplate(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true})
+	sub.cfg.Happ.Routing = xray.HappRoutingAuto
+	sub.cfg.Templates = []model.Template{{ID: 1, Core: model.CoreMihomo, Default: true, Body: ownClash}}
+	w := fetch(t, sub, "Happ/3.4.1")
+	if p := decodeHapp(t, w.Header().Get("routing")); !slices.Contains(p.DirectSites, "domain:mine.example") {
+		t.Fatalf("Happ: %+v", p)
+	}
+	if w := fetch(t, sub, "INCY/2.1.0"); w.Header().Get("routing") == "" || w.Header().Get("routing") != incyAutoRouting(sub.cfg, ownClash) {
+		t.Fatalf("INCY: %q", w.Header().Get("routing"))
+	}
+}
+
+// Config.Profile hands the renderers every setting of the profile; only the app is the
+// Clash profile's to set.
+func TestConfigProfile(t *testing.T) {
+	cfg := Config{Nodes: []model.Node{{ID: 1}}, Direct: []string{"203.0.113.7"}, Rules: []routing.Rule{{}},
+		Routes: routing.Routes{Services: map[string]string{"youtube": routing.TargetVPN}}, Lang: "ru"}
+	p := reflect.ValueOf(cfg.Profile([]model.Proxy{{Name: "NL"}}))
+	for i := range p.NumField() {
+		if name := p.Type().Field(i).Name; name != "App" && p.Field(i).IsZero() {
+			t.Errorf("%s is not set", name)
+		}
 	}
 }
