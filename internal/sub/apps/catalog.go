@@ -38,10 +38,11 @@ var Catalog = []Known{
 	// The Clash apps that were given up on, on the Clash Premium core: the built-in rule
 	// (RuleOld) turns them away, and with it off the admin blocks them here. The order
 	// matters: ClashX Meta, a current mihomo app, is told before ClashX, whose word it holds
-	// (FlClashX is told as FlClash, further up).
-	{ID: "clashxmeta", Name: "ClashX Meta", Family: FamilyMihomo, Words: []string{"clashx meta", "clashxmeta"}},
-	{ID: "cfw", Name: "Clash for Windows", Family: FamilyMihomo, Words: []string{"clash for windows", "clashforwindows", "clash-for-windows"}},
-	{ID: "cfa", Name: "Clash for Android", Family: FamilyMihomo, Words: []string{"clashforandroid"}},
+	// (FlClashX is told as FlClash, further up). Their names are written with no separator, a
+	// space, a hyphen, a dot or an escaped space, the same set the built-in rule reads.
+	{ID: "clashxmeta", Name: "ClashX Meta", Family: FamilyMihomo, Words: []string{"clashxmeta", "clashx meta", "clashx-meta", "clashx.meta", "clashx%20meta"}},
+	{ID: "cfw", Name: "Clash for Windows", Family: FamilyMihomo, Words: []string{"clashforwindows", "clash for windows", "clash-for-windows", "clash.for.windows", "clash%20for%20windows"}},
+	{ID: "cfa", Name: "Clash for Android", Family: FamilyMihomo, Words: []string{"clashforandroid", "clash for android", "clash-for-android", "clash.for.android", "clash%20for%20android"}},
 	{ID: "clashx", Name: "ClashX", Family: FamilyMihomo, Words: []string{"clashx"}},
 	{ID: "mihomo", Name: "mihomo", Family: FamilyMihomo, Generic: true, Words: []string{"mihomo", "clash", "prizrak", "flowvy", "murge", "rabbit"}},
 

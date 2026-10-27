@@ -11,9 +11,10 @@ import (
 	"mikan/internal/sub/subtest"
 )
 
-// The names a key of the admin's nameserver-policy covers in xray's DNS, as they are now:
-// one key may list several categories, lists or domains with commas, and what xray has no
-// form of, or a category the geodata lacks, is left out of it.
+// The names a key of the admin's nameserver-policy covers in xray's DNS: one key may list
+// several categories, lists or domains with commas, each name of its own kind, and what
+// xray has no form of, a category the geodata lacks, or a prefix with no name after it is
+// left out of it.
 func TestPolicyDomains(t *testing.T) {
 	for _, c := range []struct {
 		key  string
@@ -30,10 +31,10 @@ func TestPolicyDomains(t *testing.T) {
 		{"geosite:no-such-category", routing.Common, nil},
 		{"geosite:ru-blocked", routing.Common, nil}, // Loyalsoldier's geodata lacks it
 		{"geosite:ru-blocked", routing.Runetfreedom, []string{"geosite:ru-blocked"}},
-		{"geosite:!cn", routing.Common, nil},                           // mihomo's negation is no category
-		{"geosite:cn,+.a.com", routing.Common, []string{"geosite:cn"}}, // a domain after it is a category name
+		{"geosite:!cn", routing.Common, nil}, // mihomo's negation is no category
 		{"geosite:", routing.Common, nil},
-		{"GEOSITE:cn", routing.Common, nil}, // the prefix only in lower case
+		{"GEOSITE:cn", routing.Common, []string{"geosite:cn"}}, // the prefix in any case, as mihomo reads it
+		{"GeoSite:CN,Category-RU", routing.Common, []string{"geosite:cn", "geosite:category-ru"}},
 		// rule-set: the panel's lists as their nearest categories, none for others.
 		{"rule-set:mikan-ru-sites", routing.Common, []string{"geosite:category-ru"}},
 		{"rule-set:mikan-ru-sites", routing.Runetfreedom, []string{"geosite:category-ru", "geosite:ru-available-only-inside"}},
@@ -43,22 +44,33 @@ func TestPolicyDomains(t *testing.T) {
 		{"rule-set:mikan-blocked", routing.Runetfreedom, []string{"geosite:ru-blocked"}},
 		{"rule-set:mikan-telegram-ip", routing.Common, nil}, // only IPs
 		{"rule-set:wl.yaml", routing.Common, nil},
+		{"RULE-SET:mikan-ru-core", routing.Common, []string{"geosite:category-ru"}},
 		// Domains: "+." with every subdomain, "*." one label deep, the others as they are.
 		{"+.example.com", routing.Common, []string{"domain:example.com"}},
 		{"*.example.com", routing.Common, []string{`regexp:^[^.]+\.example\.com$`}},
 		{"example.com", routing.Common, []string{"full:example.com"}},
 		{"+.a.com,+.b.com", routing.Common, []string{"domain:a.com", "domain:b.com"}},
 		{"a.com, +.b.com ,*.c.com", routing.Common, []string{"full:a.com", "domain:b.com", `regexp:^[^.]+\.c\.com$`}},
-		{"+.a.com,geosite:cn", routing.Common, []string{"domain:a.com"}}, // a prefix only at the start
 		{"a.com,,b.com", routing.Common, []string{"full:a.com", "full:b.com"}},
 		{"full:example.com", routing.Common, nil},
 		{"domain:example.com", routing.Common, nil},
 		{"a.*.com", routing.Common, nil},
 		{"*", routing.Common, nil},
 		{"", routing.Common, nil},
-		// A prefix with no name after it still makes a name.
-		{"+.", routing.Common, []string{"domain:"}},
-		{"*.", routing.Common, []string{`regexp:^[^.]+\.$`}},
+		// A prefix with no name after it is no name: "domain:" would send every name there.
+		{"+.", routing.Common, nil},
+		{"*.", routing.Common, nil},
+		{"+.,a.com,*.", routing.Common, []string{"full:a.com"}},
+		{"+.a.com,geosite:", routing.Common, []string{"domain:a.com"}},
+		{"geosite:cn,+.", routing.Common, []string{"geosite:cn"}},
+		// A key that mixes kinds: each name is of the kind it is written as, a name with no
+		// prefix of its own of the key's.
+		{"geosite:cn,+.a.com", routing.Common, []string{"geosite:cn", "domain:a.com"}},
+		{"geosite:cn,*.a.com,category-ru", routing.Common, []string{"geosite:cn", `regexp:^[^.]+\.a\.com$`, "geosite:category-ru"}},
+		{"+.a.com,geosite:cn", routing.Common, []string{"domain:a.com", "geosite:cn"}},
+		{"a.com,GEOSITE:cn,rule-set:mikan-games", routing.Common, []string{"full:a.com", "geosite:cn", "geosite:category-games"}},
+		{"rule-set:mikan-games,+.a.com", routing.Common, []string{"geosite:category-games", "domain:a.com"}},
+		{"geosite:cn,a.com", routing.Common, []string{"geosite:cn"}}, // a plain name after the prefix is a category
 	} {
 		if got := policyDomains(c.key, c.geo); !slices.Equal(got, c.want) {
 			t.Errorf("%q: %q, want %q", c.key, got, c.want)
@@ -94,6 +106,29 @@ func TestDNSPolicyServers(t *testing.T) {
 	got, _ := json.Marshal(rules)
 	if string(got) != `[{"inboundTag":["dns"],"ip":["223.5.5.5","77.88.8.8","77.88.8.1","1.1.1.1"],"outboundTag":"direct"},{"inboundTag":["dns"],"outboundTag":"proxy"}]` {
 		t.Fatalf("rules: %s", got)
+	}
+}
+
+// A key that mixes kinds, or spells its prefix in upper case, gives xray each of its names,
+// and xray takes the config.
+func TestDNSPolicyMixedKeys(t *testing.T) {
+	prof := profileOf(subtest.TwoNodes())
+	prof.Routes = routing.Routes{DNS: routing.DNS{
+		Nameserver: []string{"https://1.1.1.1/dns-query"},
+		Policy: []routing.DNSPolicy{
+			{Match: "geosite:cn,+.a.com", Servers: []string{"223.5.5.5"}},
+			{Match: "+.b.com,geosite:category-ru,*.c.com", Servers: []string{"77.88.8.8"}},
+			{Match: "GEOSITE:category-games,rule-set:mikan-gemini", Servers: []string{"8.8.8.8"}},
+			{Match: "+.,*.", Servers: []string{"9.9.9.9"}},
+		},
+	}}
+	cs := render(t, prof, routing.All, model.Template{})
+	servers, _ := json.Marshal(cs[0].DNS.Servers)
+	if string(servers) != `[{"address":"223.5.5.5","domains":["geosite:cn","domain:a.com"],"skipFallback":true},`+
+		`{"address":"77.88.8.8","domains":["domain:b.com","geosite:category-ru","regexp:^[^.]+\\.c\\.com$"],"skipFallback":true},`+
+		`{"address":"8.8.8.8","domains":["geosite:category-games","geosite:google-gemini"],"skipFallback":true},`+
+		`"https://1.1.1.1/dns-query"]` {
+		t.Fatalf("servers: %s", servers)
 	}
 }
 
