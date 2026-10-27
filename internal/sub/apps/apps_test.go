@@ -112,6 +112,7 @@ func TestMihomoVersionGates(t *testing.T) {
 		{"mihomo/1.19.3", proto.Needs{Type: "anytls"}, true},
 		{"clash-verge/v2.2.3", proto.Needs{Type: "anytls"}, true},
 		{"clash-verge/v2.2.3", proto.Needs{Type: "mieru"}, false},
+		{"mihomo/1.18.10", proto.Needs{Type: "mieru"}, false},
 		{"mihomo/1.19.0", proto.Needs{Type: "mieru"}, true},
 	}
 	for _, c := range cases {
