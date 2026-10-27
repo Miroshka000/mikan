@@ -11786,26 +11786,26 @@
               "null"
             ]
           },
-          "ips": {
-            "description": "Адреса с открытыми соединениями на этой ноде",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
           "node_id": {
             "format": "int64",
             "type": "integer"
           },
           "node_name": {
             "type": "string"
+          },
+          "online_ips": {
+            "description": "Адреса с открытыми соединениями на этой ноде; оператор поддержки без доступа к подписчикам получает пустой список",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
           "node_id",
           "node_name",
           "device_id",
-          "ips",
+          "online_ips",
           "conns"
         ],
         "type": "object"

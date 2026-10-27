@@ -25,16 +25,18 @@ func TestMaskPeople(t *testing.T) {
 		`"device":{"id":1,"name":"Ivan's iPhone","hwid":"abc","last_ip":"9.9.9.9","platform":"ios"},` +
 		`"node":{"id":1,"name":"DE-1","host":"h","ip":"203.0.113.9","note":"fine"},"tariff":{"id":2,"name":"Month"},` +
 		// The addresses a subscriber came from: a device list names no user beside them.
-		`"devices":[{"ip":"7.7.7.7","first_seen":"a","last_seen":"b","online":true}],"probe":{"ok":true,"ip":"198.51.100.7","checked_at":"c"}}`
+		`"devices":[{"ip":"7.7.7.7","first_seen":"a","last_seen":"b","online":true}],"probe":{"ok":true,"ip":"198.51.100.7","checked_at":"c"},` +
+		// Where a subscriber is online now (GET /users/{id}/online): the node stays, the addresses go.
+		`"live":[{"node_id":2,"node_name":"DE-2","device_id":1,"online_ips":["4.4.4.4"],"conns":3}]}`
 	out := string(maskPeople([]byte(in)))
-	for _, leak := range []string{"Ivan", "@ivan", "owes", "tok", "1.2.3.4", "99", "ivan_tg", "old", "Anna", "5.6.7.8", "abc", "9.9.9.9", "7.7.7.7"} {
+	for _, leak := range []string{"Ivan", "@ivan", "owes", "tok", "1.2.3.4", "99", "ivan_tg", "old", "Anna", "5.6.7.8", "abc", "9.9.9.9", "7.7.7.7", "4.4.4.4"} {
 		// 99 also stands in "tg_id":99 only; used_up has no 99 run.
 		if strings.Contains(out, leak) {
 			t.Errorf("%q survives: %s", leak, out)
 		}
 	}
 	for _, keep := range []string{`"name":"#7"`, `"name":"#3"`, `"user_name":"#7"`, `"tg_id":0`, `"used_up":123456789012345678`, `"tags":["vip"]`, `"online_ips":[]`,
-		`"tariff_name":"Month <b>"`, `"node_name":"DE-1"`, `"ip":"203.0.113.9"`, `"ip":"198.51.100.7"`, `"online":true`, `"name":"DE-1"`, `"name":"Month"`, `"platform":"ios"`, `"bytes":5`} {
+		`"tariff_name":"Month <b>"`, `"node_name":"DE-1"`, `"ip":"203.0.113.9"`, `"ip":"198.51.100.7"`, `"online":true`, `"name":"DE-1"`, `"name":"Month"`, `"platform":"ios"`, `"bytes":5`, `"node_name":"DE-2"`, `"conns":3`} {
 		if !strings.Contains(out, keep) {
 			t.Errorf("%s is lost: %s", keep, out)
 		}

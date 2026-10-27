@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -80,6 +81,12 @@ func TestUserOnlineByNodeAndDevice(t *testing.T) {
 	})
 	if string(got) != string(want) {
 		t.Fatalf("online:\n got %s\nwant %s", got, want)
+	}
+	// A support operator without access to the subscribers gets the nodes and the counts,
+	// not the addresses: the field is one the people mask knows.
+	masked := string(maskPeople(got))
+	if strings.Contains(masked, "198.51.100.") || !strings.Contains(masked, `"online_ips":[]`) || !strings.Contains(masked, `"node_name":"fi"`) {
+		t.Fatalf("masked: %s", masked)
 	}
 
 	// Without nodes there is nowhere to be online: an empty list, not null.

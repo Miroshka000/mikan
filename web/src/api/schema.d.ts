@@ -7480,11 +7480,11 @@ export interface components {
              * @description Привязанное устройство, чьими ключами подключены; null — общие ключи пользователя (приложения без ID или без привязки)
              */
             device_id: number | null;
-            /** @description Адреса с открытыми соединениями на этой ноде */
-            ips: string[];
             /** Format: int64 */
             node_id: number;
             node_name: string;
+            /** @description Адреса с открытыми соединениями на этой ноде; оператор поддержки без доступа к подписчикам получает пустой список */
+            online_ips: string[];
         };
         UserPoolView: {
             /** @description Свой лимит группы и её пакеты исчерпаны: подключения группы не работают до сброса */

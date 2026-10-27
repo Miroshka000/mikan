@@ -85,7 +85,7 @@ A device is called what its app reports: the model, the system or the app itself
 
 In the card's "Devices" block each bound device shows what its app reported (model, system and its version, app and its version), when it was last online or last fetched the subscription, its last address (masked) and when it was bound. Unbind, ban and rename are the buttons on the right.
 
-While the user is connected, an **Online now** list shows below: on which server, with whose keys (a bound device's or the user's shared keys), from which addresses and how many connections are open. It refreshes itself from the servers' latest reports (every few seconds); the API gives the same: `GET /api/v1/users/{id}/online`. Connections are cut by unbinding or banning a device. There is no separate "drop connections" button that keeps access: the servers cannot do that yet.
+While the user is connected, an **Online now** list shows below: on which server, with whose keys (a bound device's or the user's shared keys), from which addresses and how many connections are open. It refreshes itself from the servers' latest reports (every few seconds); the API gives the same: `GET /api/v1/users/{id}/online`. For now a server closes connections only when access goes: a device unbound or banned, the term or the traffic over. There is no "drop connections" button that keeps access yet.
 
 ### Banning a device
 

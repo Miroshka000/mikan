@@ -1110,7 +1110,7 @@
     "liveTitle": "Online now",
     "liveOwnKeys": "Shared keys of the user",
     "liveConns": "{n, plural, one {# connection} other {# connections}}",
-    "liveNote": "Where the user is connected now, by server, as the servers last reported (every few seconds). Unbinding or banning a device cuts off its connections; the servers cannot close the connections of a user who keeps access.",
+    "liveNote": "Where the user is connected now, by server, as the servers last reported (every few seconds). For now a server closes connections only when access goes: a device unbound or banned, the term or the traffic over.",
     "unbind": "Unbind",
     "unbindLabel": "Unbind {name}",
     "unbindTitle": "Unbind “{name}”?",

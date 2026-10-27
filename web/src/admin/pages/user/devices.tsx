@@ -245,8 +245,8 @@ function BoundDevices({ u }: { u: User }) {
 
 /**
  * Where the user is online now, by node and by keys (a bound device's or the user's own),
- * as the nodes last reported. Nothing shows while nobody is online. It only shows: the
- * nodes close a user's connections only when the keys stop being allowed (unbind, ban).
+ * as the nodes last reported. Nothing shows while nobody is online. It only shows: for
+ * now a node closes a slot's connections only when its access goes (unbind, ban, expiry, quota).
  */
 function OnlineNow({ u }: { u: User }) {
   const online = useUserOnline(u.id);
@@ -274,8 +274,8 @@ function OnlineNow({ u }: { u: User }) {
                 {s.node_name || `#${s.node_id}`} · {device(s.device_id)}
               </div>
               <div className="truncate text-xs text-[var(--ink-500)]">
-                {s.ips.length > 0 ? <span className="mono">{s.ips.map(maskIP).join(", ")}</span> : null}
-                {s.ips.length > 0 ? " · " : ""}
+                {s.online_ips.length > 0 ? <span className="mono">{s.online_ips.map(maskIP).join(", ")}</span> : null}
+                {s.online_ips.length > 0 ? " · " : ""}
                 <span className="num">{t("userDrawer.liveConns", { n: s.conns })}</span>
               </div>
             </div>

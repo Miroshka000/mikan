@@ -17,7 +17,7 @@ type UserOnlineView struct {
 	// DeviceID is the bound device whose keys are online; nil: the user's own keys (apps
 	// without a device id, or the panel binds no devices).
 	DeviceID *int64   `json:"device_id" doc:"Привязанное устройство, чьими ключами подключены; null — общие ключи пользователя (приложения без ID или без привязки)"`
-	IPs      []string `json:"ips" doc:"Адреса с открытыми соединениями на этой ноде"`
+	IPs      []string `json:"online_ips" doc:"Адреса с открытыми соединениями на этой ноде; оператор поддержки без доступа к подписчикам получает пустой список"`
 	Conns    int      `json:"conns" doc:"Открытые соединения на этой ноде"`
 }
 
@@ -29,8 +29,10 @@ func (h *handlers) registerUserOnline(tags []string) {
 }
 
 // userOnline splits what the user list merges (online, online_ips) by node and device,
-// from the nodes' last counters (every few seconds). It only shows: the nodes close a
-// user's connections only when the user's keys stop being allowed (unbind, ban, expiry).
+// from the nodes' last counters (every few seconds). It only shows: for now a node closes
+// a slot's connections only when its access goes (unbind, ban, expiry, quota). The field
+// of addresses is online_ips, which the people mask empties for an operator who may not
+// see the subscribers.
 func (h *handlers) userOnline(ctx context.Context, in *userIDInput) (*userOnlineOutput, error) {
 	if _, err := h.d.Users.Get(ctx, in.ID); err != nil {
 		return nil, mapDomainErr(err)
