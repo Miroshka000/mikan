@@ -19,7 +19,7 @@ dns:
     +.cn:
       - 223.5.5.5
 proxies:
-  - name: "\U0001F1F3\U0001F1F1 VLESS XHTTP"
+  - name: "🇳🇱 VLESS XHTTP"
     type: vless
     server: 203.0.113.7
     port: 443
@@ -39,7 +39,7 @@ proxies:
         h-max-request-times: 600-900
         h-max-reusable-secs: 1800-3000
         max-concurrency: 16-32
-  - name: "\U0001F1F3\U0001F1F1 Hysteria2"
+  - name: "🇳🇱 Hysteria2"
     type: hysteria2
     server: 203.0.113.7
     port: 443
@@ -50,7 +50,7 @@ proxies:
     obfs-password: golden-obfs-password
     password: S3cr3t+/=
     skip-cert-verify: false
-  - name: "\U0001F1F3\U0001F1F1 TUIC"
+  - name: "🇳🇱 TUIC"
     type: tuic
     server: 203.0.113.7
     port: 8443
@@ -62,7 +62,7 @@ proxies:
     skip-cert-verify: false
     udp-relay-mode: native
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: "\U0001F1F3\U0001F1F1 VLESS Vision"
+  - name: "🇳🇱 VLESS Vision"
     type: vless
     server: 203.0.113.7
     port: 8443
@@ -76,7 +76,7 @@ proxies:
     tls: true
     udp: true
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: "\U0001F1F3\U0001F1F1 Trojan"
+  - name: "🇳🇱 Trojan"
     type: trojan
     server: 203.0.113.7
     port: 2087
@@ -89,7 +89,7 @@ proxies:
     sni: www.example.com
     tls: true
     udp: true
-  - name: "\U0001F1F3\U0001F1F1 AnyTLS"
+  - name: "🇳🇱 AnyTLS"
     type: anytls
     server: 203.0.113.7
     port: 2083
@@ -99,7 +99,7 @@ proxies:
     skip-cert-verify: false
     tls: true
     udp: true
-  - name: "\U0001F1F3\U0001F1F1 VLESS gRPC"
+  - name: "🇳🇱 VLESS gRPC"
     type: vless
     server: 203.0.113.7
     port: 2053
@@ -134,7 +134,7 @@ proxies:
         h-max-request-times: 600-900
         h-max-reusable-secs: 1800-3000
         max-concurrency: 16-32
-  - name: "\U0001F1FA\U0001F1F8 Hysteria2"
+  - name: "🇺🇸 Hysteria2"
     type: hysteria2
     server: usa.example.com
     port: 443
@@ -146,7 +146,7 @@ proxies:
     password: S3cr3t+/=
     skip-cert-verify: false
     sni: usa.example.com
-  - name: "\U0001F1FA\U0001F1F8 TUIC"
+  - name: "🇺🇸 TUIC"
     type: tuic
     server: usa.example.com
     port: 8443
@@ -159,7 +159,7 @@ proxies:
     sni: usa.example.com
     udp-relay-mode: native
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: "\U0001F1FA\U0001F1F8 VLESS Vision"
+  - name: "🇺🇸 VLESS Vision"
     type: vless
     server: usa.example.com
     port: 8443
@@ -178,55 +178,55 @@ proxy-groups:
     type: select
     proxies:
       - Auto
-      - "\U0001F1F3\U0001F1F1 Нидерланды"
-      - "\U0001F1FA\U0001F1F8 США"
-      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
-      - "\U0001F1F3\U0001F1F1 Hysteria2"
-      - "\U0001F1F3\U0001F1F1 TUIC"
-      - "\U0001F1F3\U0001F1F1 VLESS Vision"
-      - "\U0001F1F3\U0001F1F1 Trojan"
-      - "\U0001F1F3\U0001F1F1 AnyTLS"
-      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+      - "🇳🇱 Нидерланды"
+      - "🇺🇸 США"
+      - "🇳🇱 VLESS XHTTP"
+      - "🇳🇱 Hysteria2"
+      - "🇳🇱 TUIC"
+      - "🇳🇱 VLESS Vision"
+      - "🇳🇱 Trojan"
+      - "🇳🇱 AnyTLS"
+      - "🇳🇱 VLESS gRPC"
       - Особый
-      - "\U0001F1FA\U0001F1F8 Hysteria2"
-      - "\U0001F1FA\U0001F1F8 TUIC"
-      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+      - "🇺🇸 Hysteria2"
+      - "🇺🇸 TUIC"
+      - "🇺🇸 VLESS Vision"
   - name: Auto
     type: fallback
     proxies:
-      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
-      - "\U0001F1F3\U0001F1F1 Hysteria2"
-      - "\U0001F1F3\U0001F1F1 TUIC"
-      - "\U0001F1F3\U0001F1F1 VLESS Vision"
-      - "\U0001F1F3\U0001F1F1 Trojan"
-      - "\U0001F1F3\U0001F1F1 AnyTLS"
-      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+      - "🇳🇱 VLESS XHTTP"
+      - "🇳🇱 Hysteria2"
+      - "🇳🇱 TUIC"
+      - "🇳🇱 VLESS Vision"
+      - "🇳🇱 Trojan"
+      - "🇳🇱 AnyTLS"
+      - "🇳🇱 VLESS gRPC"
       - Особый
-      - "\U0001F1FA\U0001F1F8 Hysteria2"
-      - "\U0001F1FA\U0001F1F8 TUIC"
-      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+      - "🇺🇸 Hysteria2"
+      - "🇺🇸 TUIC"
+      - "🇺🇸 VLESS Vision"
     interval: 120
     url: https://www.gstatic.com/generate_204
-  - name: "\U0001F1F3\U0001F1F1 Нидерланды"
+  - name: "🇳🇱 Нидерланды"
     type: url-test
     proxies:
-      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
-      - "\U0001F1F3\U0001F1F1 Hysteria2"
-      - "\U0001F1F3\U0001F1F1 TUIC"
-      - "\U0001F1F3\U0001F1F1 VLESS Vision"
-      - "\U0001F1F3\U0001F1F1 Trojan"
-      - "\U0001F1F3\U0001F1F1 AnyTLS"
-      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
+      - "🇳🇱 VLESS XHTTP"
+      - "🇳🇱 Hysteria2"
+      - "🇳🇱 TUIC"
+      - "🇳🇱 VLESS Vision"
+      - "🇳🇱 Trojan"
+      - "🇳🇱 AnyTLS"
+      - "🇳🇱 VLESS gRPC"
     interval: 120
     tolerance: 50
     url: https://www.gstatic.com/generate_204
-  - name: "\U0001F1FA\U0001F1F8 США"
+  - name: "🇺🇸 США"
     type: url-test
     proxies:
       - Особый
-      - "\U0001F1FA\U0001F1F8 Hysteria2"
-      - "\U0001F1FA\U0001F1F8 TUIC"
-      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+      - "🇺🇸 Hysteria2"
+      - "🇺🇸 TUIC"
+      - "🇺🇸 VLESS Vision"
     interval: 120
     tolerance: 50
     url: https://www.gstatic.com/generate_204
