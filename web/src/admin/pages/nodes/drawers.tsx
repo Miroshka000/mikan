@@ -15,6 +15,7 @@ import { nodeLabel } from "../../../lib/node-label";
 import { JoinProgress, type FixActions } from "../node-check";
 import type { Node } from "../nodes";
 import { BalanceFields, balanceKey, useBalance } from "../nodes-balance";
+import { billingBody, BillingFields, billingForm, type BillingForm } from "./billing";
 
 export type Joined = { id: number; name: string; key: string; command: string };
 
@@ -128,8 +129,10 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
   const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, front_page: "", in_auto: true, api_lockdown: false, api_allow: "" });
   const balance = useBalance();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [billing, setBilling] = useState<BillingForm | null>(null);
   useEffect(() => {
     if (node) {
+      setBilling(billingForm(node.billing));
       // The server as it was given, not the address for clients (its domain when it has one):
       // the field saves the server.
       setForm({ name: node.name, public_name: node.public_name, host: node.server_host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "",
@@ -187,6 +190,14 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
       body.api_allow = allow;
     }
     body.sni_router = form.sni_router;
+    if (billing) {
+      const b = billingBody(billing);
+      if ("errors" in b) {
+        setErrors(b.errors);
+        return;
+      }
+      body.billing = b.body;
+    }
     body.front_page = form.front_page as NonNullable<Schemas["PatchNodeInputBody"]["front_page"]>;
     const group = form.group.trim();
     const capacity = group && form.capacity.trim() ? Number(form.capacity) : undefined;
@@ -335,6 +346,16 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
           error={errors.group}
           groups={(balance.data ?? []).map((g) => g.group)}
         />
+        {billing ? (
+          <BillingFields
+            form={billing}
+            errors={errors}
+            onChange={(patch) => {
+              setBilling((b) => (b ? { ...b, ...patch } : b));
+              setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !k.startsWith("billing."))));
+            }}
+          />
+        ) : null}
       </form>
     </Drawer>
   );

@@ -76,6 +76,9 @@ func Proxy(p model.Proxy) map[string]any {
 		if p.UDPOverTCP > 0 {
 			y["udp-over-tcp"], y["udp-over-tcp-version"] = true, p.UDPOverTCP
 		}
+		if p.Plugin != "" {
+			y["plugin"], y["plugin-opts"] = p.Plugin, p.PluginOpts
+		}
 	case "sudoku":
 		s := p.Sudoku
 		y["key"], y["aead-method"] = s.Key, s.AEAD
@@ -100,9 +103,35 @@ func Proxy(p model.Proxy) map[string]any {
 			y["obfs-opts"] = p.Snell.ObfsOpts
 		}
 	}
+	if p.Smux != nil {
+		y["smux"] = smux(p.Smux)
+	}
 	// Hysteria2 and TUIC carry UDP by themselves: mihomo takes no switch for them.
 	if p.Type != "hysteria2" && p.Type != "tuic" {
 		y["udp"] = p.UDP
+	}
+	return y
+}
+
+// smux is mihomo's smux of m.
+func smux(m *model.Smux) map[string]any {
+	y := map[string]any{"enabled": true}
+	if m.Protocol != "" {
+		y["protocol"] = m.Protocol
+	}
+	for k, n := range map[string]int{"max-connections": m.MaxConnections, "min-streams": m.MinStreams, "max-streams": m.MaxStreams} {
+		if n > 0 {
+			y[k] = n
+		}
+	}
+	if m.Padding {
+		y["padding"] = true
+	}
+	if m.OnlyTCP {
+		y["only-tcp"] = true
+	}
+	if b := m.Brutal; b != nil {
+		y["brutal-opts"] = map[string]any{"enabled": true, "up": b.Up, "down": b.Down}
 	}
 	return y
 }

@@ -343,7 +343,7 @@ func TestSupportAccessExpires(t *testing.T) {
 		t.Fatalf("the new grant's token: %d", resp.StatusCode)
 	}
 	// Two hours and a minute on.
-	s.now = s.now.Add(2*time.Hour + time.Minute)
+	s.advance(2*time.Hour + time.Minute)
 	if resp, _ := live.do(http.MethodGet, "/users", nil, bearerOf(spare.Token)); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("an expired token: %d", resp.StatusCode)
 	}
@@ -857,7 +857,7 @@ func TestSupportAdminNotices(t *testing.T) {
 	if _, code, _ := s.grant(map[string]any{"hours": 2, "level": "view"}); code != http.StatusCreated {
 		t.Fatal("second grant")
 	}
-	h.now = h.now.Add(3 * time.Hour)
+	h.advance(3 * time.Hour)
 	if err := h.p.Support.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}

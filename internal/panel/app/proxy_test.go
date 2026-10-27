@@ -78,7 +78,7 @@ func TestInboundsBehindAProxy(t *testing.T) {
 
 	// An address of its own turns the port move and the site switch off in the same
 	// update: the proxy in front forwards to the port and may route by the site.
-	h.now = h.now.Add(time.Hour)
+	h.advance(time.Hour)
 	code, body, v := patch(xhttp, map[string]any{"listen": " 127.0.0.1 "})
 	if code != http.StatusOK || v.Listen != "127.0.0.1" || v.AutoPort || v.AutoSNI || v.ClientSNI {
 		t.Fatalf("listen: %d %s", code, body)

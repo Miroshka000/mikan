@@ -17,6 +17,32 @@ It checks the domain through public DNS. Common causes: the A record points to a
 
 Run `mikan install` again and it will continue. If the admin account already exists, the installer does not know the password: get a new one with `mikan reset-password`.
 
+## Moving
+
+### The import cannot reach the old panel on this same server
+
+The mikan panel runs in the server's own network. If the old panel serves plain http on its port, give `http://127.0.0.1:PORT` (for 3x-ui, with its secret path). If it serves https itself (Marzban with `UVICORN_SSL_*`, 3x-ui with a certificate), give its usual address `https://domain:port`: it works from the same server too. "This address may not be used" most often means `http://` was given to an outside address: unencrypted, the import goes only to this server and the local network, to the rest only over `https://`. The whole move in order: [Moving to mikan](/mikan/en/start/migrate/).
+
+### "The old panel's certificate is not trusted"
+
+The old panel's certificate has expired, is self-signed or is for another name. The import does not skip this check: fix the certificate there or, if the old panel is on this server or in the local network, give an `http://` address.
+
+### "The old panel answered with a redirect"
+
+The import does not follow redirects, so the password cannot go to another address. Give the final address: `https://` and without the admin path, and for 3x-ui with the port and secret path, as in the browser.
+
+### Can I run the import again
+
+Yes. Users whose names already exist in mikan are skipped, so another import adds only new ones. It does not bring changes to users already moved (renewals, traffic used). One import runs at a time; "Stop" interrupts it, and the users made before that stay.
+
+### Users from two panels
+
+You can import from several panels one after another. But Marzban's and PasarGuard's links are checked with one secret, so once users with links came from one of them, mikan will not start an import from the other. The old links' path is also one for the whole mikan install: if the panels use different paths (`api/sub` for Remnawave, `sub` for the others), old links open only for the panel whose path is set.
+
+### Move mikan to another server
+
+A backup, an install with the same panel port, a restore: see [Moving mikan to another server](/mikan/en/start/migrate/#moving-mikan-to-another-server).
+
 ## Access
 
 ### I lost the link, the password or 2FA

@@ -140,7 +140,7 @@ func TestMarketplaceGrants(t *testing.T) {
 	wider := entry
 	wider.Version, wider.Digest, wider.Permissions = "1.1.0", "sha256:"+strings.Repeat("c", 64), []string{"bot", "kv", "users:write"}
 	publish(wider)
-	h.now = h.now.Add(11 * time.Minute) // past the cached catalog
+	h.advance(11 * time.Minute) // past the cached catalog
 	v = read(h.do(http.MethodGet, api, nil, nil))
 	if len(v.Installed) != 1 || strings.Join(v.Installed[0].Granted, ",") != "bot,kv" {
 		t.Fatalf("installed: %+v", v.Installed)

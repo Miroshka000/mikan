@@ -5,7 +5,7 @@ import { meQuery } from "../api/hooks";
 import { whoamiQuery } from "../api/support";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { ADDON_KINDS, ADDON_TABS, PAYMENT_TABS, PROMO_TABS, DIAG_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type AddonsSearch, type DiagSearch, type PaymentsSearch, type SettingsSearch, type SupportSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { ADDON_KINDS, ADDON_TABS, PAYMENT_TABS, PROMO_TABS, DIAG_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type AddonsSearch, type DiagSearch, type NodesSearch, type PaymentsSearch, type SettingsSearch, type SupportSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -98,7 +98,15 @@ export function createAppRouter(queryClient: QueryClient) {
     }),
   });
   const inbounds = createRoute({ getParentRoute: () => app, path: "/inbounds", component: page(() => import("./pages/inbounds"), "InboundsPage") });
-  const nodes = createRoute({ getParentRoute: () => app, path: "/nodes", component: page(() => import("./pages/nodes"), "NodesPage") });
+  const nodes = createRoute({
+    getParentRoute: () => app,
+    path: "/nodes",
+    component: page(() => import("./pages/nodes"), "NodesPage"),
+    validateSearch: (s: Record<string, unknown>): NodesSearch => ({
+      node: Number.isSafeInteger(Number(s.node)) && Number(s.node) >= 1 ? Number(s.node) : undefined,
+      add: s.add === true || s.add === "true" ? true : undefined,
+    }),
+  });
   const diagnostics = createRoute({
     getParentRoute: () => app,
     path: "/diagnostics",

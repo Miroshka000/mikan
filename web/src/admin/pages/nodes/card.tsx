@@ -14,6 +14,7 @@ import { bytes, num } from "../../../lib/format";
 import { nodeLabel } from "../../../lib/node-label";
 import { HelloLine, NodeProblem, SkewLine } from "../node-check";
 import type { Node } from "../nodes";
+import { BillingRows } from "./billing";
 
 /** What a server before 0.5.0.2 runs once by hand: from then on the panel updates it. */
 const OLD_NODE_COMMAND = "mikan update";
@@ -165,6 +166,7 @@ export function NodeCard({
           </div>
         ) : null}
         <NodeCertRow n={n} />
+        <BillingRows n={n} />
       </dl>
       <NodeUpdate n={n} />
       {/* The actions stay at the card's bottom, level with the card beside it. */}

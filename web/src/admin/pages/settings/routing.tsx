@@ -504,7 +504,7 @@ function PreviewCard({ mode, routes, rules }: { mode: Schemas["SettingsView"]["s
 
 const CORE_NAMES: Record<Schemas["Note"]["core"], string> = { mihomo: "Clash", singbox: "sing-box", xray: "Xray" };
 
-/** What the sing-box and Xray apps make of the groups they have none of their own for: the nearest kind. */
+/** What the sing-box and Xray apps make of the profile: the nearest kind of a group they have none of, and what they leave out. */
 function PreviewNotes({ notes }: { notes: Schemas["Note"][] }) {
   return (
     <section className="mt-4" aria-labelledby="routes-notes">

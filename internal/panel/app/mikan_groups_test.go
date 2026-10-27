@@ -32,7 +32,7 @@ const (
 func TestMikanGroupsHeader(t *testing.T) {
 	h := newHarness(t)
 	// A fixed clock: the header's resets_at is of it, and the header is checked byte for byte.
-	h.now = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	h.setNow(time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC))
 	ctx := context.Background()
 	if err := domain.Seed(ctx, h.st, h.now); err != nil {
 		t.Fatal(err)
