@@ -133,6 +133,34 @@ func TestCachedList(t *testing.T) {
 	get("ok.ru", 5) // a success lives a day again
 }
 
+// A fetch that fails does not undo one that ended while it ran: the new list stays.
+func TestCachedListFailureAfterFetch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		listCache.Lock()
+		listCache.m["http://"+r.Host+r.URL.Path] = listEntry{payload: []string{"vk.com"}, at: time.Now()}
+		listCache.Unlock()
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	src := srv.URL + "/ru.yaml"
+	listCache.Lock()
+	listCache.m[src] = listEntry{payload: []string{"ya.ru"}, at: time.Now().Add(-25 * time.Hour)}
+	listCache.Unlock()
+	t.Cleanup(func() {
+		listCache.Lock()
+		delete(listCache.m, src)
+		listCache.Unlock()
+	})
+
+	got, err := cachedList(t.Context(), src)
+	listCache.Lock()
+	e := listCache.m[src]
+	listCache.Unlock()
+	if err != nil || !slices.Equal(got, []string{"vk.com"}) || e.err != nil || !slices.Equal(e.payload, []string{"vk.com"}) {
+		t.Fatalf("got %q %v, cached %q %v; want vk.com, no error", got, err, e.payload, e.err)
+	}
+}
+
 // A list never fetched is an error, tried again five minutes later.
 func TestCachedListFailure(t *testing.T) {
 	l := &listServer{status: http.StatusNotFound}

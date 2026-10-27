@@ -164,13 +164,19 @@ func cachedList(ctx context.Context, src string) ([]string, error) {
 	e, ok := listCache.m[src]
 	listCache.Unlock()
 	if !ok || time.Since(e.at) >= e.ttl() {
+		seen := e.at
 		payload, err := fetchList(ctx, src)
-		if err != nil && ok {
-			payload = e.payload
-		}
-		e = listEntry{payload: payload, err: err, at: time.Now()}
 		listCache.Lock()
-		listCache.m[src] = e
+		cur, ok := listCache.m[src]
+		if err != nil && ok && !cur.at.Equal(seen) {
+			e = cur // a fetch that ended while ours ran stands: a failure does not undo it
+		} else {
+			if err != nil && ok {
+				payload = cur.payload
+			}
+			e = listEntry{payload: payload, err: err, at: time.Now()}
+			listCache.m[src] = e
+		}
 		listCache.Unlock()
 	}
 	if e.payload != nil {
