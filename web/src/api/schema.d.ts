@@ -245,6 +245,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/login/passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Вход по passkey */
+        post: operations["passkey-login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login/passkey/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Начать вход по passkey */
+        post: operations["passkey-login-begin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -274,6 +308,58 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ключи входа (passkey) */
+        get: operations["list-passkeys"];
+        put?: never;
+        /** Добавить passkey */
+        post: operations["add-passkey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Начать добавление passkey */
+        post: operations["passkey-begin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить passkey */
+        delete: operations["delete-passkey"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5521,11 +5607,46 @@ export interface components {
             /** @description Заголовок превью; пусто — бренд */
             title: string;
         };
+        PasskeyAddInputBody: {
+            /** @description Ответ navigator.credentials.create() в JSON (PublicKeyCredential.toJSON()) */
+            credential: unknown;
+            name: string;
+        };
+        PasskeyBeginInputBody: {
+            /** @description Пароль: без него украденная сессия добавила бы свой вход */
+            password: string;
+            /** @description Код из приложения, если включена 2FA */
+            totp?: string;
+        };
+        PasskeyLoginBeginOutputBody: {
+            /** @description Передаётся обратно в POST /auth/login/passkey */
+            ceremony: string;
+            /** @description Параметры WebAuthn для navigator.credentials.get() ({publicKey: …}, двоичные поля в base64url) */
+            options: unknown;
+        };
+        PasskeyLoginInputBody: {
+            ceremony: string;
+            /** @description Ответ navigator.credentials.get() в JSON (PublicKeyCredential.toJSON()) */
+            credential: unknown;
+        };
+        PasskeyOptionsOutputBody: {
+            /** @description Параметры WebAuthn для navigator.credentials.create() ({publicKey: …}, двоичные поля в base64url) */
+            options: unknown;
+        };
+        PasskeyView: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            last_used_at?: string;
+            name: string;
+        };
         PasswordInputBody: {
             current: string;
             /** @description Не короче 12 символов */
             new: string;
-            /** @description Отозвать и ключи API (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный из угнанной сессии, пережил бы это */
+            /** @description Отозвать и ключи API, и ключи доступа (passkey) (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный или добавленный из угнанной сессии, пережил бы это */
             revoke_keys?: boolean;
         };
         PatchAddonInputBody: {
@@ -8628,6 +8749,69 @@ export interface operations {
             };
         };
     };
+    "passkey-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyLoginInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "passkey-login-begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyLoginBeginOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     logout: {
         parameters: {
             query?: never;
@@ -8673,6 +8857,130 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MeBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "add-passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyAddInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "passkey-begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyBeginInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOptionsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

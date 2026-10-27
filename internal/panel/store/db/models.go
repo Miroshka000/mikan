@@ -92,6 +92,16 @@ type Admin struct {
 	LastLoginAt   sql.NullInt64
 }
 
+type AdminPasskey struct {
+	ID           int64
+	AdminID      int64
+	CredentialID []byte
+	Name         string
+	Credential   string
+	CreatedAt    int64
+	LastUsedAt   sql.NullInt64
+}
+
 type ApiKey struct {
 	ID         int64
 	AdminID    int64

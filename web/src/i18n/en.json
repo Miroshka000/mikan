@@ -681,7 +681,13 @@
       "resp_header_name": "The header \"{value}\" cannot be set: its name is taken by the protocol or is written wrong",
       "resp_header_cache": "A rule cannot set the cache headers (Cache-Control, CDN-Cache-Control, Cloudflare-CDN-Cache-Control, Surrogate-Control): no answer of the subscription is kept by caches, so that a refusal does not outlive its rule",
       "resp_header_value": "A header value: Latin letters, digits and signs, up to 512 characters, no line breaks",
-      "app_unknown": "There is no such app in the list: {value}"
+      "app_unknown": "There is no such app in the list: {value}",
+      "passkey_no_domain": "Passkeys need the panel's domain",
+      "passkey_expired": "The sign-in took too long. Try again",
+      "passkey_setup_expired": "Adding the passkey took too long. Start again",
+      "invalid_passkey": "The passkey was not accepted",
+      "passkey_limit": "There are too many passkeys already: delete the ones you do not use",
+      "passkey_exists": "This passkey is added already"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to mikan; otherwise free the port",
@@ -721,7 +727,11 @@
     "submit": "Sign in",
     "confirm": "Confirm",
     "back": "Back to password",
-    "forgot": "Forgot the password? On the server run"
+    "forgot": "Forgot the password? On the server run",
+    "or": "or",
+    "passkey": "Sign in with a passkey",
+    "passkeyFailed": "The passkey was not accepted. Try again or sign in with the password.",
+    "passkeyAddress": "Passkeys work only when the panel is opened at its domain."
   },
   "dashboard": {
     "title": "Overview",
@@ -1973,7 +1983,7 @@
     "certTemp": "temporary",
     "certNote": "Renews automatically. Issuance needs port 80 open, it is held for a few seconds.",
     "passwordChanged": "Password changed, other sessions ended",
-    "revokeKeys": "Revoke API keys too: a key made from a hijacked session would outlive the password change",
+    "revokeKeys": "Revoke API keys and passkeys too: one made from a hijacked session would outlive the password change",
     "twoFactorPasswordHint": "Turning on 2FA needs the password.",
     "currentPassword": "Current password",
     "newPassword": "New password",
@@ -2769,7 +2779,24 @@
         "fast": "🔒 Fast",
         "auto": "⚡ Auto"
       }
-    }
+    },
+    "passkeys": "Passkeys",
+    "passkeysSub": "Sign in with the fingerprint, face or PIN of a device instead of the password and the code",
+    "passkeysNone": "No passkeys yet.",
+    "passkeyAdd": "Add a passkey",
+    "passkeyName": "Name",
+    "passkeyNameDefault": "Passkey",
+    "passkeyPasswordHint": "Adding a passkey needs the password, and the code when 2FA is on.",
+    "passkeyAdded": "Passkey added",
+    "passkeyDeleted": "Passkey deleted",
+    "passkeyUsed": "used {ago}",
+    "passkeyNeverUsed": "not used yet",
+    "passkeyAddedOn": "added {date}",
+    "passkeyDeleteTitle": "Delete the passkey?",
+    "passkeyDeleteText": "Signing in with it will stop working. The password stays.",
+    "passkeyUnsupported": "This browser cannot make passkeys.",
+    "passkeyNoDomain": "Passkeys need the panel's domain: set it on the General tab, in the Domain field.",
+    "passkeyDomainNote": "A passkey is bound to the panel's domain: after the domain changes, add the passkeys again."
   },
   "deviceMode": {
     "label": "How to count:",
@@ -5270,7 +5297,9 @@
         "recovery_code_used": "Signed in with a recovery code",
         "session_revoked": "Session ended",
         "totp_enabled": "Two-factor sign-in on",
-        "totp_disabled": "Two-factor sign-in off"
+        "totp_disabled": "Two-factor sign-in off",
+        "passkey_added": "Passkey added",
+        "passkey_deleted": "Passkey deleted"
       },
       "support": {
         "grant": "Support access given",

@@ -373,6 +373,7 @@ func TestSupportOperatorBoundaries(t *testing.T) {
 	closed := []struct{ method, path string }{
 		{http.MethodGet, "/auth/me"}, {http.MethodGet, "/auth/sessions"}, {http.MethodPost, "/auth/password"},
 		{http.MethodPost, "/auth/totp/setup"}, {http.MethodPost, "/auth/totp/disable"}, {http.MethodPost, "/auth/logout"},
+		{http.MethodGet, "/auth/passkeys"}, {http.MethodPost, "/auth/passkeys/begin"}, {http.MethodPost, "/auth/passkeys"}, {http.MethodDelete, "/auth/passkeys/1"},
 		{http.MethodGet, "/api-keys"}, {http.MethodPost, "/api-keys"}, {http.MethodDelete, "/api-keys/1"},
 		{http.MethodGet, "/support/grants"}, {http.MethodPost, "/support/grants"}, {http.MethodDelete, "/support/grants/1"},
 		{http.MethodPost, "/settings/reset-admin-path"},
