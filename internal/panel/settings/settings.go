@@ -129,7 +129,7 @@ const (
 	KeyHappHide     = "happ_hide_settings"
 	KeyHappCrypt    = "happ_crypt"
 	// KeyLegacySubPath is the path of the subscription links of the panel users were
-	// imported from: "sub" for Marzban and PasarGuard, "api/sub" for Remnawave. The old
+	// imported from: "sub" for Marzban, PasarGuard and 3x-ui, "api/sub" for Remnawave. The old
 	// tokens lead to the users (legacy_sub_tokens); empty: off.
 	KeyLegacySubPath = "legacy_sub_path"
 	// KeyLegacySubKind and KeyLegacySubSecret check the links Marzban or PasarGuard signed

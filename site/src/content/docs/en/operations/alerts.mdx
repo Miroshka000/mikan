@@ -18,6 +18,16 @@ description: Admin alerts in Telegram, a public status in a channel, and Prometh
 
 For failure events a recovery message arrives too. You can also receive [daily database backups](/mikan/en/operations/backups/#backups-to-telegram) here.
 
+## A group with topics and Discord
+
+The same alerts can also go to two more places, such as your team's chat. The events are picked in the same list for all of them, and the "Private alerts" switch turns them on and off everywhere. The notices of support coming in and of balance top-ups go to the group and to Discord as well: the switches do not turn them off.
+
+**A Telegram group.** Add the bot to the group as a member that may send messages and enter the group in "Group with topics": a numeric ID (`-100…`) or a public `@username`. If the group has topics, enter the topic's number (`message_thread_id`) in "Topic": it is the number after the group's ID in a link to a message in the topic (`…/c/<group>/<topic>/<message>`), such as `42` in `https://t.me/c/1234567890/42/100`, or the last number of a link to the topic itself. Without a number the messages go to the group's general chat.
+
+**Discord.** In the Discord channel's settings open Integrations → Webhooks, create a webhook and copy its address. Paste it into "Webhook address" and press "Save". The panel checks the address with Discord, saves it and does not show it again: only the webhook's name is shown. To change the address, paste a new one; "Remove" turns Discord off. For a forum channel you can add `?thread_id=<thread ID>` to the address.
+
+Messages to Discord go straight from the panel's server: they need no Telegram bot, and the way to Telegram (a node or a proxy) does not apply to them. Each place gets its message on its own: when Discord does not answer, the message is tried again for up to a day and does not hold Telegram's. When Discord answers that the webhook was deleted, the message is not tried again.
+
 ## Public status in a channel
 
 **Public status channel** shows subscribers which servers are working.

@@ -111,6 +111,9 @@ type Deps struct {
 	// Gateway is the panel's side of Telegram: the token, the route, the bot's status, the
 	// admin's chat and the channel.
 	Gateway *tgate.Gateway
+	// Discord checks the Discord webhook of the admin's alerts before it is saved; nil: the
+	// real Discord.
+	Discord DiscordChecker
 	// Backups send the database to the admin's Telegram chat; nil in tests.
 	Backups *tgbackup.Service
 	// Importer brings users over from another panel; nil in tests that do not need it.

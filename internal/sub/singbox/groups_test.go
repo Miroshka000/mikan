@@ -52,7 +52,7 @@ func TestConvertGroups(t *testing.T) {
 	if c.detours["b"] != "entry" || c.detours["c"] != "entry" || len(c.detours) != 2 {
 		t.Fatalf("the exits dial through the entry: %v", c.detours)
 	}
-	want := []model.Note{{Core: "singbox", Group: "first", Code: "fallback_fastest"}, {Core: "singbox", Group: "spread", Code: "balance_fastest"}}
+	want := []model.Note{{Core: "singbox", Subject: "first", Code: "fallback_fastest"}, {Core: "singbox", Subject: "spread", Code: "balance_fastest"}}
 	if !slices.Equal(c.notes, want) {
 		t.Fatalf("notes: %+v", c.notes)
 	}
@@ -79,8 +79,8 @@ func TestConvertGroups(t *testing.T) {
 // A chain of an own profile reaches the config: the exit's servers dial through the entry.
 func TestChainInConfig(t *testing.T) {
 	pl := plan{
-		proxies: []map[string]any{{"name": "entry", "type": "ss", "server": "203.0.113.1", "port": 8388, "cipher": "aes-128-gcm", "password": "x"},
-			{"name": "exit", "type": "trojan", "server": "198.51.100.2", "port": 443, "password": "y", "tls": true}},
+		proxies: []model.Proxy{{Name: "entry", Type: "shadowsocks", Server: "203.0.113.1", Port: 8388, Cipher: "aes-128-gcm", Password: "x", UDP: true},
+			{Name: "exit", Type: "trojan", Server: "198.51.100.2", Port: 443, Password: "y", TLS: &model.TLS{}, UDP: true}},
 		groups: []model.Group{{Name: "cascade", Type: model.Chain, Members: []string{"entry", "exit"}}},
 		rules:  []routing.Rule{{To: routing.Target{Kind: routing.ToGroup, Group: "cascade"}}},
 		main:   "cascade",

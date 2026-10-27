@@ -36,6 +36,9 @@ var (
 // notes as POST /users takes them, numbers in range. What cannot be taken is an error, and
 // the user is left out with it.
 func Normalize(u User) (User, error) {
+	if u.Skip != "" {
+		return u, errors.New(u.Skip)
+	}
 	u.Contact = strings.TrimSpace(u.Contact)
 	name, err := domain.CleanUserName(u.Name)
 	var fe *domain.FieldError
@@ -177,7 +180,7 @@ var afterCreate func(name string) error
 
 // Apply makes the users on the plan tariffID, with the old panel's limit, term, traffic
 // used and device limit, and files the keys their old links resolve to: Remnawave's
-// short UUID, or for Marzban and PasarGuard the name and id their signed tokens carry
+// short UUID or 3x-ui's subId, or for Marzban and PasarGuard the name and id their signed tokens carry
 // (Verifier). Each user is one transaction, so a failure leaves nothing half made; a
 // name mikan already has is skipped, never merged into someone else. progress, when not
 // nil, is told after each user. The nodes are told once, at the end.
@@ -266,7 +269,7 @@ func applyOne(ctx context.Context, st *store.Store, users *domain.Users, now tim
 	}
 	var keys []string
 	switch kind {
-	case Remnawave:
+	case Remnawave, XUI:
 		if in.Token != "" {
 			keys = append(keys, in.Token)
 		}

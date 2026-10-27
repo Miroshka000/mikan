@@ -57,9 +57,13 @@ func Proxy(p model.Proxy) map[string]any {
 			}
 		}
 	case "tuic":
-		// TUIC relays UDP packet by packet ("native"), not over a stream.
+		// TUIC relays UDP packet by packet ("native"), not over a stream, unless asked.
+		relay := p.UDPRelay
+		if relay == "" {
+			relay = "native"
+		}
 		y["uuid"], y["password"], y["alpn"] = p.UUID, p.Password, p.ALPN
-		y["congestion-controller"], y["udp-relay-mode"] = p.Congestion, "native"
+		y["congestion-controller"], y["udp-relay-mode"] = p.Congestion, relay
 	case "trusttunnel":
 		y["username"], y["password"] = p.Username, p.Password
 	case "shadowquic":
@@ -138,6 +142,9 @@ func tls(y map[string]any, p model.Proxy) {
 		}
 		y["reality-opts"] = opts
 	}
+	if t.Insecure {
+		y["skip-cert-verify"] = true
+	}
 	if t.Pin != "" {
 		// A self-signed certificate is pinned, and only it is taken.
 		y["fingerprint"], y["skip-cert-verify"] = t.Pin, false
@@ -168,13 +175,25 @@ func transport(y map[string]any, tr *model.Transport) {
 		y["network"], y["grpc-opts"] = "grpc", map[string]any{"grpc-service-name": tr.Service, "ping-interval": grpcPingInterval}
 	case "ws":
 		opts := map[string]any{"path": tr.Path}
-		if tr.Host != "" {
-			opts["headers"] = map[string]any{"Host": tr.Host}
+		if h := wsHeaders(tr); len(h) > 0 {
+			opts["headers"] = h
 		}
 		y["network"], y["ws-opts"] = "ws", opts
 	default:
 		y["network"] = "tcp"
 	}
+}
+
+// wsHeaders are the HTTP headers of a WebSocket transport: Host and the others.
+func wsHeaders(tr *model.Transport) map[string]any {
+	h := map[string]any{}
+	for k, v := range tr.Headers {
+		h[k] = v
+	}
+	if tr.Host != "" {
+		h["Host"] = tr.Host
+	}
+	return h
 }
 
 // proxy is x as the app of p takes it: Proxy, without the gRPC ping interval for Stash.

@@ -14,7 +14,7 @@ var groupTags = map[string]bool{"a": true, "b": true, "c": true, "entry": true}
 func codes(b Balancing) []string {
 	var out []string
 	for _, n := range b.Notes {
-		out = append(out, n.Group+":"+n.Code)
+		out = append(out, n.Subject+":"+n.Code)
 	}
 	return out
 }
