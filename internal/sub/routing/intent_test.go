@@ -145,6 +145,11 @@ func TestParseResolver(t *testing.T) {
 		"2606:4700:4700::1111#PROXY":       {Scheme: "udp", Host: "2606:4700:4700::1111", Via: "PROXY"},
 		"[2606:4700:4700::1111]":           {Scheme: "udp", Host: "2606:4700:4700::1111"},
 		"tls://[2606:4700:4700::1111]:853": {Scheme: "tls", Host: "2606:4700:4700::1111", Port: 853},
+		// An address keeps its spelling, with a port, in brackets or bare.
+		"2606:4700:4700:0:0:0:0:1111":      {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111"},
+		"[2606:4700:4700:0:0:0:0:1111]:53": {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111", Port: 53},
+		"[2606:4700:4700:0:0:0:0:1111]":    {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111"},
+		"[2606:4700:4700::AbCd]:53":        {Scheme: "udp", Host: "2606:4700:4700::AbCd", Port: 53},
 	} {
 		if got, ok := ParseResolver(in); !ok || got != want {
 			t.Errorf("%s: %+v %v", in, got, ok)

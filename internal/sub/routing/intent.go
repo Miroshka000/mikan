@@ -201,15 +201,17 @@ func ParseResolver(s string) (Resolver, bool) {
 		return Resolver{Scheme: "system"}, true
 	}
 	// A bare IP, with a port or not, is read as an address: as a URL an IPv6 one without
-	// brackets loses its last group to the port.
+	// brackets loses its last group to the port. The address keeps its spelling, as the
+	// URL way keeps that of one in brackets.
 	if a, err := netip.ParseAddr(s); err == nil && a.Zone() == "" {
-		return Resolver{Scheme: "udp", Host: a.String(), Via: via}, true
+		return Resolver{Scheme: "udp", Host: s, Via: via}, true
 	}
 	if ap, err := netip.ParseAddrPort(s); err == nil && ap.Addr().Zone() == "" {
 		if ap.Port() == 0 {
 			return Resolver{}, false
 		}
-		return Resolver{Scheme: "udp", Host: ap.Addr().String(), Port: int(ap.Port()), Via: via}, true
+		host := strings.TrimSuffix(strings.TrimPrefix(s[:strings.LastIndexByte(s, ':')], "["), "]")
+		return Resolver{Scheme: "udp", Host: host, Port: int(ap.Port()), Via: via}, true
 	}
 	if !strings.Contains(s, "://") {
 		s = "udp://" + s
