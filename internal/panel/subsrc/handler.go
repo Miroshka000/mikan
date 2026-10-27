@@ -559,10 +559,11 @@ func (h *Handler) sample(ctx context.Context) (profile.Profile, Config, error) {
 	}
 	keys := proto.Slot{Name: "preview", UUID: "00000000-0000-0000-0000-000000000000", Secret: "preview"}
 	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint})
-	return profile.Profile{Proxies: ps, Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang,
-		// A current mihomo: the preview shows every list, and a template started from it keeps
-		// the ones a younger core reads (an app that does not name its core still gets none).
-		App: apps.App{Family: apps.FamilyMihomo, Core: previewCore}}, cfg, nil
+	prof := cfg.Profile(ps)
+	// A current mihomo: the preview shows every list, and a template started from it keeps
+	// the ones a younger core reads (an app that does not name its core still gets none).
+	prof.App = apps.App{Family: apps.FamilyMihomo, Core: previewCore}
+	return prof, cfg, nil
 }
 
 // previewCore is the mihomo the nodes run (go.mod), the newest an app may have.

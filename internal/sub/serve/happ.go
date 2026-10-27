@@ -25,5 +25,5 @@ func autoRouting(cfg Config) (string, profile.Profile) {
 	if name == "" {
 		name = "VPN"
 	}
-	return name, profile.Profile{Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang}
+	return name, cfg.Profile(nil)
 }
