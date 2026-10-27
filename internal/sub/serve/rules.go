@@ -37,7 +37,7 @@ func (h *Handler) refuse(w http.ResponseWriter, r *http.Request, ex *exchange) O
 		return OutcomeDropped
 	}
 	hd := w.Header()
-	hd.Set("Cache-Control", "no-store")
+	noStore(hd)
 	ruleHeaders(hd, a.Headers)
 	switch a.Respond {
 	case apps.Respond403:

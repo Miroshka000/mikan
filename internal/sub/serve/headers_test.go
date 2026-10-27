@@ -308,6 +308,19 @@ func TestAppGroupsHeaderFits(t *testing.T) {
 	}
 }
 
+func TestGroupsHeaders(t *testing.T) {
+	hd := http.Header{}
+	groupsHeaders(hd, AppGroups{V: 1})
+	if _, ok := hd[GroupsHeader]; ok {
+		t.Errorf("no groups, yet a header: %v", hd)
+	}
+	g := AppGroups{V: 1, Groups: []AppGroup{{ID: 3, Name: "Премиум", Mode: "own", State: "active"}}}
+	groupsHeaders(hd, g)
+	if got := hd.Values(GroupsHeader); len(got) != 1 || got[0] != g.header() {
+		t.Errorf("got %q, want %q", got, g.header())
+	}
+}
+
 func TestWantsFeature(t *testing.T) {
 	for _, c := range []struct {
 		values []string

@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -111,7 +110,7 @@ func TestTemplateThatDoesNotRender(t *testing.T) {
 		{model.CoreXray, "/" + testToken + "?format=xray", `{"outbounds": {"tag": "VPN"}}`},
 	} {
 		sub := newSub(t, apps.Policy{NoBuiltin: true})
-		sub.groups = testGroups()
+		sub.groups, sub.pool = testGroups(), 7
 		serve := func() (*httptest.ResponseRecorder, *Handler, string) {
 			var logged bytes.Buffer
 			h := handlerOf(sub)
@@ -129,6 +128,10 @@ func TestTemplateThatDoesNotRender(t *testing.T) {
 		if w.Code != http.StatusOK || w.Body.String() != builtIn.Body.String() {
 			t.Errorf("%s: %d, not the built-in profile:\n%.400s", c.core, w.Code, w.Body)
 		}
+		// The built-in profile went out in its place: the device took a profile both times.
+		if sub.fetched != 2 {
+			t.Errorf("%s: Fetched %d times, want 2", c.core, sub.fetched)
+		}
 		msg := `msg="subscription: an own template does not render, the built-in profile goes out" template=5 core=` + string(c.core)
 		if n := strings.Count(logged, "level=WARN"); n != 1 || !strings.Contains(logged, msg) {
 			t.Errorf("%s: %d warnings: %s", c.core, n, logged)
@@ -138,9 +141,9 @@ func TestTemplateThatDoesNotRender(t *testing.T) {
 		if len(keys) != 1 || !strings.HasPrefix(keys[0], "template/5/template_") {
 			t.Errorf("%s: warned of %v", c.core, keys)
 		}
-		if c.core == model.CoreMihomo && (w.Header().Get(GroupsHeader) == "" || len(sub.groupsOf) != 2 || len(sub.groupsOf[1]) == 0 ||
-			!slices.EqualFunc(sub.groupsOf[1], sub.groupsOf[0], func(a, b model.Proxy) bool { return a.Name == b.Name })) {
-			t.Errorf("the groups of the built-in profile: %q of %v", w.Header().Get(GroupsHeader), sub.groupsOf)
+		if g := w.Header().Get(GroupsHeader); c.core == model.CoreMihomo && (g == "" || g != builtIn.Header().Get(GroupsHeader) ||
+			len(decodeGroups(t, g).Groups[0].Proxies) == 0) {
+			t.Errorf("the groups of the built-in profile: %q, want %q", g, builtIn.Header().Get(GroupsHeader))
 		}
 	}
 }
