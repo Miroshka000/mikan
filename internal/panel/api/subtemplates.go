@@ -63,6 +63,8 @@ type subTemplateIDInput struct {
 	ID int64 `path:"id" minimum:"1"`
 }
 
+// The bodies' maxLength is subsrc.MaxTemplateSize, which huma counts in runes: a coarse first
+// filter. checkTemplateSize counts the bytes the limit is in.
 type createSubTemplateInput struct {
 	Body struct {
 		Core    string `json:"core" enum:"mihomo,singbox,xray"`
@@ -181,6 +183,9 @@ func (h *handlers) getSubTemplate(ctx context.Context, in *subTemplateIDInput) (
 // body. With no inbound to check it against, it goes unchecked: the profiles check it again
 // for each user, and one that does not render gives the built-in profile.
 func (h *handlers) checkSubTemplate(ctx context.Context, core submodel.Core, body string) error {
+	if err := checkTemplateSize(body); err != nil {
+		return err
+	}
 	if strings.TrimSpace(body) == "" {
 		return fieldErr("body.body", "template_empty")
 	}
@@ -196,6 +201,15 @@ func (h *handlers) checkSubTemplate(ctx context.Context, core submodel.Core, bod
 		return nil
 	}
 	return err
+}
+
+// checkTemplateSize refuses a text over subsrc.MaxTemplateSize bytes, at the field body: the
+// tags' maxLength lets through that many runes, and a text in Cyrillic is twice as many bytes.
+func checkTemplateSize(body string) error {
+	if len(body) > subsrc.MaxTemplateSize {
+		return fieldErrValue("body.body", "template_size", subsrc.MaxTemplateSize)
+	}
+	return nil
 }
 
 // setTemplateDefault makes the template of core the core's default (on), or leaves the core
@@ -347,6 +361,9 @@ func (h *handlers) deleteSubTemplate(ctx context.Context, in *subTemplateIDInput
 func (h *handlers) previewSubTemplate(ctx context.Context, in *previewSubTemplateInput) (*previewSubTemplateOutput, error) {
 	if h.d.TemplatePreview == nil {
 		return nil, huma.Error503ServiceUnavailable("preview_unavailable")
+	}
+	if err := checkTemplateSize(in.Body.Body); err != nil {
+		return nil, err
 	}
 	pv, err := h.d.TemplatePreview(ctx, subsrc.TemplatePreview{Core: submodel.Core(in.Body.Core), Body: in.Body.Body, Starter: in.Body.Starter})
 	if errors.Is(err, submodel.ErrNoProxies) {

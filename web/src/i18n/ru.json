@@ -392,6 +392,7 @@
       "template_in_use": "Шаблон выбирают правила ответа: {value}. Сначала уберите его из них",
       "template_limit": "У этого ядра уже {value} шаблонов, больше нельзя",
       "template_name": "Нужно имя шаблона",
+      "template_size": "Шаблон больше {value} байт, больше нельзя",
       "template_ask": "Группа {value}: mikan читается только в selector и urltest sing-box или в балансировщике Xray, с ключами nodes, types, filter и choice",
       "template_balancer_tag": "У балансировщика №{value} нет tag",
       "template_core": "Нет такого ядра: {value}",
