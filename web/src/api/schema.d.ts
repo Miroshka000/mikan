@@ -3710,11 +3710,8 @@ export interface components {
              * @description Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней
              */
             days?: number;
-            /**
-             * Format: int64
-             * @description С filter: сколько пользователей подходило в предпросмотре (found). Если сейчас подходит другое число — 409 filter_changed, и ничего не сделано
-             */
-            expect?: number;
+            /** @description Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его не читает */
+            expect?: string;
             /** @description Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter */
             filter?: components["schemas"]["BulkFilter"];
             /**
@@ -3737,6 +3734,8 @@ export interface components {
              * @description Скольких действие изменит
              */
             changed: number;
+            /** @description Только с filter: SHA-256 (hex) списка id подходящих пользователей по возрастанию через запятую; его передают в действие как expect */
+            digest?: string;
             /**
              * Format: int64
              * @description Сколько из них есть: к ним действие и применится (affected)

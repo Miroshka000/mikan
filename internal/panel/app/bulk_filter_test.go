@@ -14,8 +14,8 @@ import (
 
 // A bulk action by filter takes the users the list shows for the same filter: the preview
 // counts them as the list does, the action reaches them all and nobody else, past the 1000
-// ids a list of ids may name. The number the admin confirmed guards the action, the filter
-// and the ids exclude each other, a read key reaches neither, and the journal says which
+// ids a list of ids may name. The set the admin confirmed (the preview's digest) is required
+// and guards the action, the filter and the ids exclude each other, a read key reaches neither, and the journal says which
 // filter it was.
 func TestBulkByFilter(t *testing.T) {
 	k := newKeyHarness(t)
@@ -59,6 +59,7 @@ func TestBulkByFilter(t *testing.T) {
 		Sample                                        []struct {
 			UserID int64 `json:"user_id"`
 		}
+		Digest string `json:"digest"`
 	}
 	ask := func(key string, body map[string]any) (int, preview, string) {
 		t.Helper()
@@ -127,24 +128,77 @@ func TestBulkByFilter(t *testing.T) {
 		return resp.StatusCode, string(out)
 	}
 	inFolder := map[string]any{"folder": folderID}
-	// A number other than the one the filter matches now: nothing is done.
-	if code, out := bulk(k.full, map[string]any{"filter": inFolder, "action": "disable", "expect": 3}); code != http.StatusConflict || !strings.Contains(out, "filter_changed") {
-		t.Fatalf("a stale count: %d %s", code, out)
+	digest := func(filter map[string]any) string {
+		t.Helper()
+		code, p, out := ask(k.full, map[string]any{"filter": filter, "action": "disable"})
+		if code != http.StatusOK || len(p.Digest) != 64 {
+			t.Fatalf("the preview of %v: %d %s", filter, code, out)
+		}
+		return p.Digest
 	}
-	if total, _ := listIDs(url.Values{"state": {"disabled"}}); total != 1 {
-		t.Fatalf("a refused action disabled users: %d disabled", total)
+	disabled := func() []int64 {
+		t.Helper()
+		_, got := listIDs(url.Values{"state": {"disabled"}})
+		return got
 	}
-	// The action reaches the folder's two users, hidden one included, and nobody else.
-	if code, out := bulk(k.full, map[string]any{"filter": inFolder, "action": "disable", "expect": 2}); code != http.StatusOK || !strings.Contains(out, `"affected":2`) {
+	// By filter the action needs the set the preview named: without it nothing is done, not
+	// even to everyone a bare filter matches.
+	for name, body := range map[string]map[string]any{
+		"delete everyone":  {"filter": map[string]any{}, "action": "delete"},
+		"disable a folder": {"filter": inFolder, "action": "disable"},
+	} {
+		if code, out := bulk(k.full, body); code != http.StatusUnprocessableEntity || !strings.Contains(out, "body.expect") || !strings.Contains(out, "expect_required") {
+			t.Errorf("%s without expect: %d %s", name, code, out)
+		}
+	}
+	if total, _ := listIDs(url.Values{}); total != len(ids) {
+		t.Fatalf("an action without expect deleted users: %d left", total)
+	}
+	// One user out of the folder and another in: the same number, other users. Nothing is done.
+	stale := digest(inFolder)
+	if _, err := k.st.DB.ExecContext(ctx, "UPDATE users SET folder_id = CASE WHEN id = $1 THEN NULL ELSE $3::bigint END WHERE id IN ($1, $2)", ids["elena"], ids["gleb"], folder.ID); err != nil {
+		t.Fatal(err)
+	}
+	if code, p, _ := ask(k.full, map[string]any{"filter": inFolder, "action": "disable"}); code != http.StatusOK || p.Found != 2 || p.Digest == stale {
+		t.Fatalf("the swap: %d %+v", code, p)
+	}
+	if code, out := bulk(k.full, map[string]any{"filter": inFolder, "action": "disable", "expect": stale}); code != http.StatusConflict || !strings.Contains(out, "filter_changed") {
+		t.Fatalf("a swapped set: %d %s", code, out)
+	}
+	if got := disabled(); !slices.Equal(got, []int64{ids["boris"]}) {
+		t.Fatalf("a refused action disabled users: %v", got)
+	}
+	// The set confirmed: the folder's two users now, and nobody else.
+	if code, out := bulk(k.full, map[string]any{"filter": inFolder, "action": "disable", "expect": digest(inFolder)}); code != http.StatusOK || !strings.Contains(out, `"affected":2`) {
 		t.Fatalf("disable by filter: %d %s", code, out)
 	}
-	if _, got := listIDs(url.Values{"state": {"disabled"}}); !slices.Equal(got, []int64{ids["anna"], ids["boris"], ids["elena"]}) {
+	if got := disabled(); !slices.Equal(got, []int64{ids["anna"], ids["boris"], ids["gleb"]}) {
 		t.Fatalf("disabled after the action: %v", got)
 	}
 	var details string
 	if err := k.st.DB.QueryRowContext(ctx, "SELECT details FROM audit_log WHERE action = 'user.bulk_disable' ORDER BY id DESC LIMIT 1").Scan(&details); err != nil ||
 		!strings.Contains(details, `"filter":{`) || !strings.Contains(details, `"folder":"`+folderID+`"`) || !strings.Contains(details, `"count":2`) || !strings.Contains(details, `"requested":2`) {
 		t.Fatalf("the journal: %q %v", details, err)
+	}
+	// expect is for a filter: beside ids it is refused, as is no user at all (an old client's
+	// empty list), and a malformed one.
+	for name, body := range map[string]map[string]any{
+		"expect with ids":    {"ids": []int64{ids["anna"]}, "action": "enable", "expect": stale},
+		"no ids":             {"ids": []int64{}, "action": "enable"},
+		"a malformed digest": {"filter": inFolder, "action": "enable", "expect": "3"},
+	} {
+		if code, out := bulk(k.full, body); code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d %s", name, code, out)
+		}
+	}
+	if code, out := bulk(k.full, map[string]any{"ids": []int64{ids["anna"]}, "action": "enable", "expect": stale}); !strings.Contains(out, "body.expect") || !strings.Contains(out, "expect_with_ids") {
+		t.Errorf("expect with ids: %d %s", code, out)
+	}
+	if code, out := bulk(k.full, map[string]any{"ids": []int64{}, "action": "enable"}); !strings.Contains(out, "body.ids") {
+		t.Errorf("no ids: %d %s", code, out)
+	}
+	if got := disabled(); !slices.Equal(got, []int64{ids["anna"], ids["boris"], ids["gleb"]}) {
+		t.Fatalf("a refused action enabled users: %v", got)
 	}
 
 	// Ids or a filter, one of the two; a bad folder is refused where it is.
@@ -179,16 +233,17 @@ func TestBulkByFilter(t *testing.T) {
 	if total, _ := listIDs(url.Values{"q": {"bulk-"}}); total != many {
 		t.Fatalf("the list of the many: %d", total)
 	}
-	if code, p, out := ask(k.full, map[string]any{"filter": byName, "action": "hide"}); code != http.StatusOK || p.Found != many || p.Changed != many || len(p.Sample) != domain.BulkSampleSize {
-		t.Fatalf("the preview of the many: %d %s", code, out)
+	manyCode, p, manyOut := ask(k.full, map[string]any{"filter": byName, "action": "hide"})
+	if manyCode != http.StatusOK || p.Found != many || p.Changed != many || len(p.Sample) != domain.BulkSampleSize {
+		t.Fatalf("the preview of the many: %d %s", manyCode, manyOut)
 	}
-	if code, out := bulk(k.full, map[string]any{"filter": byName, "action": "hide", "expect": many}); code != http.StatusOK || !strings.Contains(out, `"affected":1200`) {
+	if code, out := bulk(k.full, map[string]any{"filter": byName, "action": "hide", "expect": p.Digest}); code != http.StatusOK || !strings.Contains(out, `"affected":1200`) {
 		t.Fatalf("hide the many: %d %s", code, out)
 	}
 	if total, _ := listIDs(url.Values{"q": {"bulk-"}, "hidden": {"only"}}); total != many {
 		t.Fatalf("hidden of the many: %d", total)
 	}
-	if total, _ := listIDs(url.Values{"hidden": {"only"}}); total != many+2 {
+	if total, _ := listIDs(url.Values{"hidden": {"only"}}); total != many+2 { // clara and elena
 		t.Fatalf("the action hid others: %d hidden", total)
 	}
 }

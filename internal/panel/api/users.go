@@ -3,7 +3,9 @@ package api
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"slices"
@@ -271,7 +273,7 @@ type bulkInput struct {
 	Body struct {
 		IDs    []int64     `json:"ids,omitempty" maxItems:"1000" doc:"Пользователи по id; задаётся либо ids, либо filter"`
 		Filter *BulkFilter `json:"filter,omitempty" doc:"Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter"`
-		Expect *int        `json:"expect,omitempty" minimum:"0" doc:"С filter: сколько пользователей подходило в предпросмотре (found). Если сейчас подходит другое число — 409 filter_changed, и ничего не сделано"`
+		Expect string      `json:"expect,omitempty" pattern:"^[0-9a-f]{64}$" doc:"Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его не читает"`
 		Action string      `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
 		Days   int64       `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
 		Folder int64       `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`
@@ -322,6 +324,7 @@ type bulkPreviewOutput struct {
 		Unchanged int          `json:"unchanged" doc:"Сколько уже такие: например, уже отключены"`
 		Sample    []BulkSample `json:"sample" doc:"Первые 10 изменяемых, по id"`
 		AtStake   *BulkAtStake `json:"at_stake,omitempty" doc:"Только для delete: что удалится вместе с пользователями"`
+		Digest    string       `json:"digest,omitempty" doc:"Только с filter: SHA-256 (hex) списка id подходящих пользователей по возрастанию через запятую; его передают в действие как expect"`
 	}
 }
 
@@ -942,10 +945,13 @@ func bulkOpt(in *bulkInput) domain.BulkOpt {
 	return opt
 }
 
-// bulkPreview is what bulkUsers would do with the same body, done by nothing: the admin
-// confirms what they see. A folder named is checked as the action checks it.
+// maxBulkFilterUsers is how many users a bulk action by filter may reach: one transaction
+// locks them all, and a filter that takes more is narrowed (a var for the tests).
+var maxBulkFilterUsers = 20000
+
 // bulkTargets are the users the body names: its ids, or the users its filter matches now
-// (the list's own filter, so they are the users the list shows for it). One of the two.
+// (the list's own filter, so they are the users the list shows for it). One of the two;
+// expect goes with a filter only.
 func (h *handlers) bulkTargets(ctx context.Context, in *bulkInput) ([]int64, error) {
 	b := &in.Body
 	switch {
@@ -953,6 +959,8 @@ func (h *handlers) bulkTargets(ctx context.Context, in *bulkInput) ([]int64, err
 		return nil, fieldErr("body.filter", "ids_or_filter")
 	case b.Filter == nil && len(b.IDs) == 0:
 		return nil, fieldErr("body.ids", "ids_or_filter")
+	case b.Filter == nil && b.Expect != "":
+		return nil, fieldErr("body.expect", "expect_with_ids")
 	case b.Filter == nil:
 		return b.IDs, nil
 	}
@@ -961,9 +969,29 @@ func (h *handlers) bulkTargets(ctx context.Context, in *bulkInput) ([]int64, err
 	if err != nil {
 		return nil, err
 	}
-	return h.matchingIDs(ctx, uf)
+	ids, err := h.matchingIDs(ctx, uf)
+	if err == nil && len(ids) > maxBulkFilterUsers {
+		return nil, fieldErrValue("body.filter", "too_many_users", maxBulkFilterUsers)
+	}
+	return ids, err
 }
 
+// bulkDigest names a set of users: the SHA-256 of their ids in order, comma-separated. The
+// preview by filter gives it, the action is done only to the set it names.
+func bulkDigest(ids []int64) string {
+	var b strings.Builder
+	for i, id := range slices.Sorted(slices.Values(ids)) {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatInt(id, 10))
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
+}
+
+// bulkPreview is what bulkUsers would do with the same body, done by nothing: the admin
+// confirms what they see. A folder named is checked as the action checks it.
 func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreviewOutput, error) {
 	ids, err := h.bulkTargets(ctx, in)
 	if err != nil {
@@ -996,17 +1024,24 @@ func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreview
 	if plan.AtStake != nil {
 		b.AtStake = &BulkAtStake{Active: plan.Active, WithBalance: int(plan.AtStake.WithBalance), Paying: int(plan.AtStake.Paying), Granted: int(plan.AtStake.Granted)}
 	}
+	if in.Body.Filter != nil {
+		b.Digest = bulkDigest(ids)
+	}
 	return out, nil
 }
 
 func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, error) {
+	// By filter, the admin confirmed the set the preview named: without it nothing is done (a
+	// bare filter would reach whoever matches, unseen), and another set now (users came, went
+	// or changed since the preview) is asked again rather than done to users nobody counted.
+	if in.Body.Filter != nil && in.Body.Expect == "" {
+		return nil, fieldErr("body.expect", "expect_required")
+	}
 	ids, err := h.bulkTargets(ctx, in)
 	if err != nil {
 		return nil, err
 	}
-	// By filter, the admin confirmed a number: another one now (users came or went since the
-	// preview) is asked again rather than done to users nobody counted.
-	if in.Body.Filter != nil && in.Body.Expect != nil && *in.Body.Expect != len(ids) {
+	if in.Body.Filter != nil && bulkDigest(ids) != in.Body.Expect {
 		return nil, huma.Error409Conflict("filter_changed")
 	}
 	// One transaction for the list: it is applied whole or not at all.

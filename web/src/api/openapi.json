@@ -1411,10 +1411,9 @@
             "type": "integer"
           },
           "expect": {
-            "description": "С filter: сколько пользователей подходило в предпросмотре (found). Если сейчас подходит другое число — 409 filter_changed, и ничего не сделано",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
+            "description": "Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его не читает",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
           },
           "filter": {
             "$ref": "#/components/schemas/BulkFilter",
@@ -1465,6 +1464,10 @@
             "description": "Скольких действие изменит",
             "format": "int64",
             "type": "integer"
+          },
+          "digest": {
+            "description": "Только с filter: SHA-256 (hex) списка id подходящих пользователей по возрастанию через запятую; его передают в действие как expect",
+            "type": "string"
           },
           "found": {
             "description": "Сколько из них есть: к ним действие и применится (affected)",
