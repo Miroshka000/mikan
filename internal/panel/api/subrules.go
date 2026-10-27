@@ -299,18 +299,21 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 	case apps.RespondDrop:
 	case apps.RespondHTML:
 		out.Body.Status = http.StatusOK
-	case apps.RespondStub:
-		out.Body.Status, out.Body.Text = http.StatusOK, serve.StubText(lang, d)
-		out.Body.Format = serve.StubFormat(serve.Resolve(req, "", d, xrayJSON))
 	default:
 		out.Body.Status = http.StatusOK
-		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
-		// A messenger building a link's preview gets the panel's subscription page.
-		if serve.LinkPreview(req.Get("User-Agent")) {
+		f := serve.Resolve(req, "", d, xrayJSON)
+		switch {
+		case f == serve.FormatHTML || serve.LinkPreview(req.Get("User-Agent")):
+			// A browser and a messenger building a link's preview get the panel's
+			// subscription page, before a stub or a profile, as Serve sends it.
 			out.Body.Format = serve.FormatHTML
-		}
-		if out.Body.Template, err = h.testedTemplate(ctx, out.Body.Format, req.Get("User-Agent"), d.Action.Template); err != nil {
-			return nil, err
+		case d.Responds() == apps.RespondStub:
+			out.Body.Text, out.Body.Format = serve.StubText(lang, d), serve.StubFormat(f)
+		default:
+			out.Body.Format = f
+			if out.Body.Template, err = h.testedTemplate(ctx, f, req.Get("User-Agent"), d.Action.Template); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return out, nil
