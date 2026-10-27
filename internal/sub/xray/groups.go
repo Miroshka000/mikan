@@ -31,7 +31,7 @@ type Balancing struct {
 	// of the chains.
 	Dialers map[string]string
 	// Observatory and BurstObservatory are how the outbounds of the leastPing and the
-	// leastLoad balancers are tested, of none when there is no such balancer. Their
+	// leastLoad balancers are tested, none when there is no such balancer. Their
 	// subjects are a config's own (observe in json.go): the outbounds of the balancers it has.
 	Observatory      *Observatory
 	BurstObservatory *BurstObservatory
