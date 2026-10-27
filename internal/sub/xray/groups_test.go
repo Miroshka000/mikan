@@ -66,7 +66,7 @@ func TestBalance(t *testing.T) {
 	if got := codes(b); !slices.Equal(got, want) {
 		t.Fatalf("notes: %q", got)
 	}
-	if o := b.Observatory; o == nil || !slices.Equal(o.SubjectSelector, []string{"a", "b", "c"}) || o.ProbeURL != routing.ProbeURL || o.ProbeInterval != "60s" || b.BurstObservatory != nil {
+	if o := b.Observatory; o == nil || o.ProbeURL != routing.ProbeURL || o.ProbeInterval != "60s" || !o.EnableConcurrency || o.SubjectSelector != nil || b.BurstObservatory != nil {
 		t.Fatalf("observatory: %+v %+v", o, b.BurstObservatory)
 	}
 }
@@ -80,9 +80,9 @@ func TestBalanceLeastLoad(t *testing.T) {
 	if string(raw) != `[{"tag":"auto","selector":["a","b"],"fallbackTag":"a","strategy":{"type":"leastLoad","settings":{"expected":2,"maxRTT":"1500ms","tolerance":0.05}}}]` {
 		t.Fatalf("balancers: %s", raw)
 	}
-	burst, _ := json.Marshal(b.BurstObservatory)
-	if string(burst) != `{"subjectSelector":["a","b"],"pingConfig":{"destination":"https://cp.cloudflare.com/","interval":"600s","sampling":3}}` || b.Observatory != nil {
-		t.Fatalf("burst observatory: %s", burst)
+	// The subjects are a config's own (observe): Balance has how they are probed.
+	if o := b.BurstObservatory; o == nil || o.PingConfig != (PingConfig{Destination: "https://cp.cloudflare.com/", Interval: "600s", Sampling: 3}) || o.SubjectSelector != nil || b.Observatory != nil {
+		t.Fatalf("burst observatory: %+v %+v", o, b.Observatory)
 	}
 }
 

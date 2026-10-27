@@ -18,12 +18,6 @@ const (
 	CoreXray    Core = "xray"    // the list of xray configs, JSON (xray.Template)
 )
 
-// Cores are the cores a template is written for, in the order the admin panel lists them.
-var Cores = []Core{CoreMihomo, CoreSingBox, CoreXray}
-
-// Known says whether c is one of Cores.
-func (c Core) Known() bool { return c == CoreMihomo || c == CoreSingBox || c == CoreXray }
-
 // Template is an admin's own profile for one core, a subscription template: the core's
 // config without the servers, which the panel puts the user's servers into. The zero
 // Template is none: the built-in profile.

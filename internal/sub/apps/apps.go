@@ -126,12 +126,24 @@ func DetectApp(userAgent string) App {
 }
 
 // mihomoSince is the first mihomo release with a proxy type. The ones not in the core
-// of 2024 go only to a core known to have them: an unknown type fails the profile.
-var mihomoSince = map[string]Version{
-	"anytls": {1, 19, 3}, "mieru": {1, 19, 0}, "sudoku": {1, 19, 17}, "trusttunnel": {1, 19, 21}, "shadowquic": {1, 19, 29},
+// of 2024 (needKnown) go only to a core known to have them: an unknown type fails the
+// profile.
+var mihomoSince = map[string]struct {
+	since     Version
+	needKnown bool
+}{
+	"anytls":      {Version{1, 19, 3}, false},
+	"mieru":       {Version{1, 19, 0}, true},
+	"sudoku":      {Version{1, 19, 17}, true},
+	"trusttunnel": {Version{1, 19, 21}, true},
+	"shadowquic":  {Version{1, 19, 29}, true},
 }
 
-var mihomoNewTypes = map[string]bool{"mieru": true, "sudoku": true, "trusttunnel": true, "shadowquic": true}
+// xhttpSince is the first mihomo with the XHTTP transport.
+var xhttpSince = Version{1, 19, 22}
+
+// encryptionSince is the first mihomo with VLESS Encryption.
+var encryptionSince = Version{1, 19, 13}
 
 // geckoSince is the first mihomo with Hysteria2's Gecko obfuscation. Xray and sing-box
 // got it later than the apps on them can be told apart, so only mihomo apps that name
@@ -146,13 +158,10 @@ func (a App) Supports(n proto.Needs) bool {
 	switch a.Family {
 	case FamilyMihomo:
 		known := a.Core.Known()
-		if mihomoNewTypes[n.Type] && !known {
+		if t, ok := mihomoSince[n.Type]; ok && (known && !a.Core.AtLeast(t.since) || !known && t.needKnown) {
 			return false
 		}
-		if since, ok := mihomoSince[n.Type]; ok && known && !a.Core.AtLeast(since) {
-			return false
-		}
-		if known && (n.Transport == "xhttp" && !a.Core.AtLeast(Version{1, 19, 22}) || n.Encryption && !a.Core.AtLeast(Version{1, 19, 13})) {
+		if known && (n.Transport == "xhttp" && !a.Core.AtLeast(xhttpSince) || n.Encryption && !a.Core.AtLeast(encryptionSince)) {
 			return false
 		}
 		// An older core fails the whole profile on an obfs it does not know.
