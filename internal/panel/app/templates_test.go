@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
@@ -199,5 +200,76 @@ func TestSubTemplatesOverHTTP(t *testing.T) {
 	resp, raw = h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "One too many", "body": own}, csrf)
 	if resp.StatusCode != http.StatusConflict || !strings.Contains(string(raw), "template_limit") {
 		t.Fatalf("over the limit: %d %s", resp.StatusCode, raw)
+	}
+}
+
+// A template is at most subsrc.MaxTemplateSize bytes, not runes: a text in Cyrillic under the
+// limit in runes is refused on create, change and preview, and an ASCII one of exactly the
+// limit is kept.
+func TestSubTemplateSizeInBytes(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355} {
+		if err := settings.Set(ctx, settings.New(h.st.Q), k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	api := "/" + adminPath + "/api/v1"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	resp, raw := h.do(http.MethodPost, api+"/sub-templates/preview", map[string]any{"core": "mihomo", "starter": true}, csrf)
+	var pv struct {
+		Profile string `json:"profile"`
+	}
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(raw, &pv) != nil || pv.Profile == "" {
+		t.Fatalf("starter: %d %s", resp.StatusCode, raw)
+	}
+	// The starter padded with a comment to n bytes.
+	padded := func(n int) string {
+		return pv.Profile + "#" + strings.Repeat("x", n-len(pv.Profile)-2) + "\n"
+	}
+	cyrillic := pv.Profile + "#" + strings.Repeat("я", 300<<10) + "\n"
+	refused := func(what string, resp *http.Response, raw []byte) {
+		t.Helper()
+		if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(raw), `"template_size"`) || !strings.Contains(string(raw), strconv.Itoa(subsrc.MaxTemplateSize)) {
+			t.Fatalf("%s: %d %.300s", what, resp.StatusCode, raw)
+		}
+	}
+
+	resp, raw = h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "Cyrillic", "body": cyrillic}, csrf)
+	refused("create in Cyrillic", resp, raw)
+	resp, raw = h.do(http.MethodPost, api+"/sub-templates/preview", map[string]any{"core": "mihomo", "body": cyrillic}, csrf)
+	refused("preview in Cyrillic", resp, raw)
+	// Exactly the limit in runes and one byte over it: maxLength lets it through, the bytes do
+	// not. A comment alone: the starter has letters of more than a byte of its own.
+	edge := "#я" + strings.Repeat("x", subsrc.MaxTemplateSize-2)
+	if len(edge) != subsrc.MaxTemplateSize+1 || utf8.RuneCountInString(edge) != subsrc.MaxTemplateSize {
+		t.Fatalf("the edge is %d bytes, %d runes", len(edge), utf8.RuneCountInString(edge))
+	}
+	resp, raw = h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "Edge", "body": edge}, csrf)
+	refused("a byte over the limit in runes", resp, raw)
+
+	full := padded(subsrc.MaxTemplateSize)
+	resp, raw = h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "Full", "body": full}, csrf)
+	var kept struct {
+		ID   int64 `json:"id"`
+		Size int64 `json:"size"`
+	}
+	if resp.StatusCode != http.StatusCreated || json.Unmarshal(raw, &kept) != nil || kept.Size != subsrc.MaxTemplateSize {
+		t.Fatalf("exactly the limit: %d %.300s", resp.StatusCode, raw)
+	}
+	at := api + "/sub-templates/" + strconv.FormatInt(kept.ID, 10)
+	resp, raw = h.do(http.MethodPatch, at, map[string]any{"body": cyrillic}, csrf)
+	refused("change to Cyrillic", resp, raw)
+	if resp, raw := h.do(http.MethodPatch, at, map[string]any{"body": full + " "}, csrf); resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("a byte over the limit: %d %.300s", resp.StatusCode, raw)
+	}
+	if resp, raw := h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "Over", "body": full + " "}, csrf); resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("a byte over the limit: %d %.300s", resp.StatusCode, raw)
 	}
 }

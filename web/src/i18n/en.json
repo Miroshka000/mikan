@@ -392,6 +392,7 @@
       "template_in_use": "Response rules pick this template: {value}. Take it out of them first",
       "template_limit": "This core already has {value} templates, the most it can have",
       "template_name": "The template needs a name",
+      "template_size": "The template is over {value} bytes, the most it can be",
       "template_ask": "Group {value}: mikan is read only on a sing-box selector or urltest or on an Xray balancer, with the keys nodes, types, filter and choice",
       "template_balancer_tag": "Balancer {value} has no tag",
       "template_core": "There is no core {value}",
