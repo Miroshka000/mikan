@@ -770,7 +770,7 @@ func TestHappRoutingOfTheClashTemplate(t *testing.T) {
 	if p := decodeHapp(t, w.Header().Get("routing")); !slices.Contains(p.DirectSites, "domain:mine.example") {
 		t.Fatalf("Happ: %+v", p)
 	}
-	if w := fetch(t, sub, "INCY/2.1.0"); w.Header().Get("routing") == "" || w.Header().Get("routing") != incyAutoRouting(sub.cfg, ownClash) {
+	if w := fetch(t, sub, "INCY/2.1.0"); w.Header().Get("routing") != incyAutoRouting(sub.cfg, ownClash) || w.Header().Get("routing") == incyAutoRouting(sub.cfg, "") {
 		t.Fatalf("INCY: %q", w.Header().Get("routing"))
 	}
 }
