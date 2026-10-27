@@ -55,23 +55,41 @@ func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets) (map[strin
 	slices.Sort(keys)
 	var rules []map[string]any
 	for _, k := range keys {
-		field, value := "domain", k
-		switch {
-		case strings.HasPrefix(k, "geosite:"):
-			field, value = "rule_set", strings.TrimPrefix(k, "geosite:")
-		case strings.HasPrefix(k, "+."):
-			field, value = "domain_suffix", strings.TrimPrefix(k, "+.")
-		case strings.ContainsAny(k, ":*"):
+		// A key resolves its names with one server, whatever the names: a rule of their
+		// fields, which sing-box ORs.
+		fields := map[string][]string{}
+		kind, names := routing.PolicyNames(k)
+		for _, v := range names {
+			switch {
+			case kind == "geosite":
+				if category(v) {
+					fields["rule_set"] = append(fields["rule_set"], v)
+				}
+			case kind != "":
+				// a rule list's names stay mihomo's
+			case strings.HasPrefix(v, "+."):
+				fields["domain_suffix"] = append(fields["domain_suffix"], v[2:])
+			case !strings.ContainsAny(v, ":*"):
+				fields["domain"] = append(fields["domain"], v)
+			}
+		}
+		if len(fields) == 0 {
 			continue // a pattern of mihomo's own
 		}
 		tag := "policy-" + strconv.Itoa(len(rules))
 		if len(policy[k]) == 0 || !add(tag, policy[k][0]) {
 			continue
 		}
-		if field == "rule_set" {
-			value = sets.geo("geosite", value)
+		rule := map[string]any{"server": tag}
+		for f, l := range fields {
+			if f == "rule_set" {
+				for i, v := range l {
+					l[i] = sets.geo("geosite", v)
+				}
+			}
+			rule[f] = l
 		}
-		rules = append(rules, map[string]any{field: []string{value}, "server": tag})
+		rules = append(rules, rule)
 	}
 	// A server named by a domain needs another to resolve that name, or sing-box refuses
 	// the whole config: mihomo's default nameservers, which are there for it.
@@ -102,6 +120,22 @@ func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets) (map[strin
 		dns["strategy"] = "ipv4_only"
 	}
 	return dns, local
+}
+
+// category says whether a geosite name can be one of MetaCubeX's: their .srs are named
+// with a-z, 0-9, "-", "@" and "!" ("category-ai-!cn", "apple@cn"), never "!" first,
+// mihomo's negation. Another would make a rule set to fetch that is not there, and sing-box
+// does not start without it.
+func category(name string) bool {
+	if strings.HasPrefix(name, "!") {
+		return false
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || strings.ContainsRune("-@!", c)) {
+			return false
+		}
+	}
+	return true
 }
 
 func isIP(host string) bool {
