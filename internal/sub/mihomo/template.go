@@ -61,12 +61,12 @@ func Template(p Profile, src string) ([]byte, []model.Proxy, error) {
 
 // templateConfig is the profile Template renders, and the panel's proxies in it.
 func templateConfig(p Profile, src string) (map[string]any, []model.Proxy, error) {
-	if len(p.Proxies) == 0 {
-		return nil, nil, model.ErrNoProxies
-	}
 	cfg, err := parseProfileTemplate(src)
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(p.Proxies) == 0 {
+		return nil, nil, model.ErrNoProxies
 	}
 	// Checked again for this user: their inbounds and app may leave a group the template
 	// names a member of empty, and mihomo refuses a profile with a missing member.
@@ -233,8 +233,9 @@ var policies = []string{"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 
 // CheckTemplate finds what would break the profiles made of src for p: YAML that does
 // not parse, a group that lists a member nobody defines, a rule that sends traffic to a
-// group that does not exist or uses a rule list that is not there. model.ErrNoProxies
-// when p has no proxies to check it with, as with the other cores.
+// group that does not exist or uses a rule list that is not there. When p has no proxies
+// to check the groups and rules with, src is only read, and model.ErrNoProxies is what
+// is left, as with xray.
 func CheckTemplate(p Profile, src string) error {
 	_, _, err := templateConfig(p, src)
 	return err
