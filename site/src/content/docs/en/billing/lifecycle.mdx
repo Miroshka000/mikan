@@ -140,9 +140,17 @@ When the action would change nobody, the window says "Nothing to change: all of 
 
 A confirmed action is done for all the clients found in one transaction: for all of them or for none. A client deleted between the preview and the confirmation is skipped, and one changed in that time is handled as they have become.
 
+### Everyone matching the filter
+
+A bulk action can go to every client the list's current filter matches, not only the rows loaded on the page: the state chip, the search, the folder, the source and the hidden ones, as the list has them. Tick the box in the table's header, and when the filter holds more clients than the page shows, the line above the table offers **Select all N clients matching the filter**. The bar then says "All N matching", and every action, hide and move to a folder included, first asks the server how many clients the filter matches now and shows that number in the confirmation ("Everyone matching the filter right now: N"). To delete them, type that number into the window: the button waits for it.
+
+The panel takes the clients by the same filter the list uses, so "matching" means the same thing on both sides, whatever their number: a list of ticked clients is limited to 1000, a filter is not. If the clients matching the filter change between the count and the confirmation (one was added, deleted or changed state), the action does nothing and says so: count again. Ticking or unticking a row, changing the filter or loading another page goes back to the rows ticked.
+
+The activity log records the action as for ticked rows (`user.bulk_<action>`), with the filter and the number of clients. A read-only key and support access at the view level cannot run it; support access without access to the subscribers can, but without a search, as in the list.
+
 ## For the API and addons
 
-All of this is available through the API too: the rules, the dry run of the removal, a user's next plan, the fields of a plan and of a user, the preview of bulk actions. The methods with their parameters, answers and key rights are in the [API reference](/mikan/en/api/reference/): [the subscription rules](/mikan/en/api/reference/operations/get-lifecycle/), [the next plan](/mikan/en/api/reference/operations/set-next-tariff/), [the preview of bulk actions](/mikan/en/api/reference/operations/bulk-users-preview/).
+All of this is available through the API too: the rules, the dry run of the removal, a user's next plan, the fields of a plan and of a user, the preview of bulk actions. The methods with their parameters, answers and key rights are in the [API reference](/mikan/en/api/reference/): [the subscription rules](/mikan/en/api/reference/operations/get-lifecycle/), [the next plan](/mikan/en/api/reference/operations/set-next-tariff/), [the preview of bulk actions](/mikan/en/api/reference/operations/bulk-users-preview/). Both bulk methods take either `ids` or `filter` (the parameters of `GET /api/v1/users`); with `filter`, pass the `found` of the preview as `expect` to the action, and a different number now answers 409 `filter_changed`.
 
 - Audit log: `lifecycle.update`, `user.next_tariff`, `user.next_tariff_clear`, `user.switch_tariff`, `user.remove_inactive`.
 - Events for addons: `user.started` (`by`: `connection` or `admin`), `user.switched` (`tariff_id`, `from_tariff_id`, `expires_at`, `carried`), `user.removed` (`by`: `inactive`, `expired_at`, `online_at`, `days`).

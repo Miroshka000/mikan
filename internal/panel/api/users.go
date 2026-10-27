@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -268,11 +269,22 @@ type extendInput struct {
 
 type bulkInput struct {
 	Body struct {
-		IDs    []int64 `json:"ids" minItems:"1" maxItems:"1000"`
-		Action string  `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
-		Days   int64   `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
-		Folder int64   `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`
+		IDs    []int64     `json:"ids,omitempty" maxItems:"1000" doc:"Пользователи по id; задаётся либо ids, либо filter"`
+		Filter *BulkFilter `json:"filter,omitempty" doc:"Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter"`
+		Expect *int        `json:"expect,omitempty" minimum:"0" doc:"С filter: сколько пользователей подходило в предпросмотре (found). Если сейчас подходит другое число — 409 filter_changed, и ничего не сделано"`
+		Action string      `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
+		Days   int64       `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
+		Folder int64       `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`
 	}
+}
+
+// BulkFilter is the users list's filter (listUsersInput without the page) in a bulk body.
+type BulkFilter struct {
+	State  string `json:"state,omitempty" enum:"all,active,expiring,limited,expired,disabled,attention" default:"all"`
+	Query  string `json:"q,omitempty" maxLength:"100" doc:"Оператору поддержки без показа подписчиков закрыт: 403 support_denied"`
+	Folder string `json:"folder,omitempty" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
+	Source string `json:"source,omitempty" enum:"all,admin,bot,trial,free,import" default:"all"`
+	Hidden string `json:"hidden,omitempty" enum:"hide,show,only" default:"show" doc:"Как у списка: по умолчанию вместе со скрытыми"`
 }
 
 type bulkOutput struct {
@@ -398,7 +410,8 @@ type folderFilter struct {
 	id  sql.NullInt64 // invalid: no folder
 }
 
-func parseFolderFilter(s string) (folderFilter, error) {
+// parseFolderFilter reads s; a bad one is refused at location.
+func parseFolderFilter(s, location string) (folderFilter, error) {
 	switch s {
 	case "", "all":
 		return folderFilter{any: true}, nil
@@ -407,7 +420,7 @@ func parseFolderFilter(s string) (folderFilter, error) {
 	}
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || id < 1 {
-		return folderFilter{}, fieldErrValue("query.folder", "bad_folder", s)
+		return folderFilter{}, fieldErrValue(location, "bad_folder", s)
 	}
 	return folderFilter{id: sql.NullInt64{Int64: id, Valid: true}}, nil
 }
@@ -449,16 +462,77 @@ func attentionRank(state string) int {
 	return -1
 }
 
+// userFilter is the users list's filter, and what a bulk action by filter takes its users
+// by: the same code on both sides, so "the users that match" are the same users.
+//
+// The filters stay in Go: the search lowercases as Go does (PostgreSQL's lower() follows the
+// database's locale, and a C locale leaves Cyrillic as it is), and the states are
+// domain.State.
+type userFilter struct {
+	state, source, hidden string
+	query                 string // lowercased and trimmed; empty: no search
+	folder                folderFilter
+}
+
+// newUserFilter reads a filter whose fields are at at ("query." for the list, "body.filter."
+// for a bulk body); what is not given is the list's default. A search by name, contact, note
+// or tag tells with its total and the ids it finds whether the text is in a subscriber,
+// however the answer is masked: an operator who may not see the subscribers does not search
+// them.
+func newUserFilter(ctx context.Context, at, state, query, folder, source, hidden string) (userFilter, error) {
+	f := userFilter{state: cmp.Or(state, "all"), source: cmp.Or(source, "all"), hidden: cmp.Or(hidden, "show"), query: strings.ToLower(strings.TrimSpace(query))}
+	if f.query != "" && hidesPeople(ctx) {
+		return userFilter{}, huma.Error403Forbidden("support_denied")
+	}
+	var err error
+	f.folder, err = parseFolderFilter(folder, at+"folder")
+	return f, err
+}
+
+// facets are the parts of f the list counts users by, each on its own.
+func (f userFilter) facets(u db.User) (okHidden, okFolder, okSource bool) {
+	return hiddenMatches(f.hidden, u), f.folder.matches(u), f.source == "all" || f.source == u.Source
+}
+
+// wants is the rest of f, for a user whose facets match and whose state is st: the state
+// and the search.
+func (f userFilter) wants(u db.User, st string) bool {
+	if f.state == stateAttention {
+		if attentionRank(st) < 0 {
+			return false
+		}
+	} else if f.state != "all" && !(st == f.state || (f.state == domain.StateActive && st == domain.StateExpiring)) {
+		return false
+	}
+	return f.query == "" || strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags), f.query)
+}
+
+// matchingIDs are the ids of the users f matches now: the users the list shows for it,
+// whatever their number.
+func (h *handlers) matchingIDs(ctx context.Context, f userFilter) ([]int64, error) {
+	users, err := h.d.Store.Q.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	now := h.d.Now()
+	grants, err := domain.LoadGrantsLeft(ctx, h.d.Store.Q, now)
+	if err != nil {
+		return nil, err
+	}
+	ids := []int64{}
+	for _, u := range users {
+		if okHidden, okFolder, okSource := f.facets(u); okHidden && okFolder && okSource && f.wants(u, domain.State(u, grants.Main(u.ID), now)) {
+			ids = append(ids, u.ID)
+		}
+	}
+	return ids, nil
+}
+
 func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUsersOutput, error) {
-	// The filters stay in Go: the search lowercases as Go does (PostgreSQL's lower() follows
-	// the database's locale, and a C locale leaves Cyrillic as it is), and the states are
-	// domain.State. Only the page's users get their slots read.
-	//
-	// A search by name, contact, note or tag tells with its total and the ids it finds whether
-	// the text is in a subscriber, however the answer is masked: an operator who may not see
-	// the subscribers does not search them.
-	if strings.TrimSpace(in.Query) != "" && hidesPeople(ctx) {
-		return nil, huma.Error403Forbidden("support_denied")
+	// Only the page's users get their slots read.
+	f, err := newUserFilter(ctx, "query.", in.State, in.Query, in.Folder, in.Source, in.Hidden)
+	if err != nil {
+		return nil, err
 	}
 	users, err := h.d.Store.Q.ListUsers(ctx)
 	if err != nil {
@@ -469,11 +543,6 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 	if err != nil {
 		return nil, err
 	}
-	folder, err := parseFolderFilter(in.Folder)
-	if err != nil {
-		return nil, err
-	}
-	q := strings.ToLower(strings.TrimSpace(in.Query))
 	out := &listUsersOutput{}
 	b := &out.Body
 	b.FolderCounts = map[string]int{"none": 0}
@@ -495,9 +564,7 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 			b.HiddenTotal++
 		}
 		// Each part of the filter on its own; a count leaves out only its own part.
-		okHidden := hiddenMatches(in.Hidden, u)
-		okFolder := folder.matches(u)
-		okSource := in.Source == "all" || in.Source == u.Source
+		okHidden, okFolder, okSource := f.facets(u)
 		if okHidden && okSource {
 			b.FolderCounts[folderKey(u)]++
 		}
@@ -523,19 +590,12 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 		case domain.StateDisabled:
 			c.Disabled++
 		}
-		if in.State == stateAttention {
-			if attentionRank(st) < 0 {
-				continue
-			}
-		} else if in.State != "all" && !(st == in.State || (in.State == domain.StateActive && st == domain.StateExpiring)) {
-			continue
-		}
-		if q != "" && !strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags), q) {
+		if !f.wants(u, st) {
 			continue
 		}
 		matched = append(matched, u)
 	}
-	if in.State == stateAttention {
+	if f.state == stateAttention {
 		slices.SortStableFunc(matched, func(a, b db.User) int {
 			return attentionRank(domain.State(a, grants.Main(a.ID), now)) - attentionRank(domain.State(b, grants.Main(b.ID), now))
 		})
@@ -883,7 +943,31 @@ func bulkOpt(in *bulkInput) domain.BulkOpt {
 
 // bulkPreview is what bulkUsers would do with the same body, done by nothing: the admin
 // confirms what they see. A folder named is checked as the action checks it.
+// bulkTargets are the users the body names: its ids, or the users its filter matches now
+// (the list's own filter, so they are the users the list shows for it). One of the two.
+func (h *handlers) bulkTargets(ctx context.Context, in *bulkInput) ([]int64, error) {
+	b := &in.Body
+	switch {
+	case b.Filter != nil && len(b.IDs) > 0:
+		return nil, fieldErr("body.filter", "ids_or_filter")
+	case b.Filter == nil && len(b.IDs) == 0:
+		return nil, fieldErr("body.ids", "ids_or_filter")
+	case b.Filter == nil:
+		return b.IDs, nil
+	}
+	f := b.Filter
+	uf, err := newUserFilter(ctx, "body.filter.", f.State, f.Query, f.Folder, f.Source, f.Hidden)
+	if err != nil {
+		return nil, err
+	}
+	return h.matchingIDs(ctx, uf)
+}
+
 func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreviewOutput, error) {
+	ids, err := h.bulkTargets(ctx, in)
+	if err != nil {
+		return nil, err
+	}
 	opt := bulkOpt(in)
 	if opt.Folder != nil {
 		if _, err := h.d.Store.Q.GetFolder(ctx, *opt.Folder); errors.Is(err, sql.ErrNoRows) {
@@ -892,7 +976,7 @@ func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreview
 			return nil, err
 		}
 	}
-	plan, err := h.d.Users.BulkPlan(ctx, in.Body.IDs, in.Body.Action, opt)
+	plan, err := h.d.Users.BulkPlan(ctx, ids, in.Body.Action, opt)
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}
@@ -915,13 +999,25 @@ func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreview
 }
 
 func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, error) {
+	ids, err := h.bulkTargets(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	// By filter, the admin confirmed a number: another one now (users came or went since the
+	// preview) is asked again rather than done to users nobody counted.
+	if in.Body.Filter != nil && in.Body.Expect != nil && *in.Body.Expect != len(ids) {
+		return nil, huma.Error409Conflict("filter_changed")
+	}
 	// One transaction for the list: it is applied whole or not at all.
 	opt := bulkOpt(in)
-	details := map[string]any{"requested": len(in.Body.IDs)}
+	details := map[string]any{"requested": len(ids)}
+	if f := in.Body.Filter; f != nil {
+		details["filter"] = f
+	}
 	if opt.Folder != nil {
 		details["folder"] = *opt.Folder
 	}
-	n, err := h.d.Users.Bulk(ctx, in.Body.IDs, in.Body.Action, opt)
+	n, err := h.d.Users.Bulk(ctx, ids, in.Body.Action, opt)
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}

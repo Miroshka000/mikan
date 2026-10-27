@@ -3657,6 +3657,31 @@ export interface components {
              */
             with_balance: number;
         };
+        BulkFilter: {
+            /**
+             * @description all — любая; none — вне папок; число — id папки
+             * @default all
+             */
+            folder: string;
+            /**
+             * @description Как у списка: по умолчанию вместе со скрытыми
+             * @default show
+             * @enum {string}
+             */
+            hidden: "hide" | "show" | "only";
+            /** @description Оператору поддержки без показа подписчиков закрыт: 403 support_denied */
+            q?: string;
+            /**
+             * @default all
+             * @enum {string}
+             */
+            source: "all" | "admin" | "bot" | "trial" | "free" | "import";
+            /**
+             * @default all
+             * @enum {string}
+             */
+            state: "all" | "active" | "expiring" | "limited" | "expired" | "disabled" | "attention";
+        };
         BulkInputBody: {
             /**
              * @description hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ
@@ -3670,10 +3695,18 @@ export interface components {
             days?: number;
             /**
              * Format: int64
+             * @description С filter: сколько пользователей подходило в предпросмотре (found). Если сейчас подходит другое число — 409 filter_changed, и ничего не сделано
+             */
+            expect?: number;
+            /** @description Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter */
+            filter?: components["schemas"]["BulkFilter"];
+            /**
+             * Format: int64
              * @description Для move: папка; 0 или не задано — убрать из папок
              */
             folder_id?: number;
-            ids: number[];
+            /** @description Пользователи по id; задаётся либо ids, либо filter */
+            ids?: number[];
         };
         BulkOutputBody: {
             /** Format: int64 */
