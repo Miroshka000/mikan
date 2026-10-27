@@ -1,16 +1,16 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
-import { ArrowLeft, FileCode2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, FileCode2, Plus, Trash2 } from "lucide-react";
 import { lazy, Suspense, useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
-import { qk, useNodes, useSubTemplate, useSubTemplates } from "../../../api/hooks";
+import { qk, useNodes, useReadySubTemplates, useSubTemplate, useSubTemplates } from "../../../api/hooks";
 import { Card, FormActions } from "../../../components/layout";
-import { Confirm } from "../../../components/overlay";
+import { Confirm, Drawer } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
 import { SwitchRow } from "../../../components/switch";
 import { useToast } from "../../../components/toast";
 import { Button, EmptyState, ErrorState, Field, Pill, Segmented, Skeleton } from "../../../components/ui";
-import { t, useLocale } from "../../../i18n";
+import { t, tMaybe, useLocale } from "../../../i18n";
 import { useDebounced } from "../../../lib/debounce";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { bytes, dateShort } from "../../../lib/format";
@@ -20,6 +20,11 @@ const ConfigEditor = lazy(() => import("../../../components/config-editor"));
 type Core = Schemas["SubTemplateHead"]["core"];
 type Head = Schemas["SubTemplateHead"];
 type View = Schemas["SubTemplatesView"];
+type Ready = Schemas["ReadySubTemplate"];
+
+/** A ready template's name and summary in the admin's language; the API's are Russian. */
+const readyName = (r: Pick<Ready, "id" | "name">) => tMaybe(`settings.subTemplates.readyNames.${r.id}`) ?? r.name;
+const readySummary = (r: Ready) => tMaybe(`settings.subTemplates.readyItems.${r.id}`) ?? r.summary;
 
 export const CORES: Core[] = ["mihomo", "singbox", "xray"];
 
@@ -176,7 +181,9 @@ function EditorForm({ v, core, saved, onClose, onCreated }: { v: View; core: Cor
   const [name, setName] = useState(saved?.name ?? coreName(core));
   const [body, setBody] = useState(saved?.body ?? "");
   const [def, setDef] = useState(saved ? saved.default : !v.templates.some((x) => x.core === core && x.default));
+  // What would replace the text in the editor: the starter, or a ready template by its id.
   const [replace, setReplace] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const hidden = !!saved?.hidden;
   const dirty = saved ? name !== saved.name || def !== saved.default || (!hidden && body !== saved.body) : body.trim() !== "";
@@ -200,6 +207,17 @@ function EditorForm({ v, core, saved, onClose, onCreated }: { v: View; core: Cor
     onError: (e) => toast.error(errorText(e)),
   });
   const start = () => (body.trim() ? setReplace("starter") : starter.mutate());
+  const load = useMutation({
+    mutationFn: (id: string) => unwrap(api.GET("/api/v1/sub-templates/ready/{id}", { params: { path: { id } } })),
+    onSuccess: (r) => {
+      setBody(r.body);
+      // A new template is named after the one it starts from, unless the admin named it.
+      if (!saved && name === coreName(core)) setName(readyName(r));
+      setCatalog(false);
+    },
+    onError: (e) => toast.error(errorText(e)),
+  });
+  const pick = (id: string) => (body.trim() ? setReplace(id) : load.mutate(id));
   const leave = useBlocker({ shouldBlockFn: () => dirty && !save.isPending, enableBeforeUnload: () => dirty, withResolver: true });
   const back = () => (dirty ? setLeaving(true) : onClose());
   const reset = saved
@@ -242,6 +260,9 @@ function EditorForm({ v, core, saved, onClose, onCreated }: { v: View; core: Cor
                   <Button variant="ghost" size="sm" loading={starter.isPending} onClick={start}>
                     {core === "mihomo" ? t("settings.subTemplates.fromSimple") : t("settings.subTemplates.example")}
                   </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setCatalog(true)}>
+                    {t("settings.subTemplates.ready.open")}
+                  </Button>
                 </div>
                 {core === "mihomo" ? <ClashSnippets names={names} onApply={(f) => setBody(f)} current={body} /> : null}
                 <div>
@@ -271,10 +292,13 @@ function EditorForm({ v, core, saved, onClose, onCreated }: { v: View; core: Cor
         text={t("settings.subTemplates.replaceText")}
         confirm={t("settings.subTemplates.replace")}
         onConfirm={() => {
+          const what = replace;
           setReplace(null);
-          starter.mutate();
+          if (what === "starter") starter.mutate();
+          else if (what) load.mutate(what);
         }}
       />
+      <ReadyTemplates core={core} open={catalog} onOpenChange={setCatalog} loading={load.isPending ? load.variables : undefined} onPick={pick} />
       <Confirm
         open={leaving || leave.status === "blocked"}
         onOpenChange={(o) => {
@@ -295,6 +319,58 @@ function EditorForm({ v, core, saved, onClose, onCreated }: { v: View; core: Cor
         }}
       />
     </div>
+  );
+}
+
+/** The ready templates of a core, each with its author, license and source: picking one puts
+ * its text in the editor and saves nothing. mikan's own is made of the panel's settings. */
+function ReadyTemplates({
+  core,
+  open,
+  onOpenChange,
+  loading,
+  onPick,
+}: {
+  core: Core;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  loading?: string;
+  onPick: (id: string) => void;
+}) {
+  useLocale();
+  const q = useReadySubTemplates();
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} title={t("settings.subTemplates.ready.title", { core: coreName(core) })}>
+      <p className="text-sm text-[var(--ink-500)]">{t("settings.subTemplates.ready.lead")}</p>
+      <QueryBoundary query={q} pending={<Skeleton style={{ height: 160, borderRadius: 12 }} />}>
+        {(v) => (
+          <ul className="mt-4 flex flex-col gap-2">
+            {v.templates
+              .filter((r) => r.core === core)
+              .map((r) => (
+                <li key={r.id} className="panel-soft flex flex-col gap-2 p-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[14px] font-medium">{readyName(r)}</span>
+                    {r.builtin ? <Pill tone="ok">{t("settings.subTemplates.ready.builtin")}</Pill> : null}
+                  </div>
+                  <p className="text-xs text-[var(--ink-500)]">{readySummary(r)}</p>
+                  <p className="text-xs break-words text-[var(--ink-500)]">
+                    {t("settings.subTemplates.ready.meta", { author: r.author, license: r.license })}{" "}
+                    <a className="link-btn inline-flex items-center gap-1" href={r.source} target="_blank" rel="noreferrer noopener">
+                      {t("settings.subTemplates.ready.source")} <ExternalLink size={12} aria-hidden />
+                    </a>
+                  </p>
+                  <div>
+                    <Button size="sm" variant="ghost" loading={loading === r.id} disabled={loading !== undefined && loading !== r.id} onClick={() => onPick(r.id)}>
+                      {t("settings.subTemplates.ready.load")}
+                    </Button>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        )}
+      </QueryBoundary>
+    </Drawer>
   );
 }
 

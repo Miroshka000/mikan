@@ -1,0 +1,55 @@
+# privWL-clash by Nemu-x (https://github.com/Nemu-x/privWL-clash): only what is blocked or
+# slowed down in Russia goes through the VPN, Telegram among it; everything else goes
+# direct. The lists (MIT) are linked, not copied, and pinned to a commit: a push to their
+# repository cannot reroute the apps until the admin moves the pin.
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies: [Auto]
+    include-all-proxies: true
+  - name: Auto
+    type: url-test
+    include-all-proxies: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+rule-providers:
+  privwl-telegram:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/tgprx.yaml
+    path: ./ruleset/privwl-telegram.yaml
+    interval: 86400
+  privwl-blocked:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/clV2_provider.yaml
+    path: ./ruleset/privwl-blocked.yaml
+    interval: 86400
+  privwl-blocked-apps:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/process-core.yaml
+    path: ./ruleset/privwl-blocked-apps.yaml
+    interval: 86400
+rules:
+  - RULE-SET,privwl-telegram,VPN,no-resolve
+  - RULE-SET,privwl-blocked,VPN
+  - RULE-SET,privwl-blocked-apps,VPN
+  - MATCH,DIRECT
