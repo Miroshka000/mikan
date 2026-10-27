@@ -11926,6 +11926,46 @@
         ],
         "type": "object"
       },
+      "UserOnlineView": {
+        "additionalProperties": false,
+        "properties": {
+          "conns": {
+            "description": "Открытые соединения на этой ноде",
+            "format": "int64",
+            "type": "integer"
+          },
+          "device_id": {
+            "description": "Привязанное устройство, чьими ключами подключены; null — общие ключи пользователя (приложения без ID или без привязки)",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "node_name": {
+            "type": "string"
+          },
+          "online_ips": {
+            "description": "Адреса с открытыми соединениями на этой ноде; оператор поддержки без доступа к подписчикам получает пустой список",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "node_id",
+          "node_name",
+          "device_id",
+          "online_ips",
+          "conns"
+        ],
+        "type": "object"
+      },
       "UserPoolView": {
         "additionalProperties": false,
         "properties": {
@@ -22147,6 +22187,52 @@
           }
         },
         "summary": "Следующий тариф: включится сам, когда кончится срок",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/online": {
+      "get": {
+        "operationId": "user-online",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserOnlineView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Где пользователь онлайн сейчас: ноды, устройства, адреса",
         "tags": [
           "users"
         ]

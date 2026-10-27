@@ -2899,6 +2899,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/online": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Где пользователь онлайн сейчас: ноды, устройства, адреса */
+        get: operations["user-online"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/pools": {
         parameters: {
             query?: never;
@@ -7543,6 +7560,23 @@ export interface components {
             expiring: number;
             /** Format: int64 */
             limited: number;
+        };
+        UserOnlineView: {
+            /**
+             * Format: int64
+             * @description Открытые соединения на этой ноде
+             */
+            conns: number;
+            /**
+             * Format: int64
+             * @description Привязанное устройство, чьими ключами подключены; null — общие ключи пользователя (приложения без ID или без привязки)
+             */
+            device_id: number | null;
+            /** Format: int64 */
+            node_id: number;
+            node_name: string;
+            /** @description Адреса с открытыми соединениями на этой ноде; оператор поддержки без доступа к подписчикам получает пустой список */
+            online_ips: string[];
         };
         UserPoolView: {
             /** @description Свой лимит группы и её пакеты исчерпаны: подключения группы не работают до сброса */
@@ -14850,6 +14884,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-online": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOnlineView"][];
+                };
             };
             /** @description Error */
             default: {

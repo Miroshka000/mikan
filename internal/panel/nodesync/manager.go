@@ -212,6 +212,16 @@ func (m *Manager) Online() map[string]nodeapi.Online {
 	return out
 }
 
+// OnlineByNode is the live view of each node apart, by node id: where a device is online,
+// which Online merges away.
+func (m *Manager) OnlineByNode() map[int64]map[string]nodeapi.Online {
+	out := map[int64]map[string]nodeapi.Online{}
+	for _, s := range m.Syncers() {
+		out[s.id] = s.Online()
+	}
+	return out
+}
+
 // otherIPs returns, per slot of node id, the user's devices online anywhere else: on the
 // other nodes, and under the user's other slots (bound devices) on any node. owner maps
 // every slot to its user.
