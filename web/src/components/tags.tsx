@@ -24,8 +24,8 @@ export function TagChips({ tags }: { tags: string[] }) {
   if (tags.length === 0) return null;
   return (
     <span className="flex flex-wrap items-center gap-1.5">
-      {tags.map((tag) => (
-        <span key={tag} className="tag">
+      {tags.map((tag, i) => (
+        <span key={`${tag}-${i}`} className="tag">
           {tag}
         </span>
       ))}
