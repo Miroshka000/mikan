@@ -8,13 +8,47 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// keyOrder is the order people read a profile in: the general settings, DNS, then the
-// proxies, groups and rules, and in a proxy or a group its name and type first. mihomo
-// does not care; keys not listed follow in alphabetical order.
-var keyOrder = []string{
-	"name", "type", "server", "port", "enable",
-	"mixed-port", "allow-lan", "mode", "log-level", "ipv6", "unified-delay", "tcp-concurrent",
-	"geodata-mode", "geox-url", "dns", "proxies", "proxy-groups", "rules",
+// keyOrder is the order people read a profile in: in a proxy or a group its name and type
+// first; the general settings in the order of base.yaml, DNS the last of them; then the
+// proxies, groups and rules. mihomo does not care; keys not listed follow in alphabetical
+// order.
+var keyOrder = slices.Concat([]string{"name", "type", "server", "port", "enable"}, baseKeys, []string{"proxies", "proxy-groups", "rules"})
+
+// embeddedYAML reads a mapping of the panel's own, and its keys in the order of the file.
+func embeddedYAML(src []byte) (map[string]any, []string) {
+	var n yaml.Node
+	var m map[string]any
+	if err := yaml.Unmarshal(src, &n); err != nil {
+		panic(err)
+	}
+	if err := n.Decode(&m); err != nil {
+		panic(err)
+	}
+	doc := n.Content[0]
+	keys := make([]string, 0, len(doc.Content)/2)
+	for i := 0; i < len(doc.Content); i += 2 {
+		keys = append(keys, doc.Content[i].Value)
+	}
+	return m, keys
+}
+
+// cloneYAML is a copy of v, a decoded YAML value, that shares no map or list with it.
+func cloneYAML(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		m := make(map[string]any, len(v))
+		for k, x := range v {
+			m[k] = cloneYAML(x)
+		}
+		return m
+	case []any:
+		s := make([]any, len(v))
+		for i, x := range v {
+			s[i] = cloneYAML(x)
+		}
+		return s
+	}
+	return v
 }
 
 // marshalYAML writes a profile as YAML, which the apps show to people who open it; JSON

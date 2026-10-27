@@ -3,6 +3,8 @@ package mihomo
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -426,5 +428,79 @@ func TestGRPCKeepalive(t *testing.T) {
 				t.Errorf("%s, %s profile: grpc-opts %v", app.Family, name, opts)
 			}
 		}
+	}
+}
+
+// Every built-in profile and every starter begins with base.yaml, in its order and with
+// its values: the panel only adds to it, the geodata keys go only where nothing names
+// geodata, and the sniffer is sniffer.yaml's. Rendering leaves base.yaml as it was read.
+func TestBaseSkeleton(t *testing.T) {
+	if len(baseKeys) == 0 || len(base) != len(baseKeys) || len(sniffer) == 0 {
+		t.Fatalf("base.yaml %v, sniffer.yaml %v", baseKeys, sniffer)
+	}
+	check := func(t *testing.T, raw []byte, mode routing.Mode, sniffs bool) {
+		t.Helper()
+		var n yaml.Node
+		var out map[string]any
+		if err := yaml.Unmarshal(raw, &n); err != nil {
+			t.Fatal(err)
+		}
+		if err := n.Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for i := 0; i < len(n.Content[0].Content); i += 2 {
+			keys = append(keys, n.Content[0].Content[i].Value)
+		}
+		var want []string
+		for _, k := range baseKeys {
+			if _, ok := out[k]; !ok && (k == "geodata-mode" || k == "geox-url") && mode == routing.All {
+				continue
+			}
+			want = append(want, k)
+		}
+		if len(keys) < len(want) || !slices.Equal(keys[:len(want)], want) {
+			t.Fatalf("keys %v, base.yaml %v", keys, baseKeys)
+		}
+		for _, k := range want {
+			got, w := out[k], base[k]
+			if k == "dns" {
+				dns, _ := got.(map[string]any)
+				got = map[string]any{}
+				for dk := range w.(map[string]any) {
+					got.(map[string]any)[dk] = dns[dk]
+				}
+			}
+			if !reflect.DeepEqual(got, w) {
+				t.Errorf("%s: %#v, base.yaml %#v", k, got, w)
+			}
+		}
+		if got, ok := out["sniffer"]; ok != sniffs || ok && !reflect.DeepEqual(got, sniffer) {
+			t.Errorf("sniffer %#v (%v), sniffer.yaml %#v", got, sniffs, sniffer)
+		}
+	}
+	for _, v := range append(slices.Clip(subtest.Variants), subtest.EveryTypeVariant) {
+		p := goldenProfile(v)
+		for _, mode := range subtest.Modes {
+			t.Run(v.Name+"/"+string(mode), func(t *testing.T) {
+				raw, err := Render(p, v.Groups.WithDefaults("en"), mode)
+				if err != nil {
+					t.Fatal(err)
+				}
+				check(t, raw, mode, p.Routes.Tune.Sniffer)
+				if !p.App.TakesOwnProfile() {
+					return
+				}
+				starter, err := Starter(p, v.Groups, mode)
+				if err != nil {
+					t.Fatal(err)
+				}
+				check(t, starter, mode, p.Routes.Tune.Sniffer)
+			})
+		}
+	}
+	fresh, _ := embeddedYAML(baseYAML)
+	if !reflect.DeepEqual(base, fresh) {
+		t.Fatalf("rendering changed base.yaml: %#v", base)
 	}
 }

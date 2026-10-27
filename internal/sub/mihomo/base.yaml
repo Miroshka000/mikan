@@ -1,0 +1,25 @@
+# What every built-in Clash profile starts with: the panel adds the DNS servers, the
+# proxies, the groups and the rules. These keys come first in a profile, in this order.
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+# The node has no IPv6 on most VPS: with it on, apps first try IPv6 through the tunnel
+# and wait for the node's "network unreachable" before falling back.
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+# MetaCubeX meta-rules-dat, what Koala Clash ships and mihomo's own default: apps without
+# the files download them from here before the profile starts. A profile whose rules name
+# no geodata goes without these two.
+geodata-mode: false
+geox-url:
+  geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
+  geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
+  mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
+# The admin's "real IP" (routing.Tune.RealIP) turns fake-ip to redir-host, which has no range.
+dns:
+  enable: true
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16

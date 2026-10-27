@@ -13,16 +13,8 @@ import (
 // GEOIP category of a service, and the categories nearest to the panel's own lists for a
 // core that cannot download a Clash list.
 
-// MetaCubeX meta-rules-dat is the geodata of mihomo and sing-box. MetaCubeXGeoX is what
-// Koala Clash ships, mihomo's own default: apps without the files download them from here
-// before the profile starts.
-var MetaCubeXGeoX = map[string]string{
-	"geoip":   "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat",
-	"geosite": "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat",
-	"mmdb":    "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb",
-	"asn":     "https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb",
-}
-
+// MetaCubeX meta-rules-dat is the geodata of mihomo and sing-box; where mihomo's apps
+// download it from is in mihomo/base.yaml (geox-url).
 const metaCubeXSing = "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/"
 
 // MetaCubeXRuleSet is the sing-box rule set (.srs) of a category of MetaCubeX's geodata;
