@@ -130,6 +130,22 @@ func TestBalanceNestedChain(t *testing.T) {
 	}
 }
 
+// The hops are counted per chain: a chain made while another is cascading (here past DIRECT,
+// cascade called before the hops were made) leaves the other's numbers be. Balance makes
+// every hop before a chain's cascade, so this is the converter's own guard.
+func TestCascadeHopsPerChain(t *testing.T) {
+	c := converter{byName: map[string]model.Group{}, tags: groupTags, refs: map[string]Ref{}, busy: map[string]bool{}, hops: map[int]int{}, copied: map[string]bool{},
+		out: Balancing{Refs: map[string]Ref{}}}
+	long := model.Group{Name: "long", Type: model.Chain, Members: []string{"a", "b", "c", "DIRECT", "short", "c"}}
+	c.byName["short"] = model.Group{Name: "short", Type: model.Chain, Members: []string{"entry", "a"}}
+	c.chains, c.hops[1] = 1, 1
+	r, ok := c.cascade(long, 1, nil)
+	want := []Copy{{"chain1-hop2-", "b", "a"}, {"chain1-hop3-", "c", "chain1-hop2-b"}, {"chain2-hop2-", "a", "entry"}, {"chain1-hop5-", "c", "chain2-hop2-a"}}
+	if !ok || r != (Ref{Tag: "chain1-hop5-c"}) || !slices.Equal(c.out.Copies, want) {
+		t.Fatalf("%+v %v: copies %v", r, ok, c.out.Copies)
+	}
+}
+
 // The admin's xray balance: leastLoad with its settings and the burst observatory, the
 // check address and interval.
 func TestBalanceLeastLoad(t *testing.T) {

@@ -479,8 +479,8 @@ rules:
 			}
 		}
 	}
-	// The exits are copies, tagged by the proxies' tags: the proxy's own outbound, which every
-	// config shares, keeps its streamSettings.
+	// The exits are copies, tagged chain<n>-hop<k>- plus the proxy's tag: the proxy's own
+	// outbound, which every config shares, keeps its streamSettings.
 	const entryTag = "proxy-3" // 🇳🇱 VLESS Vision
 	pl, err := planOf(p, model.GroupNames{}, routing.All, tpl)
 	if err != nil {
@@ -570,5 +570,52 @@ rules:
 	}
 	if !seen["Авто"] || !seen[b] {
 		t.Fatalf("configs: %v", seen)
+	}
+}
+
+// The hops are numbered per chain: the same proxy twice in one chain, past DIRECT and a chain
+// made after it, gets two copies, each dialing through its own hop before.
+func TestJSONChainHopsPerChain(t *testing.T) {
+	const a, b, c, d = "🇳🇱 VLESS XHTTP", "🇳🇱 Hysteria2", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP" // proxy-1 to proxy-4
+	src := `mode: rule
+proxy-groups:
+  - {name: Прокси, type: select, proxies: [` + a + `, ` + b + `, ` + c + `, ` + d + `]}
+  - {name: Длинный, type: chain, proxies: [` + a + `, ` + b + `, ` + c + `, DIRECT, Короткий, ` + c + `]}
+  - {name: Короткий, type: chain, proxies: [` + d + `, ` + a + `]}
+rules:
+  - DOMAIN-SUFFIX,example.org,Длинный
+  - MATCH,Прокси
+`
+	p, tpl := profileOf(subtest.TwoNodes()), subtest.Clash(src)
+	pl, err := planOf(p, model.GroupNames{}, routing.All, tpl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags := map[string]bool{}
+	var through []string
+	for _, x := range pl.balancing().Copies {
+		if tags[x.Tag()] {
+			t.Errorf("two copies tagged %s", x.Tag())
+		}
+		tags[x.Tag()] = true
+		if x.Of == "proxy-3" {
+			through = append(through, x.Dialer)
+		}
+	}
+	if !slices.Equal(through, []string{"chain2-hop2-proxy-2", "chain1-hop2-proxy-1"}) {
+		t.Fatalf("the copies of %s dial through %q", c, through)
+	}
+	for _, cfg := range render(t, p, routing.All, tpl) {
+		var exit map[string]any
+		for _, r := range cfg.Routing.Rules {
+			if dom, _ := json.Marshal(r["domain"]); string(dom) == `["domain:example.org"]` {
+				exit = cfg.outbound(t, r["outboundTag"].(string))
+			}
+		}
+		d, _ := get(exit, "streamSettings", "sockopt", "dialerProxy").(string)
+		hop := cfg.outbound(t, d)
+		if hop["tag"] != "chain1-hop2-proxy-1" || get(hop, "streamSettings", "sockopt", "dialerProxy") != "proxy-4" {
+			t.Errorf("%s: the chain goes out of %v through %v", cfg.Remarks, exit["tag"], hop["tag"])
+		}
 	}
 }

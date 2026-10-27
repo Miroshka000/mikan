@@ -103,7 +103,7 @@ type PingConfig struct {
 // outbounds xray has of the proxies; s.Xray sets the strategy of the testing groups and the
 // observatory.
 func Balance(groups []model.Group, tags map[string]bool, s routing.Servers) Balancing {
-	c := converter{byName: map[string]model.Group{}, tags: tags, refs: map[string]Ref{}, busy: map[string]bool{}, copied: map[string]bool{},
+	c := converter{byName: map[string]model.Group{}, tags: tags, refs: map[string]Ref{}, busy: map[string]bool{}, hops: map[int]int{}, copied: map[string]bool{},
 		s: s.Xray, out: Balancing{Refs: map[string]Ref{}}}
 	for _, g := range groups {
 		c.byName[g.Name] = g
@@ -124,9 +124,11 @@ type converter struct {
 	busy   map[string]bool // groups being converted: a group in itself is no member
 	s      routing.XrayServers
 	out    Balancing
-	// The chains so far, the hops of the last, and the copies made (outbounds and balancers).
-	chains, hops int
-	copied       map[string]bool
+	// The chains so far, the hops made of each (by its number: one may be made while another
+	// is), and the copies made (outbounds and balancers).
+	chains int
+	hops   map[int]int
+	copied map[string]bool
 }
 
 // dial is a hop of the chain dialed through the outbound tag: what it is made of are
@@ -285,8 +287,8 @@ func (c *converter) balancer(g model.Group, v *dial) (Ref, bool) {
 // chain makes each hop after the first dial through the one before it. Such a hop is made of
 // copies of its outbounds (Copy), and of its balancers over them: the proxies' own outbounds
 // dial through nothing, for the per-server configs and the balancers past the chain. A chain
-// as a hop is entered by its first hop (model.Entries). A dialer is an outbound: a hop before
-// another that is a balancer dials through its first outbound.
+// as a hop is entered by its first hop, as model.Entries does. A dialer is an outbound: a hop
+// before another that is a balancer dials through its first outbound.
 func (c *converter) chain(g model.Group) (Ref, bool) {
 	if len(g.Members) == 0 {
 		return Ref{}, false
@@ -297,7 +299,7 @@ func (c *converter) chain(g model.Group) (Ref, bool) {
 		}
 	}
 	c.chains++
-	c.hops = 1 // the entry, which is no copy
+	c.hops[c.chains] = 1 // the entry, which is no copy
 	return c.cascade(g, c.chains, nil)
 }
 
@@ -319,8 +321,8 @@ func (c *converter) cascade(g model.Group, n int, v *dial) (Ref, bool) {
 			}
 			v = nil
 			if d != directTag { // the hop past DIRECT dials through nothing
-				c.hops++
-				v = &dial{chain: n, prefix: fmt.Sprintf("chain%d-hop%d-", n, c.hops), tag: d}
+				c.hops[n]++
+				v = &dial{chain: n, prefix: fmt.Sprintf("chain%d-hop%d-", n, c.hops[n]), tag: d}
 			}
 		}
 		r, ok := c.through(m, v)
