@@ -38,7 +38,7 @@ The panel gives an app only the protocols it can run, and tells it by `User-Agen
 |---|---|---|
 | Stash | starts with `stash` | Clash |
 | Hiddify and apps on sing-box | contains `hiddify`, `karing`, `sing-box`, `singbox`, `nekobox`, `nekoray`, `husi`, `throne`, `deskbox` or `inhive`; starts with `sfa`, `sfi`, `sfm` or `sft` | links; the official sing-box apps (`sfa`, `sfi`, `sfm`, `sft`) that name a core of `sing-box 1.12.0` or newer get a whole sing-box config |
-| Apps on mihomo | contains `mihomo`, `clash`, `koala`, `kabosu`, `verge`, `prizrak`, `flowvy`, `murge` or `rabbit` | Clash |
+| Apps on mihomo | contains `mihomo`, `clash`, `koala`, `kabosu`, `mikan`, `verge`, `prizrak`, `flowvy`, `murge` or `rabbit` | Clash |
 | Apps on Xray | contains `happ`, `v2raytun`, `incy`, `v2rayng`, `v2rayn`, `onexray`, `v2box`, `simplexray` or `renoarx` | links; Happ and INCY get the Xray format, see [The Xray format](#the-xray-format) |
 | Others | everything else | links or the subscription page, see [Answer format](#answer-format); `streisand`, `shadowrocket` and `foxray` always get links |
 
@@ -66,13 +66,13 @@ The subscription page also goes to messengers that build a preview of a pasted l
 
 ### Response rules
 
-The administrator's rules (**Settings → Subscription → Response rules**) look at the request for an existing subscription before any profile is made. A rule tests the request's headers, any of them by name (`User-Agent`, `X-Device-Os`, one of the administrator's own): equal to a value, containing it or matching a regular expression. The tests are joined with "and" and "or". The rules are checked from the top down, and the first that matches decides. What it can do:
+The administrator's rules (**Settings → Subscription → Response rules**) look at the request for an existing subscription before any profile is made. A rule tests the request's headers, any of them by name (`User-Agent`, `X-Device-Os`, one of the administrator's own): equal to a value, containing it or matching a regular expression. The tests are joined with "and" and "or". The rules are checked from the top down, and the first that matches decides. A rule cannot be named `apps` or start with `builtin:`: these are what the tester and the log call the panel's own decisions. What it can do:
 
 - serve the profile as usual, with what the rule changes: the format (see [Answer format](#answer-format)), the template the profile is made from, headers added to the answer, and keys for a device that sends no ID, whatever the panel asks of devices;
 - answer with a notice in place of the servers, see [A notice in place of the servers](#a-notice-in-place-of-the-servers);
 - answer `403` or `404`, show a page of the administrator's own (`text/html`, with a policy that forbids scripts on it) or close the connection with no answer at all.
 
-The built-in protection comes after the administrator's rules: ShadowsocksR clients and discontinued Clash apps (Clash for Windows, Clash for Android, ClashX other than its Meta fork) get the notice, because no profile of the panel suits their cores. It can be turned off in the same window. The apps the administrator blocked in **Settings → Subscription → Apps** get the same notice last. A request that no rule matches is served as usual, and a token that is not among the subscriptions gets the `404` described below whatever the rules say.
+The built-in protection comes after the administrator's rules: ShadowsocksR clients and discontinued Clash apps (Clash for Windows, Clash for Android, ClashX other than its Meta fork) get the notice, because no profile of the panel suits their cores. It can be turned off in the same window. These apps are on the list of apps too, each on a row of its own: the tester and the log name them, and with the protection off they are blocked there one by one; the mihomo row does not cover them. The apps the administrator blocked in **Settings → Subscription → Apps** get the same notice last. A request that no rule matches is served as usual, and a token that is not among the subscriptions gets the `404` described below whatever the rules say.
 
 Every fetch of a profile goes into a log: the time, the address, `User-Agent`, the app, the rule that decided, the format and the outcome, with no token and no key. How long it is kept is set in **Settings → Subscription → General → Request log**, and the log itself is in the user's card.
 

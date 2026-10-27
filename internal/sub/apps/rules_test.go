@@ -19,6 +19,10 @@ var samples = map[string]string{
 	"flclash":      "FlClashX/v0.9.1 Platform/android",
 	"verge":        "clash-verge/v2.2.3",
 	"clashmeta":    "ClashMetaForAndroid/2.11.19.Meta",
+	"clashxmeta":   "ClashX Meta/1.3.0 (com.metacubex.ClashX.meta; build:1.3.0; macOS 14.0.0) Alamofire/5.8.0",
+	"cfw":          "ClashforWindows/0.20.39",
+	"cfa":          "ClashForAndroid/2.5.12",
+	"clashx":       "ClashX/1.118.0 (com.west2online.ClashX; build:1.118.0; macOS 14.0.0) Alamofire/5.8.0",
 	"mihomo":       "Flowvy/0.9 mihomo/1.19.31",
 	"happ":         "Happ/3.4.1",
 	"incy":         "INCY/2.1.0",
@@ -70,8 +74,7 @@ func TestCatalogIdentifiesAndAgreesWithDetectApp(t *testing.T) {
 }
 
 // DetectApp reads the catalog's words, so every word and prefix of an entry, on its own,
-// is that entry for Identify and its family for DetectApp. A bare Mikan is the one left an
-// unknown app (see pinnedUAs).
+// is that entry for Identify and its family for DetectApp.
 func TestEveryWordAgreesWithDetectApp(t *testing.T) {
 	for _, k := range Catalog {
 		for _, w := range slices.Concat(k.Words, k.Prefixes) {
@@ -79,12 +82,8 @@ func TestEveryWordAgreesWithDetectApp(t *testing.T) {
 			if got, _ := Identify(ua); got.ID != k.ID {
 				t.Errorf("Identify(%q) = %q, want %s", ua, got.ID, k.ID)
 			}
-			want := k.Family
-			if k.ID == "mikan" {
-				want = FamilyOther
-			}
-			if f := DetectApp(ua).Family; f != want {
-				t.Errorf("DetectApp(%q) = %s, want %s", ua, f, want)
+			if f := DetectApp(ua).Family; f != k.Family {
+				t.Errorf("DetectApp(%q) = %s, want %s", ua, f, k.Family)
 			}
 			if !Named(k.ID, ua) || !FamilyNamed(k.Family, ua) {
 				t.Errorf("%q: Named %v, FamilyNamed %v", ua, Named(k.ID, ua), FamilyNamed(k.Family, ua))
@@ -227,6 +226,20 @@ func TestFirstMatchDecides(t *testing.T) {
 	}
 }
 
+// oldClash is the app each discontinued Clash app of TestBuiltinRules is told as: its own
+// entry, not the generic mihomo, so the tester and the log name it. ClashX Meta is a
+// current app and no ClashX.
+var oldClash = map[string]string{
+	"ClashforWindows/0.20.39":          "cfw",
+	"Clash for Windows/0.20.39":        "cfw",
+	"ClashX/1.118.0 (com.west2online)": "clashx",
+	"ClashX Pro/1.118.0.5":             "clashx",
+	"ClashForAndroid/2.5.12":           "cfa",
+	"ClashX Meta/1.4.15":               "clashxmeta",
+	"ClashMetaForAndroid/2.11.19.Meta": "clashmeta",
+	"FlClashX/v0.9.1 Platform/android": "flclash",
+}
+
 func TestBuiltinRules(t *testing.T) {
 	r := responder(t, Policy{})
 	for ua, want := range map[string]string{
@@ -258,17 +271,35 @@ func TestBuiltinRules(t *testing.T) {
 		if want != "" && (d.Responds() != RespondStub || len(d.Install) != 3) {
 			t.Errorf("%q: %s with %v to install, want a stub that names three apps", ua, d.Responds(), d.Install)
 		}
+		if id, ok := oldClash[ua]; ok && d.App.ID != id {
+			t.Errorf("%q is %q, want %q", ua, d.App.ID, id)
+		}
 	}
-	// No app the catalog knows is turned away by them: they are for apps it does not list.
+	// No app of the catalog is turned away by them but the discontinued Clash apps, listed
+	// so that an admin who turns the rules off may still block them one by one.
 	for id, ua := range samples {
-		if d := r.Decide(hdr("User-Agent", ua)); d.Rule != "" {
-			t.Errorf("%s (%q) is refused by %s", id, ua, d.Rule)
+		want := ""
+		if id == "cfw" || id == "cfa" || id == "clashx" {
+			want = RuleOld
+		}
+		if d := r.Decide(hdr("User-Agent", ua)); d.Rule != want {
+			t.Errorf("%s (%q) is decided by %q, want %q", id, ua, d.Rule, want)
 		}
 	}
 	// The admin turns them off all at once, or answers the client otherwise before they run.
 	off := responder(t, Policy{NoBuiltin: true})
 	if d := off.Decide(hdr("User-Agent", "ClashforWindows/0.20.39")); d.Rule != "" {
 		t.Errorf("built-in rules are off: %+v", d)
+	}
+	// With them off, blocking mihomo leaves the discontinued apps served: they are apps of
+	// their own, blocked by their own ids.
+	off = responder(t, Policy{NoBuiltin: true, Blocked: []string{"mihomo"}})
+	if d := off.Decide(hdr("User-Agent", "ClashforWindows/0.20.39")); d.Rule != "" {
+		t.Errorf("Clash for Windows is not the generic mihomo: %+v", d)
+	}
+	off = responder(t, Policy{NoBuiltin: true, Blocked: []string{"cfw"}})
+	if d := off.Decide(hdr("User-Agent", "ClashforWindows/0.20.39")); d.Rule != RuleApps || d.Responds() != RespondStub {
+		t.Errorf("a blocked Clash for Windows: %+v", d)
 	}
 	own := responder(t, Policy{Rules: []Rule{rule("cfw", allOf(uaIs(OpContains, "clashforwindows", false)), Action{Respond: RespondServe})}})
 	if d := own.Decide(hdr("User-Agent", "ClashforWindows/0.20.39")); d.Rule != "cfw" || d.Responds() != RespondServe {
@@ -429,6 +460,26 @@ func TestCheckRules(t *testing.T) {
 	rules[1].When.Conds[0].Op = "x"
 	if err := CheckRules(rules, CheckOpts{}); !errors.As(err, &ce) || ce.Path != "rules.1.when.conds.0.op" {
 		t.Errorf("the path names the rule: %v", err)
+	}
+	// The panel's own labels are not a rule's name: the tester and the log could not tell
+	// the rule from the list of blocked apps or a built-in rule. A rule saved with one
+	// before still loads (Check), and a name that only looks like one is a name.
+	for _, name := range []string{RuleApps, " apps ", RuleSSR, RuleOld, "builtin:next"} {
+		r := okRule()
+		r.Name = name
+		if err := CheckRules([]Rule{r}, CheckOpts{}); !errors.As(err, &ce) || ce.Path != "rules.0.name" || ce.Code != "resp_name_reserved" {
+			t.Errorf("%q: %v", name, err)
+		}
+		if err := r.Check("rule", CheckOpts{}); err != nil {
+			t.Errorf("%q: Check %v", name, err)
+		}
+	}
+	for _, name := range []string{"Apps", "apps of the office", "my builtin:old", "builtin"} {
+		r := okRule()
+		r.Name = name
+		if err := CheckRules([]Rule{r}, CheckOpts{}); err != nil {
+			t.Errorf("%q: %v", name, err)
+		}
 	}
 }
 
