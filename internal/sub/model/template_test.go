@@ -98,3 +98,25 @@ func TestReadAsk(t *testing.T) {
 		t.Fatal("a key of the core's own is not handed over")
 	}
 }
+
+// The tag mikan adds to a template is its own name while the template leaves it free, then
+// the first numbered one nobody took.
+func TestFreeTag(t *testing.T) {
+	for _, c := range []struct {
+		taken []string
+		want  string
+	}{
+		{nil, "direct"},
+		{[]string{"proxy"}, "direct"},
+		{[]string{"direct"}, "direct-2"},
+		{[]string{"direct", "direct-2"}, "direct-3"},
+	} {
+		taken := map[string]bool{}
+		for _, tag := range c.taken {
+			taken[tag] = true
+		}
+		if got := FreeTag("direct", taken); got != c.want {
+			t.Errorf("taken %v: %q, want %q", c.taken, got, c.want)
+		}
+	}
+}

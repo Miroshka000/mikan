@@ -33,6 +33,41 @@ func TestRunetfreedomKnowsThePanelsCategories(t *testing.T) {
 	}
 }
 
+// Every key of runetfreedomLists names a list of the panel's, and every list has one but
+// those runetfreedom has no category for: a list renamed would otherwise lose its
+// categories in the xray apps without a word.
+func TestRunetfreedomListsNameTheProviders(t *testing.T) {
+	// Lists of apps (geodata has no processes) and Discord's voice IPs.
+	skipped := map[string]bool{
+		"mikan-ru-apps": true, "mikan-ru-apps-wildcard": true, "mikan-ru-pc": true,
+		"mikan-blocked-apps": true, "mikan-torrent-apps": true, "mikan-discord-voice": true,
+	}
+	var all []Provider
+	for _, s := range Services {
+		all = append(all, s.Providers...)
+	}
+	for _, d := range DirectSets {
+		all = append(all, d.Providers...)
+	}
+	providers := map[string]bool{}
+	for _, p := range append(all, BlockedLists...) {
+		providers[p.Name] = true
+		if _, ok := runetfreedomLists[p.Name]; ok == skipped[p.Name] {
+			t.Errorf("%s: in runetfreedomLists %v, skipped %v", p.Name, ok, skipped[p.Name])
+		}
+	}
+	for name := range runetfreedomLists {
+		if !providers[name] {
+			t.Errorf("runetfreedomLists: %s is no list of the panel's", name)
+		}
+	}
+	for name := range skipped {
+		if !providers[name] {
+			t.Errorf("skipped: %s is no list of the panel's", name)
+		}
+	}
+}
+
 // Common is what an app has whichever geodata it keeps: runetfreedom's lists of what is
 // blocked in Russia are not in it, the categories every geodata has are.
 func TestCommonGeodata(t *testing.T) {
