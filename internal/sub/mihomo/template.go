@@ -185,10 +185,6 @@ func fillGroup(g map[string]any, nodes []model.Node, ps []model.Proxy, providers
 		}
 		list = append(list, x.Name)
 	}
-	if len(list) == 0 && g["use"] == nil {
-		list = []any{"REJECT"}
-	}
-	g["proxies"] = list
 	delete(g, "mikan")
 	delete(g, "include-all-proxies")
 	switch {
@@ -200,13 +196,18 @@ func fillGroup(g map[string]any, nodes []model.Node, ps []model.Proxy, providers
 		delete(g, "include-all")
 		g["include-all-providers"] = true
 	}
-	// mihomo applies the filters to the providers' proxies; those the panel listed pass
-	// them already.
-	if g["include-all-providers"] != true && g["use"] == nil {
+	// A group that keeps providers keeps its filters: mihomo applies them to the providers'
+	// proxies, and those the panel listed pass them already. Nor is it left empty: REJECT
+	// would only become what it picks first.
+	if g["use"] == nil && (!providers || g["include-all-providers"] != true) {
 		for _, k := range []string{"filter", "exclude-filter", "exclude-type"} {
 			delete(g, k)
 		}
+		if len(list) == 0 {
+			list = []any{"REJECT"}
+		}
 	}
+	g["proxies"] = list
 	return nil
 }
 

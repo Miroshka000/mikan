@@ -215,8 +215,17 @@ func TestTemplateIncludeAllNextToProviders(t *testing.T) {
 			func(x model.Proxy) bool { return typeOf(x) == "hysteria2" }, "map[exclude-type:hysteria2 filter:^🇳🇱 include-all-providers:true]"},
 		{"use with filters", providers + "{name: G, type: select, mikan: {nodes: [1]}, use: [p1], filter: \"^🇳🇱\", exclude-filter: TUIC}",
 			func(x model.Proxy) bool { return strings.Contains(x.Name, "TUIC") }, "map[exclude-filter:TUIC filter:^🇳🇱 use:[p1]]"},
+		{"include-all-providers with a filter", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all-providers: true, filter: \"^🇳🇱\"}",
+			nil, "map[filter:^🇳🇱 include-all-providers:true]"},
+		{"include-all-proxies and use with a filter", providers + "{name: G, type: select, include-all-proxies: true, use: [p1], filter: \"^🇳🇱\"}",
+			nil, "map[filter:^🇳🇱 use:[p1]]"},
+		// Nothing of the user's, but the providers': no REJECT for select to start on.
+		{"nothing picked", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^none\"}",
+			func(model.Proxy) bool { return true }, "map[filter:^none include-all-providers:true]"},
 		{"no providers", "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^🇳🇱\", exclude-type: hysteria2}",
 			func(x model.Proxy) bool { return typeOf(x) == "hysteria2" }, "map[]"},
+		{"no providers, nothing picked", "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^none\"}",
+			func(model.Proxy) bool { return true }, "map[]"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			src := strings.Replace(c.group, "{name: G", "proxy-groups:\n  - {name: G", 1) + "\nrules:\n  - MATCH,G\n"
@@ -238,7 +247,10 @@ func TestTemplateIncludeAllNextToProviders(t *testing.T) {
 					want = append(want, x.Name)
 				}
 			}
-			if got, _ := g["proxies"].([]any); len(want) == 0 || !slices.Equal(got, want) {
+			if len(want) == 0 && !strings.HasPrefix(c.group, providers) {
+				want = []any{"REJECT"} // closed, not open
+			}
+			if got, _ := g["proxies"].([]any); !slices.Equal(got, want) {
 				t.Errorf("proxies: %v, want %v", got, want)
 			}
 			delete(g, "name")
