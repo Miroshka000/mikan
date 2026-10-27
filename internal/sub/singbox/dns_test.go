@@ -90,6 +90,7 @@ func TestDNSPolicyKeys(t *testing.T) {
 			{Match: "geosite:cn,category-ru", Servers: []string{"223.5.5.5"}},
 			{Match: "+.a.com,+.b.com", Servers: []string{"77.88.8.8"}},
 			{Match: "a.com, +.c.com,*.d.com", Servers: []string{"77.88.8.1"}},
+			{Match: "+.e.com,*.f.com", Servers: []string{"1.0.0.1"}},
 			{Match: "geosite:!cn", Servers: []string{"8.8.8.8"}},
 			{Match: "geosite:category-ai-!cn,+.x.com", Servers: []string{"8.8.4.4"}},
 			{Match: "rule-set:mikan-ru-core", Servers: []string{"9.9.9.9"}},
@@ -105,9 +106,10 @@ func TestDNSPolicyKeys(t *testing.T) {
 	}
 	rules, _ := json.Marshal(c.DNS.Rules)
 	if string(rules) != `[{"domain_suffix":["a.com","b.com"],"server":"policy-0"},`+
-		`{"domain":["a.com"],"domain_suffix":["c.com"],"server":"policy-1"},`+
-		`{"rule_set":["geosite-category-ai-!cn"],"server":"policy-2"},`+
-		`{"rule_set":["geosite-cn","geosite-category-ru"],"server":"policy-3"}]` {
+		`{"domain_suffix":["e.com"],"server":"policy-1"},`+
+		`{"domain":["a.com"],"domain_suffix":["c.com"],"server":"policy-2"},`+
+		`{"rule_set":["geosite-category-ai-!cn"],"server":"policy-3"},`+
+		`{"rule_set":["geosite-cn","geosite-category-ru"],"server":"policy-4"}]` {
 		t.Fatalf("rules: %s", rules)
 	}
 	// The servers of the keys left with nothing are not there.
@@ -115,7 +117,8 @@ func TestDNSPolicyKeys(t *testing.T) {
 	for _, s := range c.DNS.Servers {
 		servers[s["tag"].(string)] = s["server"]
 	}
-	want := map[string]any{"remote": "1.1.1.1", "local": "1.1.1.1", "policy-0": "77.88.8.8", "policy-1": "77.88.8.1", "policy-2": "8.8.4.4", "policy-3": "223.5.5.5"}
+	want := map[string]any{"remote": "1.1.1.1", "local": "1.1.1.1", "policy-0": "77.88.8.8", "policy-1": "1.0.0.1", "policy-2": "77.88.8.1",
+		"policy-3": "8.8.4.4", "policy-4": "223.5.5.5"}
 	if len(servers) != len(want) {
 		t.Errorf("servers: %v", c.DNS.Servers)
 	}
