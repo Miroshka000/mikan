@@ -423,3 +423,18 @@ func TestGRPCKeepalive(t *testing.T) {
 		}
 	}
 }
+
+// A proxy name saved with a line break in front, before the panel refused it, does not
+// fail the profile: the encoder cannot write such a name, so build drops the character.
+func TestProxyNameWithLineBreakRenders(t *testing.T) {
+	u := subtest.TwoNodes()
+	u.Build.Inbounds[0].Name, u.Build.Inbounds[0].Named = "\nА", true
+	raw, err := Render(profileOf(u), model.GroupNames{}, routing.All)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coreAccepts(t, raw)
+	if !strings.Contains(string(raw), "name: А\n") {
+		t.Fatalf("no proxy А:\n%s", raw)
+	}
+}
