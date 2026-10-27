@@ -36,6 +36,10 @@ const (
 // Tests says whether the group tests its members: its URL, Interval and Tolerance apply.
 func (t GroupType) Tests() bool { return t == URLTest || t == Fallback || t == LoadBalance }
 
+// Known says whether the core takes the type: Citrus knows no other group (relay is gone,
+// and the types of other forks, smart and the like, are not in it).
+func (t GroupType) Known() bool { return t == Select || t == Chain || t.Tests() }
+
 // Note is what a core made of a group it cannot write as it is: the nearest form, which the
 // admin panel's preview tells. Code names it for the panel's words.
 type Note struct {
