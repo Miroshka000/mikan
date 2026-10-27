@@ -120,7 +120,7 @@ func TestHappRoutingOf(t *testing.T) {
 // profile's, decoded (subtest has the golden files' story): the panel makes one for all of
 // its users.
 func TestGoldenHappRouting(t *testing.T) {
-	for _, v := range subtest.Variants {
+	for _, v := range subtest.CoreVariants {
 		for _, mode := range subtest.Modes {
 			t.Run(v.Name+"/"+string(mode), func(t *testing.T) {
 				goldenHapp(t, v.Name+"_"+string(mode)+".happ.json", happRouting(v, mode, ""))
