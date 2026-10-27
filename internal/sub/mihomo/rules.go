@@ -3,6 +3,7 @@ package mihomo
 import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -39,7 +40,7 @@ func RulesFor(rules []routing.Rule, app apps.App) []routing.Rule {
 // user's proxies, which the rules do not depend on, and the panel's hosts go first as in
 // every profile. A rule ReadRule cannot read (OR, NOT, SUB-RULE) is left out; false when
 // src does not render.
-func TemplateRules(p Profile, src string) ([]routing.Rule, bool) {
+func TemplateRules(p profile.Profile, src string) ([]routing.Rule, bool) {
 	p.Proxies = []model.Proxy{{Name: "mikan", Type: "direct"}}
 	t, err := parseProfileTemplate(src)
 	if err == nil {

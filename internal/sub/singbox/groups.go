@@ -3,8 +3,8 @@ package singbox
 import (
 	"strconv"
 
-	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -167,7 +167,7 @@ func proxiesOf(hop string, byName map[string]model.Group, tags map[string]bool, 
 // Notes are what sing-box makes of the groups of p's profile it cannot write as they are
 // (convertGroups), for the admin panel's preview: of the own Clash profile t, or of the
 // built-in groups. An own sing-box template has its groups as the admin wrote them: none.
-func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
+func Notes(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
 	if t.Core == model.CoreSingBox {
 		return nil
 	}

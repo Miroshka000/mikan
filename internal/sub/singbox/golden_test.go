@@ -7,13 +7,14 @@ import (
 
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 	"mikan/internal/sub/subtest/corecheck"
 )
 
 // goldenProfile is the variant's user in its app: the admin's rules the app's core takes.
-func goldenProfile(v subtest.Variant) mihomo.Profile {
+func goldenProfile(v subtest.Variant) profile.Profile {
 	p := profileOf(v.User())
 	p.App, p.Rules = v.App, mihomo.RulesFor(p.Rules, v.App)
 	return p

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -23,7 +24,7 @@ type Parts struct {
 }
 
 // TemplateParts are the parts of the profile Template makes of src for p.
-func TemplateParts(p Profile, src string) (Parts, error) {
+func TemplateParts(p profile.Profile, src string) (Parts, error) {
 	cfg, _, err := templateConfig(p, src)
 	if err != nil {
 		return Parts{}, err

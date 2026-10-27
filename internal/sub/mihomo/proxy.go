@@ -6,6 +6,7 @@ package mihomo
 import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 )
 
 // defaultReuse makes mihomo reuse a few HTTP/2 connections for XHTTP (Xray clients do this
@@ -15,7 +16,7 @@ var defaultReuse = map[string]any{"max-concurrency": "16-32", "h-max-request-tim
 
 // grpcPingInterval is how often, in seconds, the app pings an idle gRPC connection: a
 // middlebox on the way cuts a connection that stays silent, and the app would go on sending
-// into it. Stash documents no such option, and its profile goes without (Profile.proxy).
+// into it. Stash documents no such option, and its profile goes without (proxy).
 const grpcPingInterval = 15
 
 // Proxy is p as a mihomo proxy.
@@ -177,7 +178,7 @@ func transport(y map[string]any, tr *model.Transport) {
 }
 
 // proxy is x as the app of p takes it: Proxy, without the gRPC ping interval for Stash.
-func (p Profile) proxy(x model.Proxy) map[string]any {
+func proxy(p profile.Profile, x model.Proxy) map[string]any {
 	y := Proxy(x)
 	if o, ok := y["grpc-opts"].(map[string]any); ok && p.App.Family == apps.FamilyStash {
 		delete(o, "ping-interval")

@@ -36,6 +36,13 @@ type App struct {
 	Whole bool
 }
 
+// TakesOwnProfile: the app takes the admin's own Clash profile, rule lists and the rules of
+// routing.Services. Stash and apps we do not know get the built-in profile without them; a
+// zero App (the admin panel's preview) is mihomo.
+func (a App) TakesOwnProfile() bool {
+	return a.Family == "" || a.Family == FamilyMihomo
+}
+
 // Version is major.minor.patch; zero when unknown.
 type Version [3]int
 
