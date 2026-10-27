@@ -573,8 +573,10 @@ rules:
 	}
 }
 
-// The hops are numbered per chain: the same proxy twice in one chain, past DIRECT and a chain
-// made after it, gets two copies, each dialing through its own hop before.
+// A chain with DIRECT in the middle, a proxy twice and a chain after DIRECT that is declared
+// after it, end to end through xray: the proxy gets two copies, each dialing through its own
+// hop before. The per-chain hop counter itself is guarded by TestCascadeHopsPerChain: Balance
+// builds every hop before a cascade, so no profile reaches a chain made in the middle of one.
 func TestJSONChainHopsPerChain(t *testing.T) {
 	const a, b, c, d = "🇳🇱 VLESS XHTTP", "🇳🇱 Hysteria2", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP" // proxy-1 to proxy-4
 	src := `mode: rule
