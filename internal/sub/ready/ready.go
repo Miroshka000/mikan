@@ -57,7 +57,7 @@ var all = []Template{
 		Author: mikanAuthor, License: mikanLicense, Source: mikanSource, Starter: true},
 	// The panel's "only what is blocked" and the address lists of privWL-clash it lacks.
 	{ID: "privwl-blocked", Core: model.CoreMihomo, Name: "privWL · только заблокированное",
-		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. Списки: Nemu-x/privWL-clash",
+		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. Списки: Nemu-x/privWL-clash. В Happ и INCY (конфиги Xray) эти списки не работают и всё идёт напрямую: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
 		Author:  mikanAuthor, License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
 }
 

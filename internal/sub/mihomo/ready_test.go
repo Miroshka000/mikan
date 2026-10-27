@@ -28,7 +28,11 @@ func TestReadyTemplates(t *testing.T) {
 			}
 		}
 		for mode, src := range srcs {
-			t.Run(r.ID+"/"+mode, func(t *testing.T) {
+			name := r.ID
+			if mode != "" {
+				name += "/" + mode
+			}
+			t.Run(name, func(t *testing.T) {
 				if err := CheckTemplate(prof, src); err != nil {
 					t.Fatal(err)
 				}

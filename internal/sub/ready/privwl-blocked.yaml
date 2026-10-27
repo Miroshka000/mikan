@@ -5,6 +5,8 @@
 # addresses of blocked sites, which catch an app that resolves names itself (its own DoH)
 # and so passes fake-ip by. The lists (MIT) are linked, not copied, and pinned to a commit:
 # a push to their repository cannot reroute the apps until the admin moves the pin.
+# In Happ and INCY (Xray configs) these lists do not work and everything goes direct:
+# give those apps another template with a response rule, or turn their Xray configs off.
 mixed-port: 7890
 allow-lan: false
 mode: rule
