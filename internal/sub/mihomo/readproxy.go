@@ -11,9 +11,10 @@ import (
 // the model its own way (sing-box): the template's own proxies go there next to the
 // panel's. It reads what Proxy writes, of the protocols other cores speak too (VLESS,
 // Trojan, Hysteria2, TUIC, AnyTLS, Shadowsocks); false for one the model cannot hold: a
-// protocol of mihomo's own, a Shadowsocks plugin or smux, UDP over TCP of a version mihomo
-// refuses, a transport but TCP, WebSocket and gRPC (an XHTTP of the template's has none of
-// the Xray names the model keeps), no port (but a Hysteria2 range).
+// protocol of mihomo's own, UDP over TCP of a version mihomo refuses, a transport but TCP,
+// WebSocket and gRPC (an XHTTP of the template's has none of the Xray names the model
+// keeps), no port (but a Hysteria2 range). A Shadowsocks plugin and smux are read as they
+// are: whether a core can carry them is its own renderer's word.
 func ReadProxy(m map[string]any) (model.Proxy, bool) {
 	p := model.Proxy{Name: str(m["name"]), Type: str(m["type"]), Server: str(m["server"]), Port: number(m["port"])}
 	// A proxy that leaves udp out is taken as carrying it, as the sing-box config made of
@@ -43,8 +44,9 @@ func ReadProxy(m map[string]any) (model.Proxy, bool) {
 		}
 	case "ss":
 		p.Type, p.Cipher, p.Password = "shadowsocks", str(m["cipher"]), str(m["password"])
-		if str(m["plugin"]) != "" || anyMap(m["smux"])["enabled"] == true {
-			return p, false
+		// A plugin's settings stay as the template holds them: each core reads those it knows.
+		if p.Plugin = str(m["plugin"]); p.Plugin != "" {
+			p.PluginOpts = anyMap(m["plugin-opts"])
 		}
 		if m["udp-over-tcp"] == true {
 			// mihomo's version is 1 when none is given (or 0), and it refuses one but 1 and 2.
@@ -59,6 +61,15 @@ func ReadProxy(m map[string]any) (model.Proxy, bool) {
 		}
 	default:
 		return p, false
+	}
+	// mihomo multiplexes a proxy of any protocol that asks for it.
+	if x := anyMap(m["smux"]); x["enabled"] == true {
+		p.Smux = &model.Smux{Protocol: str(x["protocol"]), MaxConnections: number(x["max-connections"]),
+			MinStreams: number(x["min-streams"]), MaxStreams: number(x["max-streams"]), Padding: x["padding"] == true,
+			OnlyTCP: x["only-tcp"] == true}
+		if b := anyMap(x["brutal-opts"]); b["enabled"] == true {
+			p.Smux.Brutal = &model.Brutal{Up: str(b["up"]), Down: str(b["down"])}
+		}
 	}
 	reality := anyMap(m["reality-opts"])
 	switch p.Type {
