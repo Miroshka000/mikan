@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
@@ -244,6 +245,14 @@ func TestSubTemplateSizeInBytes(t *testing.T) {
 	refused("create in Cyrillic", resp, raw)
 	resp, raw = h.do(http.MethodPost, api+"/sub-templates/preview", map[string]any{"core": "mihomo", "body": cyrillic}, csrf)
 	refused("preview in Cyrillic", resp, raw)
+	// Exactly the limit in runes and one byte over it: maxLength lets it through, the bytes do
+	// not. A comment alone: the starter has letters of more than a byte of its own.
+	edge := "#я" + strings.Repeat("x", subsrc.MaxTemplateSize-2)
+	if len(edge) != subsrc.MaxTemplateSize+1 || utf8.RuneCountInString(edge) != subsrc.MaxTemplateSize {
+		t.Fatalf("the edge is %d bytes, %d runes", len(edge), utf8.RuneCountInString(edge))
+	}
+	resp, raw = h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "Edge", "body": edge}, csrf)
+	refused("a byte over the limit in runes", resp, raw)
 
 	full := padded(subsrc.MaxTemplateSize)
 	resp, raw = h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "Full", "body": full}, csrf)
