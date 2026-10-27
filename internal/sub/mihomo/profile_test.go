@@ -393,7 +393,7 @@ func TestRulesInProfile(t *testing.T) {
 }
 
 // An idle gRPC connection is pinged, so that the app does not stay on one a middlebox cut
-// while it was silent; Stash's profile, the built-in one and the own one, goes without.
+// while it was silent; Stash's profile, always the built-in one, goes without.
 func TestGRPCKeepalive(t *testing.T) {
 	grpc := model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID, Transport: &model.Transport{Network: "grpc", Service: "api"}}
 	if o := Proxy(grpc)["grpc-opts"].(map[string]any); o["ping-interval"] != 15 || o["grpc-service-name"] != "api" {
