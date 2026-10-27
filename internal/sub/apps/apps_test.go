@@ -94,6 +94,34 @@ func TestSupports(t *testing.T) {
 	}
 }
 
+// Each mihomo gate holds from its first release on, and the types newer than the
+// core of 2024 stay off a core that does not name its version.
+func TestMihomoVersionGates(t *testing.T) {
+	xhttp := proto.Needs{Type: "vless", Transport: "xhttp"}
+	enc := proto.Needs{Type: "vless", Transport: "tcp", Encryption: true}
+	cases := []struct {
+		ua   string
+		n    proto.Needs
+		want bool
+	}{
+		{"mihomo/1.19.21", xhttp, false},
+		{"mihomo/1.19.22", xhttp, true},
+		{"mihomo/1.19.12", enc, false},
+		{"mihomo/1.19.13", enc, true},
+		{"mihomo/1.19.2", proto.Needs{Type: "anytls"}, false},
+		{"mihomo/1.19.3", proto.Needs{Type: "anytls"}, true},
+		{"clash-verge/v2.2.3", proto.Needs{Type: "anytls"}, true},
+		{"clash-verge/v2.2.3", proto.Needs{Type: "mieru"}, false},
+		{"mihomo/1.18.10", proto.Needs{Type: "mieru"}, false},
+		{"mihomo/1.19.0", proto.Needs{Type: "mieru"}, true},
+	}
+	for _, c := range cases {
+		if got := DetectApp(c.ua).Supports(c.n); got != c.want {
+			t.Errorf("%s with %+v: %v, want %v", c.ua, c.n, got, c.want)
+		}
+	}
+}
+
 // Gecko goes only to mihomo apps that name a core of 1.19.26 or later: an older core
 // fails the whole profile on it, and the other cores got it too late to tell apart.
 func TestGeckoOnlyForNewMihomo(t *testing.T) {
