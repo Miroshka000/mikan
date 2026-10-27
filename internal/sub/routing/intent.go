@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -192,11 +193,23 @@ type Resolver struct {
 }
 
 // ParseResolver reads a server of Resolvers: "https://1.1.1.1/dns-query#VPN", "tls://dns.google",
-// "77.88.8.8", "system". False for one no core but mihomo reads (dhcp://).
+// "77.88.8.8", "2606:4700:4700::1111", "[2606:4700:4700::1111]:53", "system". False for one
+// no core but mihomo reads (dhcp://).
 func ParseResolver(s string) (Resolver, bool) {
 	s, via, _ := strings.Cut(s, "#")
 	if s == "system" || s == "system://" {
 		return Resolver{Scheme: "system"}, true
+	}
+	// A bare IP, with a port or not, is read as an address: as a URL an IPv6 one without
+	// brackets loses its last group to the port.
+	if a, err := netip.ParseAddr(s); err == nil && a.Zone() == "" {
+		return Resolver{Scheme: "udp", Host: a.String(), Via: via}, true
+	}
+	if ap, err := netip.ParseAddrPort(s); err == nil && ap.Addr().Zone() == "" {
+		if ap.Port() == 0 {
+			return Resolver{}, false
+		}
+		return Resolver{Scheme: "udp", Host: ap.Addr().String(), Port: int(ap.Port()), Via: via}, true
 	}
 	if !strings.Contains(s, "://") {
 		s = "udp://" + s

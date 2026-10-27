@@ -5,7 +5,9 @@ import (
 	"slices"
 	"testing"
 
+	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
+	"mikan/internal/sub/subtest"
 )
 
 // The names a key of the admin's nameserver-policy covers in xray's DNS, as they are now:
@@ -91,5 +93,21 @@ func TestDNSPolicyServers(t *testing.T) {
 	got, _ := json.Marshal(rules)
 	if string(got) != `[{"inboundTag":["dns"],"ip":["223.5.5.5","77.88.8.8","77.88.8.1","1.1.1.1"],"outboundTag":"direct"},{"inboundTag":["dns"],"outboundTag":"proxy"}]` {
 		t.Fatalf("rules: %s", got)
+	}
+}
+
+// A resolver given as a bare IPv6 address is that address, with its port when it has one,
+// and xray takes the config.
+func TestDNSIPv6Resolver(t *testing.T) {
+	prof := profileOf(subtest.TwoNodes())
+	prof.Routes = routing.Routes{DNS: routing.DNS{
+		Nameserver: []string{"2606:4700:4700::1111", "[2606:4700:4700::1001]:5353", "tcp://[2606:4700:4700::1111]"},
+		Policy:     []routing.DNSPolicy{{Match: "+.cn", Servers: []string{"2400:3200::1"}}},
+	}}
+	cs := render(t, prof, routing.All, model.Template{})
+	servers, _ := json.Marshal(cs[0].DNS.Servers)
+	if string(servers) != `[{"address":"2400:3200::1","domains":["domain:cn"],"skipFallback":true},`+
+		`"2606:4700:4700::1111",{"address":"2606:4700:4700::1001","port":5353},"tcp://[2606:4700:4700::1111]:53"]` {
+		t.Fatalf("servers: %s", servers)
 	}
 }
