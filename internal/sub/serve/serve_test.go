@@ -89,9 +89,11 @@ func newSub(t *testing.T, p apps.Policy) *fakeSub {
 	}
 }
 
+// testNow is the time of the handlers of handlerOf.
+var testNow = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+
 func handlerOf(sub *fakeSub) *Handler {
-	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
-	return New(fakeSource{sub}, func() time.Time { return now }, func(*http.Request) string { return "192.0.2.7" })
+	return New(fakeSource{sub}, func() time.Time { return testNow }, func(*http.Request) string { return "192.0.2.7" })
 }
 
 // fetch is a GET of the subscription by an app with the User-Agent ua.
@@ -149,7 +151,7 @@ func TestServedRequestIsLogged(t *testing.T) {
 		t.Fatalf("%d, %d keys given", w.Code, len(sub.keys))
 	}
 	e := oneEntry(t, sub)
-	want := LogEntry{At: time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC), IP: "192.0.2.7", Agent: "Happ/3.4.1", App: "happ", Format: FormatURI, Outcome: OutcomeServed}
+	want := LogEntry{At: testNow, IP: "192.0.2.7", Agent: "Happ/3.4.1", App: "happ", Format: FormatURI, Outcome: OutcomeServed}
 	if e != want {
 		t.Errorf("%+v, want %+v", e, want)
 	}
@@ -487,7 +489,6 @@ func hwidHeaders(w *httptest.ResponseRecorder) map[string]string {
 // Every reason Keys gives for no keys has a stub of its own, in the panel's language, and
 // the headers the apps that read the device binding show.
 func TestKeysErrorStubs(t *testing.T) {
-	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	noHWID := map[string]string{"X-Hwid-Not-Supported": "true"}
 	for _, c := range []struct {
 		name    string
@@ -511,13 +512,13 @@ func TestKeysErrorStubs(t *testing.T) {
 		{"banned", ErrDeviceBanned, nil,
 			"⛔ This device is blocked",
 			"⛔ Устройство заблокировано", map[string]string{}},
-		{"unbound until", &UnboundError{Until: now.Add(90 * time.Minute)}, nil,
+		{"unbound until", &UnboundError{Until: testNow.Add(90 * time.Minute)}, nil,
 			"⏸ This device was unbound — it can connect again in 2 h",
 			"⏸ Устройство отвязано — подключится снова через 2 ч", map[string]string{}},
-		{"unbound, the time is past", &UnboundError{Until: now.Add(-time.Minute)}, nil,
+		{"unbound, the time is past", &UnboundError{Until: testNow.Add(-time.Minute)}, nil,
 			"⏸ This device was unbound — it can connect again in 1 h",
 			"⏸ Устройство отвязано — подключится снова через 1 ч", map[string]string{}},
-		{"unbound forever", &UnboundError{Until: now.Add(time.Hour), Forever: true}, nil,
+		{"unbound forever", &UnboundError{Until: testNow.Add(time.Hour), Forever: true}, nil,
 			"⏸ This device was unbound — only the administrator can let it connect again",
 			"⏸ Устройство отвязано — подключить его снова может только администратор", map[string]string{}},
 	} {
@@ -639,12 +640,15 @@ func TestPanelFailuresAre500(t *testing.T) {
 			t.Errorf("%s: %d %q, %d entries", name, w.Code, w.Body, len(sub.log))
 		}
 	}
-	sub := newSub(t, apps.Policy{NoBuiltin: true})
+	// A source that fails has no subscription whose log could be written: only the answer
+	// is checked.
 	w := httptest.NewRecorder()
 	New(failingSource{}, time.Now, func(*http.Request) string { return "" }).Serve(w, httptest.NewRequest(http.MethodGet, "/"+testToken, nil), testToken)
-	check("source", sub, w)
+	if w.Code != 500 || w.Body.String() != "internal error\n" {
+		t.Errorf("source: %d %q", w.Code, w.Body)
+	}
 
-	sub = newSub(t, apps.Policy{NoBuiltin: true})
+	sub := newSub(t, apps.Policy{NoBuiltin: true})
 	sub.userErr = errors.New("db is gone")
 	check("user", sub, fetch(t, sub, "Happ/3.4.1"))
 	if len(sub.keys) != 0 {
@@ -698,7 +702,6 @@ func TestFetchedBeforeTheProfile(t *testing.T) {
 
 // {devices} counts the bound devices only with binding on and a text that uses it.
 func TestAnnouncementDevices(t *testing.T) {
-	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	u := User{Name: "u", Devices: ptr(3), Places: true}
 	for _, c := range []struct {
 		name     string
@@ -717,7 +720,7 @@ func TestAnnouncementDevices(t *testing.T) {
 		sub := newSub(t, apps.Policy{NoBuiltin: true})
 		sub.bound, sub.boundErr = 2, c.boundErr
 		sub.cfg.Announce, sub.cfg.Binding = c.announce, c.binding
-		if got := Announcement(context.Background(), sub, u, sub.cfg, now); got != c.want || sub.boundCalls != c.calls {
+		if got := Announcement(context.Background(), sub, u, sub.cfg, testNow); got != c.want || sub.boundCalls != c.calls {
 			t.Errorf("%s: %q, %d counts; want %q, %d", c.name, got, sub.boundCalls, c.want, c.calls)
 		}
 	}
