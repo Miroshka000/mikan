@@ -83,6 +83,12 @@ func profileHeaders(hd http.Header, format, title string) {
 	}
 }
 
+// noStore keeps an answer out of caches: it is the subscriber's own, with their keys and
+// traffic, and changes with them.
+func noStore(hd http.Header) {
+	hd.Set("Cache-Control", "no-store")
+}
+
 // stubHeaders are what the apps that read the device binding's headers show for reason.
 func stubHeaders(hd http.Header, reason error) {
 	switch {
@@ -340,6 +346,14 @@ func (g AppGroups) header() string {
 		return ""
 	}
 	return v
+}
+
+// groupsHeaders put X-Mikan-Groups, the groups g of the subscription, on the answer to a
+// Mikan app; nothing without groups.
+func groupsHeaders(hd http.Header, g AppGroups) {
+	if v := g.header(); v != "" {
+		hd.Set(GroupsHeader, v)
+	}
 }
 
 // ruleHeaders are the headers a response rule adds, over the panel's own: the admin may

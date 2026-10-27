@@ -295,7 +295,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	// Happ's routing profile is the one of the Clash profile the request would get.
 	appHeaders(hd, ua, cfg, Template(cfg.Templates, FormatClash, dec.Action.Template).Body)
 	ruleHeaders(hd, dec.Action.Headers)
-	hd.Set("Cache-Control", "no-store")
+	noStore(hd)
 	if r.Method == http.MethodHead {
 		return "" // apps peek at the traffic headers; the keys go only with a real fetch
 	}
@@ -450,7 +450,5 @@ func (h *Handler) groupsHeader(ctx context.Context, hd http.Header, r *http.Requ
 		h.Warn("mikan_groups", "subscription: the server groups for the Mikan app are not read", "err", err)
 		return
 	}
-	if v := g.header(); v != "" {
-		hd.Set(GroupsHeader, v)
-	}
+	groupsHeaders(hd, g)
 }

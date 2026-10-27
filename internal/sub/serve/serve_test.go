@@ -243,6 +243,37 @@ func TestRulePage(t *testing.T) {
 	}
 }
 
+// No answer to a subscription is kept by a cache: not the profile, its HEAD, a stub, nor
+// what a rule answers in its place.
+func TestAnswersAreNotStored(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true, Blocked: []string{"shadowrocket"}, Rules: []apps.Rule{
+		rule("no curl", "curl", apps.Action{Respond: apps.Respond403}),
+		rule("no wget", "wget", apps.Action{Respond: apps.Respond404}),
+		rule("page", "mozilla", apps.Action{Respond: apps.RespondHTML, HTML: "<h1>Use Happ</h1>"}),
+	}})
+	for _, c := range []struct {
+		name, method, ua string
+		code             int
+		outcome          Outcome
+	}{
+		{"GET", http.MethodGet, "Happ/3.4.1", 200, OutcomeServed},
+		{"HEAD", http.MethodHead, "Happ/3.4.1", 200, ""},
+		{"stub", http.MethodGet, "Shadowrocket/2592 CFNetwork/1568", 200, OutcomeStub},
+		{"403", http.MethodGet, "curl/8.9", 403, OutcomeBlocked},
+		{"404", http.MethodGet, "Wget/1.21", 404, OutcomeBlocked},
+		{"page", http.MethodGet, "Mozilla/5.0", 200, OutcomeBlocked},
+	} {
+		sub.log = nil
+		w := fetchAs(t, sub, c.method, "/"+testToken, c.ua)
+		if w.Code != c.code || w.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: %d %v", c.name, w.Code, w.Header())
+		}
+		if c.outcome != "" && oneEntry(t, sub).Outcome != c.outcome {
+			t.Errorf("%s: %+v", c.name, sub.log)
+		}
+	}
+}
+
 // A real server lets the handler take the connection: the client gets nothing.
 func TestRuleDropsTheConnection(t *testing.T) {
 	sub := newSub(t, apps.Policy{NoBuiltin: true, Rules: []apps.Rule{rule("drop", "badbot", apps.Action{Respond: apps.RespondDrop})}})
