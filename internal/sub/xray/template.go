@@ -171,7 +171,7 @@ func readFrame(p mihomo.Profile, src string) (frame, error) {
 		f.balancers = append(f.balancers, b)
 	}
 	if len(closed) > 0 && blackhole == "" {
-		blackhole = freeTag("block", tags)
+		blackhole = model.FreeTag("block", tags)
 		f.own = append(f.own, map[string]any{"tag": blackhole, "protocol": "blackhole"})
 	}
 	for _, b := range closed {
@@ -197,7 +197,7 @@ func readFrame(p mihomo.Profile, src string) (frame, error) {
 	for _, r := range routing.HostRules(p.Direct) {
 		for _, fl := range fields(r.When, routing.Common) {
 			if freedom == "" {
-				freedom = freeTag(directTag, tags)
+				freedom = model.FreeTag(directTag, tags)
 				f.own = append(f.own, map[string]any{"tag": freedom, "protocol": "freedom"})
 			}
 			head = append(head, withRef(fl, Ref{Tag: freedom}))
@@ -280,15 +280,6 @@ func firstOf(have, v string) string {
 		return have
 	}
 	return v
-}
-
-// freeTag is base, or base with a number when the template took it.
-func freeTag(base string, tags map[string]bool) string {
-	tag := base
-	for i := 2; tags[tag]; i++ {
-		tag = base + "-" + strconv.Itoa(i)
-	}
-	return tag
 }
 
 // text is a string of the template; "" for anything else.
