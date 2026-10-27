@@ -1,7 +1,10 @@
-# privWL-clash by Nemu-x (https://github.com/Nemu-x/privWL-clash): only what is blocked or
-# slowed down in Russia goes through the VPN, Telegram among it; everything else goes
-# direct. The lists (MIT) are linked, not copied, and pinned to a commit: a push to their
-# repository cannot reroute the apps until the admin moves the pin.
+# Only what is blocked or slowed down in Russia goes through the VPN, Telegram among it;
+# everything else goes direct. On top of the panel's own "only what is blocked" it sends
+# the address lists of privWL-clash (https://github.com/Nemu-x/privWL-clash, by Nemu-x)
+# through the VPN: the ranges of Cloudflare, AWS and others that are slowed down, and the
+# addresses of blocked sites, which catch an app that resolves names itself (its own DoH)
+# and so passes fake-ip by. The lists (MIT) are linked, not copied, and pinned to a commit:
+# a push to their repository cannot reroute the apps until the admin moves the pin.
 mixed-port: 7890
 allow-lan: false
 mode: rule
@@ -9,11 +12,25 @@ log-level: warning
 ipv6: false
 unified-delay: true
 tcp-concurrent: true
+# As the panel's own: names resolve through the VPN, where DNS is not slowed down; the
+# Russian ones with Yandex, for the Russian sites that go direct; the servers' own names
+# straight, before the VPN is up.
 dns:
   enable: true
+  ipv6: false
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
   nameserver:
+    - https://1.1.1.1/dns-query#VPN
+    - https://8.8.8.8/dns-query#VPN
+  nameserver-policy:
+    geosite:category-ru:
+      - 77.88.8.8
+      - 77.88.8.1
+  proxy-server-nameserver:
     - https://1.1.1.1/dns-query
     - https://dns.google/dns-query
 proxy-groups:
@@ -34,6 +51,7 @@ rule-providers:
     url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/tgprx.yaml
     path: ./ruleset/privwl-telegram.yaml
     interval: 86400
+    proxy: VPN
   privwl-blocked:
     type: http
     behavior: classical
@@ -41,6 +59,7 @@ rule-providers:
     url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/clV2_provider.yaml
     path: ./ruleset/privwl-blocked.yaml
     interval: 86400
+    proxy: VPN
   privwl-blocked-apps:
     type: http
     behavior: classical
@@ -48,8 +67,28 @@ rule-providers:
     url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/process-core.yaml
     path: ./ruleset/privwl-blocked-apps.yaml
     interval: 86400
+    proxy: VPN
+  privwl-ip:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ipcidr.yaml
+    path: ./ruleset/privwl-ip.yaml
+    interval: 86400
+    proxy: VPN
+  privwl-ip-sites:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/Nemu-x/privWL-clash/5d0a5924b6c87e4abed0d3c87989ce2469679828/ipcidr-domain.yaml
+    path: ./ruleset/privwl-ip-sites.yaml
+    interval: 86400
+    proxy: VPN
 rules:
+  - GEOIP,LAN,DIRECT,no-resolve
   - RULE-SET,privwl-telegram,VPN,no-resolve
   - RULE-SET,privwl-blocked,VPN
   - RULE-SET,privwl-blocked-apps,VPN
+  - RULE-SET,privwl-ip,VPN,no-resolve
+  - RULE-SET,privwl-ip-sites,VPN,no-resolve
   - MATCH,DIRECT

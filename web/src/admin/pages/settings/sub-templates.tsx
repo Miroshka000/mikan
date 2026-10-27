@@ -218,6 +218,9 @@ function EditorForm({ v, core, saved, onClose, onCreated }: { v: View; core: Cor
     onError: (e) => toast.error(errorText(e)),
   });
   const pick = (id: string) => (body.trim() ? setReplace(id) : load.mutate(id));
+  // mikan's own is what the button beside gives: the catalog is offered when it has more.
+  const readyList = useReadySubTemplates();
+  const readyMore = (readyList.data?.templates ?? []).some((r) => r.core === core && !r.builtin);
   const leave = useBlocker({ shouldBlockFn: () => dirty && !save.isPending, enableBeforeUnload: () => dirty, withResolver: true });
   const back = () => (dirty ? setLeaving(true) : onClose());
   const reset = saved
@@ -260,9 +263,11 @@ function EditorForm({ v, core, saved, onClose, onCreated }: { v: View; core: Cor
                   <Button variant="ghost" size="sm" loading={starter.isPending} onClick={start}>
                     {core === "mihomo" ? t("settings.subTemplates.fromSimple") : t("settings.subTemplates.example")}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setCatalog(true)}>
-                    {t("settings.subTemplates.ready.open")}
-                  </Button>
+                  {readyMore ? (
+                    <Button variant="ghost" size="sm" onClick={() => setCatalog(true)}>
+                      {t("settings.subTemplates.ready.open")}
+                    </Button>
+                  ) : null}
                 </div>
                 {core === "mihomo" ? <ClashSnippets names={names} onApply={(f) => setBody(f)} current={body} /> : null}
                 <div>

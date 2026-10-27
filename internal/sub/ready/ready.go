@@ -55,10 +55,10 @@ var all = []Template{
 		Author: mikanAuthor, License: mikanLicense, Source: mikanSource, Starter: true},
 	{ID: "mikan-xray", Core: model.CoreXray, Name: "mikan", Summary: "Рабочий конфиг Xray: локальные SOCKS и HTTP, DNS через туннель, локальные сети напрямую",
 		Author: mikanAuthor, License: mikanLicense, Source: mikanSource, Starter: true},
-	{ID: "privwl-blocked", Core: model.CoreMihomo, Name: "privWL · только заблокированное", Summary: "Через VPN только заблокированное и замедленное в России и Telegram, остальное напрямую",
-		Author: "Nemu-x", License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
-	{ID: "privwl-ru-direct", Core: model.CoreMihomo, Name: "privWL · Россия напрямую", Summary: "Всё через VPN, кроме российских приложений и сайтов: банки, госуслуги, маркетплейсы",
-		Author: "Nemu-x", License: mikanLicense, Source: privWLSource, Body: file("privwl-ru-direct.yaml")},
+	// The panel's "only what is blocked" and the address lists of privWL-clash it lacks.
+	{ID: "privwl-blocked", Core: model.CoreMihomo, Name: "privWL · только заблокированное",
+		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. Списки: Nemu-x/privWL-clash",
+		Author:  mikanAuthor, License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
 }
 
 // All is the catalog, by core in the order the editor lists it.

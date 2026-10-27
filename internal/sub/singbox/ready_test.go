@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/ready"
@@ -57,7 +59,35 @@ func TestReadyTemplates(t *testing.T) {
 			if servers == 0 {
 				t.Errorf("no servers in the config:\n%s", raw)
 			}
+			// Every list of a Clash template is converted: none of its rules is lost.
+			if r.Core == model.CoreMihomo && !r.Starter {
+				sets := map[string]bool{}
+				for _, s := range c.Route.RuleSet {
+					sets[s["tag"].(string)] = true
+				}
+				for _, name := range providers(t, src) {
+					if !sets["list-"+name] {
+						t.Errorf("the list %s is not in the config: %v", name, sets)
+					}
+				}
+			}
 			corecheck.SingBox(t, raw)
 		})
 	}
+}
+
+// providers are the names of the rule lists of the Clash template src.
+func providers(t *testing.T, src string) []string {
+	t.Helper()
+	var cfg struct {
+		Providers map[string]any `yaml:"rule-providers"`
+	}
+	if err := yaml.Unmarshal([]byte(src), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for name := range cfg.Providers {
+		out = append(out, name)
+	}
+	return out
 }

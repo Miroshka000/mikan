@@ -2685,12 +2685,10 @@
         "mikan-clash": "The panel's built-in profile with the current routing settings; its groups ask for the servers themselves.",
         "mikan-singbox": "A working sing-box config: TUN, DNS through the tunnel, local networks direct.",
         "mikan-xray": "A working Xray config: local SOCKS and HTTP, DNS through the tunnel, local networks direct.",
-        "privwl-blocked": "Only what is blocked or slowed down in Russia, and Telegram, goes through the VPN; the rest goes direct.",
-        "privwl-ru-direct": "Everything goes through the VPN except Russian apps and sites: banks, state services, marketplaces."
+        "privwl-blocked": "What is blocked or slowed down in Russia, Telegram and the address ranges that are slowed down (Cloudflare, AWS and others) go through the VPN; the rest goes direct. Lists: Nemu-x/privWL-clash."
       },
       "readyNames": {
-        "privwl-blocked": "privWL · only what is blocked",
-        "privwl-ru-direct": "privWL · Russia direct"
+        "privwl-blocked": "privWL · only what is blocked"
       },
       "body": "Template text",
       "size": "{size} of {max}",
