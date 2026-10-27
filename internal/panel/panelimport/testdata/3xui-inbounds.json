@@ -1,0 +1,184 @@
+{
+ "success": true,
+ "msg": "",
+ "obj": [
+  {
+   "id": 1,
+   "up": 0,
+   "down": 0,
+   "total": 0,
+   "remark": "VLESS-443",
+   "enable": true,
+   "expiryTime": 0,
+   "listen": "",
+   "port": 443,
+   "protocol": "vless",
+   "tag": "inbound-443",
+   "settings": "{\n  \"clients\": [\n    {\n      \"id\": \"0f1d6a3e-5a3b-4f0e-9a51-2c1f0b1e7a01\",\n      \"flow\": \"xtls-rprx-vision\",\n      \"email\": \"anna\",\n      \"limitIp\": 2,\n      \"totalGB\": 10737418240,\n      \"expiryTime\": 1893456000000,\n      \"enable\": true,\n      \"tgId\": 777,\n      \"subId\": \"anna0sub0long0id\",\n      \"comment\": \"friend\",\n      \"reset\": 0\n    },\n    {\n      \"id\": \"0f1d6a3e-5a3b-4f0e-9a51-2c1f0b1e7a02\",\n      \"flow\": \"\",\n      \"email\": \"boris\",\n      \"limitIp\": 0,\n      \"totalGB\": 0,\n      \"expiryTime\": 0,\n      \"enable\": false,\n      \"tgId\": 0,\n      \"subId\": \"boris0sub0long00\",\n      \"comment\": \"\",\n      \"reset\": 0\n    },\n    {\n      \"id\": \"0f1d6a3e-5a3b-4f0e-9a51-2c1f0b1e7a03\",\n      \"flow\": \"\",\n      \"email\": \"vera\",\n      \"limitIp\": \"3\",\n      \"totalGB\": \"5368709120\",\n      \"expiryTime\": -2592000000,\n      \"enable\": true,\n      \"tgId\": \"\",\n      \"subId\": \"short\",\n      \"reset\": 0\n    }\n  ],\n  \"decryption\": \"none\",\n  \"fallbacks\": []\n}",
+   "streamSettings": "{\"network\":\"tcp\",\"security\":\"reality\"}",
+   "sniffing": "{}",
+   "clientStats": [
+    {
+     "id": 1,
+     "inboundId": 1,
+     "enable": true,
+     "email": "anna",
+     "up": 100,
+     "down": 900,
+     "expiryTime": 1893456000000,
+     "total": 10737418240,
+     "reset": 0
+    },
+    {
+     "id": 2,
+     "inboundId": 1,
+     "enable": true,
+     "email": "boris",
+     "up": 5,
+     "down": 5,
+     "expiryTime": 0,
+     "total": 0,
+     "reset": 0
+    },
+    {
+     "id": 3,
+     "inboundId": 1,
+     "enable": true,
+     "email": "vera",
+     "up": 0,
+     "down": 0,
+     "expiryTime": -2592000000,
+     "total": 5368709120,
+     "reset": 0
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "up": 0,
+   "down": 0,
+   "total": 0,
+   "remark": "VMESS-8080",
+   "enable": true,
+   "expiryTime": 0,
+   "listen": "",
+   "port": 8080,
+   "protocol": "vmess",
+   "tag": "inbound-8080",
+   "settings": "{\n  \"clients\": [\n    {\n      \"id\": \"0f1d6a3e-5a3b-4f0e-9a51-2c1f0b1e7a04\",\n      \"security\": \"auto\",\n      \"email\": \"anna-vmess\",\n      \"limitIp\": 1,\n      \"totalGB\": 10737418240,\n      \"expiryTime\": 1924992000000,\n      \"enable\": true,\n      \"tgId\": 0,\n      \"subId\": \"anna0sub0long0id\",\n      \"comment\": \"friend\",\n      \"reset\": 0\n    },\n    {\n      \"id\": \"0f1d6a3e-5a3b-4f0e-9a51-2c1f0b1e7a05\",\n      \"security\": \"auto\",\n      \"email\": \"gleb\",\n      \"limitIp\": 0,\n      \"totalGB\": 0,\n      \"expiryTime\": 0,\n      \"enable\": true,\n      \"tgId\": 0,\n      \"subId\": \"gleb0sub0long000\",\n      \"comment\": \"\",\n      \"reset\": 0\n    }\n  ]\n}",
+   "streamSettings": "{\"network\":\"ws\"}",
+   "sniffing": "{}",
+   "clientStats": [
+    {
+     "id": 4,
+     "inboundId": 2,
+     "enable": true,
+     "email": "anna-vmess",
+     "up": 0,
+     "down": 1000,
+     "expiryTime": 1924992000000,
+     "total": 10737418240,
+     "reset": 0
+    },
+    {
+     "id": 5,
+     "inboundId": 2,
+     "enable": true,
+     "email": "gleb",
+     "up": 1,
+     "down": 1,
+     "expiryTime": 0,
+     "total": 0,
+     "reset": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "up": 0,
+   "down": 0,
+   "total": 0,
+   "remark": "Trojan",
+   "enable": true,
+   "expiryTime": 0,
+   "listen": "",
+   "port": 2087,
+   "protocol": "trojan",
+   "tag": "inbound-2087",
+   "settings": "{\n  \"clients\": [\n    {\n      \"password\": \"dima-pass\",\n      \"email\": \"dima\",\n      \"limitIp\": 0,\n      \"totalGB\": 1000,\n      \"expiryTime\": 0,\n      \"enable\": true,\n      \"tgId\": 0,\n      \"subId\": \"\",\n      \"comment\": \"\",\n      \"reset\": 0\n    },\n    {\n      \"password\": \"egor-pass\",\n      \"email\": \"egor\",\n      \"limitIp\": 0,\n      \"totalGB\": 0,\n      \"expiryTime\": 1600000000000,\n      \"enable\": true,\n      \"tgId\": 0,\n      \"subId\": \"egor0sub0long000\",\n      \"comment\": \"\",\n      \"reset\": 0\n    }\n  ]\n}",
+   "streamSettings": "{\"network\":\"tcp\"}",
+   "sniffing": "{}",
+   "clientStats": [
+    {
+     "id": 6,
+     "inboundId": 3,
+     "enable": false,
+     "email": "dima",
+     "up": 400,
+     "down": 600,
+     "allTime": 5000,
+     "expiryTime": 0,
+     "total": 1000,
+     "reset": 0
+    },
+    {
+     "id": 7,
+     "inboundId": 3,
+     "enable": false,
+     "email": "egor",
+     "up": 0,
+     "down": 0,
+     "expiryTime": 1600000000000,
+     "total": 0,
+     "reset": 0
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "up": 0,
+   "down": 0,
+   "total": 0,
+   "remark": "WG",
+   "enable": true,
+   "expiryTime": 0,
+   "listen": "",
+   "port": 51820,
+   "protocol": "wireguard",
+   "tag": "inbound-51820",
+   "settings": "{\"mtu\": 1420, \"secretKey\": \"kD3/+Lr2OaPY5q2sB3eEJxX6Y8v7GmIu6cQ6tS3N3Ug=\", \"peers\": [{\"privateKey\": \"x\", \"publicKey\": \"y\", \"allowedIPs\": [\"10.0.0.2/32\"], \"keepAlive\": 0}], \"noKernelTun\": false}",
+   "streamSettings": "",
+   "sniffing": "{}",
+   "clientStats": []
+  },
+  {
+   "id": 6,
+   "up": 0,
+   "down": 0,
+   "total": 0,
+   "remark": "VLESS-XHTTP",
+   "enable": true,
+   "expiryTime": 0,
+   "listen": "",
+   "port": 2443,
+   "protocol": "vless",
+   "tag": "inbound-2443",
+   "settings": "{\n  \"clients\": [\n    {\n      \"id\": \"0f1d6a3e-5a3b-4f0e-9a51-2c1f0b1e7a01\",\n      \"email\": \"anna\",\n      \"limitIp\": 2,\n      \"totalGB\": 10737418240,\n      \"expiryTime\": 1893456000000,\n      \"enable\": true,\n      \"tgId\": 777,\n      \"subId\": \"anna0sub0long0id\",\n      \"comment\": \"friend\",\n      \"reset\": 0\n    }\n  ],\n  \"decryption\": \"none\"\n}",
+   "streamSettings": "{\"network\":\"xhttp\"}",
+   "sniffing": "{}",
+   "clientStats": [
+    {
+     "id": 1,
+     "inboundId": 1,
+     "enable": true,
+     "email": "anna",
+     "up": 100,
+     "down": 900,
+     "expiryTime": 1893456000000,
+     "total": 10737418240,
+     "reset": 0
+    }
+   ]
+  }
+ ]
+}

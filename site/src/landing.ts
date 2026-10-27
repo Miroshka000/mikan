@@ -83,7 +83,7 @@ export const strings = {
 				},
 				{
 					title: 'Переезд с других панелей',
-					text: 'Импорт пользователей из Marzban, PasarGuard и Remnawave. Старые ссылки подписок работают, когда старый домен указывает на mikan.',
+					text: 'Импорт пользователей из Marzban, PasarGuard, Remnawave и 3x-ui. Старые ссылки подписок работают, когда старый домен указывает на mikan.',
 					href: docs('ru', 'operations/import/'),
 				},
 				{
@@ -202,7 +202,7 @@ export const strings = {
 				},
 				{
 					title: 'Moving from other panels',
-					text: 'Import users from Marzban, PasarGuard and Remnawave. Old subscription links keep working once the old domain points to mikan.',
+					text: 'Import users from Marzban, PasarGuard, Remnawave and 3x-ui. Old subscription links keep working once the old domain points to mikan.',
 					href: docs('en', 'operations/import/'),
 				},
 				{

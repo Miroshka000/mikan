@@ -3598,7 +3598,8 @@
             "enum": [
               "marzban",
               "pasarguard",
-              "remnawave"
+              "remnawave",
+              "3xui"
             ],
             "type": "string"
           },
@@ -3639,7 +3640,8 @@
             "enum": [
               "marzban",
               "pasarguard",
-              "remnawave"
+              "remnawave",
+              "3xui"
             ],
             "type": "string"
           },
@@ -3648,17 +3650,17 @@
             "type": "string"
           },
           "token": {
-            "description": "Remnawave: API-токен; PasarGuard: API-ключ вместо логина",
+            "description": "Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина",
             "maxLength": 4096,
             "type": "string"
           },
           "url": {
-            "description": "Адрес старой панели: https://panel.example.com; http:// — только для этого сервера или локальной сети",
+            "description": "Адрес старой панели: https://panel.example.com, у 3x-ui — с его секретным путём; http:// — только для этого сервера или локальной сети",
             "maxLength": 300,
             "type": "string"
           },
           "username": {
-            "description": "Marzban, PasarGuard: логин администратора",
+            "description": "Marzban, PasarGuard, 3x-ui: логин администратора",
             "maxLength": 200,
             "type": "string"
           }
@@ -4139,11 +4141,11 @@
             "type": "boolean"
           },
           "source": {
-            "description": "Из какой панели: marzban, pasarguard или remnawave",
+            "description": "Из какой панели: marzban, pasarguard, remnawave или 3xui",
             "type": "string"
           },
           "url": {
-            "description": "Ссылка целиком. Только у Remnawave: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи",
+            "description": "Ссылка целиком. Только у Remnawave и 3x-ui: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи",
             "type": "string"
           }
         },
@@ -4157,7 +4159,7 @@
         "additionalProperties": false,
         "properties": {
           "kind": {
-            "description": "Чьи ссылки: marzban, pasarguard или remnawave; импорт ставит его сам",
+            "description": "Чьи ссылки: marzban, pasarguard, remnawave или 3xui; импорт ставит его сам",
             "type": "string"
           },
           "links": {
@@ -4166,7 +4168,7 @@
             "type": "integer"
           },
           "path": {
-            "description": "Путь старых ссылок подписки: sub у Marzban и PasarGuard, api/sub у Remnawave; пусто — выключено",
+            "description": "Путь старых ссылок подписки: sub у Marzban, PasarGuard и 3x-ui, api/sub у Remnawave; пусто — выключено",
             "type": "string"
           },
           "secret_set": {
@@ -6544,6 +6546,7 @@
               "marzban",
               "pasarguard",
               "remnawave",
+              "3xui",
               ""
             ],
             "type": "string"

@@ -2012,12 +2012,13 @@
     "sections": "Settings sections",
     "import": {
       "title": "Clients from another panel",
-      "sub": "Marzban, PasarGuard or Remnawave: clients come over with their limit, usage, term and device limit. Names mikan already has are left out.",
+      "sub": "Marzban, PasarGuard, Remnawave or 3x-ui: clients come over with their limit, usage, term and device limit. Names mikan already has are left out.",
       "kind": "Panel",
       "kinds": {
         "marzban": "Marzban",
         "pasarguard": "PasarGuard",
-        "remnawave": "Remnawave"
+        "remnawave": "Remnawave",
+        "3xui": "3x-ui"
       },
       "url": "Address of the old panel",
       "urlHint": "As you open it in the browser, without the admin path: https://panel.example.com. The old panel keeps working; nothing is changed there.",
@@ -2027,6 +2028,9 @@
       "tokenHint": "Remnawave → API tokens: a token with read access to clients.",
       "apiKey": "API key (instead of a password)",
       "apiKeyHint": "PasarGuard → API keys, with users:read. Leave empty to sign in with the username and password.",
+      "xuiUrlHint": "As you open it in the browser, with the port and the panel's secret path: https://panel.example.com:2053/path. The old panel keeps working; nothing is changed there.",
+      "xuiToken": "API token (instead of a password)",
+      "xuiTokenHint": "3x-ui → Settings → API tokens, in newer versions; needed when the admin signs in with a two-factor code. Leave empty to sign in with the username and password.",
       "check": "Check",
       "found": "Found {total} clients, {n} new",
       "taken": "Already here, left out: {n}",
@@ -2042,7 +2046,7 @@
       "fetching": "Reading the old panel…",
       "progress": "Importing: {done} of {total}",
       "failed": "The import stopped: {error}",
-      "invalid": "Cannot be taken as they are (too long, broken numbers): {n}",
+      "invalid": "Cannot be taken as they are (too long, broken numbers, only on protocols mikan has not): {n}",
       "notCarried": "Not carried over: the traffic reset strategy, groups and protocols of the old panel (clients get the plan's). An on-hold term starts at the import. Links revoked in the old panel work again: reissue them.",
       "report": "Created {created}, old links filed for {links}",
       "reportNext": "The old links do not open yet: turn them on in the Old subscription links card",
@@ -2051,7 +2055,7 @@
       "legacySub": "Point the old panel's domain at this server and set its subscription port in Settings → Subscription: the links people have keep working.",
       "legacyKind": "Old panel",
       "legacyPath": "Path of the old links",
-      "legacyPathHint": "sub for Marzban and PasarGuard, api/sub for Remnawave (or your own). Empty: off.",
+      "legacyPathHint": "sub for Marzban, PasarGuard and 3x-ui, api/sub for Remnawave (or your own: in 3x-ui it is in Settings → Subscription). Empty: off.",
       "secret": "Signing secret of the old panel",
       "secretHint": "Marzban and PasarGuard sign every link: without their secret an old link cannot be told from a forged one, so it does not open. The secret is in the old panel's database: SELECT secret_key FROM jwt;",
       "secretSet": "The secret is set. Type a new one to change it.",
