@@ -1,22 +1,23 @@
 ---
 title: Import from other panels
-description: Moving users from Marzban, PasarGuard and Remnawave, and how old subscription links keep working.
+description: Moving users from Marzban, PasarGuard, Remnawave and 3x-ui, and how old subscription links keep working.
 ---
 
 import { Steps } from '@astrojs/starlight/components';
 
-**Settings → Import** moves users from Marzban, PasarGuard or Remnawave. You do not need access to the old panel's database: everything goes through its API, and the old panel itself is not changed.
+**Settings → Import** moves users from Marzban, PasarGuard, Remnawave or 3x-ui. You do not need access to the old panel's database: everything goes through its API, and the old panel itself is not changed.
 
 ## Move users
 
 <Steps>
 
-1. Pick the panel and enter the **Address of the old panel**, for example `https://panel.example.com`, without the admin path.
+1. Pick the panel and enter the **Address of the old panel**, for example `https://panel.example.com`, without the admin path. For 3x-ui the address goes with the port and the panel's secret path, as you open it in the browser: `https://panel.example.com:2053/path`.
 
 2. Access:
    - **Marzban**: the administrator's username and password;
    - **PasarGuard**: a username and password, or an API key with the `users:read` permission;
-   - **Remnawave**: an API token with permission to read users.
+   - **Remnawave**: an API token with permission to read users;
+   - **3x-ui**: the administrator's username and password, or an API token (Settings → API tokens, in newer versions). If the administrator signs in with a two-factor code, a token is needed. In 3x-ui 3.11 the username and password are random at install (3x-ui's log shows them on the first start), `admin`/`admin` does not work. The import does not take a self-signed certificate: if the panel has no real certificate, give an `http://` address, which works only to this server or within the local network.
 
 3. Pick a **Plan**: users get its protocols, traffic reset rule and server groups.
 
@@ -28,6 +29,19 @@ import { Steps } from '@astrojs/starlight/components';
 
 The traffic limit, used traffic, term, device limit and note are carried over. Users whose names already exist in mikan are skipped. The old reset rule, groups and connections are not carried over. Users "on hold" start their term at the moment of import.
 
+### 3x-ui
+
+In 3x-ui clients live inside the inbounds, so the import gathers them into users this way:
+
+- clients with the same `subId`, on any inbounds, are one user, one subscription. The user is named after the `email` of the first of them (in the order of the inbounds), the note is their comments, the contact their Telegram ID;
+- 3x-ui has limits per client, and the user gets their sum: the traffic limit is the sum of the limits, used traffic the sum of what they used; if one of the clients has no limit, the user has none. The term is the latest one, and a client without a term makes the user's term endless;
+- the device limit is `limitHwid` of 3x-ui 3.x, and in the versions without it the limit of addresses at once (`limitIp`), the largest of the clients';
+- a term "from the first use" (a negative `expiryTime`) starts at the import, as "on hold" does from the other panels;
+- a client without a `subId` comes over as a user of its own, without an old link;
+- a client that is only on inbounds of protocols mikan has not (VMess, WireGuard, MTProto and others) does not come over: "Check" lists it among those mikan will not take, with the reason. If the same `subId` has clients on mikan's protocols, the user comes over with them, and such a client's limits, term and traffic are not added in. mikan's protocols are VLESS, Trojan, Shadowsocks, Hysteria2 and TUIC.
+
+A user is disabled only if every client of its `subId` is. A client 3x-ui turned off by itself when its term or traffic ran out comes over expired or over its limit, not disabled, so it works again after a renewal. The limits and terms of the inbounds themselves are not carried over.
+
 :::caution
 Links that were revoked in the old panel work again after the import. If that matters, reissue them.
 :::
@@ -36,7 +50,7 @@ Links that were revoked in the old panel work again after the import. If that ma
 
 For clients to change nothing, point the old domain at the mikan server and set up the **Old subscription links** card:
 
-- **Path of the old links**: `sub` for Marzban and PasarGuard, `api/sub` for Remnawave. Empty: off.
+- **Path of the old links**: `sub` for Marzban and PasarGuard, `api/sub` for Remnawave. For 3x-ui it is the "Subscription path" of its Settings → Subscription (`sub` by default): the old link is the client's `subId`, which comes over as it is. Empty: off.
 - Marzban and PasarGuard also need the **Signing secret of the old panel**. It is stored in the old panel's database:
 
   ```sql
@@ -46,4 +60,4 @@ For clients to change nothing, point the old domain at the mikan server and set 
   Without it, the old links will not open.
 - Set the subscription port in **Settings → Subscription** if the old panel served subscriptions on a different port.
 
-The bot accepts old links, and the user card shows the old link (Remnawave) or that it works. Reissuing a link disables the old one too.
+The bot accepts old links, and the user card shows the old link (Remnawave, 3x-ui) or that it works. Reissuing a link disables the old one too.

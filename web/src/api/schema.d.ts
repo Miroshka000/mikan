@@ -4399,7 +4399,7 @@ export interface components {
         };
         ImportRunInputBody: {
             /** @enum {string} */
-            kind: "marzban" | "pasarguard" | "remnawave";
+            kind: "marzban" | "pasarguard" | "remnawave" | "3xui";
             password?: string;
             /**
              * Format: int64
@@ -4412,13 +4412,13 @@ export interface components {
         };
         ImportSource: {
             /** @enum {string} */
-            kind: "marzban" | "pasarguard" | "remnawave";
+            kind: "marzban" | "pasarguard" | "remnawave" | "3xui";
             password?: string;
-            /** @description Remnawave: API-токен; PasarGuard: API-ключ вместо логина */
+            /** @description Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина */
             token?: string;
-            /** @description Адрес старой панели: https://panel.example.com; http:// — только для этого сервера или локальной сети */
+            /** @description Адрес старой панели: https://panel.example.com, у 3x-ui — с его секретным путём; http:// — только для этого сервера или локальной сети */
             url: string;
-            /** @description Marzban, PasarGuard: логин администратора */
+            /** @description Marzban, PasarGuard, 3x-ui: логин администратора */
             username?: string;
         };
         InactiveOutputBody: {
@@ -4598,20 +4598,20 @@ export interface components {
         LegacyLinks: {
             /** @description Старые ссылки сейчас открываются: задан их путь, а для подписанных ещё и секрет старой панели */
             active: boolean;
-            /** @description Из какой панели: marzban, pasarguard или remnawave */
+            /** @description Из какой панели: marzban, pasarguard, remnawave или 3xui */
             source: string;
-            /** @description Ссылка целиком. Только у Remnawave: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи */
+            /** @description Ссылка целиком. Только у Remnawave и 3x-ui: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи */
             url?: string;
         };
         LegacyView: {
-            /** @description Чьи ссылки: marzban, pasarguard или remnawave; импорт ставит его сам */
+            /** @description Чьи ссылки: marzban, pasarguard, remnawave или 3xui; импорт ставит его сам */
             kind: string;
             /**
              * Format: int64
              * @description У скольких пользователей заведены старые ссылки
              */
             links: number;
-            /** @description Путь старых ссылок подписки: sub у Marzban и PasarGuard, api/sub у Remnawave; пусто — выключено */
+            /** @description Путь старых ссылок подписки: sub у Marzban, PasarGuard и 3x-ui, api/sub у Remnawave; пусто — выключено */
             path: string;
             /** @description Секрет старой панели задан; сам он не возвращается */
             secret_set: boolean;
@@ -5500,7 +5500,7 @@ export interface components {
         };
         PatchLegacyInputBody: {
             /** @enum {string} */
-            kind?: "marzban" | "pasarguard" | "remnawave" | "";
+            kind?: "marzban" | "pasarguard" | "remnawave" | "3xui" | "";
             path?: string;
             /** @description Секрет из таблицы jwt базы старой панели; пусто — убрать */
             secret?: string;

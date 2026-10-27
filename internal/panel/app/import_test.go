@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -277,6 +278,83 @@ func TestImportFromRemnawaveKeepsShortUUIDLinks(t *testing.T) {
 	// The client type after the token picks the format, as in Remnawave.
 	if _, body := h.do(http.MethodGet, "/api/sub/Abc123Def456Ghi7/mihomo", nil, map[string]string{"User-Agent": "Happ/3.4.1"}); !strings.Contains(string(body), "proxies") {
 		t.Errorf("/mihomo did not give a Clash profile: %.120s", body)
+	}
+}
+
+// 3x-ui (a version without CSRF) at its secret path: the clients of one subId become one
+// user, a client only on vmess is reported and not made, and the subId opens the old link.
+func TestImportFrom3xUIKeepsSubIDLinks(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355} {
+		if err := settings.Set(ctx, settings.New(h.st.Q), k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	api := "/" + adminPath + "/api/v1"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	inbounds, err := os.ReadFile("../panelimport/testdata/3xui-inbounds.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/x7k/login":
+			_ = r.ParseForm()
+			if r.PostForm.Get("username") == "admin" && r.PostForm.Get("password") == "pw" {
+				http.SetCookie(w, &http.Cookie{Name: "3x-ui", Value: "s", Path: "/"})
+				_, _ = w.Write([]byte(`{"success":true}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"success":false}`))
+		case "/x7k/panel/api/inbounds/list":
+			if c, err := r.Cookie("3x-ui"); err != nil || c.Value != "s" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write(inbounds)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(old.Close)
+	tariffs, _ := h.st.Q.ListTariffs(ctx)
+	run := map[string]any{"kind": "3xui", "url": old.URL + "/x7k", "username": "admin", "password": "pw", "tariff_id": tariffs[1].ID}
+	r := runImport(t, h, api, csrf, run)
+	// anna, boris and egor have a subId fit to be a secret; vera's is too short, dima has none.
+	if r.Created != 5 || r.Links != 3 || r.Failed.Count != 1 || !strings.Contains(r.Failed.Names[0], "gleb") || r.NoLink.Count != 1 {
+		t.Fatalf("import: %+v", r)
+	}
+	users, _ := h.st.Q.ListUsers(ctx)
+	var anna db.User
+	for _, u := range users {
+		if u.Name == "anna" {
+			anna = u
+		}
+	}
+	if !anna.TrafficLimit.Valid || anna.TrafficLimit.Int64 != 10<<30 || anna.UsedDown != 1000 || !anna.DeviceLimit.Valid || anna.DeviceLimit.Int64 != 2 || anna.Contact != "tg:777" {
+		t.Fatalf("anna: %+v", anna)
+	}
+	if resp, body := h.do(http.MethodPatch, api+"/import/legacy", map[string]any{"path": "xui/sub"}, csrf); resp.StatusCode != http.StatusOK {
+		t.Fatalf("legacy path: %d %s", resp.StatusCode, body)
+	}
+	if _, err := h.p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]int{
+		"/xui/sub/anna0sub0long0id": http.StatusOK,
+		"/xui/sub/anna0sub0long0ie": http.StatusNotFound,
+	} {
+		resp, body := h.do(http.MethodGet, path, nil, map[string]string{"User-Agent": "Happ/3.4.1"})
+		if resp.StatusCode != want {
+			t.Errorf("%s: %d %.80s, want %d", path, resp.StatusCode, body, want)
+		}
 	}
 }
 
