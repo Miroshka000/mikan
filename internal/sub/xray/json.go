@@ -100,17 +100,11 @@ type rule struct {
 // none (or of another core's).
 func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
 	g = g.WithDefaults(p.Lang)
-	outs := outboundsOf(p.Proxies)
+	outs, carried := outboundsOf(p.Proxies)
 	if len(outs) == 0 {
 		return plan{}, model.ErrNoProxies
 	}
 	// The groups are made of what xray carries: a group of nothing else is none.
-	var carried []model.Proxy
-	for _, x := range p.Proxies {
-		if slices.ContainsFunc(outs, func(t tagged) bool { return t.name == x.Name }) {
-			carried = append(carried, x)
-		}
-	}
 	p.Proxies = carried
 	if t.Core != model.CoreMihomo {
 		return builtin(p, g, m, outs), nil
@@ -122,20 +116,20 @@ func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 	if err != nil {
 		return plan{}, err
 	}
-	return template(parts, g, outs, p.Routes.Servers), nil
+	return clashPlan(parts, g, outs, p.Routes.Servers), nil
 }
 
-// outboundsOf are the outbounds of the proxies xray carries, tagged.
-func outboundsOf(ps []model.Proxy) []tagged {
+// outboundsOf are the outbounds of the proxies xray carries, tagged, and those proxies.
+func outboundsOf(ps []model.Proxy) (outs []tagged, carried []model.Proxy) {
 	width := len(strconv.Itoa(len(ps)))
-	var out []tagged
 	for _, x := range ps {
-		tag := fmt.Sprintf("proxy-%0*d", width, len(out)+1)
+		tag := fmt.Sprintf("proxy-%0*d", width, len(outs)+1)
 		if o, ok := outbound(x, tag); ok {
-			out = append(out, tagged{name: x.Name, tag: tag, out: o})
+			outs = append(outs, tagged{name: x.Name, tag: tag, out: o})
+			carried = append(carried, x)
 		}
 	}
-	return out
+	return outs, carried
 }
 
 // builtin is the plan of the panel's routing: the intent with what xray can match of it,
@@ -189,10 +183,10 @@ func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode, outs []tagged
 	return pl
 }
 
-// template is the plan of an own Clash profile: its rules up to the first MATCH, its groups
+// clashPlan is the plan of an own Clash profile: its rules up to the first MATCH, its groups
 // and DNS. Its main group is the one MATCH goes to, else the panel's main group by name,
 // else its first.
-func template(parts mihomo.Parts, g model.GroupNames, outs []tagged, s routing.Servers) plan {
+func clashPlan(parts mihomo.Parts, g model.GroupNames, outs []tagged, s routing.Servers) plan {
 	// What no rule takes goes direct in mihomo.
 	pl := plan{outbounds: outs, groups: parts.Groups, dns: parts.DNS, servers: s, final: routing.Target{Kind: routing.ToDirect}}
 	for _, r := range parts.Rules {
