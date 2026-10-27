@@ -10,7 +10,8 @@ import (
 )
 
 // singboxOutbound is p as a sing-box outbound; false for one sing-box cannot carry: a
-// protocol of mihomo's own, VLESS Encryption, Gecko, XHTTP, a pinned certificate.
+// protocol of mihomo's own, VLESS Encryption, Gecko, XHTTP, a pinned certificate, a
+// Shadowsocks plugin or multiplexing it has no counterpart for.
 func singboxOutbound(p model.Proxy) (map[string]any, bool) {
 	o := map[string]any{"tag": p.Name, "server": p.Server, "server_port": p.Port}
 	tls, ok := singboxTLS(p)
@@ -59,6 +60,13 @@ func singboxOutbound(p model.Proxy) (map[string]any, bool) {
 		if p.UDPOverTCP > 0 {
 			o["udp_over_tcp"] = map[string]any{"enabled": true, "version": p.UDPOverTCP}
 		}
+		if p.Plugin != "" {
+			plugin, opts, ok := sip003(p.Plugin, p.PluginOpts)
+			if !ok {
+				return nil, false
+			}
+			o["plugin"], o["plugin_opts"] = plugin, opts
+		}
 	default:
 		return nil, false
 	}
@@ -87,10 +95,148 @@ func singboxOutbound(p model.Proxy) (map[string]any, bool) {
 			return nil, false // XHTTP
 		}
 	}
+	if p.Smux != nil {
+		mux, ok := multiplex(p)
+		if !ok {
+			return nil, false
+		}
+		o["multiplex"] = mux
+	}
 	if !p.UDP && p.Type != "tuic" && p.Type != "hysteria2" {
 		o["network"] = "tcp"
 	}
 	return o, true
+}
+
+// sip003 is a Shadowsocks plugin of mihomo's as sing-box runs it: its name and its options
+// in SIP003's form (key=value;...); false for a plugin sing-box has none of (shadow-tls,
+// restls, gost-plugin, kcptun, ...) or a setting it cannot take. The hosts are mihomo's
+// default when none is given, which sing-box's are not.
+func sip003(plugin string, opts map[string]any) (string, string, bool) {
+	var args []string
+	arg := func(k string, v any) {
+		if v == nil {
+			args = append(args, k)
+			return
+		}
+		args = append(args, k+"="+sip003Escaper.Replace(str(v)))
+	}
+	host := str(opts["host"])
+	if host == "" {
+		host = "bing.com"
+	}
+	switch plugin {
+	case "obfs":
+		mode := str(opts["mode"])
+		if mode != "http" && mode != "tls" {
+			return "", "", false // mihomo refuses it
+		}
+		arg("obfs", mode)
+		arg("obfs-host", host)
+		return "obfs-local", strings.Join(args, ";"), true
+	case "v2ray-plugin":
+		// sing-box's v2ray-plugin sends Host alone and checks the certificate as any
+		// website's: no other headers, skip-cert-verify, pinning, ECH or HTTPUpgrade.
+		for k, v := range opts {
+			switch k {
+			case "mode", "host", "path", "tls", "mux":
+			default:
+				if !unset(v) {
+					return "", "", false
+				}
+			}
+		}
+		if mode := str(opts["mode"]); mode != "websocket" {
+			return "", "", false // mihomo's only mode
+		}
+		arg("mode", "websocket")
+		if opts["tls"] == true {
+			arg("tls", nil)
+		}
+		arg("host", host)
+		if path := str(opts["path"]); path != "" {
+			arg("path", path)
+		}
+		if opts["mux"] == false {
+			arg("mux", 0) // mihomo multiplexes unless told not to, as sing-box does
+		}
+		return "v2ray-plugin", strings.Join(args, ";"), true
+	}
+	return "", "", false
+}
+
+// sip003Escaper escapes what SIP003 options take as their own.
+var sip003Escaper = strings.NewReplacer(`\`, `\\`, `=`, `\=`, `;`, `\;`)
+
+// unset: v is a setting left at its zero (ech-opts: {enabled: false}).
+func unset(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case bool:
+		return !x
+	case string:
+		return x == ""
+	case int:
+		return x == 0
+	case []any:
+		return len(x) == 0
+	case map[string]any:
+		for _, y := range x {
+			if !unset(y) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// multiplex is the sing-box multiplex of p's smux; false where sing-box has none: a
+// protocol but VLESS, Trojan and Shadowsocks, UDP kept out of it (only-tcp), a TCP Brutal
+// speed but whole Mbps.
+func multiplex(p model.Proxy) (map[string]any, bool) {
+	m := p.Smux
+	switch p.Type {
+	case "vless", "trojan", "shadowsocks":
+	default:
+		return nil, false
+	}
+	if m.OnlyTCP {
+		return nil, false
+	}
+	o := map[string]any{"enabled": true}
+	switch m.Protocol {
+	case "":
+	case "smux", "yamux", "h2mux":
+		o["protocol"] = m.Protocol
+	default:
+		return nil, false
+	}
+	for k, n := range map[string]int{"max_connections": m.MaxConnections, "min_streams": m.MinStreams, "max_streams": m.MaxStreams} {
+		if n > 0 {
+			o[k] = n
+		}
+	}
+	if m.Padding {
+		o["padding"] = true
+	}
+	if b := m.Brutal; b != nil {
+		up, ok1 := mbps(b.Up)
+		down, ok2 := mbps(b.Down)
+		if !ok1 || !ok2 {
+			return nil, false
+		}
+		o["brutal"] = map[string]any{"enabled": true, "up_mbps": up, "down_mbps": down}
+	}
+	return o, true
+}
+
+// mbps is a speed of mihomo's in whole Mbps: a bare number, or one of Mbps.
+func mbps(s string) (int, bool) {
+	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "Mbps"))
+	n, err := strconv.Atoi(s)
+	return n, err == nil && n > 0
 }
 
 // singboxTLS is the tls block of p, nil for none; false for a pinned self-signed

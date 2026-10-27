@@ -10,7 +10,8 @@
 // Clash profile's own read into it (mihomo.ReadProxy). What sing-box
 // has no counterpart for is left out:
 // XHTTP and the mihomo-only protocols (build.ForApp leaves them out already), a self-signed
-// certificate pinned by its hash (sing-box pins a public key, from 1.13 on), .mrs lists,
+// certificate pinned by its hash (sing-box pins a public key, from 1.13 on), a Shadowsocks
+// plugin but obfs and v2ray-plugin, smux sing-box has no counterpart for, .mrs lists,
 // rule types of mihomo's own, logic rules but AND.
 package singbox
 
