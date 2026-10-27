@@ -73,6 +73,7 @@ func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets) (map[strin
 				fields["domain"] = append(fields["domain"], v)
 			}
 		}
+		// Each name on its own: a "*." name drops only itself, not the plain names of its key.
 		if len(fields) == 0 {
 			continue // a pattern of mihomo's own
 		}
