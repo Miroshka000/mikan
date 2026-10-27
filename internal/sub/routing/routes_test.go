@@ -15,10 +15,11 @@ func TestRoutesCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	for code, r := range map[string]Routes{
-		"routes_service": {Services: map[string]string{"nope": TargetVPN}},
-		"routes_target":  {Services: map[string]string{"youtube": nodeTarget(9)}},
-		"routes_direct":  {Direct: []string{"nope"}},
-		"routes_dns":     {DNS: DNS{Nameserver: []string{"ftp://x"}}},
+		"routes_service":    {Services: map[string]string{"nope": TargetVPN}},
+		"routes_target":     {Services: map[string]string{"youtube": nodeTarget(9)}},
+		"routes_direct":     {Direct: []string{"nope"}},
+		"routes_dns":        {DNS: DNS{Nameserver: []string{"ftp://x"}}},
+		"routes_dns_policy": {DNS: DNS{Policy: []DNSPolicy{{Match: "geosite:cn,+.a.com", Servers: []string{"8.8.8.8"}}}}},
 	} {
 		if err := r.Check(exists); err == nil || err.Error() != code {
 			t.Errorf("%s: %v", code, err)

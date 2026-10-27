@@ -79,8 +79,9 @@ func TestDNSAllThroughTunnel(t *testing.T) {
 }
 
 // A key of the policy that lists names with commas is one DNS rule of all of them: rule sets
-// of the categories, domains with their subdomains or not; what sing-box has no form of is
-// left out, and a key left with nothing makes no rule.
+// of the categories, domains with their subdomains or not, each name of its own kind as xray
+// reads it too (routing.PolicyNames); what sing-box has no form of is left out, and a key
+// left with nothing makes no rule.
 func TestDNSPolicyKeys(t *testing.T) {
 	lists(t)
 	prof := profileOf(subtest.TwoNodes())
@@ -94,6 +95,9 @@ func TestDNSPolicyKeys(t *testing.T) {
 			{Match: "geosite:!cn", Servers: []string{"8.8.8.8"}},
 			{Match: "geosite:category-ai-!cn,+.x.com", Servers: []string{"8.8.4.4"}},
 			{Match: "rule-set:mikan-ru-core", Servers: []string{"9.9.9.9"}},
+			{Match: "+.g.com,geosite:category-games", Servers: []string{"1.1.1.2"}},
+			{Match: "GEOSITE:private", Servers: []string{"1.1.1.3"}},
+			{Match: "h.com,GEOSITE:private", Servers: []string{"1.1.1.4"}},
 		},
 	}}
 	raw, err := Render(context.Background(), prof, model.GroupNames{}, routing.All, model.Template{})
@@ -107,9 +111,12 @@ func TestDNSPolicyKeys(t *testing.T) {
 	rules, _ := json.Marshal(c.DNS.Rules)
 	if string(rules) != `[{"domain_suffix":["a.com","b.com"],"server":"policy-0"},`+
 		`{"domain_suffix":["e.com"],"server":"policy-1"},`+
-		`{"domain":["a.com"],"domain_suffix":["c.com"],"server":"policy-2"},`+
-		`{"rule_set":["geosite-category-ai-!cn"],"server":"policy-3"},`+
-		`{"rule_set":["geosite-cn","geosite-category-ru"],"server":"policy-4"}]` {
+		`{"domain_suffix":["g.com"],"rule_set":["geosite-category-games"],"server":"policy-2"},`+
+		`{"rule_set":["geosite-private"],"server":"policy-3"},`+
+		`{"domain":["a.com"],"domain_suffix":["c.com"],"server":"policy-4"},`+
+		`{"domain_suffix":["x.com"],"rule_set":["geosite-category-ai-!cn"],"server":"policy-5"},`+
+		`{"rule_set":["geosite-cn","geosite-category-ru"],"server":"policy-6"},`+
+		`{"domain":["h.com"],"server":"policy-7"}]` {
 		t.Fatalf("rules: %s", rules)
 	}
 	// The servers of the keys left with nothing are not there.
@@ -117,8 +124,8 @@ func TestDNSPolicyKeys(t *testing.T) {
 	for _, s := range c.DNS.Servers {
 		servers[s["tag"].(string)] = s["server"]
 	}
-	want := map[string]any{"remote": "1.1.1.1", "local": "1.1.1.1", "policy-0": "77.88.8.8", "policy-1": "1.0.0.1", "policy-2": "77.88.8.1",
-		"policy-3": "8.8.4.4", "policy-4": "223.5.5.5"}
+	want := map[string]any{"remote": "1.1.1.1", "local": "1.1.1.1", "policy-0": "77.88.8.8", "policy-1": "1.0.0.1", "policy-2": "1.1.1.2",
+		"policy-3": "1.1.1.3", "policy-4": "77.88.8.1", "policy-5": "8.8.4.4", "policy-6": "223.5.5.5", "policy-7": "1.1.1.4"}
 	if len(servers) != len(want) {
 		t.Errorf("servers: %v", c.DNS.Servers)
 	}
@@ -131,7 +138,7 @@ func TestDNSPolicyKeys(t *testing.T) {
 	for _, s := range c.Route.RuleSet {
 		sets[s["tag"].(string)], _ = s["url"].(string)
 	}
-	for _, name := range []string{"cn", "category-ru", "category-ai-!cn"} {
+	for _, name := range []string{"cn", "category-ru", "category-ai-!cn", "category-games", "private"} {
 		if url := sets["geosite-"+name]; url != routing.MetaCubeXRuleSet("geosite", name) {
 			t.Errorf("geosite-%s: %q", name, url)
 		}

@@ -8268,6 +8268,125 @@
         ],
         "type": "object"
       },
+      "ReadySubTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "builtin": {
+            "description": "Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают",
+            "type": "boolean"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "license": {
+            "description": "Лицензия текста шаблона, SPDX",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Откуда шаблон и списки, на которые он ссылается",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Описание по-русски; панель переводит его по id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name",
+          "summary",
+          "author",
+          "license",
+          "source",
+          "builtin"
+        ],
+        "type": "object"
+      },
+      "ReadySubTemplateOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "body": {
+            "description": "Текст шаблона: для своего шаблона mikan собран из текущих настроек панели",
+            "type": "string"
+          },
+          "builtin": {
+            "description": "Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают",
+            "type": "boolean"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "license": {
+            "description": "Лицензия текста шаблона, SPDX",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Откуда шаблон и списки, на которые он ссылается",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Описание по-русски; панель переводит его по id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "id",
+          "core",
+          "name",
+          "summary",
+          "author",
+          "license",
+          "source",
+          "builtin"
+        ],
+        "type": "object"
+      },
+      "ReadySubTemplatesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "templates": {
+            "description": "По ядрам, в порядке каталога",
+            "items": {
+              "$ref": "#/components/schemas/ReadySubTemplate"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates"
+        ],
+        "type": "object"
+      },
       "RecordingInfo": {
         "additionalProperties": false,
         "properties": {
@@ -11804,6 +11923,46 @@
           "limited",
           "expired",
           "disabled"
+        ],
+        "type": "object"
+      },
+      "UserOnlineView": {
+        "additionalProperties": false,
+        "properties": {
+          "conns": {
+            "description": "Открытые соединения на этой ноде",
+            "format": "int64",
+            "type": "integer"
+          },
+          "device_id": {
+            "description": "Привязанное устройство, чьими ключами подключены; null — общие ключи пользователя (приложения без ID или без привязки)",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "node_name": {
+            "type": "string"
+          },
+          "online_ips": {
+            "description": "Адреса с открытыми соединениями на этой ноде; оператор поддержки без доступа к подписчикам получает пустой список",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "node_id",
+          "node_name",
+          "device_id",
+          "online_ips",
+          "conns"
         ],
         "type": "object"
       },
@@ -19180,6 +19339,81 @@
         ]
       }
     },
+    "/api/v1/sub-templates/ready": {
+      "get": {
+        "description": "Каталог, из которого редактор загружает шаблон. В базу панель их сама не кладёт.",
+        "operationId": "list-ready-sub-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadySubTemplatesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Готовые шаблоны подписки",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
+    "/api/v1/sub-templates/ready/{id}": {
+      "get": {
+        "description": "Ничего не сохраняет: текст для редактора.",
+        "operationId": "get-ready-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadySubTemplateOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Готовый шаблон подписки с текстом",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
     "/api/v1/sub-templates/{id}": {
       "delete": {
         "operationId": "delete-sub-template",
@@ -21953,6 +22187,52 @@
           }
         },
         "summary": "Следующий тариф: включится сам, когда кончится срок",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/online": {
+      "get": {
+        "operationId": "user-online",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserOnlineView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Где пользователь онлайн сейчас: ноды, устройства, адреса",
         "tags": [
           "users"
         ]

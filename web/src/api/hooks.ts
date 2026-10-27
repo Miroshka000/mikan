@@ -11,6 +11,7 @@ export const qk = {
   devices: (id: number) => ["users", "devices", id] as const,
   boundDevices: (id: number) => ["users", "bound", id] as const,
   deviceBans: (id: number) => ["users", "bans", id] as const,
+  userOnline: (id: number) => ["users", "online", id] as const,
   tariffs: ["tariffs"] as const,
   inbounds: ["inbounds"] as const,
   presets: ["presets"] as const,
@@ -52,6 +53,7 @@ export const qk = {
   subRules: ["sub-rules"] as const,
   subTemplates: ["sub-templates"] as const,
   subTemplate: (id: number) => ["sub-templates", "one", id] as const,
+  readySubTemplates: ["sub-templates-ready"] as const,
   userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
   lifecycle: ["lifecycle"] as const,
@@ -143,6 +145,15 @@ export function useDeviceBans(id: number) {
   return useQuery({
     queryKey: qk.deviceBans(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/device-bans", { params: { path: { id } }, signal })),
+  });
+}
+
+/** Where a user is online now, by node and by device: the nodes report every few seconds. */
+export function useUserOnline(id: number) {
+  return useQuery({
+    queryKey: qk.userOnline(id),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/online", { params: { path: { id } }, signal })),
+    refetchInterval: 15_000,
   });
 }
 
@@ -302,8 +313,8 @@ export function useUpdates() {
 type UserScope = "all" | "devices";
 
 /** The user views a devices mutation changes: the user (its device count), the list (the
- * same count) and the device lists. */
-const DEVICE_VIEWS = new Set(["one", "list", "pages", "devices", "bound", "bans"]);
+ * same count), the device lists and where the user is online. */
+const DEVICE_VIEWS = new Set(["one", "list", "pages", "devices", "bound", "bans", "online"]);
 
 /** Mutations that change a user refresh the user-related views they change. */
 export function useUserMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>, scope: UserScope = "all") {
@@ -512,6 +523,11 @@ export function useSubTemplate(id: number | undefined) {
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/{id}", { params: { path: { id: id! } }, signal })),
     enabled: id !== undefined,
   });
+}
+
+/** The catalog of ready subscription templates: mikan's own and the community's, without their texts. */
+export function useReadySubTemplates() {
+  return useQuery({ queryKey: qk.readySubTemplates, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/ready", { signal })), staleTime: Infinity });
 }
 
 /** The latest requests of a user's subscription, newest first. */
