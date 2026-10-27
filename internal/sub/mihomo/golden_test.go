@@ -4,18 +4,19 @@ import (
 	"strings"
 	"testing"
 
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
 
 // profileOf is the mihomo profile of a test user: its proxies and the panel's settings
 // around them.
-func profileOf(u subtest.User) Profile {
-	return Profile{Proxies: u.Proxies(), Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
+func profileOf(u subtest.User) profile.Profile {
+	return profile.Profile{Proxies: u.Proxies(), Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
 }
 
 // goldenProfile is the variant's user in its app.
-func goldenProfile(v subtest.Variant) Profile {
+func goldenProfile(v subtest.Variant) profile.Profile {
 	p := profileOf(v.User())
 	p.App, p.Rules = v.App, RulesFor(p.Rules, v.App)
 	return p
@@ -56,7 +57,7 @@ func TestGoldenTemplate(t *testing.T) {
 		if strings.HasPrefix(v.Name, "single") {
 			continue // the template names the second node's group
 		}
-		if !prof.Routable() {
+		if !prof.App.TakesOwnProfile() {
 			continue // serve gives the app the built-in profile
 		}
 		t.Run(v.Name, func(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -26,7 +27,7 @@ import (
 const rejectTag = "REJECT"
 
 // Template renders the own sing-box template src for p.
-func Template(p mihomo.Profile, src string) ([]byte, error) {
+func Template(p profile.Profile, src string) ([]byte, error) {
 	cfg, err := templateConfig(p, src)
 	if err != nil {
 		return nil, err
@@ -37,13 +38,13 @@ func Template(p mihomo.Profile, src string) ([]byte, error) {
 // CheckTemplate finds what would break the configs made of src for p: JSON that does not
 // parse, outbounds without a tag or with one tag twice, a group that asks for servers in a
 // way the panel does not read, and what names an outbound or a rule set that is not there.
-func CheckTemplate(p mihomo.Profile, src string) error {
+func CheckTemplate(p profile.Profile, src string) error {
 	_, err := templateConfig(p, src)
 	return err
 }
 
 // templateConfig is the config src makes for p, checked.
-func templateConfig(p mihomo.Profile, src string) (map[string]any, error) {
+func templateConfig(p profile.Profile, src string) (map[string]any, error) {
 	if len(p.Proxies) == 0 {
 		return nil, model.ErrNoProxies
 	}

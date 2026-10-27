@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -80,7 +81,7 @@ type happProfile struct {
 // user: of the own Clash profile src when it renders, of the panel's routing (routing.Intent)
 // otherwise. A site or IP goes to the list of the first rule that takes it, as in the cores,
 // and where the rest goes decides GlobalProxy.
-func HappRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) string {
+func HappRoutingOf(name string, p profile.Profile, m routing.Mode, src string) string {
 	rules, final := happRules(p, m, src)
 	return happLink(name, rules, final)
 }
@@ -96,7 +97,7 @@ const routingStamp = 1792972800 // 2026-10-26
 
 // IncyRoutingOf is HappRoutingOf for INCY, in its own scheme, with UseChunkFiles in INCY's
 // spelling too.
-func IncyRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) string {
+func IncyRoutingOf(name string, p profile.Profile, m routing.Mode, src string) string {
 	rules, final := happRules(p, m, src)
 	r, whole := happProfileOf(name, rules, final), false
 	r.ChunkFiles = &whole
@@ -106,7 +107,7 @@ func IncyRoutingOf(name string, p mihomo.Profile, m routing.Mode, src string) st
 // happRules are the rules of the profile the settings make, in order, and where what none
 // of them takes goes: an own profile's up to its first MATCH (through the proxy without
 // one, Happ's own default), or the intent's.
-func happRules(p mihomo.Profile, m routing.Mode, src string) ([]routing.Rule, routing.Target) {
+func happRules(p profile.Profile, m routing.Mode, src string) ([]routing.Rule, routing.Target) {
 	if src != "" {
 		if rules, ok := mihomo.TemplateRules(p, src); ok {
 			for i, r := range rules {
