@@ -80,7 +80,8 @@ func readFrame(p mihomo.Profile, src string) (frame, error) {
 	if err != nil {
 		return frame{}, err
 	}
-	f := frame{cfg: cfg, outs: outboundsOf(p.Proxies), servers: map[string][]tagged{}}
+	outs, carried := outboundsOf(p.Proxies)
+	f := frame{cfg: cfg, outs: outs, servers: map[string][]tagged{}}
 	if len(f.outs) == 0 {
 		return frame{}, model.ErrNoProxies
 	}
@@ -120,12 +121,6 @@ func readFrame(p mihomo.Profile, src string) (frame, error) {
 	rawBalancers, ok := rt["balancers"].([]any)
 	if !ok && rt["balancers"] != nil {
 		return frame{}, model.TemplateErr("template_shape", "routing.balancers")
-	}
-	var carried []model.Proxy
-	for _, x := range p.Proxies {
-		if slices.ContainsFunc(f.outs, func(t tagged) bool { return t.name == x.Name }) {
-			carried = append(carried, x)
-		}
 	}
 	balancers := map[string]bool{}
 	var closed []map[string]any // left with no servers: they select the blackhole
