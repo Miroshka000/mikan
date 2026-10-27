@@ -2,17 +2,15 @@ package serve
 
 import (
 	"net/http"
-	"strings"
 
 	"mikan/internal/frontpage"
 	"mikan/internal/sub/apps"
-	"mikan/internal/textutil"
 )
 
 // The response rules (apps.Responder) go first in Serve: before the page, before the
 // user is read, and before a device is given keys. This file is what the handler does with
-// what they decided: the answers that end the request, the format they may name and the
-// stub of an app that is turned away.
+// what they decided: the answers that end the request and the format they may name. The
+// stub of an app that is turned away is stub.go's.
 
 // Formats are the formats a response rule may force on an answer, for apps.CheckOpts.
 // A format the handler can write (Serve) is listed here to be named.
@@ -81,36 +79,4 @@ func drop(w http.ResponseWriter) bool {
 	}
 	_ = conn.Close()
 	return true
-}
-
-// unsupportedError is why a request gets a stub that says its app is not supported.
-type unsupportedError struct{ text string }
-
-func (e *unsupportedError) Error() string { return "unsupported: " + e.text }
-
-// StubText is the words of the entry an app that is turned away gets in place of the
-// servers: the admin's own, else the built-in ones, which send the visitor to the apps the
-// admin has not blocked. The admin panel's tester shows it too.
-func StubText(lang string, d apps.Decision) string {
-	if t := strings.TrimSpace(d.Action.Text); t != "" {
-		return fillTitle(t, nil)
-	}
-	en := textutil.Lang(lang).En()
-	switch {
-	case len(d.Install) == 0 && en:
-		return "⛔ This app is not supported — open the subscription link in a browser"
-	case len(d.Install) == 0:
-		return "⛔ Это приложение не поддерживается — откройте ссылку подписки в браузере"
-	case en:
-		return "⛔ This app is not supported — install " + listed(d.Install, "or")
-	}
-	return "⛔ Это приложение не поддерживается — установите " + listed(d.Install, "или")
-}
-
-// listed is "A", "A or B" and "A, B or C".
-func listed(names []string, or string) string {
-	if len(names) < 2 {
-		return strings.Join(names, "")
-	}
-	return strings.Join(names[:len(names)-1], ", ") + " " + or + " " + names[len(names)-1]
 }

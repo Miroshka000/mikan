@@ -1,9 +1,23 @@
 package mihomo
 
 import (
+	_ "embed"
+
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
+)
+
+// base is base.yaml, the start of every built-in profile, and baseKeys its keys in the
+// order of the file; sniffer is sniffer.yaml.
+var (
+	//go:embed base.yaml
+	baseYAML []byte
+	//go:embed sniffer.yaml
+	snifferYAML []byte
+
+	base, baseKeys = embeddedYAML(baseYAML)
+	sniffer, _     = embeddedYAML(snifferYAML)
 )
 
 // Render is a complete client profile.
@@ -48,25 +62,19 @@ func renderConfig(p profile.Profile, g model.GroupNames, m routing.Mode) (map[st
 	for _, r := range tail {
 		rules = append(rules, r.Clash(targetName(gs, r.To, -1)))
 	}
-	cfg := map[string]any{
-		"mixed-port": 7890, "allow-lan": false, "mode": "rule", "log-level": "warning",
-		// The node has no IPv6 on most VPS: with it on, apps first try IPv6 through the
-		// tunnel and wait for the node's "network unreachable" before falling back.
-		"ipv6": false, "unified-delay": true, "tcp-concurrent": true,
-		"dns":          dnsOf(in.Resolvers()),
-		"proxies":      proxies,
-		"proxy-groups": groups,
-	}
+	cfg := cloneYAML(base).(map[string]any)
+	dnsOf(cfg["dns"].(map[string]any), in.Resolvers())
+	cfg["proxies"], cfg["proxy-groups"] = proxies, groups
 	if len(rt.providers) > 0 {
 		cfg["rule-providers"] = rt.providers
 	}
-	if rt.geodata || in.Mode != routing.All {
-		cfg["geodata-mode"], cfg["geox-url"] = false, routing.MetaCubeXGeoX
+	if !rt.geodata && in.Mode == routing.All {
+		// Rules that name no geodata do not make the app download it.
+		delete(cfg, "geodata-mode")
+		delete(cfg, "geox-url")
 	}
 	if in.Tune.Sniffer {
-		cfg["sniffer"] = map[string]any{"enable": true, "parse-pure-ip": true,
-			"sniff": map[string]any{"HTTP": map[string]any{"ports": []any{80, "8080-8880"}}, "TLS": map[string]any{"ports": []any{443, 8443}},
-				"QUIC": map[string]any{"ports": []any{443, 8443}}}}
+		cfg["sniffer"] = cloneYAML(sniffer)
 	}
 	// mihomo skips a rule whose group can't carry UDP (a proxy with udp off, picked by hand
 	// or by url-test) and sends what falls through to DIRECT: past the tunnel, from the real
@@ -98,10 +106,9 @@ func groupOf(gr model.Group) map[string]any {
 	return m
 }
 
-// dnsOf is the DNS of a profile that resolves with r.
-func dnsOf(r routing.Resolvers) map[string]any {
-	dns := map[string]any{"enable": true, "ipv6": r.IPv6, "enhanced-mode": "fake-ip", "fake-ip-range": "198.18.0.1/16",
-		"default-nameserver": r.Default, "nameserver": r.Nameserver}
+// dnsOf fills dns, the DNS of base.yaml, for a profile that resolves with r.
+func dnsOf(dns map[string]any, r routing.Resolvers) {
+	dns["ipv6"], dns["default-nameserver"], dns["nameserver"] = r.IPv6, r.Default, r.Nameserver
 	if len(r.ProxyServer) > 0 {
 		dns["proxy-server-nameserver"] = r.ProxyServer
 	}
@@ -116,7 +123,6 @@ func dnsOf(r routing.Resolvers) map[string]any {
 		dns["enhanced-mode"] = "redir-host"
 		delete(dns, "fake-ip-range")
 	}
-	return dns
 }
 
 // directRules are routing.HostRules as Clash rules.
