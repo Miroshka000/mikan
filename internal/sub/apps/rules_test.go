@@ -126,6 +126,27 @@ func TestAlternativesSkipBlockedApps(t *testing.T) {
 	}
 }
 
+// The stub of an app that sends no device ID names the HWID apps in their order, without
+// the blocked ones: by the catalog's names, so an id off the catalog would show as "".
+func TestHWIDApps(t *testing.T) {
+	for _, c := range []struct {
+		blocked []string
+		want    []string
+	}{
+		{nil, []string{"Happ", "Koala Clash", "INCY"}},
+		{[]string{"koala", "v2rayng"}, []string{"Happ", "INCY"}},
+		{[]string{"happ", "koala"}, []string{"INCY"}},
+		{[]string{"incy", "happ", "koala"}, nil},
+	} {
+		if got := responder(t, Policy{Blocked: c.blocked}).HWIDApps(); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%v blocked: %q, want %q", c.blocked, got, c.want)
+		}
+	}
+	if got := (*Responder)(nil).HWIDApps(); !reflect.DeepEqual(got, []string{"Happ", "Koala Clash", "INCY"}) {
+		t.Errorf("no responder: %q", got)
+	}
+}
+
 func hdr(kv ...string) http.Header {
 	h := http.Header{}
 	for i := 0; i+1 < len(kv); i += 2 {

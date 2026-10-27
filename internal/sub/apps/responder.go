@@ -245,3 +245,15 @@ func (r *Responder) BlockedIDs() []string {
 	}
 	return out
 }
+
+// HWIDApps are the names of the HWID apps the admin has not blocked, for the stub of an app
+// that sends no device ID: it must not send subscribers to an app that gets nothing.
+func (r *Responder) HWIDApps() []string {
+	var out []string
+	for _, id := range HWID {
+		if r == nil || !r.blocked[id] {
+			out = append(out, byID[id].Name)
+		}
+	}
+	return out
+}

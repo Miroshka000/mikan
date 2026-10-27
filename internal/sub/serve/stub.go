@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"slices"
 	"strings"
 
+	"mikan/internal/sub/apps"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/singbox"
@@ -15,24 +15,36 @@ import (
 	"mikan/internal/textutil"
 )
 
-// hwidApps are the apps that send a device ID, for the stub of an app that does not, without
-// those the admin blocked: the stub must not send subscribers to an app that gets nothing.
-func hwidApps(blocked []string) []string {
-	var out []string
-	for _, a := range [][2]string{{"happ", "Happ"}, {"koala", "Koala Clash"}, {"incy", "INCY"}} {
-		if !slices.Contains(blocked, a[0]) {
-			out = append(out, a[1])
-		}
+// unsupportedError is why a request gets a stub that says its app is not supported.
+type unsupportedError struct{ text string }
+
+func (e *unsupportedError) Error() string { return "unsupported: " + e.text }
+
+// StubText is the words of the entry an app that is turned away gets in place of the
+// servers: the admin's own, else the built-in ones, which send the visitor to the apps the
+// admin has not blocked. The admin panel's tester shows it too.
+func StubText(lang string, d apps.Decision) string {
+	if t := strings.TrimSpace(d.Action.Text); t != "" {
+		return fillTitle(t, nil)
 	}
-	return out
+	en := textutil.Lang(lang).En()
+	switch {
+	case len(d.Install) == 0 && en:
+		return "⛔ This app is not supported — open the subscription link in a browser"
+	case len(d.Install) == 0:
+		return "⛔ Это приложение не поддерживается — откройте ссылку подписки в браузере"
+	case en:
+		return "⛔ This app is not supported — install " + listed(d.Install, "or")
+	}
+	return "⛔ Это приложение не поддерживается — установите " + listed(d.Install, "или")
 }
 
-// listOf joins names as "A, B or C", with last the word before the last one.
-func listOf(names []string, last string) string {
-	if len(names) == 1 {
-		return names[0]
+// listed is "A", "A or B" and "A, B or C".
+func listed(names []string, or string) string {
+	if len(names) < 2 {
+		return strings.Join(names, "")
 	}
-	return strings.Join(names[:len(names)-1], ", ") + last + names[len(names)-1]
+	return strings.Join(names[:len(names)-1], ", ") + " " + or + " " + names[len(names)-1]
 }
 
 // stub answers a device that gets no keys or a profile with nothing in it: one placeholder
@@ -87,10 +99,10 @@ func (h *Handler) stub(w http.ResponseWriter, cfg Config, format string, reason 
 		if en {
 			name = "⛔ The app does not send a device ID — open the subscription link in a browser"
 		}
-		if apps := hwidApps(cfg.Responses.BlockedIDs()); len(apps) > 0 {
-			name = "⛔ Приложение не сообщает ID устройства — поставьте " + listOf(apps, " или ")
+		if names := cfg.Responses.HWIDApps(); len(names) > 0 {
+			name = "⛔ Приложение не сообщает ID устройства — поставьте " + listed(names, "или")
 			if en {
-				name = "⛔ The app does not send a device ID — install " + listOf(apps, " or ")
+				name = "⛔ The app does not send a device ID — install " + listed(names, "or")
 			}
 		}
 	}

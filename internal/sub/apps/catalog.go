@@ -143,6 +143,10 @@ func Alternatives(blocked map[string]bool, n int) []string {
 	return out
 }
 
+// HWID are the apps that send a device ID, by id, in the order the stub of an app that
+// does not names them.
+var HWID = []string{"happ", "koala", "incy"}
+
 // XrayJSON are the apps that get whole xray configs (the xray JSON profile) in place of
 // share links, by id: the ones checked on devices to run them. v2RayTun, Streisand and
 // v2rayNG are next.
