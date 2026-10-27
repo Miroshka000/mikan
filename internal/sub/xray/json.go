@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/mihomo"
@@ -60,8 +61,36 @@ func Notes(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 	}
 	var out []model.Note
 	for _, n := range Balance(pl.groups, pl.names(), pl.servers).Notes {
-		if !pl.choice[n.Group] {
+		if !pl.choice[n.Subject] {
 			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// Dropped are what xray leaves out of p's profile as Render makes it, for the admin panel's
+// preview: the proxies it cannot carry (proxy_unsupported), the conditions it has no form of
+// (rule_unsupported), the lists it has no categories for (list_unsupported), the categories
+// the usual geodata lacks (category_missing, routing.Common) and the DNS policies of no name
+// it can read (dns_policy_unsupported). An own xray template is as the admin wrote it: none.
+func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
+	if t.Core == model.CoreXray {
+		return nil
+	}
+	pl, err := planOf(p, g, m, t)
+	if err != nil {
+		return nil
+	}
+	var out []model.Note
+	for _, x := range p.Proxies {
+		if _, ok := outbound(x, ""); !ok {
+			out = append(out, model.Note{Core: core, Subject: x.Name, Code: "proxy_unsupported"})
+		}
+	}
+	out = append(out, pl.dropped...)
+	for _, x := range pl.dns.Policy {
+		if len(policyDomains(x.Match, routing.Common)) == 0 {
+			out = append(out, model.Note{Core: core, Subject: x.Match, Code: "dns_policy_unsupported"})
 		}
 	}
 	return out
@@ -82,6 +111,27 @@ type plan struct {
 	// picks are the main group's choices (its members, or itself when it is no select), the
 	// automatic ones of which get a config.
 	picks []string
+	// dropped are the conditions xray has no form of, for the preview (Dropped).
+	dropped []model.Note
+}
+
+// drop tells the preview of the conditions xray left out, once: of the first one it has no
+// form of, a list it has no categories for, a category the usual geodata lacks, or the
+// condition; of none, the conditions together (two on one field).
+func (pl *plan) drop(when []routing.Match) {
+	subject, code := strings.TrimSuffix(routing.Rule{When: when}.Clash(""), ","), "rule_unsupported"
+	if i := slices.IndexFunc(when, func(m routing.Match) bool { return matchOf(m, routing.Common) == nil }); i >= 0 {
+		m := when[i]
+		switch subject = m.Type + "," + m.Value; m.Type {
+		case "RULE-SET":
+			subject, code = m.Value, "list_unsupported"
+		case "GEOSITE", "GEOIP": // lan is always there
+			subject, code = strings.ToLower(m.Type)+":"+strings.ToLower(strings.TrimSpace(m.Value)), "category_missing"
+		}
+	}
+	if n := (model.Note{Core: core, Subject: subject, Code: code}); !slices.Contains(pl.dropped, n) {
+		pl.dropped = append(pl.dropped, n)
+	}
 }
 
 // tagged is a proxy with its outbound. Balancers select outbounds by the prefix of their
@@ -145,11 +195,14 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode, outs []tagge
 	in := routing.NewIntent(m, p.Rules, p.Routes)
 	// A route keeps the conditions xray matches; one of none makes no rule and no group.
 	var routes []routing.Route
+	var left plan // of the conditions left out, for the preview
 	for _, r := range in.Routes {
 		var keep []routing.Match
 		for _, x := range r.Rules {
 			if fields([]routing.Match{x}, routing.Common) != nil {
 				keep = append(keep, x)
+			} else {
+				left.drop([]routing.Match{x})
 			}
 		}
 		if len(keep) > 0 {
@@ -159,7 +212,7 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode, outs []tagge
 	}
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.XrayBalance(), routes, p.Lang)
 	pl := plan{outbounds: outs, groups: gs.List, dns: in.Resolvers(), servers: in.Servers,
-		choice: map[string]bool{g.Main: true, model.AliasGroup: true}}
+		choice: map[string]bool{g.Main: true, model.AliasGroup: true}, dropped: left.dropped}
 	pre, routed, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
 	for _, part := range [][]routing.Rule{pre, routed, tail} {
 		for _, r := range part {
@@ -223,6 +276,7 @@ func clashPlan(parts mihomo.Parts, g model.GroupNames, outs []tagged, s routing.
 func (pl *plan) add(when []routing.Match, t routing.Target) {
 	f := fields(when, routing.Common)
 	if f == nil {
+		pl.drop(when)
 		return
 	}
 	pl.rules = append(pl.rules, rule{fields: f, to: t})
