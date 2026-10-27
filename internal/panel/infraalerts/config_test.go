@@ -15,6 +15,23 @@ func TestConfigValidatesPublicTarget(t *testing.T) {
 	}
 }
 
+// The group takes a chat as the channel does; a topic is of a group, and is no negative number.
+func TestConfigValidatesGroup(t *testing.T) {
+	for _, tc := range []struct {
+		group  string
+		thread int64
+		valid  bool
+	}{
+		{"", 0, true}, {"-1001234567890", 0, true}, {" -1001234567890 ", 42, true}, {"@team_chat", 7, true},
+		{"", 42, false}, {"-1001234567890", -1, false}, {"team", 0, false}, {"-", 0, false},
+	} {
+		c := AlertsConfig{GroupChat: tc.group, GroupThread: tc.thread}
+		if err := c.Validate(); (err == nil) != tc.valid {
+			t.Errorf("Validate(%q, %d) error=%v, valid=%v", tc.group, tc.thread, err, tc.valid)
+		}
+	}
+}
+
 func TestAlertsConfigPatchKeepsOmittedSwitches(t *testing.T) {
 	base := Default()
 	disabled := false

@@ -379,6 +379,22 @@ func (c *Client) SendTo(ctx context.Context, chat string, text string, silent bo
 	return m, err
 }
 
+// SendToTopic is SendTo for a group, into its topic thread (message_thread_id) when thread
+// is not 0. Text Telegram cannot parse goes as plain text, as Send's does.
+func (c *Client) SendToTopic(ctx context.Context, chat string, thread int64, text string) (Message, error) {
+	var m Message
+	in := htmlText(chat, text)
+	if thread != 0 {
+		in["message_thread_id"] = thread
+	}
+	err := c.call(ctx, "sendMessage", in, &m)
+	if unparsable(err) {
+		asPlain(in, text)
+		err = c.call(ctx, "sendMessage", in, &m)
+	}
+	return m, err
+}
+
 // EditTo edits a message in a channel identified by numeric id or @username.
 func (c *Client) EditTo(ctx context.Context, chat string, msg int64, text string) error {
 	in := htmlText(chat, text)
