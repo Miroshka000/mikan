@@ -149,26 +149,48 @@ func anys(l []string) []any {
 	return out
 }
 
-// singboxList is the payload of a Clash rule list. The panel's lists are pinned to a commit,
-// so what is fetched once stays; a failure is tried again a few minutes later.
-var singboxList = func(ctx context.Context, src string) ([]string, error) {
+// singboxList is the payload of a Clash rule list. A list is fetched again a day later: the
+// panel's lists are pinned to a commit, but an own profile's list may follow a branch. A
+// failure is tried again a few minutes later, and meanwhile the payload fetched last stays.
+var singboxList = cachedList
+
+const (
+	listTTL   = 24 * time.Hour
+	listRetry = 5 * time.Minute
+)
+
+func cachedList(ctx context.Context, src string) ([]string, error) {
 	listCache.Lock()
 	e, ok := listCache.m[src]
 	listCache.Unlock()
-	if ok && (e.err == nil || time.Since(e.at) < 5*time.Minute) {
-		return e.payload, e.err
+	if !ok || time.Since(e.at) >= e.ttl() {
+		payload, err := fetchList(ctx, src)
+		if err != nil && ok {
+			payload = e.payload
+		}
+		e = listEntry{payload: payload, err: err, at: time.Now()}
+		listCache.Lock()
+		listCache.m[src] = e
+		listCache.Unlock()
 	}
-	payload, err := fetchList(ctx, src)
-	listCache.Lock()
-	listCache.m[src] = listEntry{payload: payload, err: err, at: time.Now()}
-	listCache.Unlock()
-	return payload, err
+	if e.payload != nil {
+		return e.payload, nil
+	}
+	return nil, e.err
 }
 
+// listEntry is the payload fetched last and the error of the last fetch, if it failed.
 type listEntry struct {
 	payload []string
 	err     error
 	at      time.Time
+}
+
+func (e listEntry) ttl() time.Duration {
+	if e.err != nil {
+		return listRetry
+	}
+	return listTTL
 }
 
 var listCache = struct {
