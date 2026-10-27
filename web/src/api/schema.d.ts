@@ -5175,9 +5175,10 @@ export interface components {
         };
         Note: {
             /** @enum {string} */
-            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken";
+            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken" | "proxy_unsupported" | "rule_unsupported" | "list_unsupported" | "dns_policy_unsupported" | "category_missing";
             /** @enum {string} */
             core: "mihomo" | "singbox" | "xray";
+            /** @description О чём заметка: группа, условие TYPE,VALUE, список, ключ политики DNS, сервер или geosite:NAME */
             group: string;
         };
         Notify: {
@@ -5905,7 +5906,7 @@ export interface components {
             starter?: boolean;
         };
         PreviewSubTemplateOutputBody: {
-            /** @description Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть */
+            /** @description Что sing-box и Xray делают с шаблоном Clash, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают */
             notes: components["schemas"]["Note"][];
             /** @description Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки */
             profile: string;
@@ -6305,7 +6306,7 @@ export interface components {
             sub_rules?: string;
         };
         RoutesPreviewOutputBody: {
-            /** @description Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид */
+            /** @description Что ядра sing-box и Xray делают с профилем, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают */
             notes: components["schemas"]["Note"][];
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;

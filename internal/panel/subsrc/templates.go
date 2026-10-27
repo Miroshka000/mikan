@@ -77,7 +77,7 @@ type TemplatePreview struct {
 }
 
 // PreviewTemplate is the profile a user given every inbound gets of the template (its keys
-// are placeholders), and, of a Clash one, what sing-box and xray make of its groups.
+// are placeholders), and, of a Clash one, what sing-box and xray make of it (previewNotes).
 func (h *Handler) PreviewTemplate(ctx context.Context, req TemplatePreview) (Preview, error) {
 	prof, cfg, err := h.sample(ctx)
 	if err != nil {
@@ -101,7 +101,7 @@ func (h *Handler) PreviewTemplate(ctx context.Context, req TemplatePreview) (Pre
 			out.Profile, err = mihomo.Render(prof, g, cfg.Mode)
 		}
 		if err == nil {
-			out.Notes = append(singbox.Notes(prof, g, cfg.Mode, t), xray.Notes(prof, g, cfg.Mode, t)...)
+			out.Notes = previewNotes(prof, g, cfg.Mode, t)
 		}
 	case submodel.CoreSingBox:
 		if req.Starter {

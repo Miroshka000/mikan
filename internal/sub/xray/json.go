@@ -78,15 +78,16 @@ func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Temp
 	if t.Core == model.CoreXray {
 		return nil
 	}
-	pl, err := planOf(p, g, m, t)
-	if err != nil {
-		return nil
-	}
 	var out []model.Note
 	for _, x := range p.Proxies {
 		if _, ok := outbound(x, ""); !ok {
 			out = append(out, note(x.Name, "proxy_unsupported"))
 		}
+	}
+	// Of none xray carries (model.ErrNoProxies) the proxies are all there is to tell.
+	pl, err := planOf(p, g, m, t)
+	if err != nil {
+		return out
 	}
 	out = append(out, pl.dropped...)
 	for _, x := range pl.dns.Policy {

@@ -85,7 +85,7 @@ func TestChainInConfig(t *testing.T) {
 		rules:  []routing.Rule{{To: routing.Target{Kind: routing.ToGroup, Group: "cascade"}}},
 		main:   "cascade",
 	}
-	cfg := config(t.Context(), pl)
+	cfg := config(pl, &ruleSets{ctx: t.Context()})
 	raw, _ := json.Marshal(cfg["outbounds"])
 	if !strings.Contains(string(raw), `"detour":"entry","password":"y"`) || cfg["route"].(map[string]any)["final"] != "cascade" {
 		t.Fatalf("outbounds: %s", raw)

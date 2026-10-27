@@ -51,7 +51,7 @@ type routesPreviewOutput struct {
 	Body struct {
 		Profile string `json:"profile" doc:"Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки"`
 		// Notes are empty for a starter.
-		Notes []submodel.Note `json:"notes" doc:"Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид"`
+		Notes []submodel.Note `json:"notes" doc:"Что ядра sing-box и Xray делают с профилем, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают"`
 	}
 }
 
