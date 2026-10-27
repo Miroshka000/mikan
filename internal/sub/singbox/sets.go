@@ -242,13 +242,17 @@ func fetchList(ctx context.Context, src string) ([]string, error) {
 	return parseList(raw), nil
 }
 
-// parseList reads a Clash rule list: YAML with a payload, or a line per entry.
+// parseList reads a Clash rule list: YAML with a payload, or a line per entry. A payload of
+// nothing (`payload: []`, `payload:`) is an empty list, not a line "payload: []".
 func parseList(raw []byte) []string {
 	var doc struct {
-		Payload []string `yaml:"payload"`
+		Payload yaml.Node `yaml:"payload"`
 	}
-	if yaml.Unmarshal(raw, &doc) == nil && len(doc.Payload) > 0 {
-		return doc.Payload
+	if yaml.Unmarshal(raw, &doc) == nil && doc.Payload.Kind != 0 {
+		var payload []string
+		if doc.Payload.Decode(&payload) == nil {
+			return payload
+		}
 	}
 	var out []string
 	for _, l := range strings.Split(string(raw), "\n") {

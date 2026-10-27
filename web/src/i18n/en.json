@@ -385,6 +385,7 @@
       "template_group_name": "Group no. {value} has no name",
       "template_group_dup": "The name \"{value}\" is used twice: groups and servers need names of their own",
       "template_group_member": "No such member of the group: {value}",
+      "template_group_type": "Group {value} has a type the Clash apps' core does not know: select, url-test, fallback, load-balance or chain",
       "template_filter": "The filter of group {value} cannot go with mikan's node choice: only mihomo reads such a pattern. Simplify the filter or drop mikan",
       "template_rule": "Rule no. {value} does not read: TYPE,VALUE,TARGET",
       "template_rule_target": "Rule {value} sends traffic to a group or an outbound the template does not have",
