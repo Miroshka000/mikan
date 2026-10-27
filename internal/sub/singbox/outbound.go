@@ -95,7 +95,9 @@ func singboxOutbound(p model.Proxy) (map[string]any, bool) {
 			return nil, false // XHTTP
 		}
 	}
-	if p.Smux != nil {
+	// sing-box's Shadowsocks multiplexes only without UDP over TCP and ignores multiplex
+	// beside it: the outbound goes without one rather than with one that does nothing.
+	if p.Smux != nil && p.UDPOverTCP == 0 {
 		mux, ok := multiplex(p)
 		if !ok {
 			return nil, false

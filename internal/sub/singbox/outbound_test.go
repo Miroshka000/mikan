@@ -216,6 +216,7 @@ func TestPluginsAndMux(t *testing.T) {
 		{"shadow-tls", ss(map[string]any{"plugin": "shadow-tls", "plugin-opts": map[string]any{"host": "cloud.tencent.com", "password": "p", "version": 2}}), ""},
 		{"gost-plugin", ss(map[string]any{"plugin": "gost-plugin", "plugin-opts": map[string]any{"mode": "websocket"}}), ""},
 		{"smux", ss(map[string]any{"smux": map[string]any{"enabled": true}}), `{"multiplex":{"enabled":true}}`},
+		{"smux beside UDP over TCP", ss(map[string]any{"udp-over-tcp": true, "smux": map[string]any{"enabled": true, "protocol": "smux"}}), `{}`},
 		{"smux turned off", ss(map[string]any{"smux": map[string]any{"enabled": false, "protocol": "smux"}}), `{}`},
 		{"smux of Trojan", trojan(map[string]any{"enabled": true, "protocol": "yamux", "max-connections": 4, "min-streams": 2, "padding": true, "statistic": true}),
 			`{"multiplex":{"enabled":true,"max_connections":4,"min_streams":2,"padding":true,"protocol":"yamux"}}`},
