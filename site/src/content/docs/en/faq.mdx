@@ -21,7 +21,7 @@ Run `mikan install` again and it will continue. If the admin account already exi
 
 ### The import cannot reach the old panel on this same server
 
-Give its address as `http://127.0.0.1:PORT` (3x-ui's with its secret path): the mikan panel runs in the server's own network. "This address may not be used" means `http://` was given to an outside address: unencrypted, the import goes only to this server and the local network, to the rest only over `https://`. The whole move in order: [Moving to mikan](/mikan/en/start/migrate/).
+The mikan panel runs in the server's own network. If the old panel serves plain http on its port, give `http://127.0.0.1:PORT` (for 3x-ui, with its secret path). If it serves https itself (Marzban with `UVICORN_SSL_*`, 3x-ui with a certificate), give its usual address `https://domain:port`: it works from the same server too. "This address may not be used" most often means `http://` was given to an outside address: unencrypted, the import goes only to this server and the local network, to the rest only over `https://`. The whole move in order: [Moving to mikan](/mikan/en/start/migrate/).
 
 ### "The old panel's certificate is not trusted"
 
@@ -37,7 +37,7 @@ Yes. Users whose names already exist in mikan are skipped, so another import add
 
 ### Users from two panels
 
-You can import from several panels one after another. But Marzban's and PasarGuard's links are checked with one secret, so once users with links came from one of them, mikan will not start an import from the other. The path of old links is also one per panel.
+You can import from several panels one after another. But Marzban's and PasarGuard's links are checked with one secret, so once users with links came from one of them, mikan will not start an import from the other. The old links' path is also one for the whole mikan install: if the panels use different paths (`api/sub` for Remnawave, `sub` for the others), old links open only for the panel whose path is set.
 
 ### Move mikan to another server
 

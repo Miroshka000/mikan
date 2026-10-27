@@ -10,7 +10,7 @@ A move from another panel is an installation, an import of the users and a switc
 ## Where to install
 
 - **On a new server.** The old panel keeps working until you have checked everything, and clients notice nothing until the domain is switched.
-- **On the old panel's server.** The installer does not stop on busy ports: the protocols on them get other free ports, see [Installation](/mikan/en/start/install/#what-the-installer-asks). The mikan panel runs in the server's own network, so the import reaches the old panel at `http://127.0.0.1:PORT` (3x-ui's with its secret path): plain `http://` is allowed only to this server and the local network.
+- **On the old panel's server.** The installer does not stop on busy ports: the protocols on them get other free ports, see [Installation](/mikan/en/start/install/#what-the-installer-asks). The mikan panel runs in the server's own network, so the import reaches the old panel at its usual address. If it serves plain http on its port, `http://127.0.0.1:PORT` works (for 3x-ui, with its secret path): plain `http://` is allowed only to this server and the local network. If it serves https itself (Marzban with `UVICORN_SSL_*`, 3x-ui with a certificate), give the address you open it at in the browser, `https://domain:port`. The steps go a little differently on the same server, see [below](#on-the-same-server).
 
 The old panel's node servers become mikan nodes like any other: the command with a key from the **Nodes** page, see [Nodes](/mikan/en/nodes/nodes/).
 
@@ -34,6 +34,22 @@ The old panel's node servers become mikan nodes like any other: the command with
 
 </Steps>
 
+### On the same server
+
+While the old panel runs, it holds its subscription port, and mikan will not take it ("Port … is taken by another program on the server"). Port 80, needed for the old domain's certificate, is often held by its nginx or Caddy. So steps 4, 5 and 7 go like this:
+
+<Steps>
+
+1. Move the users and set the old links' path and, for Marzban and PasarGuard, the signing secret.
+
+2. Stop the old panel, or at least what serves its subscriptions and holds port 80 (its web server). From this moment subscriptions do not open until step 4 is done.
+
+3. Set the subscription port and the old links' domain, and wait for the certificate. If nginx or Caddy stay on port 80, see [Your own certbot or nginx on port 80](/mikan/en/start/domain/#your-own-certbot-or-nginx-on-port-80).
+
+4. Try a couple of old links.
+
+</Steps>
+
 :::caution[An import is a snapshot]
 The import moves users as they were when it started. What changes in the old panel after it (renewals, traffic used, new users) does not come over by itself. Running the import again takes only new names: those already in mikan are skipped. So switch the domain soon after the import.
 :::
@@ -46,13 +62,13 @@ A mikan backup goes onto a freshly installed server, see [Restore](/mikan/en/ope
 
 1. On the old server: `mikan backup`, then copy the archive from `/opt/mikan/backups` to the new server. `mikan url` shows the panel port.
 
-2. On the new server, install mikan with the same panel port: `--port PORT`, see [the flags](/mikan/en/start/install/#unattended-for-scripts). The panel port is kept in the database and comes with the backup, while the installer opens in ufw only the port it set up itself.
+2. On the new server, install mikan with the same panel port: `--port PORT`, see [the flags](/mikan/en/start/install/#unattended-for-scripts). The panel port is in `/opt/mikan/config.json` (`PANEL_PORT`) and in the database, both come back with the backup, while the installer opens in ufw only the port it set up itself. A port you opened by hand on the old server (for example a subscription port outside the spare ones) has to be opened again: `ufw allow PORT/tcp`. `mikan doctor` shows a closed panel port and closed protocol ports; it does not check the subscription port.
 
 3. Restore the backup: `mikan restore /path/to/mikan-….tar.gz`.
 
 4. If the server has another IP, change "Server address" in **Settings → General → Server**, and point the domain's A record at the new server. Subscription links are built from this address, see [Change the domain or address](/mikan/en/start/domain/#change-the-domain-or-address). With a [subscription domain](/mikan/en/subscriptions/domain/), clients' links do not change in a move.
 
-5. The nodes connect by themselves. If "Node API from the panel's IP only" is on for them, the rule lifts itself after 15 minutes and comes back with the new address, see [Hardening a node](/mikan/en/nodes/hardening/#node-api-from-the-panels-ip-only).
+5. The connection to the nodes comes back by itself. If "Node API from the panel's IP only" is on for them, the rule lifts itself after 15 minutes and comes back with the new address, see [Hardening a node](/mikan/en/nodes/hardening/#node-api-from-the-panels-ip-only).
 
 </Steps>
 
