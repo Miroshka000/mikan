@@ -12,6 +12,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/subsrc"
+	"mikan/internal/sub/ready"
 )
 
 // The subscription templates over the API: a Clash one started from the built-in profile,
@@ -271,5 +272,83 @@ func TestSubTemplateSizeInBytes(t *testing.T) {
 	}
 	if resp, raw := h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": "mihomo", "name": "Over", "body": full + " "}, csrf); resp.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("a byte over the limit: %d %.300s", resp.StatusCode, raw)
+	}
+}
+
+// The ready templates over the API: the catalog by core with its authors and licenses, the
+// text of each, mikan's own made as the editor's starter is, each saved as it is loaded, and
+// none of them in the database until it is.
+func TestReadySubTemplatesOverHTTP(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355} {
+		if err := settings.Set(ctx, settings.New(h.st.Q), k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	api := "/" + adminPath + "/api/v1"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	type item struct {
+		ID      string `json:"id"`
+		Core    string `json:"core"`
+		Author  string `json:"author"`
+		License string `json:"license"`
+		Source  string `json:"source"`
+		Builtin bool   `json:"builtin"`
+		Body    string `json:"body"`
+	}
+	resp, raw := h.do(http.MethodGet, api+"/sub-templates/ready", nil, nil)
+	var list struct {
+		Templates []item `json:"templates"`
+	}
+	if resp.StatusCode != http.StatusOK || json.Unmarshal(raw, &list) != nil || len(list.Templates) != len(ready.All()) {
+		t.Fatalf("list: %d %s", resp.StatusCode, raw)
+	}
+	for i, x := range list.Templates {
+		r := ready.All()[i]
+		if x.ID != r.ID || x.Core != string(r.Core) || x.Author != r.Author || x.License != r.License || x.Source != r.Source || x.Builtin != r.Starter || x.Body != "" {
+			t.Errorf("list: %+v, want %s", x, r.ID)
+		}
+	}
+	if resp, raw := h.do(http.MethodGet, api+"/sub-templates/ready/nope", nil, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown: %d %s", resp.StatusCode, raw)
+	}
+	texts := map[string]string{}
+	for _, r := range ready.All() {
+		resp, raw := h.do(http.MethodGet, api+"/sub-templates/ready/"+r.ID, nil, nil)
+		var x item
+		if resp.StatusCode != http.StatusOK || json.Unmarshal(raw, &x) != nil || x.ID != r.ID || x.Body == "" {
+			t.Fatalf("%s: %d %.300s", r.ID, resp.StatusCode, raw)
+		}
+		want := r.Body
+		if r.Starter {
+			resp, raw := h.do(http.MethodPost, api+"/sub-templates/preview", map[string]any{"core": r.Core, "starter": true}, csrf)
+			var pv struct {
+				Profile string `json:"profile"`
+			}
+			if resp.StatusCode != http.StatusOK || json.Unmarshal(raw, &pv) != nil {
+				t.Fatalf("starter %s: %d %s", r.Core, resp.StatusCode, raw)
+			}
+			want = pv.Profile
+		}
+		if x.Body != want {
+			t.Errorf("%s: the text is not the catalog's:\n%s", r.ID, x.Body)
+		}
+		texts[r.ID] = x.Body
+	}
+	if heads, err := h.st.Q.ListSubTemplateHeads(ctx); err != nil || len(heads) != 0 {
+		t.Fatalf("loading saved templates: %v %v", heads, err)
+	}
+	// Each is a template the panel saves as it is loaded.
+	for _, r := range ready.All() {
+		if resp, raw := h.do(http.MethodPost, api+"/sub-templates", map[string]any{"core": r.Core, "name": r.ID, "body": texts[r.ID]}, csrf); resp.StatusCode != http.StatusCreated {
+			t.Errorf("save %s: %d %.300s", r.ID, resp.StatusCode, raw)
+		}
 	}
 }

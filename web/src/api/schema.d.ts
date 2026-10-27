@@ -2017,6 +2017,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sub-templates/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Готовые шаблоны подписки
+         * @description Каталог, из которого редактор загружает шаблон. В базу панель их сама не кладёт.
+         */
+        get: operations["list-ready-sub-templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-templates/ready/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Готовый шаблон подписки с текстом
+         * @description Ничего не сохраняет: текст для редактора.
+         */
+        get: operations["get-ready-sub-template"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sub-templates/{id}": {
         parameters: {
             query?: never;
@@ -2854,6 +2894,23 @@ export interface paths {
         post?: never;
         /** Убрать следующий тариф */
         delete: operations["clear-next-tariff"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{id}/online": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Где пользователь онлайн сейчас: ноды, устройства, адреса */
+        get: operations["user-online"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4166,6 +4223,7 @@ export interface components {
         Events: {
             autotune: boolean;
             autotune_recovery: boolean;
+            billing: boolean;
             exit: boolean;
             inbound: boolean;
             node: boolean;
@@ -4177,6 +4235,7 @@ export interface components {
         EventsPatch: {
             autotune?: boolean;
             autotune_recovery?: boolean;
+            billing?: boolean;
             exit?: boolean;
             inbound?: boolean;
             node?: boolean;
@@ -4905,6 +4964,37 @@ export interface components {
              */
             term_days: number | null;
         };
+        NodeBilling: {
+            /** @description Дата оплаты, YYYY-MM-DD (UTC); пусто — не задана. С pay_months — любая оплата из череды, следующую считает панель */
+            pay_date: string;
+            /**
+             * Format: int64
+             * @description Оплата повторяется каждые столько месяцев; 0 — разовая
+             */
+            pay_months: number;
+            /** @description Хостер сервера, как его назвал админ */
+            provider: string;
+            /**
+             * Format: int64
+             * @description За сколько дней до оплаты напомнить админу в Telegram; 0 — не напоминать
+             */
+            remind_days: number;
+            /**
+             * Format: int64
+             * @description День месяца, с которого хостер считает трафик заново; в коротком месяце — его последний день
+             */
+            reset_day: number;
+            /**
+             * Format: int64
+             * @description При скольких процентах лимита сказать админу; раз за период
+             */
+            traffic_alert: number;
+            /**
+             * Format: int64
+             * @description Трафик тарифа сервера за период, байты; 0 — без лимита
+             */
+            traffic_limit: number;
+        };
         NodeCertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
             cert: string;
@@ -4951,6 +5041,7 @@ export interface components {
             balance_group: string;
             /** @description Нода старее панели */
             behind: boolean;
+            billing: components["schemas"]["NodeBilling"];
             /** @description Панель может обновить ноду сама: удалённая, отвечает, версия 0.5.0.2 или новее; старую обновляют один раз вручную командой mikan update на её сервере */
             can_update: boolean;
             /**
@@ -5039,6 +5130,8 @@ export interface components {
             mem_used: number;
             /** @description Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений */
             name: string;
+            /** @description Ближайшая оплата сегодня или позже, YYYY-MM-DD (UTC); нет — оплата не задана или разовая прошла */
+            next_payment?: string;
             /**
              * Format: double
              * @description Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4
@@ -5065,6 +5158,8 @@ export interface components {
             /** @description Как идёт или прошло обновление ноды */
             update?: components["schemas"]["UpdateStatus"];
             version?: string;
+            /** @description Трафик тарифа сервера за текущий период; только с billing.traffic_limit */
+            vps_traffic?: components["schemas"]["VPSTraffic"];
         };
         NodeKeyOutputBody: {
             /** @description Команда установки на сервере ноды */
@@ -5187,9 +5282,10 @@ export interface components {
         };
         Note: {
             /** @enum {string} */
-            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken";
+            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken" | "proxy_unsupported" | "rule_unsupported" | "list_unsupported" | "dns_policy_unsupported" | "category_missing";
             /** @enum {string} */
             core: "mihomo" | "singbox" | "xray";
+            /** @description О чём заметка: группа, условие TYPE,VALUE, список, ключ политики DNS, сервер или geosite:NAME */
             group: string;
         };
         Notify: {
@@ -5522,6 +5618,8 @@ export interface components {
             api_allow?: string[];
             /** @description API ноды только с адресов панели; не для ноды панели */
             api_lockdown?: boolean;
+            /** @description Учёт сервера у хостера, целиком */
+            billing?: components["schemas"]["NodeBilling"];
             /**
              * Format: int64
              * @description Ширина канала ноды, Мбит/с в каждую сторону
@@ -5917,7 +6015,7 @@ export interface components {
             starter?: boolean;
         };
         PreviewSubTemplateOutputBody: {
-            /** @description Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть */
+            /** @description Что sing-box и Xray делают с шаблоном Clash, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают */
             notes: components["schemas"]["Note"][];
             /** @description Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки */
             profile: string;
@@ -6140,6 +6238,42 @@ export interface components {
             network: string;
             ports: components["schemas"]["ReachPort"][];
         };
+        ReadySubTemplate: {
+            author: string;
+            /** @description Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают */
+            builtin: boolean;
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            id: string;
+            /** @description Лицензия текста шаблона, SPDX */
+            license: string;
+            name: string;
+            /** @description Откуда шаблон и списки, на которые он ссылается */
+            source: string;
+            /** @description Описание по-русски; панель переводит его по id */
+            summary: string;
+        };
+        ReadySubTemplateOutputBody: {
+            author: string;
+            /** @description Текст шаблона: для своего шаблона mikan собран из текущих настроек панели */
+            body: string;
+            /** @description Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают */
+            builtin: boolean;
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            id: string;
+            /** @description Лицензия текста шаблона, SPDX */
+            license: string;
+            name: string;
+            /** @description Откуда шаблон и списки, на которые он ссылается */
+            source: string;
+            /** @description Описание по-русски; панель переводит его по id */
+            summary: string;
+        };
+        ReadySubTemplatesOutputBody: {
+            /** @description По ядрам, в порядке каталога */
+            templates: components["schemas"]["ReadySubTemplate"][];
+        };
         RecordingInfo: {
             /**
              * Format: date-time
@@ -6317,7 +6451,7 @@ export interface components {
             sub_rules?: string;
         };
         RoutesPreviewOutputBody: {
-            /** @description Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид */
+            /** @description Что ядра sing-box и Xray делают с профилем, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают */
             notes: components["schemas"]["Note"][];
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
@@ -7468,6 +7602,23 @@ export interface components {
             /** Format: int64 */
             limited: number;
         };
+        UserOnlineView: {
+            /**
+             * Format: int64
+             * @description Открытые соединения на этой ноде
+             */
+            conns: number;
+            /**
+             * Format: int64
+             * @description Привязанное устройство, чьими ключами подключены; null — общие ключи пользователя (приложения без ID или без привязки)
+             */
+            device_id: number | null;
+            /** Format: int64 */
+            node_id: number;
+            node_name: string;
+            /** @description Адреса с открытыми соединениями на этой ноде; оператор поддержки без доступа к подписчикам получает пустой список */
+            online_ips: string[];
+        };
         UserPoolView: {
             /** @description Свой лимит группы и её пакеты исчерпаны: подключения группы не работают до сброса */
             exhausted: boolean;
@@ -7604,6 +7755,17 @@ export interface components {
             used_down: number;
             /** Format: int64 */
             used_up: number;
+        };
+        VPSTraffic: {
+            /** @description День, с которого начнётся следующий период, YYYY-MM-DD (UTC) */
+            resets: string;
+            /** @description Первый день периода, YYYY-MM-DD (UTC) */
+            since: string;
+            /**
+             * Format: int64
+             * @description Сколько нода унесла с начала периода: трафик пользователей и каскада других нод, вверх и вниз вместе, байты
+             */
+            used: number;
         };
         ValidateInboundInputBody: {
             config: string;
@@ -12696,6 +12858,66 @@ export interface operations {
             };
         };
     };
+    "list-ready-sub-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadySubTemplatesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-ready-sub-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadySubTemplateOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-sub-template": {
         parameters: {
             query?: never;
@@ -14714,6 +14936,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-online": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOnlineView"][];
+                };
             };
             /** @description Error */
             default: {

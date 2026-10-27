@@ -16,6 +16,7 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subsrc"
 	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/ready"
 )
 
 // The subscription templates: the admin's own profiles of the cores (internal/sub/<core>)
@@ -94,7 +95,37 @@ type previewSubTemplateInput struct {
 type previewSubTemplateOutput struct {
 	Body struct {
 		Profile string          `json:"profile" doc:"Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки"`
-		Notes   []submodel.Note `json:"notes" doc:"Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть"`
+		Notes   []submodel.Note `json:"notes" doc:"Что sing-box и Xray делают с шаблоном Clash, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают"`
+	}
+}
+
+// ReadySubTemplate is a template of the ready catalog (internal/sub/ready), to load into the
+// editor: loading saves nothing.
+type ReadySubTemplate struct {
+	ID      string `json:"id"`
+	Core    string `json:"core" enum:"mihomo,singbox,xray"`
+	Name    string `json:"name"`
+	Summary string `json:"summary" doc:"Описание по-русски; панель переводит его по id"`
+	Author  string `json:"author"`
+	License string `json:"license" doc:"Лицензия текста шаблона, SPDX"`
+	Source  string `json:"source" doc:"Откуда шаблон и списки, на которые он ссылается"`
+	Builtin bool   `json:"builtin" doc:"Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают"`
+}
+
+type readySubTemplatesOutput struct {
+	Body struct {
+		Templates []ReadySubTemplate `json:"templates" doc:"По ядрам, в порядке каталога"`
+	}
+}
+
+type readySubTemplateInput struct {
+	ID string `path:"id" maxLength:"64"`
+}
+
+type readySubTemplateOutput struct {
+	Body struct {
+		ReadySubTemplate
+		Text string `json:"body" doc:"Текст шаблона: для своего шаблона mikan собран из текущих настроек панели"`
 	}
 }
 
@@ -108,6 +139,49 @@ func (h *handlers) registerSubTemplates() {
 	huma.Register(h.api, op("delete-sub-template", http.MethodDelete, "/api/v1/sub-templates/{id}", "Удалить шаблон подписки", http.StatusNoContent), h.deleteSubTemplate)
 	huma.Register(h.api, huma.Operation{OperationID: "preview-sub-template", Method: http.MethodPost, Path: "/api/v1/sub-templates/preview", Summary: "Профиль из шаблона, без сохранения",
 		Description: "Ничего не меняет: показывает, что получит пользователь со всеми подключениями.", Tags: tags}, h.previewSubTemplate)
+	huma.Register(h.api, huma.Operation{OperationID: "list-ready-sub-templates", Method: http.MethodGet, Path: "/api/v1/sub-templates/ready", Summary: "Готовые шаблоны подписки",
+		Description: "Каталог, из которого редактор загружает шаблон. В базу панель их сама не кладёт.", Tags: tags}, h.listReadySubTemplates)
+	huma.Register(h.api, huma.Operation{OperationID: "get-ready-sub-template", Method: http.MethodGet, Path: "/api/v1/sub-templates/ready/{id}", Summary: "Готовый шаблон подписки с текстом",
+		Description: "Ничего не сохраняет: текст для редактора.", Tags: tags}, h.getReadySubTemplate)
+}
+
+func readyView(r ready.Template) ReadySubTemplate {
+	return ReadySubTemplate{ID: r.ID, Core: string(r.Core), Name: r.Name, Summary: r.Summary, Author: r.Author, License: r.License, Source: r.Source, Builtin: r.Starter}
+}
+
+func (h *handlers) listReadySubTemplates(context.Context, *struct{}) (*readySubTemplatesOutput, error) {
+	out := &readySubTemplatesOutput{}
+	out.Body.Templates = []ReadySubTemplate{}
+	for _, r := range ready.All() {
+		out.Body.Templates = append(out.Body.Templates, readyView(r))
+	}
+	return out, nil
+}
+
+// getReadySubTemplate is a ready template's text; mikan's own is the starter the editor's
+// own button gives, made of the panel's settings now.
+func (h *handlers) getReadySubTemplate(ctx context.Context, in *readySubTemplateInput) (*readySubTemplateOutput, error) {
+	r, ok := ready.Get(in.ID)
+	if !ok {
+		return nil, huma.Error404NotFound("not_found")
+	}
+	out := &readySubTemplateOutput{}
+	out.Body.ReadySubTemplate, out.Body.Text = readyView(r), r.Body
+	if !r.Starter {
+		return out, nil
+	}
+	if h.d.TemplatePreview == nil {
+		return nil, huma.Error503ServiceUnavailable("preview_unavailable")
+	}
+	pv, err := h.d.TemplatePreview(ctx, subsrc.TemplatePreview{Core: r.Core, Starter: true})
+	if errors.Is(err, submodel.ErrNoProxies) {
+		return nil, huma.Error409Conflict("no_proxies")
+	}
+	if err != nil {
+		return nil, err
+	}
+	out.Body.Text = string(pv.Profile)
+	return out, nil
 }
 
 // templateRules are the names of the response rules that name each template, read through q

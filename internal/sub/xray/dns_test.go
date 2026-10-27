@@ -68,7 +68,7 @@ func TestPolicyDomains(t *testing.T) {
 		{"geosite:cn,+.a.com", routing.Common, []string{"geosite:cn", "domain:a.com"}},
 		{"geosite:cn,*.a.com,category-ru", routing.Common, []string{"geosite:cn", `regexp:^[^.]+\.a\.com$`, "geosite:category-ru"}},
 		{"+.a.com,geosite:cn", routing.Common, []string{"domain:a.com", "geosite:cn"}},
-		{"a.com,GEOSITE:cn,rule-set:mikan-games", routing.Common, []string{"full:a.com", "geosite:cn", "geosite:category-games"}},
+		{"a.com,GEOSITE:cn,rule-set:mikan-games", routing.Common, []string{"full:a.com", "geosite:category-games"}}, // a prefix inside the key in lower case only
 		{"rule-set:mikan-games,+.a.com", routing.Common, []string{"geosite:category-games", "domain:a.com"}},
 		{"geosite:cn,a.com", routing.Common, []string{"geosite:cn"}}, // a plain name after the prefix is a category
 	} {
