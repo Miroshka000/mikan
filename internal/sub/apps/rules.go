@@ -3,6 +3,7 @@ package apps
 import (
 	"regexp"
 	"regexp/syntax"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -77,7 +78,8 @@ type Action struct {
 	// Format forces the profile's format (serve and stub): the app gets it whatever its
 	// User-Agent and ?format= say. Empty: as usual.
 	Format string `json:"format,omitempty" maxLength:"16"`
-	// Headers are added to the answer, over the panel's own (serve, stub, 403, 404, html).
+	// Headers are added to the answer, over the panel's own (serve, stub, 403, 404, html);
+	// not a cache header (CacheHeaders): the answer stays no-store (CheckRules).
 	Headers []Header `json:"headers,omitempty" maxItems:"10"`
 	// SkipHWID gives a device that sends no id keys all the same, whatever the panel
 	// requires of devices (serve).
@@ -145,6 +147,11 @@ func bad(path, code, detail string) error { return &CheckError{Path: path, Code:
 // the tester and the log say decided, next to the panel's own labels (RuleApps, RuleSSR,
 // RuleOld): a rule may not take one of them, or a builtin:* one the panel may add later.
 // Check leaves names alone, so a rule saved before still loads and runs.
+//
+// Nor may a rule set a cache header (CacheHeaders): the panel keeps every answer of a
+// subscription out of caches (serve's noStore), and a rule that let a CDN keep a refusal
+// would have it refused there after the rule is gone. Check lets a rule saved with one
+// before load: the panel's no-store is set over it.
 func CheckRules(rules []Rule, opts CheckOpts) error {
 	if len(rules) > MaxRules {
 		return bad("rules", "resp_rules_many", strconv.Itoa(MaxRules))
@@ -157,9 +164,21 @@ func CheckRules(rules []Rule, opts CheckOpts) error {
 		if name := strings.TrimSpace(r.Name); name == RuleApps || strings.HasPrefix(name, "builtin:") {
 			return bad(path+".name", "resp_name_reserved", name)
 		}
+		if r.Do.takes(RespondServe, RespondStub, Respond403, Respond404, RespondHTML) {
+			for j, h := range r.Do.Headers {
+				if slices.Contains(CacheHeaders, canonical(h.Name)) {
+					return bad(path+".do.headers."+strconv.Itoa(j)+".name", "resp_header_cache", h.Name)
+				}
+			}
+		}
 	}
 	return nil
 }
+
+// CacheHeaders tell caches how long to keep an answer: Cache-Control, and the ones a CDN
+// reads over it, which no-store in Cache-Control does not overrule. A rule may set none of
+// them (CheckRules), and the answers of a subscription carry none but the panel's no-store.
+var CacheHeaders = []string{"Cache-Control", "Cdn-Cache-Control", "Cloudflare-Cdn-Cache-Control", "Surrogate-Control"}
 
 var headerName = regexp.MustCompile("^[!#$%&'*+\\-.^_`|~0-9A-Za-z]{1,64}$")
 
