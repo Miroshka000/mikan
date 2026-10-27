@@ -295,38 +295,20 @@ func checkRule(x any, n string, tags, sets map[string]bool) error {
 // tunnel, the local networks direct. It takes the place of the panel's routing, so it has
 // none of it.
 func Example(g model.GroupNames) []byte {
-	name := func(s string) string {
-		b, _ := json.Marshal(s)
-		return string(b)
+	dns := map[string]any{
+		"servers": []map[string]any{
+			{"type": "https", "tag": "remote", "server": "1.1.1.1", "detour": g.Main},
+			{"type": "udp", "tag": "local", "server": "1.1.1.1"},
+		},
+		"final": "remote",
 	}
-	return fmt.Appendf(nil, `{
-  "log": {"level": "warn"},
-  "dns": {
-    "servers": [
-      {"type": "https", "tag": "remote", "server": "1.1.1.1", "detour": %[1]s},
-      {"type": "udp", "tag": "local", "server": "1.1.1.1"}
-    ],
-    "final": "remote"
-  },
-  "inbounds": [
-    {"type": "tun", "tag": "tun-in", "address": ["172.19.0.1/30"], "auto_route": true, "strict_route": true}
-  ],
-  "outbounds": [
-    {"type": "selector", "tag": %[1]s, "outbounds": [%[2]s], "mikan": {}},
-    {"type": "urltest", "tag": %[2]s, "url": "https://www.gstatic.com/generate_204", "interval": "5m", "mikan": {}},
-    {"type": "direct", "tag": "direct"}
-  ],
-  "route": {
-    "rules": [
-      {"action": "sniff"},
-      {"protocol": "dns", "action": "hijack-dns"},
-      {"ip_is_private": true, "outbound": "direct"}
-    ],
-    "final": %[1]s,
-    "auto_detect_interface": true,
-    "default_domain_resolver": "local"
-  },
-  "experimental": {"cache_file": {"enabled": true}}
-}
-`, name(g.Main), name(g.Auto))
+	cfg := skeleton(dns, []map[string]any{
+		{"type": "selector", "tag": g.Main, "outbounds": []string{g.Auto}, "mikan": map[string]any{}},
+		{"type": "urltest", "tag": g.Auto, "url": "https://www.gstatic.com/generate_204", "interval": "5m", "mikan": map[string]any{}},
+		{"type": "direct", "tag": "direct"},
+	}, []map[string]any{{"ip_is_private": true, "outbound": "direct"}})
+	route := cfg["route"].(map[string]any)
+	route["final"], route["default_domain_resolver"] = g.Main, "local"
+	out, _ := json.MarshalIndent(cfg, "", "  ")
+	return append(out, '\n')
 }

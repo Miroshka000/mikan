@@ -183,23 +183,32 @@ func config(ctx context.Context, pl plan) map[string]any {
 	dns, resolver := dnsOf(pl.dns, tags, &sets)
 	all := append(append([]map[string]any{}, gs.outbounds...), outbounds...)
 	all = append(all, map[string]any{"type": "direct", "tag": "direct"})
-	route := map[string]any{
-		"rules":                 append([]map[string]any{{"action": "sniff"}, {"protocol": "dns", "action": "hijack-dns"}}, rules...),
-		"auto_detect_interface": true, "default_domain_resolver": resolver,
-	}
+	cfg := skeleton(dns, all, rules)
+	route := cfg["route"].(map[string]any)
+	route["default_domain_resolver"] = resolver
 	if final != "" {
 		route["final"] = final
 	}
 	if len(sets.used) > 0 {
 		route["rule_set"] = sets.sets()
 	}
+	return cfg
+}
+
+// skeleton is the config every one of the panel's is built on, the built-in one and the
+// Example alike: a TUN for the apps, warnings in the log, the cache kept, and a route that
+// sniffs and takes the DNS queries ahead of the rules.
+func skeleton(dns any, outbounds, rules []map[string]any) map[string]any {
 	return map[string]any{
 		"log": map[string]any{"level": "warn"},
 		"dns": dns,
 		"inbounds": []map[string]any{{"type": "tun", "tag": "tun-in", "address": []string{"172.19.0.1/30"},
 			"auto_route": true, "strict_route": true}},
-		"outbounds":    all,
-		"route":        route,
+		"outbounds": outbounds,
+		"route": map[string]any{
+			"rules":                 append([]map[string]any{{"action": "sniff"}, {"protocol": "dns", "action": "hijack-dns"}}, rules...),
+			"auto_detect_interface": true,
+		},
 		"experimental": map[string]any{"cache_file": map[string]any{"enabled": true}},
 	}
 }

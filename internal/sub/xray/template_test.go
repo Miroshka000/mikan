@@ -3,6 +3,7 @@ package xray
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -136,5 +137,28 @@ func TestXrayExample(t *testing.T) {
 	if cs[0].Remarks != g.Auto || cs[0].Observatory == nil {
 		raw, _ := json.Marshal(cs[0])
 		t.Fatalf("%s", raw)
+	}
+
+	// The example stands on the built-in configs' skeleton: what an app needs of it is the
+	// same in both, the local proxies and the outbounds that go direct, block and answer DNS.
+	builtin, err := Render(profileOf(subtest.Multi()), g, routing.All, model.Template{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []map[string]any
+	var got map[string]any
+	if err := json.Unmarshal(builtin, &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(Example(g), &got); err != nil {
+		t.Fatal(err)
+	}
+	shared := func(c map[string]any) map[string]any {
+		outs := c["outbounds"].([]any)
+		return map[string]any{"log": c["log"], "inbounds": c["inbounds"], "outbounds": outs[len(outs)-3:],
+			"dns.tag": c["dns"].(map[string]any)["tag"]}
+	}
+	if w, s := shared(want[0]), shared(got); !reflect.DeepEqual(w, s) {
+		t.Fatalf("the example's skeleton:\n%v\nthe built-in config's:\n%v", s, w)
 	}
 }
