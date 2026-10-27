@@ -22,6 +22,10 @@ import (
 //   - mikan: {nodes: [...], types: [...]} takes the proxies of those nodes (by the name the
 //     panel shows, or the id) and of those types (vless, hysteria2…).
 //
+// Next to proxy-providers, include-all in a group the panel fills leaves mihomo only the
+// providers (include-all-providers), and a group that keeps providers (that or use) keeps
+// filter, exclude-filter and exclude-type for their proxies.
+//
 // The panel lists the proxies in the group itself, so every core gets the same groups, and
 // a group left with none for an app gets REJECT: closed, not open. The panel's and the
 // nodes' hosts go direct ahead of the admin's rules, whatever they say.
@@ -185,11 +189,23 @@ func fillGroup(g map[string]any, nodes []model.Node, ps []model.Proxy, providers
 		list = []any{"REJECT"}
 	}
 	g["proxies"] = list
-	for _, k := range []string{"mikan", "include-all-proxies", "filter", "exclude-filter", "exclude-type"} {
-		delete(g, k)
-	}
-	if !providers {
+	delete(g, "mikan")
+	delete(g, "include-all-proxies")
+	switch {
+	case !providers:
 		delete(g, "include-all")
+	case g["include-all"] == true:
+		// include-all would also take every proxy of the user, past the panel's choice:
+		// mihomo is left only the providers.
+		delete(g, "include-all")
+		g["include-all-providers"] = true
+	}
+	// mihomo applies the filters to the providers' proxies; those the panel listed pass
+	// them already.
+	if g["include-all-providers"] != true && g["use"] == nil {
+		for _, k := range []string{"filter", "exclude-filter", "exclude-type"} {
+			delete(g, k)
+		}
 	}
 	return nil
 }

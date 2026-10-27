@@ -2,6 +2,7 @@ package mihomo
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -191,5 +192,57 @@ func TestTemplateFilterGoCannotRead(t *testing.T) {
 	without := "proxy-groups:\n  - {name: G, type: select, include-all-proxies: true, filter: \"^(?=.*US)\"}\nrules:\n  - MATCH,G\n"
 	if err := CheckTemplate(prof, without); err != nil {
 		t.Fatalf("mihomo applies the filter itself: %v", err)
+	}
+}
+
+// Next to proxy-providers, include-all would also take every proxy of the user, past the
+// nodes "mikan" picked: the group keeps only the providers, and its filters stay for them.
+func TestTemplateIncludeAllNextToProviders(t *testing.T) {
+	prof := profileOf(subtest.TwoNodes())
+	const providers = "proxy-providers:\n  p1: {type: http, url: \"http://127.0.0.1:1/p1.yaml\", path: ./providers/p1.yaml, interval: 3600}\n"
+	for _, c := range []struct {
+		name, group string
+		drop        func(model.Proxy) bool // the NL proxies the group leaves out
+		want        string                 // the group's keys besides name, type and proxies
+	}{
+		{"include-all", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all: true}",
+			nil, "map[include-all-providers:true]"},
+		{"include-all with filters", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^🇳🇱\", exclude-type: hysteria2}",
+			func(x model.Proxy) bool { return typeOf(x) == "hysteria2" }, "map[exclude-type:hysteria2 filter:^🇳🇱 include-all-providers:true]"},
+		{"use with filters", providers + "{name: G, type: select, mikan: {nodes: [1]}, use: [p1], filter: \"^🇳🇱\", exclude-filter: TUIC}",
+			func(x model.Proxy) bool { return strings.Contains(x.Name, "TUIC") }, "map[exclude-filter:TUIC filter:^🇳🇱 use:[p1]]"},
+		{"no providers", "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^🇳🇱\", exclude-type: hysteria2}",
+			func(x model.Proxy) bool { return typeOf(x) == "hysteria2" }, "map[]"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			src := strings.Replace(c.group, "{name: G", "proxy-groups:\n  - {name: G", 1) + "\nrules:\n  - MATCH,G\n"
+			raw, _, err := Template(prof, src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			coreAccepts(t, raw)
+			var v struct {
+				Groups []map[string]any `json:"proxy-groups"`
+			}
+			if err := unmarshalProfile(raw, &v); err != nil {
+				t.Fatal(err)
+			}
+			g := v.Groups[0]
+			var want []any
+			for _, x := range prof.Proxies {
+				if x.Node == 1 && (c.drop == nil || !c.drop(x)) {
+					want = append(want, x.Name)
+				}
+			}
+			if got, _ := g["proxies"].([]any); len(want) == 0 || !slices.Equal(got, want) {
+				t.Errorf("proxies: %v, want %v", got, want)
+			}
+			delete(g, "name")
+			delete(g, "type")
+			delete(g, "proxies")
+			if got := fmt.Sprint(g); got != c.want {
+				t.Errorf("group: %s, want %s\n%s", got, c.want, raw)
+			}
+		})
 	}
 }
