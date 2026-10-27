@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +139,12 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 		r.Body.Close()
 		t.Fatalf("an answer came to a dropped connection: %d", r.StatusCode)
 	}
+	// The connection is closed before the request is logged, and on a connection of its own
+	// nothing makes the next request wait for that: the log is read once the entry is in.
+	waitFor(t, func() bool {
+		rows, err := h.st.Q.ListSubLog(ctx, db.ListSubLogParams{UserID: u.ID, Limit: 10})
+		return err == nil && slices.ContainsFunc(rows, func(r db.SubLog) bool { return r.Outcome == "dropped" })
+	})
 
 	// The tester shows what would happen, for rules not yet saved too.
 	probe := func(body map[string]any) (test ruleTest) {

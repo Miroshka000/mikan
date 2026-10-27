@@ -119,16 +119,8 @@ func happRules(p profile.Profile, m routing.Mode, src string) ([]routing.Rule, r
 		}
 	}
 	in := routing.NewIntent(m, p.Rules, p.Routes)
-	var rules []routing.Rule
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
-		rules = append(rules, part...)
-	}
-	for _, r := range in.Routes {
-		for _, x := range r.Rules {
-			rules = append(rules, routing.Rule{When: []routing.Match{x}, To: r.To})
-		}
-	}
-	return append(rules, in.Tail()...), in.Final()
+	pre, routed, tail, final := in.Sequence(p.Direct, in.Routes, func(t routing.Target, _ int) routing.Target { return t })
+	return append(append(pre, routed...), tail...), final
 }
 
 // happTypes are the conditions Happ's lists hold: sites and IPs, as xray matches them.

@@ -102,7 +102,7 @@ const IncyAnnounceLines = 5
 // fillAppAnnounce is the announcement for the app at hand: INCY's with its lines, any other
 // one line, as the apps that do not say they show more would run the lines together.
 func fillAppAnnounce(s string, vars map[string]string, ua string) string {
-	if apps.IsINCY(ua) {
+	if apps.Named("incy", ua) {
 		return fillLines(s, vars, IncyAnnounceLines, TitleMax)
 	}
 	return fillTitle(s, vars)

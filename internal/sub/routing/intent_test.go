@@ -3,6 +3,8 @@ package routing
 import (
 	"slices"
 	"testing"
+
+	"mikan/internal/sub/model"
 )
 
 // The routes go in the order their rules apply: the services in the catalog's order, the
@@ -53,6 +55,62 @@ func TestIntentHead(t *testing.T) {
 	}
 	if len((Intent{}).Head()) != 1 {
 		t.Fatal("QUIC refused unasked")
+	}
+}
+
+// The rules of a profile go in the order the doc of Intent gives, each target resolved by
+// the route it is of: a route sent to a node goes to its group, a rule of no route asks
+// with -1.
+func TestIntentSequence(t *testing.T) {
+	in := Intent{Mode: RUDirect, Own: []Rule{Direct(Match{Type: "DOMAIN", Value: "own.example"})}, Tune: Tune{BlockQUIC: true}}
+	routes := []Route{
+		{Icon: "🤖", Name: "ИИ", NameEN: "AI", Rules: []Match{{Type: "DOMAIN-SUFFIX", Value: "ai.example"}, {Type: "GEOSITE", Value: "openai"}}, To: Target{Kind: ToNode, Node: 2}},
+		{Rules: []Match{{Type: "GEOSITE", Value: "youtube"}}, To: Target{Kind: ToMain}},
+		{Rules: []Match{{Type: "DOMAIN-SUFFIX", Value: "ads.example"}}, To: Target{Kind: ToReject}},
+	}
+	gs := BuildGroups([]model.Proxy{{Name: "US", Node: 2}, {Name: "NL", Node: 1}}, nil, model.GroupNames{Main: "VPN", Auto: "Auto"},
+		Servers{}, Balance{Type: model.URLTest}, routes, "en")
+	var asked []int
+	to := func(t Target, route int) Target {
+		asked = append(asked, route)
+		return gs.Resolve(t, route)
+	}
+	clash := func(rules []Rule) []string {
+		var out []string
+		for _, r := range rules {
+			name := map[TargetKind]string{ToDirect: "DIRECT", ToReject: "REJECT", ToGroup: r.To.Group}[r.To.Kind]
+			out = append(out, r.Clash(name))
+		}
+		return out
+	}
+	pre, routed, tail, final := in.Sequence([]string{"panel.example"}, routes, to)
+	if got := clash(pre); !slices.Equal(got, []string{"DOMAIN,panel.example,DIRECT", "GEOIP,LAN,DIRECT,no-resolve",
+		"AND,((NETWORK,UDP),(DST-PORT,443)),REJECT", "DOMAIN,own.example,DIRECT"}) {
+		t.Fatalf("pre: %q", got)
+	}
+	if got := clash(routed); !slices.Equal(got, []string{"DOMAIN-SUFFIX,ai.example,🤖 AI", "GEOSITE,openai,🤖 AI", "GEOSITE,youtube,VPN", "DOMAIN-SUFFIX,ads.example,REJECT"}) {
+		t.Fatalf("routed: %q", got)
+	}
+	if got := clash(tail); !slices.Equal(got, []string{"GEOSITE,category-ru,DIRECT", "GEOIP,ru,DIRECT"}) {
+		t.Fatalf("tail: %q", got)
+	}
+	if final != (Target{Kind: ToGroup, Group: "VPN"}) {
+		t.Fatalf("final: %+v", final)
+	}
+	if !slices.Equal(asked, []int{-1, -1, -1, -1, 0, 0, 1, 2, -1, -1, -1}) {
+		t.Fatalf("routes asked: %v", asked)
+	}
+
+	// The blocked mode: the rest goes direct, and no tail.
+	pre, routed, tail, final = Intent{Mode: Blocked}.Sequence(nil, nil, gs.Resolve)
+	if len(pre) != 1 || routed != nil || tail != nil || final.Kind != ToDirect {
+		t.Fatalf("blocked: %+v %+v %+v %+v", pre, routed, tail, final)
+	}
+
+	// The targets as they are: a node stays a node.
+	_, routed, _, final = in.Sequence(nil, routes, func(t Target, _ int) Target { return t })
+	if routed[0].To != (Target{Kind: ToNode, Node: 2}) || routed[3].To.Kind != ToReject || final.Kind != ToMain {
+		t.Fatalf("as they are: %+v %+v", routed, final)
 	}
 }
 

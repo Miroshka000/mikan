@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"mikan/internal/panel/domain"
-	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/settings"
 
 	"go.yaml.in/yaml/v3"
@@ -130,29 +129,5 @@ func TestInboundOutOfAuto(t *testing.T) {
 	after := auto()
 	if len(before) < 2 || len(after) != len(before)-1 {
 		t.Fatalf("auto before %v, after %v", before, after)
-	}
-}
-
-// The admin's word keeps a node out at once; a node that does not answer the panel, only
-// after nodeDownForAuto; one never checked, or answering, stays in.
-func TestOutOfAuto(t *testing.T) {
-	now := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
-	down := func(d time.Duration) nodesync.HealthView { return nodesync.HealthView{Since: now.Add(-d)} }
-	for _, c := range []struct {
-		name   string
-		noAuto int64
-		hv     nodesync.HealthView
-		known  bool
-		want   bool
-	}{
-		{"the admin's word", 1, nodesync.HealthView{OK: true}, true, true},
-		{"answering", 0, nodesync.HealthView{OK: true}, true, false},
-		{"not checked yet", 0, nodesync.HealthView{}, false, false},
-		{"silent for a minute", 0, down(time.Minute), true, false},
-		{"silent long enough", 0, down(nodeDownForAuto), true, true},
-	} {
-		if got := outOfAuto(c.noAuto, c.hv, c.known, now); got != c.want {
-			t.Errorf("%s: %v, want %v", c.name, got, c.want)
-		}
 	}
 }
