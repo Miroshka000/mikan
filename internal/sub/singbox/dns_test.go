@@ -39,6 +39,45 @@ func TestDNSIPv6Resolver(t *testing.T) {
 	t.Run("sing-box", func(t *testing.T) { corecheck.SingBox(t, raw) })
 }
 
+// In mode "all" the panel's nameserver goes through the main group, as mihomo's fake-ip
+// leaves the names to the tunnel; the proxies' own names do not. With real IPs, and for a
+// nameserver the admin gave without a group, it goes past the tunnel.
+func TestDNSAllThroughTunnel(t *testing.T) {
+	lists(t)
+	for name, tc := range map[string]struct {
+		routes routing.Routes
+		via    any
+	}{
+		"panel's":  {via: model.AliasGroup},
+		"real IP":  {routes: routing.Routes{Tune: routing.Tune{RealIP: true}}},
+		"admin's":  {routes: routing.Routes{DNS: routing.DNS{Nameserver: []string{"https://9.9.9.9/dns-query"}}}},
+		"by group": {routes: routing.Routes{DNS: routing.DNS{Nameserver: []string{"https://9.9.9.9/dns-query#" + model.AliasGroup}}}, via: model.AliasGroup},
+	} {
+		t.Run(name, func(t *testing.T) {
+			prof := profileOf(subtest.TwoNodes())
+			prof.Routes = tc.routes
+			raw, err := Render(context.Background(), prof, model.GroupNames{}, routing.All, model.Template{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var c sbConfig
+			if err := json.Unmarshal(raw, &c); err != nil {
+				t.Fatal(err)
+			}
+			for _, s := range c.DNS.Servers {
+				want := any(nil)
+				if s["tag"] == "remote" {
+					want = tc.via
+				}
+				if s["detour"] != want {
+					t.Errorf("%v: detour %v, want %v", s["tag"], s["detour"], want)
+				}
+			}
+			corecheck.SingBox(t, raw)
+		})
+	}
+}
+
 // A key of the policy that lists names with commas is one DNS rule of all of them: rule sets
 // of the categories, domains with their subdomains or not; what sing-box has no form of is
 // left out, and a key left with nothing makes no rule.

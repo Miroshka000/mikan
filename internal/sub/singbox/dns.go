@@ -11,8 +11,9 @@ import (
 
 // dnsOf is the DNS of r as sing-box servers: the first nameserver for everything, a plain
 // one for the proxies' own names (the default resolver, returned too), and the policy's
-// first server for its names. Fake IP is mihomo's: sing-box resolves for real.
-func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets) (map[string]any, string) {
+// first server for its names. Fake IP is mihomo's: sing-box resolves for real. The first
+// nameserver goes through via when it names no group of its own and via is one.
+func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets, via string) (map[string]any, string) {
 	servers := []map[string]any{}
 	add := func(tag, s string) bool {
 		srv, ok := dnsServer(tag, s, tags)
@@ -25,6 +26,9 @@ func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets) (map[strin
 	for _, s := range r.Nameserver {
 		if add("remote", s) {
 			remote = "remote"
+			if srv := servers[0]; srv["detour"] == nil && tags[via] {
+				srv["detour"] = via
+			}
 			break
 		}
 	}
