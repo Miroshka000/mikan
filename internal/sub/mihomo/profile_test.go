@@ -401,13 +401,13 @@ func TestGRPCKeepalive(t *testing.T) {
 	}
 	for _, app := range []apps.App{{Family: apps.FamilyMihomo}, {Family: apps.FamilyStash}} {
 		p := Profile{Proxies: []model.Proxy{grpc}, App: app}
-		built, err := Config(p, model.GroupNames{}, routing.DefaultMode)
+		built, err := renderConfig(p, model.GroupNames{}, routing.DefaultMode)
 		if err != nil {
 			t.Fatal(err)
 		}
 		cfgs := map[string]map[string]any{"built-in": built}
 		if p.Routable() { // Stash gets no own profile
-			own, _, err := TemplateConfig(p, subtest.OwnTemplate)
+			own, _, err := templateConfig(p, subtest.OwnTemplate)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -151,6 +151,11 @@ func TestCheckTemplate(t *testing.T) {
 	if err := CheckTemplate(prof, ok); err != nil {
 		t.Fatal(err)
 	}
+	// A panel without inbounds has nothing to check a template with, as with the other
+	// cores: the template is saved unchecked.
+	if err := CheckTemplate(Profile{}, "proxy-groups:\n  - {name: G, type: select, include-all-proxies: true}\n"); !errors.Is(err, model.ErrNoProxies) {
+		t.Fatalf("no proxies: %v, want ErrNoProxies", err)
+	}
 }
 
 // A template checked on saving can still miss a user: one without the inbound a group

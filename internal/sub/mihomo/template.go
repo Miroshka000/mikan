@@ -51,7 +51,7 @@ func yamlLine(err error) string {
 
 // Template renders the admin's template for p, and the panel's proxies in it.
 func Template(p Profile, src string) ([]byte, []model.Proxy, error) {
-	cfg, in, err := TemplateConfig(p, src)
+	cfg, in, err := templateConfig(p, src)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -59,8 +59,8 @@ func Template(p Profile, src string) ([]byte, []model.Proxy, error) {
 	return body, in, err
 }
 
-// TemplateConfig is the profile Template renders, and the panel's proxies in it.
-func TemplateConfig(p Profile, src string) (map[string]any, []model.Proxy, error) {
+// templateConfig is the profile Template renders, and the panel's proxies in it.
+func templateConfig(p Profile, src string) (map[string]any, []model.Proxy, error) {
 	if len(p.Proxies) == 0 {
 		return nil, nil, model.ErrNoProxies
 	}
@@ -233,16 +233,11 @@ var policies = []string{"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 
 // CheckTemplate finds what would break the profiles made of src for p: YAML that does
 // not parse, a group that lists a member nobody defines, a rule that sends traffic to a
-// group that does not exist or uses a rule list that is not there.
+// group that does not exist or uses a rule list that is not there. model.ErrNoProxies
+// when p has no proxies to check it with, as with the other cores.
 func CheckTemplate(p Profile, src string) error {
-	cfg, err := parseProfileTemplate(src)
-	if err != nil {
-		return err
-	}
-	if _, err := fillTemplate(cfg, p); err != nil {
-		return err
-	}
-	return checkFilled(cfg, p)
+	_, _, err := templateConfig(p, src)
+	return err
 }
 
 // checkFilled checks a template with the user's proxies in it: on saving, against a user
@@ -311,7 +306,7 @@ func checkFilled(cfg map[string]any, p Profile) error {
 // admin's own. The proxies go, and the groups ask for them: every proxy of the user
 // (include-all-proxies), or those of some nodes (mikan: nodes).
 func Starter(p Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
-	cfg, err := Config(p, g.WithDefaults(p.Lang), m)
+	cfg, err := renderConfig(p, g.WithDefaults(p.Lang), m)
 	if err != nil {
 		return nil, err
 	}

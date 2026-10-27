@@ -24,7 +24,7 @@ type Parts struct {
 
 // TemplateParts are the parts of the profile Template makes of src for p.
 func TemplateParts(p Profile, src string) (Parts, error) {
-	cfg, _, err := TemplateConfig(p, src)
+	cfg, _, err := templateConfig(p, src)
 	if err != nil {
 		return Parts{}, err
 	}
@@ -39,11 +39,7 @@ func TemplateParts(p Profile, src string) (Parts, error) {
 			out.Groups = append(out.Groups, g)
 		}
 	}
-	for _, x := range anyList(cfg["rules"]) {
-		if r, ok := routing.ReadRule(str(x)); ok {
-			out.Rules = append(out.Rules, r)
-		}
-	}
+	out.Rules = readRules(anyList(cfg["rules"]))
 	out.Lists = map[string]routing.Provider{}
 	providers, _ := cfg["rule-providers"].(map[string]any)
 	for name, x := range providers {
@@ -64,21 +60,20 @@ func groupOfMap(x any) (model.Group, bool) {
 	if g.Name == "" {
 		return g, false
 	}
-	g.Interval, _ = seconds(m["interval"])
-	g.Tolerance, _ = seconds(m["tolerance"])
+	g.Interval, g.Tolerance = seconds(m["interval"]), seconds(m["tolerance"])
 	return g, true
 }
 
 // seconds is a number the YAML holds as a number or a string.
-func seconds(v any) (int, bool) {
+func seconds(v any) int {
 	switch x := v.(type) {
 	case int:
-		return x, x > 0
+		return x
 	case string:
-		n, err := strconv.Atoi(x)
-		return n, err == nil && n > 0
+		n, _ := strconv.Atoi(x)
+		return n
 	}
-	return 0, false
+	return 0
 }
 
 // resolversOf reads the DNS of a template: the policy's servers in the order of its names,
