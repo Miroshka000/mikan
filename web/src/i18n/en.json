@@ -2680,6 +2680,24 @@
       "hidden": "The template's text is hidden: it may hold your own servers and secrets. Its name and whether it is the default can still be changed.",
       "fromSimple": "Start from the routing settings",
       "example": "Insert an example",
+      "ready": {
+        "open": "Load a ready template",
+        "title": "Ready {core} templates",
+        "lead": "Loading one puts its text in the editor; nothing is saved until you save the template. The lists a template links stay with their authors, pinned to a version.",
+        "builtin": "from the panel's settings",
+        "meta": "By {author} · {license} ·",
+        "source": "Source",
+        "load": "Load"
+      },
+      "readyItems": {
+        "mikan-clash": "The panel's built-in profile with the current routing settings; its groups ask for the servers themselves.",
+        "mikan-singbox": "A working sing-box config: TUN, DNS through the tunnel, local networks direct.",
+        "mikan-xray": "A working Xray config: local SOCKS and HTTP, DNS through the tunnel, local networks direct.",
+        "privwl-blocked": "What is blocked or slowed down in Russia, Telegram and the address ranges that are slowed down (Cloudflare, AWS and others) go through the VPN; the rest goes direct. Lists: Nemu-x/privWL-clash. In Happ and INCY (Xray configs) these lists do not work and everything goes direct: give those apps another template with a response rule, or turn their Xray configs off."
+      },
+      "readyNames": {
+        "privwl-blocked": "privWL · only what is blocked"
+      },
       "body": "Template text",
       "size": "{size} of {max}",
       "replaceTitle": "Replace the text?",
