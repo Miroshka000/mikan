@@ -2,10 +2,9 @@ package mihomo
 
 import (
 	"bytes"
-	"reflect"
 	"slices"
 	"sort"
-	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"go.yaml.in/yaml/v3"
@@ -58,30 +57,48 @@ func cloneYAML(v any) any {
 // marshalYAML writes a profile as YAML, which the apps show to people who open it; JSON
 // worked for mihomo but read as a config of another program.
 func marshalYAML(v any) ([]byte, error) {
+	doc, n, err := encodeYAML(v)
+	if err != nil || hasTextU(n) {
+		return doc, err
+	}
+	return astralAsText(doc), nil
+}
+
+// encodeYAML is v as the encoder writes it, and the node it wrote it from.
+func encodeYAML(v any) ([]byte, *yaml.Node, error) {
 	var n yaml.Node
 	if err := n.Encode(v); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	orderKeys(&n)
 	var b bytes.Buffer
 	e := yaml.NewEncoder(&b)
 	e.SetIndent(2)
 	if err := e.Encode(&n); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := e.Close(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return astralAsText(b.Bytes()), nil
+	return b.Bytes(), &n, nil
+}
+
+// hasTextU tells whether a key or a value of n has \U in its text. Then the encoder may
+// write it as it is, outside double quotes, where astralAsText would take it for an escape;
+// with none, every \U of the document is one the encoder wrote inside double quotes.
+func hasTextU(n *yaml.Node) bool {
+	if n.Kind == yaml.ScalarNode && strings.Contains(n.Value, `\U`) {
+		return true
+	}
+	return slices.ContainsFunc(n.Content, hasTextU)
 }
 
 // astralAsText writes the characters past U+FFFF of a YAML document as themselves: the
 // encoder takes them all for unprintable and escapes them, so a flag emoji in a server's
 // name read "\U0001F1F3\U0001F1F1" to whoever opened the profile. Only a \U escape is
 // undone, one whose backslash is not itself escaped, and only to a character YAML may
-// carry as it is; \x, \u (U+FEFF among them) and \\ stay. A \U the document has as text,
-// outside a double-quoted string, would become a character too: then the document no
-// longer reads the same, and it is kept escaped.
+// carry as it is; \x, \u (U+FEFF among them) and \\ stay. Every \U of doc must be an
+// escape inside double quotes (hasTextU).
 func astralAsText(doc []byte) []byte {
 	if !bytes.Contains(doc, []byte(`\U`)) {
 		return doc
@@ -104,10 +121,6 @@ func astralAsText(doc []byte) []byte {
 			out = append(out, doc[i])
 		}
 	}
-	var was, is any
-	if yaml.Unmarshal(doc, &was) != nil || yaml.Unmarshal(out, &is) != nil || !reflect.DeepEqual(was, is) {
-		return doc
-	}
 	return out
 }
 
@@ -117,9 +130,21 @@ func astralEscape(s []byte) (rune, bool) {
 	if len(s) < len(`\UXXXXXXXX`) || s[1] != 'U' {
 		return 0, false
 	}
-	v, err := strconv.ParseUint(string(s[2:10]), 16, 32)
-	r := rune(v)
-	if err != nil || r <= 0xFFFF || !utf8.ValidRune(r) || r&0xFFFE == 0xFFFE {
+	var r rune
+	for _, c := range s[2:10] {
+		switch {
+		case '0' <= c && c <= '9':
+			c -= '0'
+		case 'A' <= c && c <= 'F':
+			c -= 'A' - 10
+		case 'a' <= c && c <= 'f':
+			c -= 'a' - 10
+		default:
+			return 0, false
+		}
+		r = r<<4 | rune(c)
+	}
+	if r <= 0xFFFF || !utf8.ValidRune(r) || r&0xFFFE == 0xFFFE {
 		return 0, false
 	}
 	return r, true
