@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -29,7 +29,7 @@ import (
 const proxyTag = "proxy"
 
 // Template renders the own xray template src for p: the list of configs.
-func Template(p mihomo.Profile, src string) ([]byte, error) {
+func Template(p profile.Profile, src string) ([]byte, error) {
 	cfgs, err := templateConfigs(p, src)
 	if err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func Template(p mihomo.Profile, src string) ([]byte, error) {
 // parse, outbounds or balancers without a tag or with one tag twice, a tag of the panel's,
 // a balancer that asks for servers in a way the panel does not read, and a rule or a
 // balancer that names an outbound or a balancer that is not there.
-func CheckTemplate(p mihomo.Profile, src string) error {
+func CheckTemplate(p profile.Profile, src string) error {
 	_, err := templateConfigs(p, src)
 	return err
 }
@@ -60,7 +60,7 @@ type frame struct {
 	outs      []tagged // the user's servers xray carries
 }
 
-func templateConfigs(p mihomo.Profile, src string) ([]map[string]any, error) {
+func templateConfigs(p profile.Profile, src string) ([]map[string]any, error) {
 	f, err := readFrame(p, src)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func templateConfigs(p mihomo.Profile, src string) ([]map[string]any, error) {
 	return out, nil
 }
 
-func readFrame(p mihomo.Profile, src string) (frame, error) {
+func readFrame(p profile.Profile, src string) (frame, error) {
 	cfg, err := model.ParseJSONTemplate(src)
 	if err != nil {
 		return frame{}, err
@@ -171,7 +171,7 @@ func readFrame(p mihomo.Profile, src string) (frame, error) {
 		f.balancers = append(f.balancers, b)
 	}
 	if len(closed) > 0 && blackhole == "" {
-		blackhole = freeTag("block", tags)
+		blackhole = model.FreeTag("block", tags)
 		f.own = append(f.own, map[string]any{"tag": blackhole, "protocol": "blackhole"})
 	}
 	for _, b := range closed {
@@ -197,7 +197,7 @@ func readFrame(p mihomo.Profile, src string) (frame, error) {
 	for _, r := range routing.HostRules(p.Direct) {
 		for _, fl := range fields(r.When, routing.Common) {
 			if freedom == "" {
-				freedom = freeTag(directTag, tags)
+				freedom = model.FreeTag(directTag, tags)
 				f.own = append(f.own, map[string]any{"tag": freedom, "protocol": "freedom"})
 			}
 			head = append(head, withRef(fl, Ref{Tag: freedom}))
@@ -280,15 +280,6 @@ func firstOf(have, v string) string {
 		return have
 	}
 	return v
-}
-
-// freeTag is base, or base with a number when the template took it.
-func freeTag(base string, tags map[string]bool) string {
-	tag := base
-	for i := 2; tags[tag]; i++ {
-		tag = base + "-" + strconv.Itoa(i)
-	}
-	return tag
 }
 
 // text is a string of the template; "" for anything else.

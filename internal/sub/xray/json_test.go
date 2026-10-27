@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 	"mikan/internal/sub/subtest/corecheck"
@@ -31,12 +31,12 @@ type xrayConfig struct {
 	Observatory *Observatory `json:"observatory"`
 }
 
-func profileOf(u subtest.User) mihomo.Profile {
-	return mihomo.Profile{Proxies: u.Proxies(), Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
+func profileOf(u subtest.User) profile.Profile {
+	return profile.Profile{Proxies: u.Proxies(), Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
 }
 
 // render is the xray JSON profile of p, each config checked by xray.
-func render(t *testing.T, p mihomo.Profile, m routing.Mode, tpl model.Template) []xrayConfig {
+func render(t *testing.T, p profile.Profile, m routing.Mode, tpl model.Template) []xrayConfig {
 	t.Helper()
 	raw, err := Render(p, model.GroupNames{}, m, tpl)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestJSONOutbounds(t *testing.T) {
 		{Name: "gecko", Type: "hysteria2", Server: "203.0.113.7", Port: 443, Password: "pw", TLS: &model.TLS{}, Obfs: &model.Obfs{Type: "gecko"}},
 		{Name: "bad pin", Type: "trojan", Server: "203.0.113.7", Port: 2087, Password: "pw", TLS: &model.TLS{Pin: "ab12"}, Transport: &model.Transport{Network: "tcp"}},
 	}
-	cs := render(t, mihomo.Profile{Proxies: ps}, routing.All, model.Template{})
+	cs := render(t, profile.Profile{Proxies: ps}, routing.All, model.Template{})
 	var servers []string
 	for _, c := range cs[1:] {
 		servers = append(servers, c.Remarks)
@@ -170,7 +170,7 @@ func TestJSONOutbounds(t *testing.T) {
 		string(masks) != `{"udp":[{"settings":{"password":"obfs"},"type":"salamander"}]}` {
 		t.Fatalf("hysteria2 (no port hopping: older cores refuse its mask): %v, masks %s", hy2, masks)
 	}
-	if _, err := Render(mihomo.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, model.Template{}); !errors.Is(err, model.ErrNoProxies) {
+	if _, err := Render(profile.Profile{Proxies: ps[7:]}, model.GroupNames{}, routing.All, model.Template{}); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("nothing xray carries: %v", err)
 	}
 }

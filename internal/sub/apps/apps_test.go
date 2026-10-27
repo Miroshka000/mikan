@@ -94,6 +94,27 @@ func TestSupports(t *testing.T) {
 	}
 }
 
+// The admin's own Clash profile and the rule lists go to mihomo apps and to the panel's
+// preview (a zero App) only: Stash reads its own flavor, the rest are not Clash apps.
+func TestTakesOwnProfile(t *testing.T) {
+	for _, c := range []struct {
+		app  App
+		want bool
+	}{
+		{App{}, true},
+		{App{Family: FamilyMihomo}, true},
+		{App{Family: FamilyMihomo, Core: Version{1, 19, 12}}, true},
+		{App{Family: FamilyStash}, false},
+		{App{Family: FamilyXray}, false},
+		{App{Family: FamilySingBox}, false},
+		{App{Family: FamilyOther}, false},
+	} {
+		if got := c.app.TakesOwnProfile(); got != c.want {
+			t.Errorf("%+v: %v, want %v", c.app, got, c.want)
+		}
+	}
+}
+
 // Each mihomo gate holds from its first release on, and the types newer than the
 // core of 2024 stay off a core that does not name its version.
 func TestMihomoVersionGates(t *testing.T) {
@@ -173,16 +194,19 @@ func TestGetUplinkOnlyForAppsThatSendIt(t *testing.T) {
 }
 
 func TestHappAndINCY(t *testing.T) {
-	if !IsHapp("Happ/3.6.0/Android/abc") || IsHapp("v2RayTun/5.1") || IsHapp("") {
-		t.Fatal("IsHapp")
+	if !Named("happ", "Happ/3.6.0/Android/abc") || Named("happ", "v2RayTun/5.1") || Named("happ", "") {
+		t.Fatal("Named happ")
 	}
-	if !IsINCY("INCY/2.0.8/iOS") || IsINCY("Happ/3.6.0") || IsINCY("") {
-		t.Fatal("IsINCY")
+	if !Named("incy", "INCY/2.0.8/iOS") || Named("incy", "Happ/3.6.0") || Named("incy", "") {
+		t.Fatal("Named incy")
+	}
+	if Named("nosuchapp", "nosuchapp/1.0") {
+		t.Fatal("Named for an id the catalog does not have")
 	}
 }
 
 // pinnedUAs is what every detector of the package says of a User-Agent today: DetectApp,
-// Identify, IsHapp, IsINCY, TakesXrayJSON and the built-in rules of a Responder. It pins
+// Identify, Named for happ and incy, TakesXrayJSON and the built-in rules of a Responder. It pins
 // the answers, not what they should be: a refactor of the tables of words must leave every
 // row as it is, and a row that changes on purpose is changed here with a reason. The rows
 // marked "looks wrong" are answers that disagree with another detector or with the app.
@@ -190,7 +214,7 @@ var pinnedUAs = []struct {
 	ua             string
 	app            App
 	id             string // Identify's app; "" for none
-	happ, incy, xj bool   // IsHapp, IsINCY, TakesXrayJSON
+	happ, incy, xj bool   // Named happ, Named incy, TakesXrayJSON
 	rule           string // the built-in rule that decides; "" for none
 }{
 	// Looks wrong: Happ's word is on its xray app, DetectApp makes a sing-box app of it.
@@ -205,7 +229,7 @@ var pinnedUAs = []struct {
 	// The same, and "mihomo/1.19" names no core: the version wants three numbers.
 	{"v2rayN/7 mihomo/1.19", App{Family: FamilyMihomo}, "v2rayn", false, false, false, ""},
 	// Looks wrong: Happ for Identify (happ comes first in the catalog), INCY for the
-	// headers and the announcement (IsINCY is asked first there).
+	// headers and the announcement (INCY is asked first there).
 	{"INCY/2.1 Happ", App{Family: FamilyXray}, "happ", true, true, true, ""},
 	{"Stash/2.8.0 Clash/1.11.0", App{Family: FamilyStash}, "stash", false, false, false, ""},
 	// The Mikan app asks for a subscription as "mihomo[/core] Mikan/x", the mihomo on
@@ -311,11 +335,11 @@ func TestDetectionIsPinned(t *testing.T) {
 		if k, _ := Identify(c.ua); k.ID != c.id {
 			t.Errorf("Identify(%q) = %q, want %q", c.ua, k.ID, c.id)
 		}
-		if got := IsHapp(c.ua); got != c.happ {
-			t.Errorf("IsHapp(%q) = %v", c.ua, got)
+		if got := Named("happ", c.ua); got != c.happ {
+			t.Errorf("Named(happ, %q) = %v", c.ua, got)
 		}
-		if got := IsINCY(c.ua); got != c.incy {
-			t.Errorf("IsINCY(%q) = %v", c.ua, got)
+		if got := Named("incy", c.ua); got != c.incy {
+			t.Errorf("Named(incy, %q) = %v", c.ua, got)
 		}
 		if got := TakesXrayJSON(c.ua); got != c.xj {
 			t.Errorf("TakesXrayJSON(%q) = %v", c.ua, got)

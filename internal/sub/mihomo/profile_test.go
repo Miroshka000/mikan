@@ -3,6 +3,8 @@ package mihomo
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -12,6 +14,7 @@ import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/build"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -303,7 +306,7 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 			nodes = append(nodes, model.Node{ID: id, Name: names[id], Endpoint: model.Endpoint{Host: "203.0.113.7"}})
 			wantGroups = append(wantGroups, names[id])
 		}
-		p := Profile{Proxies: build.Proxies(build.Profile{Keys: subtest.Keys, Inbounds: ins, Nodes: nodes}), Nodes: nodes}
+		p := profile.Profile{Proxies: build.Proxies(build.Profile{Keys: subtest.Keys, Inbounds: ins, Nodes: nodes}), Nodes: nodes}
 		raw, err := Render(p, model.GroupNames{}, routing.All)
 		if err != nil {
 			t.Fatal(err)
@@ -332,10 +335,10 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 }
 
 func TestNothingToServeIsAnError(t *testing.T) {
-	if _, err := Render(Profile{}, model.GroupNames{}, routing.All); !errors.Is(err, model.ErrNoProxies) {
+	if _, err := Render(profile.Profile{}, model.GroupNames{}, routing.All); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("a profile with empty groups is not served: %v", err)
 	}
-	if _, _, err := Template(Profile{}, "rules: [MATCH,DIRECT]\n"); !errors.Is(err, model.ErrNoProxies) {
+	if _, _, err := Template(profile.Profile{}, "rules: [MATCH,DIRECT]\n"); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("an own profile with no proxies: %v", err)
 	}
 }
@@ -393,23 +396,27 @@ func TestRulesInProfile(t *testing.T) {
 }
 
 // An idle gRPC connection is pinged, so that the app does not stay on one a middlebox cut
-// while it was silent; Stash's profile, the built-in one and the own one, goes without.
+// while it was silent; Stash's profile, always the built-in one, goes without.
 func TestGRPCKeepalive(t *testing.T) {
 	grpc := model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID, Transport: &model.Transport{Network: "grpc", Service: "api"}}
 	if o := Proxy(grpc)["grpc-opts"].(map[string]any); o["ping-interval"] != 15 || o["grpc-service-name"] != "api" {
 		t.Fatalf("grpc-opts: %v", o)
 	}
 	for _, app := range []apps.App{{Family: apps.FamilyMihomo}, {Family: apps.FamilyStash}} {
-		p := Profile{Proxies: []model.Proxy{grpc}, App: app}
-		built, err := Config(p, model.GroupNames{}, routing.DefaultMode)
+		p := profile.Profile{Proxies: []model.Proxy{grpc}, App: app}
+		built, err := renderConfig(p, model.GroupNames{}, routing.DefaultMode)
 		if err != nil {
 			t.Fatal(err)
 		}
-		own, _, err := TemplateConfig(p, subtest.OwnTemplate)
-		if err != nil {
-			t.Fatal(err)
+		cfgs := map[string]map[string]any{"built-in": built}
+		if p.App.TakesOwnProfile() { // Stash gets no own profile
+			own, _, err := templateConfig(p, subtest.OwnTemplate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfgs["own"] = own
 		}
-		for name, cfg := range map[string]map[string]any{"built-in": built, "own": own} {
+		for name, cfg := range cfgs {
 			var opts map[string]any
 			switch ps := cfg["proxies"].(type) {
 			case []map[string]any:
@@ -436,5 +443,93 @@ func TestProxyNameWithLineBreakRenders(t *testing.T) {
 	coreAccepts(t, raw)
 	if !strings.Contains(string(raw), "name: А\n") {
 		t.Fatalf("no proxy А:\n%s", raw)
+	}
+}
+
+// Every built-in profile and every starter begins with base.yaml, in its order and with
+// its values: the panel only adds to it, the geodata keys go only where nothing names
+// geodata, "real IP" turns fake-ip to redir-host with no range, and the sniffer is
+// sniffer.yaml's. Rendering leaves base.yaml as it was read.
+func TestBaseSkeleton(t *testing.T) {
+	if len(baseKeys) == 0 || len(base) != len(baseKeys) || len(sniffer) == 0 {
+		t.Fatalf("base.yaml %v, sniffer.yaml %v", baseKeys, sniffer)
+	}
+	check := func(t *testing.T, raw []byte, mode routing.Mode, tune routing.Tune) {
+		t.Helper()
+		var n yaml.Node
+		var out map[string]any
+		if err := yaml.Unmarshal(raw, &n); err != nil {
+			t.Fatal(err)
+		}
+		if err := n.Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for i := 0; i < len(n.Content[0].Content); i += 2 {
+			keys = append(keys, n.Content[0].Content[i].Value)
+		}
+		var want []string
+		for _, k := range baseKeys {
+			if _, ok := out[k]; !ok && (k == "geodata-mode" || k == "geox-url") && mode == routing.All {
+				continue
+			}
+			want = append(want, k)
+		}
+		if len(keys) < len(want) || !slices.Equal(keys[:len(want)], want) {
+			t.Fatalf("keys %v, base.yaml %v", keys, baseKeys)
+		}
+		for _, k := range want {
+			got, w := out[k], base[k]
+			if k == "dns" {
+				dns, _ := got.(map[string]any)
+				fixed := map[string]any{}
+				for dk := range w.(map[string]any) {
+					if x, ok := dns[dk]; ok {
+						fixed[dk] = x
+					}
+				}
+				if got = fixed; tune.RealIP {
+					w = cloneYAML(w)
+					w.(map[string]any)["enhanced-mode"] = "redir-host"
+					delete(w.(map[string]any), "fake-ip-range")
+				}
+			}
+			if !reflect.DeepEqual(got, w) {
+				t.Errorf("%s: %#v, base.yaml %#v", k, got, w)
+			}
+		}
+		if got, ok := out["sniffer"]; ok != tune.Sniffer || ok && !reflect.DeepEqual(got, sniffer) {
+			t.Errorf("sniffer %#v (%v), sniffer.yaml %#v", got, tune.Sniffer, sniffer)
+		}
+	}
+	for _, v := range append(slices.Clip(subtest.Variants), subtest.EveryTypeVariant) {
+		for _, realIP := range []bool{false, true} {
+			p := goldenProfile(v)
+			name := v.Name
+			if realIP {
+				p.Routes.Tune.RealIP, name = true, name+"-real-ip"
+			}
+			for _, mode := range subtest.Modes {
+				t.Run(name+"/"+string(mode), func(t *testing.T) {
+					raw, err := Render(p, v.Groups.WithDefaults("en"), mode)
+					if err != nil {
+						t.Fatal(err)
+					}
+					check(t, raw, mode, p.Routes.Tune)
+					if !p.App.TakesOwnProfile() {
+						return
+					}
+					starter, err := Starter(p, v.Groups, mode)
+					if err != nil {
+						t.Fatal(err)
+					}
+					check(t, starter, mode, p.Routes.Tune)
+				})
+			}
+		}
+	}
+	fresh, _ := embeddedYAML(baseYAML)
+	if !reflect.DeepEqual(base, fresh) {
+		t.Fatalf("rendering changed base.yaml: %#v", base)
 	}
 }

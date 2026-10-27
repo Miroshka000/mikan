@@ -1,5 +1,5 @@
 // Package serve answers the fetches of subscriptions over HTTP. It reads a subscription
-// from a Source, picks the format the app takes (Format), sets every header the answer
+// from a Source, picks the format the app takes (Resolve), sets every header the answer
 // carries (headers.go), and has the cores' renderers write the profile, or a stub in place
 // of the servers when there is nothing to connect to (stub.go).
 package serve
@@ -19,6 +19,7 @@ import (
 	"mikan/internal/sub/build"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/singbox"
 	"mikan/internal/sub/xray"
@@ -107,6 +108,13 @@ type Config struct {
 	// XrayJSON: the apps that run whole xray configs (apps.XrayJSON) get the xray JSON
 	// profile in place of share links; a request that names a format gets it either way.
 	XrayJSON bool
+}
+
+// Profile is the profile of the proxies ps as cfg sets it for every core: the admin's rules
+// as they are saved, the routes, the nodes and the hosts kept out of the tunnel. The App
+// and the rules its core parses (mihomo.RulesFor) are the Clash profile's to set.
+func (cfg Config) Profile(ps []model.Proxy) profile.Profile {
+	return profile.Profile{Proxies: ps, Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang}
 }
 
 // User is what a subscription's headers and texts say of its user.
@@ -216,7 +224,7 @@ func internalError(w http.ResponseWriter) {
 }
 
 // Serve answers a fetch of the subscription of token: the page for a browser or a
-// messenger's preview, the profile in the format the app asks for otherwise (Format). The
+// messenger's preview, the profile in the format the app asks for otherwise (Resolve). The
 // response rules go first (rules.go): they may answer for the profile, or name the format
 // and what the device is asked for. The order is fixed: the headers go before the keys are
 // handed out (a HEAD stops after them), the device gets its keys before the profile is made,
@@ -257,13 +265,17 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	}
 	ua := r.Header.Get("User-Agent")
 	format := Resolve(r.Header, r.URL.Query().Get("format"), dec, cfg.XrayJSON)
-	ex.format = format
 	// A messenger that builds a preview of a pasted link gets the page, which has the
 	// preview's title and picture and nothing of the user's.
 	if (format == FormatHTML || LinkPreview(ua) && r.URL.Query().Get("format") == "") && h.page != nil {
+		ex.format = FormatHTML
 		h.page(w, r, cfg)
 		return OutcomeServed
 	}
+	if format == FormatHTML {
+		format = FormatURI // no page to send: a browser gets the links
+	}
+	ex.format = format
 	u, err := sub.User(ctx)
 	if err != nil {
 		internalError(w)
@@ -290,21 +302,21 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	if dec.Responds() == apps.RespondStub {
 		// An app that is turned away gets no keys: it must not take a place of the
 		// subscriber's devices.
-		h.stub(w, cfg, format, &unsupportedError{text: StubText(cfg.Lang, dec)})
+		h.stub(w, cfg, ex, &unsupportedError{text: StubText(cfg.Lang, dec)})
 		return OutcomeStub
 	}
 	keys, err := sub.Keys(ctx, Device{HWID: r.Header.Get("X-Hwid"), OS: r.Header.Get("X-Device-Os"), OSVersion: r.Header.Get("X-Ver-Os"),
 		Model: r.Header.Get("X-Device-Model"), App: ua, IP: h.ip(r), SkipHWID: dec.Action.SkipHWID})
 	switch {
 	case errors.Is(err, ErrDeviceLimit), errors.Is(err, ErrNoHWID), errors.Is(err, ErrDeviceBanned), errors.As(err, new(*UnboundError)):
-		h.stub(w, cfg, format, err)
+		h.stub(w, cfg, ex, err)
 		return OutcomeStub
 	case err != nil:
 		internalError(w)
 		return ""
 	}
 	if notice := inactiveNotice(cfg, u.State, vars); notice != nil {
-		h.stub(w, cfg, format, notice)
+		h.stub(w, cfg, ex, notice)
 		return OutcomeStub
 	}
 	ins, err := sub.Inbounds(ctx)
@@ -319,38 +331,36 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		Skip: func(in model.Inbound, err error) {
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
 		}})
-	prof := mihomo.Profile{Proxies: proxies, Nodes: cfg.Nodes, Direct: cfg.Direct, Lang: cfg.Lang}
-	tpl := Template(cfg.Templates, format, dec.Action.Template)
+	prof := cfg.Profile(proxies)
+	tpl := ProfileTemplate(cfg.Templates, format, dec.Action.Template, app)
 	switch format {
 	case FormatClash:
-		prof.Rules, prof.Routes, prof.App = mihomo.RulesFor(cfg.Rules, app), cfg.Routes, app
+		prof.Rules, prof.App = mihomo.RulesFor(cfg.Rules, app), app
 		body, ps, err := h.clashProfile(prof, cfg, tpl)
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, profileTitle(cfg, vars))
 		_, _ = w.Write(body)
 	case FormatSingBox:
-		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
 		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return singbox.Render(ctx, prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		profileHeaders(hd, format, profileTitle(cfg, vars))
 		_, _ = w.Write(body)
 	case FormatXray:
-		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
 		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return xray.Render(prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		profileHeaders(hd, format, "")
 		_, _ = w.Write(body)
 	default:
 		links, ps, err := xray.Links(proxies)
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, "")
@@ -359,33 +369,27 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	return OutcomeServed
 }
 
-// clashProfile is the Clash profile of prof: of the admin's own template t when the app can
-// take it, the built-in one otherwise; and the panel's proxies in it.
-func (h *Handler) clashProfile(prof mihomo.Profile, cfg Config, t model.Template) ([]byte, []model.Proxy, error) {
-	builtIn := func() ([]byte, []model.Proxy, error) {
-		body, err := mihomo.Render(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Mode)
-		return body, prof.Proxies, err
-	}
-	if t.Body == "" || !prof.Routable() {
-		return builtIn()
-	}
-	body, ps, err := mihomo.Template(prof, t.Body)
-	var te *model.TemplateError
-	if errors.As(err, &te) {
-		// Saved templates are checked; one that went bad must not leave apps without a profile.
-		h.Warn("template/"+strconv.FormatInt(t.ID, 10)+"/"+te.Code, "subscription: an own template does not render, the built-in profile goes out",
-			"template", t.ID, "core", t.Core, "err", err)
-		return builtIn()
-	}
+// clashProfile is the Clash profile of prof made of t (render), and the panel's proxies in
+// it: of the built-in profile, prof's own.
+func (h *Handler) clashProfile(prof profile.Profile, cfg Config, t model.Template) ([]byte, []model.Proxy, error) {
+	var ps []model.Proxy
+	body, err := h.render(t, func(t model.Template) (body []byte, err error) {
+		if t.Body == "" {
+			ps = prof.Proxies
+			return mihomo.Render(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Mode)
+		}
+		body, ps, err = mihomo.Template(prof, t.Body)
+		return body, err
+	})
 	return body, ps, err
 }
 
 // profileFailed answers a profile that could not be made: with nothing for this app to
 // connect to (model.ErrNoProxies) the stub that says so, otherwise the panel's own failure.
 // The outcome is the request log's: a failure of the panel's own is not logged.
-func (h *Handler) profileFailed(w http.ResponseWriter, cfg Config, format string, err error) Outcome {
+func (h *Handler) profileFailed(w http.ResponseWriter, cfg Config, ex *exchange, err error) Outcome {
 	if errors.Is(err, model.ErrNoProxies) {
-		h.stub(w, cfg, format, err)
+		h.stub(w, cfg, ex, err)
 		return OutcomeStub
 	}
 	internalError(w)

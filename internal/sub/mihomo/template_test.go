@@ -2,11 +2,13 @@ package mihomo
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -151,6 +153,15 @@ func TestCheckTemplate(t *testing.T) {
 	if err := CheckTemplate(prof, ok); err != nil {
 		t.Fatal(err)
 	}
+	// A panel without inbounds has nothing to check the groups and rules with, as with
+	// xray: the template is read, and saved without the rest of the check.
+	if err := CheckTemplate(profile.Profile{}, "proxy-groups:\n  - {name: G, type: select, include-all-proxies: true}\n"); !errors.Is(err, model.ErrNoProxies) {
+		t.Fatalf("no proxies: %v, want ErrNoProxies", err)
+	}
+	var te *model.TemplateError
+	if err := CheckTemplate(profile.Profile{}, "proxy-groups: ["); !errors.As(err, &te) || te.Code != "template_yaml" {
+		t.Fatalf("no proxies, broken YAML: %v, want template_yaml", err)
+	}
 }
 
 // A template checked on saving can still miss a user: one without the inbound a group
@@ -186,5 +197,72 @@ func TestTemplateFilterGoCannotRead(t *testing.T) {
 	without := "proxy-groups:\n  - {name: G, type: select, include-all-proxies: true, filter: \"^(?=.*US)\"}\nrules:\n  - MATCH,G\n"
 	if err := CheckTemplate(prof, without); err != nil {
 		t.Fatalf("mihomo applies the filter itself: %v", err)
+	}
+}
+
+// Next to proxy-providers, include-all would also take every proxy of the user, past the
+// nodes "mikan" picked: the group keeps only the providers, and its filters stay for them.
+func TestTemplateIncludeAllNextToProviders(t *testing.T) {
+	prof := profileOf(subtest.TwoNodes())
+	const providers = "proxy-providers:\n  p1: {type: http, url: \"http://127.0.0.1:1/p1.yaml\", path: ./providers/p1.yaml, interval: 3600}\n"
+	for _, c := range []struct {
+		name, group string
+		drop        func(model.Proxy) bool // the NL proxies the group leaves out
+		want        string                 // the group's keys besides name, type and proxies
+	}{
+		{"include-all", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all: true}",
+			nil, "map[include-all-providers:true]"},
+		{"include-all with filters", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^🇳🇱\", exclude-type: hysteria2}",
+			func(x model.Proxy) bool { return typeOf(x) == "hysteria2" }, "map[exclude-type:hysteria2 filter:^🇳🇱 include-all-providers:true]"},
+		{"use with filters", providers + "{name: G, type: select, mikan: {nodes: [1]}, use: [p1], filter: \"^🇳🇱\", exclude-filter: TUIC}",
+			func(x model.Proxy) bool { return strings.Contains(x.Name, "TUIC") }, "map[exclude-filter:TUIC filter:^🇳🇱 use:[p1]]"},
+		{"include-all-providers with a filter", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all-providers: true, filter: \"^🇳🇱\"}",
+			nil, "map[filter:^🇳🇱 include-all-providers:true]"},
+		{"include-all-proxies and use with a filter", providers + "{name: G, type: select, include-all-proxies: true, use: [p1], filter: \"^🇳🇱\"}",
+			nil, "map[filter:^🇳🇱 use:[p1]]"},
+		// Nothing of the user's, but the providers': no REJECT for select to start on.
+		{"nothing picked", providers + "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^none\"}",
+			func(model.Proxy) bool { return true }, "map[filter:^none include-all-providers:true]"},
+		{"no providers", "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^🇳🇱\", exclude-type: hysteria2}",
+			func(x model.Proxy) bool { return typeOf(x) == "hysteria2" }, "map[]"},
+		// mihomo has no providers to give such a group.
+		{"empty proxy-providers, nothing picked", "proxy-providers: {}\n{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^none\"}",
+			func(model.Proxy) bool { return true }, "map[]"},
+		{"no providers, nothing picked", "{name: G, type: select, mikan: {nodes: [1]}, include-all: true, filter: \"^none\"}",
+			func(model.Proxy) bool { return true }, "map[]"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			src := strings.Replace(c.group, "{name: G", "proxy-groups:\n  - {name: G", 1) + "\nrules:\n  - MATCH,G\n"
+			raw, _, err := Template(prof, src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			coreAccepts(t, raw)
+			var v struct {
+				Groups []map[string]any `json:"proxy-groups"`
+			}
+			if err := unmarshalProfile(raw, &v); err != nil {
+				t.Fatal(err)
+			}
+			g := v.Groups[0]
+			var want []any
+			for _, x := range prof.Proxies {
+				if x.Node == 1 && (c.drop == nil || !c.drop(x)) {
+					want = append(want, x.Name)
+				}
+			}
+			if len(want) == 0 && !strings.HasPrefix(c.group, providers) {
+				want = []any{"REJECT"} // closed, not open
+			}
+			if got, _ := g["proxies"].([]any); !slices.Equal(got, want) {
+				t.Errorf("proxies: %v, want %v", got, want)
+			}
+			delete(g, "name")
+			delete(g, "type")
+			delete(g, "proxies")
+			if got := fmt.Sprint(g); got != c.want {
+				t.Errorf("group: %s, want %s\n%s", got, c.want, raw)
+			}
+		})
 	}
 }

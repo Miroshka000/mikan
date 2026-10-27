@@ -6,6 +6,7 @@ package apps
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -34,6 +35,13 @@ type App struct {
 	// Whole: the app runs a whole sing-box config, route and DNS too (the official SFA,
 	// SFI, SFM, SFT); the others take its outbounds and route by their own settings.
 	Whole bool
+}
+
+// TakesOwnProfile: the app takes the admin's own Clash profile, rule lists and the rules of
+// routing.Services. Stash and apps we do not know get the built-in profile without them; a
+// zero App (the admin panel's preview) is mihomo.
+func (a App) TakesOwnProfile() bool {
+	return a.Family == "" || a.Family == FamilyMihomo
 }
 
 // Version is major.minor.patch; zero when unknown.
@@ -83,35 +91,33 @@ func koalaCore(app Version) Version {
 	return Version{}
 }
 
-// DetectApp reads the app from its User-Agent. sing-box apps come first: Hiddify says
-// "like ClashMeta" to get Clash profiles from other panels.
+// DetectApp reads the app from its User-Agent by the words of the Catalog, a family at a
+// time: Stash, sing-box, mihomo, xray. sing-box apps come before mihomo: Hiddify says "like
+// ClashMeta" to get Clash profiles from other panels.
 func DetectApp(userAgent string) App {
 	ua := strings.ToLower(userAgent)
-	has := func(words ...string) bool {
-		for _, w := range words {
-			if strings.Contains(ua, w) {
-				return true
-			}
-		}
-		return false
-	}
 	switch {
-	case strings.HasPrefix(ua, "stash"):
+	case names(FamilyStash, ua, ""):
 		return App{Family: FamilyStash}
-	case has("hiddify"):
-		// Hiddify 4 (2026) runs a sing-box 1.13 fork; the 2.x of 2024 had no AnyTLS. One
-		// that does not say its version is taken for the old one.
-		m := hiddifyVersion.FindStringSubmatch(ua)
-		return App{Family: FamilySingBox, Legacy: m == nil || versionOf(m)[0] < 4}
-	case has("karing", "sing-box", "singbox", "nekobox", "nekoray", "husi", "throne", "deskbox", "inhive") ||
-		strings.HasPrefix(ua, "sfa") || strings.HasPrefix(ua, "sfi") || strings.HasPrefix(ua, "sfm") || strings.HasPrefix(ua, "sft"):
-		// "SFA (sing-box 1.14.2; language en_US)"
-		a := App{Family: FamilySingBox, Whole: strings.HasPrefix(ua, "sfa") || strings.HasPrefix(ua, "sfi") || strings.HasPrefix(ua, "sfm") || strings.HasPrefix(ua, "sft")}
+	case names(FamilySingBox, ua, ""):
+		if byID["hiddify"].matches(ua) {
+			// Hiddify 4 (2026) runs a sing-box 1.13 fork; the 2.x of 2024 had no AnyTLS. One
+			// that does not say its version is taken for the old one.
+			m := hiddifyVersion.FindStringSubmatch(ua)
+			return App{Family: FamilySingBox, Legacy: m == nil || versionOf(m)[0] < 4}
+		}
+		// "SFA (sing-box 1.14.2; language en_US)": the official apps are the prefixes of the
+		// generic sing-box entry.
+		a := App{Family: FamilySingBox, Whole: slices.ContainsFunc(byID["singbox"].Prefixes, func(p string) bool {
+			return strings.HasPrefix(ua, p)
+		})}
 		if m := singboxVersion.FindStringSubmatch(ua); m != nil {
 			a.Core = versionOf(m)
 		}
 		return a
-	case has("mihomo", "clash", "koala", "kabosu", "verge", "prizrak", "flowvy", "murge", "rabbit"):
+	// The Mikan app asks for a subscription as "mihomo[/core] Mikan/x"; a bare "Mikan/x" stays
+	// an app we do not know, as before the Catalog had Mikan.
+	case names(FamilyMihomo, ua, "mikan"):
 		a := App{Family: FamilyMihomo}
 		if m := mihomoVersion.FindStringSubmatch(ua); m != nil {
 			a.Core = versionOf(m)
@@ -119,7 +125,7 @@ func DetectApp(userAgent string) App {
 			a.Core = koalaCore(versionOf(m))
 		}
 		return a
-	case has("happ", "v2raytun", "incy", "v2rayng", "v2rayn", "onexray", "v2box", "simplexray", "renoarx"):
+	case names(FamilyXray, ua, ""):
 		return App{Family: FamilyXray}
 	}
 	return App{Family: FamilyOther}
@@ -223,9 +229,3 @@ func For(n proto.Needs) []Family {
 	}
 	return out
 }
-
-// IsHapp tells Happ by its User-Agent ("Happ/3.6.0/…").
-func IsHapp(ua string) bool { return strings.Contains(strings.ToLower(ua), "happ") }
-
-// IsINCY tells INCY by its User-Agent.
-func IsINCY(ua string) bool { return strings.Contains(strings.ToLower(ua), "incy") }

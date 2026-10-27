@@ -1,0 +1,145 @@
+{
+  "dns": {
+    "final": "remote",
+    "servers": [
+      {
+        "detour": "PROXY",
+        "server": "1.1.1.1",
+        "tag": "remote",
+        "type": "https"
+      },
+      {
+        "server": "1.1.1.1",
+        "tag": "local",
+        "type": "udp"
+      }
+    ],
+    "strategy": "ipv4_only"
+  },
+  "experimental": {
+    "cache_file": {
+      "enabled": true
+    }
+  },
+  "inbounds": [
+    {
+      "address": [
+        "172.19.0.1/30"
+      ],
+      "auto_route": true,
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    }
+  ],
+  "log": {
+    "level": "warn"
+  },
+  "outbounds": [
+    {
+      "outbounds": [
+        "Авто",
+        "VLESS TLS",
+        "VLESS WS",
+        "Shadowsocks 2022"
+      ],
+      "tag": "VPN",
+      "type": "selector"
+    },
+    {
+      "interval": "300s",
+      "outbounds": [
+        "VLESS TLS",
+        "VLESS WS",
+        "Shadowsocks 2022"
+      ],
+      "tag": "Авто",
+      "tolerance": 50,
+      "type": "urltest",
+      "url": "https://www.gstatic.com/generate_204"
+    },
+    {
+      "outbounds": [
+        "VPN"
+      ],
+      "tag": "PROXY",
+      "type": "selector"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "vpn.example.com",
+      "server_port": 443,
+      "tag": "VLESS TLS",
+      "tls": {
+        "enabled": true,
+        "server_name": "vpn.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "type": "vless",
+      "uuid": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+    },
+    {
+      "packet_encoding": "xudp",
+      "server": "vpn.example.com",
+      "server_port": 2053,
+      "tag": "VLESS WS",
+      "tls": {
+        "enabled": true,
+        "server_name": "vpn.example.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        }
+      },
+      "transport": {
+        "path": "/golden-ws",
+        "type": "ws"
+      },
+      "type": "vless",
+      "uuid": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+    },
+    {
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "AAECAwQFBgcICQoLDA0ODw==:rkvHPGi04pBDvWELP95stw==",
+      "server": "vpn.example.com",
+      "server_port": 8388,
+      "tag": "Shadowsocks 2022",
+      "type": "shadowsocks",
+      "udp_over_tcp": {
+        "enabled": true,
+        "version": 2
+      }
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": "local",
+    "final": "VPN",
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "domain": [
+          "vpn.example.com"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      }
+    ]
+  }
+}
