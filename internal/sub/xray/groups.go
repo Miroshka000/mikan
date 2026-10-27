@@ -19,7 +19,7 @@ const (
 )
 
 // Balancing is a profile's groups as xray's routing carries them, for its JSON config:
-// balancers over the outbounds (tagged by the proxies' names), the observatories that test
+// balancers over the outbounds (tagged by the proxies' names), how the observatories test
 // them, what a rule to each group names, and the chains' dialers. What xray has no group
 // for becomes the nearest form, with a note for the preview.
 type Balancing struct {
@@ -29,7 +29,10 @@ type Balancing struct {
 	Refs map[string]Ref
 	// Dialers: an outbound to the one it dials through (streamSettings.sockopt.dialerProxy),
 	// of the chains.
-	Dialers          map[string]string
+	Dialers map[string]string
+	// Observatory and BurstObservatory are how the outbounds of the leastPing and the
+	// leastLoad balancers are tested, of none when there is no such balancer. Their
+	// subjects are a config's own (observe in json.go): the outbounds of the balancers it has.
 	Observatory      *Observatory
 	BurstObservatory *BurstObservatory
 	Notes            []model.Note
@@ -107,8 +110,6 @@ type converter struct {
 	busy   map[string]bool // groups being converted: a group in itself is no member
 	s      routing.XrayServers
 	out    Balancing
-	ping   []string // the outbounds of the leastPing balancers
-	load   []string // of the leastLoad ones
 }
 
 func (c *converter) note(g model.Group, code string) {
@@ -221,11 +222,7 @@ func (c *converter) balancer(g model.Group) (Ref, bool) {
 	if flat {
 		c.note(g, "balance_flat")
 	}
-	switch b.Strategy.Type {
-	case routing.XrayLeastPing:
-		c.ping = append(c.ping, sel...)
-	case routing.XrayLeastLoad:
-		c.load = append(c.load, sel...)
+	if b.Strategy.Type == routing.XrayLeastLoad {
 		set := map[string]any{}
 		if c.s.Expected > 0 {
 			set["expected"] = c.s.Expected
@@ -282,19 +279,16 @@ func (c *converter) chain(g model.Group) (Ref, bool) {
 	return c.ref(g.Members[len(g.Members)-1])
 }
 
-// observe tests the balancers' outbounds as b says: the observatory for leastPing, the
-// burst one for leastLoad.
+// observe is how the balancers' outbounds are tested, as b says: the observatory for
+// leastPing, the burst one for leastLoad.
 func (c *converter) observe(b routing.Balance) {
-	subjects := func(l []string) []string {
-		out := slices.Clone(l)
-		slices.Sort(out)
-		return slices.Compact(out)
-	}
 	every := strconv.Itoa(b.Interval) + "s"
-	if len(c.ping) > 0 {
-		c.out.Observatory = &Observatory{SubjectSelector: subjects(c.ping), ProbeURL: b.URL, ProbeInterval: every, EnableConcurrency: true}
-	}
-	if len(c.load) > 0 {
-		c.out.BurstObservatory = &BurstObservatory{SubjectSelector: subjects(c.load), PingConfig: PingConfig{Destination: b.URL, Interval: every, Sampling: c.s.Sampling}}
+	for _, x := range c.out.Balancers {
+		switch x.Strategy.Type {
+		case routing.XrayLeastPing:
+			c.out.Observatory = &Observatory{ProbeURL: b.URL, ProbeInterval: every, EnableConcurrency: true}
+		case routing.XrayLeastLoad:
+			c.out.BurstObservatory = &BurstObservatory{PingConfig: PingConfig{Destination: b.URL, Interval: every, Sampling: c.s.Sampling}}
+		}
 	}
 }
