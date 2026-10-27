@@ -39,11 +39,14 @@ func TestGoldenClash(t *testing.T) {
 // The admin's own Clash profile on the two-node user, and the starter the admin edits from.
 func TestGoldenTemplate(t *testing.T) {
 	for _, v := range subtest.Variants {
+		prof := goldenProfile(v)
 		if strings.HasPrefix(v.Name, "single") {
 			continue // the template names the second node's group
 		}
+		if !prof.Routable() {
+			continue // serve gives the app the built-in profile
+		}
 		t.Run(v.Name, func(t *testing.T) {
-			prof := goldenProfile(v)
 			raw, _, err := Template(prof, subtest.OwnTemplate)
 			if err != nil {
 				t.Fatal(err)
