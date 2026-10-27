@@ -125,8 +125,21 @@ enum Squeeze {
 /// What tar leaves out of every archive. What the node's panel and the updater say to each
 /// other (data/node/update) is of the moment: a restore must not bring back an old request,
 /// or a status that says an update runs. The panel's own directory is not a member at all.
-/// A secret's write cut short leaves its temporary file in secrets/, which is no secret.
-const EXCLUDE: [&str; 2] = ["--exclude=data/node/update", "--exclude=secrets/.*.tmp"];
+/// A secret's write cut short leaves its temporary file in secrets/, which is no secret: each
+/// goes by its own name, as a pattern matches below any directory in GNU's tar and BusyBox's
+/// alike, and only GNU's takes --anchored.
+fn excludes(root: &Path) -> Vec<String> {
+    let mut out = vec!["--exclude=data/node/update".to_owned()];
+    if let Ok(dir) = fs::read_dir(root.join(config::SECRETS)) {
+        out.extend(
+            dir.flatten()
+                .filter_map(|e| e.file_name().into_string().ok())
+                .filter(|n| secret_leftover(n))
+                .map(|n| format!("--exclude={}/{n}", config::SECRETS)),
+        );
+    }
+    out
+}
 
 /// tar of members (paths below root) into a new private archive in dir.
 fn pack(root: &Path, dir: &Path, kind: &str, members: &[String], squeeze: Squeeze) -> Result<PathBuf> {
@@ -134,7 +147,7 @@ fn pack(root: &Path, dir: &Path, kind: &str, members: &[String], squeeze: Squeez
     let out = match squeeze {
         Squeeze::Normal => Command::new("tar")
             .args(["-czf", "-"])
-            .args(EXCLUDE)
+            .args(excludes(root))
             .arg("-C")
             .arg(root)
             .args(members)
@@ -170,7 +183,7 @@ fn pack(root: &Path, dir: &Path, kind: &str, members: &[String], squeeze: Squeez
 fn fast_tar(root: &Path, members: &[String], file: File) -> std::io::Result<std::process::Output> {
     let mut tar = Command::new("tar")
         .args(["-cf", "-"])
-        .args(EXCLUDE)
+        .args(excludes(root))
         .arg("-C")
         .arg(root)
         .args(members)
@@ -863,13 +876,16 @@ mod tests {
         file(&root, "data/node/state.json", "{}");
         let leftover = format!("{}/.node_join.4242.1761523200123456789.tmp", config::SECRETS);
         file(&root, &leftover, "mk1.half");
+        // only secrets/ itself: a like name in the node's data is the node's own file
+        file(&root, "data/node/secrets/.keep.tmp", "node's");
         let mut members: Vec<String> = TOP.iter().filter(|m| exists(&root, m)).map(|s| (*s).to_owned()).collect();
         members.push("data/node".into());
         let dir = backups_dir(&root).unwrap();
         for squeeze in [Squeeze::Normal, Squeeze::Fast] {
             let a = pack(&root, &dir, "mikan", &members, squeeze).unwrap();
             let names = String::from_utf8_lossy(&Command::new("tar").arg("-tzf").arg(&a).output().unwrap().stdout).into_owned();
-            assert!(names.lines().any(|n| n == "secrets/node_join") && !names.contains(".tmp"), "{names}");
+            assert!(names.lines().any(|n| n == "secrets/node_join") && !names.contains(".node_join."), "{names}");
+            assert!(names.lines().any(|n| n == "data/node/secrets/.keep.tmp"), "{names}");
             check_archive(&a).unwrap();
         }
         // an archive made before the leftover was left out
