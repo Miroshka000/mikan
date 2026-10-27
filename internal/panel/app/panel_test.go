@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -36,8 +37,27 @@ type harness struct {
 	ts     *httptest.Server
 	client *http.Client
 	csrf   string
-	now    time.Time
-	p      *Panel
+	// now is the panel's clock. The test reads it as it likes, but moves it only with
+	// advance or setNow: the panel reads it under nowMu, on its own goroutines, and may
+	// still be at a request the client already has the answer to.
+	now   time.Time
+	nowMu sync.Mutex
+	p     *Panel
+}
+
+// clock is the panel's Now.
+func (h *harness) clock() time.Time {
+	h.nowMu.Lock()
+	defer h.nowMu.Unlock()
+	return h.now
+}
+
+func (h *harness) advance(d time.Duration) { h.setNow(h.now.Add(d)) }
+
+func (h *harness) setNow(t time.Time) {
+	h.nowMu.Lock()
+	h.now = t
+	h.nowMu.Unlock()
 }
 
 func newHarness(t *testing.T, with ...func(*Options)) *harness {
@@ -71,7 +91,7 @@ func newHarness(t *testing.T, with ...func(*Options)) *harness {
 		"secret.txt":           {Data: []byte("not for the subscription path")},
 	}
 	// No test reaches the real registry of community addons: a closed port answers at once.
-	opts := Options{Version: "test", Web: web, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return h.now }, Resolve: testResolve,
+	opts := Options{Version: "test", Web: web, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: h.clock, Resolve: testResolve,
 		AddonsCommunity: "http://127.0.0.1:1/index.json"}
 	for _, f := range with {
 		f(&opts)
@@ -296,7 +316,7 @@ func TestBruteForceBlocksIP(t *testing.T) {
 	if err := h.st.DB.QueryRow(`SELECT count(*) FROM audit_log WHERE action = 'auth.login_failed'`).Scan(&n); err != nil || n != 10 {
 		t.Fatalf("audit failed logins = %d (%v), want 10", n, err)
 	}
-	h.now = h.now.Add(16 * time.Minute)
+	h.advance(16 * time.Minute)
 	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
 		t.Fatalf("after block expiry: %d", resp.StatusCode)
 	}
@@ -308,7 +328,7 @@ func TestIdleSessionExpires(t *testing.T) {
 	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
 		t.Fatal("login failed")
 	}
-	h.now = h.now.Add(auth.IdleTTL + time.Minute)
+	h.advance(auth.IdleTTL + time.Minute)
 	if resp, _ := h.do(http.MethodGet, "/"+adminPath+"/api/v1/auth/me", nil, nil); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("idle session: %d, want 401", resp.StatusCode)
 	}

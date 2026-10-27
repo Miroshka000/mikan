@@ -245,6 +245,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/login/passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Вход по passkey */
+        post: operations["passkey-login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login/passkey/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Начать вход по passkey */
+        post: operations["passkey-login-begin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -274,6 +308,58 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ключи входа (passkey) */
+        get: operations["list-passkeys"];
+        put?: never;
+        /** Добавить passkey */
+        post: operations["add-passkey"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Начать добавление passkey */
+        post: operations["passkey-begin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить passkey */
+        delete: operations["delete-passkey"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4227,6 +4313,7 @@ export interface components {
         Events: {
             autotune: boolean;
             autotune_recovery: boolean;
+            billing: boolean;
             exit: boolean;
             inbound: boolean;
             node: boolean;
@@ -4238,6 +4325,7 @@ export interface components {
         EventsPatch: {
             autotune?: boolean;
             autotune_recovery?: boolean;
+            billing?: boolean;
             exit?: boolean;
             inbound?: boolean;
             node?: boolean;
@@ -4968,6 +5056,37 @@ export interface components {
              */
             term_days: number | null;
         };
+        NodeBilling: {
+            /** @description Дата оплаты, YYYY-MM-DD (UTC); пусто — не задана. С pay_months — любая оплата из череды, следующую считает панель */
+            pay_date: string;
+            /**
+             * Format: int64
+             * @description Оплата повторяется каждые столько месяцев; 0 — разовая
+             */
+            pay_months: number;
+            /** @description Хостер сервера, как его назвал админ */
+            provider: string;
+            /**
+             * Format: int64
+             * @description За сколько дней до оплаты напомнить админу в Telegram; 0 — не напоминать
+             */
+            remind_days: number;
+            /**
+             * Format: int64
+             * @description День месяца, с которого хостер считает трафик заново; в коротком месяце — его последний день
+             */
+            reset_day: number;
+            /**
+             * Format: int64
+             * @description При скольких процентах лимита сказать админу; раз за период
+             */
+            traffic_alert: number;
+            /**
+             * Format: int64
+             * @description Трафик тарифа сервера за период, байты; 0 — без лимита
+             */
+            traffic_limit: number;
+        };
         NodeCertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
             cert: string;
@@ -5014,6 +5133,7 @@ export interface components {
             balance_group: string;
             /** @description Нода старее панели */
             behind: boolean;
+            billing: components["schemas"]["NodeBilling"];
             /** @description Панель может обновить ноду сама: удалённая, отвечает, версия 0.5.0.2 или новее; старую обновляют один раз вручную командой mikan update на её сервере */
             can_update: boolean;
             /**
@@ -5102,6 +5222,8 @@ export interface components {
             mem_used: number;
             /** @description Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений */
             name: string;
+            /** @description Ближайшая оплата сегодня или позже, YYYY-MM-DD (UTC); нет — оплата не задана или разовая прошла */
+            next_payment?: string;
             /**
              * Format: double
              * @description Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4
@@ -5130,6 +5252,8 @@ export interface components {
             /** @description Как идёт или прошло обновление ноды */
             update?: components["schemas"]["UpdateStatus"];
             version?: string;
+            /** @description Трафик тарифа сервера за текущий период; только с billing.traffic_limit */
+            vps_traffic?: components["schemas"]["VPSTraffic"];
         };
         NodeKeyOutputBody: {
             /** @description Команда установки на сервере ноды */
@@ -5252,9 +5376,10 @@ export interface components {
         };
         Note: {
             /** @enum {string} */
-            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken";
+            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken" | "proxy_unsupported" | "rule_unsupported" | "list_unsupported" | "dns_policy_unsupported" | "category_missing";
             /** @enum {string} */
             core: "mihomo" | "singbox" | "xray";
+            /** @description О чём заметка: группа, условие TYPE,VALUE, список, ключ политики DNS, сервер или geosite:NAME */
             group: string;
         };
         Notify: {
@@ -5490,11 +5615,46 @@ export interface components {
             /** @description Заголовок превью; пусто — бренд */
             title: string;
         };
+        PasskeyAddInputBody: {
+            /** @description Ответ navigator.credentials.create() в JSON (PublicKeyCredential.toJSON()) */
+            credential: unknown;
+            name: string;
+        };
+        PasskeyBeginInputBody: {
+            /** @description Пароль: без него украденная сессия добавила бы свой вход */
+            password: string;
+            /** @description Код из приложения, если включена 2FA */
+            totp?: string;
+        };
+        PasskeyLoginBeginOutputBody: {
+            /** @description Передаётся обратно в POST /auth/login/passkey */
+            ceremony: string;
+            /** @description Параметры WebAuthn для navigator.credentials.get() ({publicKey: …}, двоичные поля в base64url) */
+            options: unknown;
+        };
+        PasskeyLoginInputBody: {
+            ceremony: string;
+            /** @description Ответ navigator.credentials.get() в JSON (PublicKeyCredential.toJSON()) */
+            credential: unknown;
+        };
+        PasskeyOptionsOutputBody: {
+            /** @description Параметры WebAuthn для navigator.credentials.create() ({publicKey: …}, двоичные поля в base64url) */
+            options: unknown;
+        };
+        PasskeyView: {
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            last_used_at?: string;
+            name: string;
+        };
         PasswordInputBody: {
             current: string;
             /** @description Не короче 12 символов */
             new: string;
-            /** @description Отозвать и ключи API (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный из угнанной сессии, пережил бы это */
+            /** @description Отозвать и ключи API, и ключи доступа (passkey) (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный или добавленный из угнанной сессии, пережил бы это */
             revoke_keys?: boolean;
         };
         PatchAddonInputBody: {
@@ -5589,6 +5749,8 @@ export interface components {
             api_allow?: string[];
             /** @description API ноды только с адресов панели; не для ноды панели */
             api_lockdown?: boolean;
+            /** @description Учёт сервера у хостера, целиком */
+            billing?: components["schemas"]["NodeBilling"];
             /**
              * Format: int64
              * @description Ширина канала ноды, Мбит/с в каждую сторону
@@ -5986,7 +6148,7 @@ export interface components {
             starter?: boolean;
         };
         PreviewSubTemplateOutputBody: {
-            /** @description Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть */
+            /** @description Что sing-box и Xray делают с шаблоном Clash, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают */
             notes: components["schemas"]["Note"][];
             /** @description Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки */
             profile: string;
@@ -6422,7 +6584,7 @@ export interface components {
             sub_rules?: string;
         };
         RoutesPreviewOutputBody: {
-            /** @description Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид */
+            /** @description Что ядра sing-box и Xray делают с профилем, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают */
             notes: components["schemas"]["Note"][];
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
@@ -7727,6 +7889,17 @@ export interface components {
             /** Format: int64 */
             used_up: number;
         };
+        VPSTraffic: {
+            /** @description День, с которого начнётся следующий период, YYYY-MM-DD (UTC) */
+            resets: string;
+            /** @description Первый день периода, YYYY-MM-DD (UTC) */
+            since: string;
+            /**
+             * Format: int64
+             * @description Сколько нода унесла с начала периода: трафик пользователей и каскада других нод, вверх и вниз вместе, байты
+             */
+            used: number;
+        };
         ValidateInboundInputBody: {
             config: string;
             /**
@@ -8588,6 +8761,69 @@ export interface operations {
             };
         };
     };
+    "passkey-login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyLoginInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "passkey-login-begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyLoginBeginOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     logout: {
         parameters: {
             query?: never;
@@ -8633,6 +8869,130 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["MeBody"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "add-passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyAddInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "passkey-begin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyBeginInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasskeyOptionsOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-passkey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

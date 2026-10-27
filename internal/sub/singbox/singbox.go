@@ -10,7 +10,8 @@
 // Clash profile's own read into it (mihomo.ReadProxy). What sing-box
 // has no counterpart for is left out:
 // XHTTP and the mihomo-only protocols (build.ForApp leaves them out already), a self-signed
-// certificate pinned by its hash (sing-box pins a public key, from 1.13 on), .mrs lists,
+// certificate pinned by its hash (sing-box pins a public key, from 1.13 on), a Shadowsocks
+// plugin but obfs and v2ray-plugin, smux sing-box has no counterpart for, .mrs lists,
 // rule types of mihomo's own, logic rules but AND.
 package singbox
 
@@ -48,7 +49,7 @@ func Render(ctx context.Context, p profile.Profile, g model.GroupNames, m routin
 	if err != nil {
 		return nil, err
 	}
-	out := config(ctx, pl)
+	out := config(pl, &ruleSets{ctx: ctx})
 	if out == nil {
 		return nil, model.ErrNoProxies // nothing of the profile sing-box can carry
 	}
@@ -125,13 +126,20 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	return pl
 }
 
-func config(ctx context.Context, pl plan) map[string]any {
+// config is the config of pl, its lists read by sets (whose ctx they download with). Of the
+// preview's sets (Dropped) it is walked for what it leaves out, which sets tell.
+func config(pl plan, sets *ruleSets) map[string]any {
 	var outbounds []map[string]any
 	tags := map[string]bool{"direct": true}
+	for _, name := range pl.unread {
+		sets.drop("proxy_unsupported", name)
+	}
 	for _, x := range pl.proxies {
 		if o, ok := singboxOutbound(x); ok {
 			outbounds = append(outbounds, o)
 			tags[str(o["tag"])] = true
+		} else {
+			sets.drop("proxy_unsupported", x.Name)
 		}
 	}
 	if len(outbounds) == 0 {
@@ -158,7 +166,7 @@ func config(ctx context.Context, pl plan) map[string]any {
 	if detour == "" {
 		detour = str(outbounds[0]["tag"])
 	}
-	sets := ruleSets{ctx: ctx, detour: detour, lists: pl.lists, used: map[string]map[string]any{}}
+	sets.detour, sets.lists, sets.used = detour, pl.lists, map[string]map[string]any{}
 	var rules []map[string]any
 	final := ""
 	for _, r := range pl.rules {
@@ -172,7 +180,8 @@ func config(ctx context.Context, pl plan) map[string]any {
 			break
 		}
 		if !ok {
-			continue // a group sing-box has none of
+			sets.drop("rule_unsupported", r.Clash(r.To.Group)) // a group sing-box has none of
+			continue
 		}
 		match, ok := sets.rule(r)
 		if !ok {
@@ -193,7 +202,7 @@ func config(ctx context.Context, pl plan) map[string]any {
 			via = main
 		}
 	}
-	dns, resolver := dnsOf(pl.dns, tags, &sets, via)
+	dns, resolver := dnsOf(pl.dns, tags, sets, via)
 	all := append(append([]map[string]any{}, gs.outbounds...), outbounds...)
 	all = append(all, map[string]any{"type": "direct", "tag": "direct"})
 	route := map[string]any{

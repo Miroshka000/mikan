@@ -379,7 +379,7 @@ func TestSupportTerminalEndsWithTheGrant(t *testing.T) {
 			s.terminalGrant(nil)
 		}, "revoked"},
 		"expired": {func(s *terminalHarness, g grantReply) {
-			s.now = s.now.Add(7 * time.Hour)
+			s.advance(7 * time.Hour)
 			if err := s.p.Support.Sweep(context.Background()); err != nil {
 				s.t.Fatal(err)
 			}

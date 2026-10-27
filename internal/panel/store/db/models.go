@@ -92,6 +92,16 @@ type Admin struct {
 	LastLoginAt   sql.NullInt64
 }
 
+type AdminPasskey struct {
+	ID           int64
+	AdminID      int64
+	CredentialID []byte
+	Name         string
+	Credential   string
+	CreatedAt    int64
+	LastUsedAt   sql.NullInt64
+}
+
 type ApiKey struct {
 	ID         int64
 	AdminID    int64
@@ -252,30 +262,37 @@ type MikanSqliteImport struct {
 }
 
 type Node struct {
-	ID           int64
-	Name         string
-	Address      string
-	PublicHost   string
-	Domain       string
-	CertSha256   string
-	Enabled      int64
-	CreatedAt    int64
-	UpdatedAt    int64
-	PublicName   string
-	Sort         int64
-	TotalUp      int64
-	TotalDown    int64
-	FairShare    int64
-	ChannelMbps  sql.NullInt64
-	Capacity     sql.NullInt64
-	BalanceGroup string
-	HttpRedirect int64
-	SniRouter    int64
-	ApiLockdown  int64
-	ApiAllow     []string
-	FrontPage    string
-	NoAuto       int64
-	Tags         string
+	ID              int64
+	Name            string
+	Address         string
+	PublicHost      string
+	Domain          string
+	CertSha256      string
+	Enabled         int64
+	CreatedAt       int64
+	UpdatedAt       int64
+	PublicName      string
+	Sort            int64
+	TotalUp         int64
+	TotalDown       int64
+	FairShare       int64
+	ChannelMbps     sql.NullInt64
+	Capacity        sql.NullInt64
+	BalanceGroup    string
+	HttpRedirect    int64
+	SniRouter       int64
+	ApiLockdown     int64
+	ApiAllow        []string
+	FrontPage       string
+	NoAuto          int64
+	BillingProvider string
+	PayDay          int64
+	PayMonths       int64
+	RemindDays      int64
+	TrafficLimit    int64
+	ResetDay        int64
+	TrafficAlert    int64
+	Tags            string
 }
 
 type NodeAssignment struct {

@@ -132,8 +132,7 @@ rules:
 }
 
 // Shadowsocks wraps UDP in UDP over TCP when the server asks for it, of mihomo's version 1
-// when none is given; one of a plugin or smux is left out, as sing-box would dial a server
-// that does not answer, and one of a version mihomo refuses too.
+// when none is given; one of a version mihomo refuses is left out.
 func TestShadowsocks(t *testing.T) {
 	ss := func(extra map[string]any) map[string]any {
 		m := map[string]any{"name": "S", "type": "ss", "server": "203.0.113.7", "port": 8388, "cipher": "aes-128-gcm", "password": "x", "udp": true}
@@ -157,10 +156,6 @@ func TestShadowsocks(t *testing.T) {
 		{"version of no number", ss(map[string]any{"udp-over-tcp": true, "udp-over-tcp-version": "two"}), false, nil},
 		{"plain", ss(nil), true, nil},
 		{"turned off", ss(map[string]any{"udp-over-tcp": false, "udp-over-tcp-version": 2}), true, nil},
-		{"obfs", ss(map[string]any{"plugin": "obfs", "plugin-opts": map[string]any{"mode": "tls", "host": "bing.com"}}), false, nil},
-		{"shadow-tls", ss(map[string]any{"plugin": "shadow-tls", "plugin-opts": map[string]any{"host": "cloud.tencent.com", "password": "p", "version": 2}}), false, nil},
-		{"smux", ss(map[string]any{"smux": map[string]any{"enabled": true, "protocol": "h2mux"}}), false, nil},
-		{"smux turned off", ss(map[string]any{"smux": map[string]any{"enabled": false}}), true, nil},
 	} {
 		o, ok := carried(c.in)
 		if ok != c.ok {
@@ -176,16 +171,99 @@ func TestShadowsocks(t *testing.T) {
 	}
 }
 
+// A Shadowsocks plugin sing-box runs too (obfs, v2ray-plugin) and smux are the outbound's
+// plugin and multiplex; a plugin sing-box has none of, or a setting of one it cannot take,
+// leaves the proxy out, as sing-box would dial a server that does not answer.
+func TestPluginsAndMux(t *testing.T) {
+	ss := func(extra map[string]any) map[string]any {
+		m := map[string]any{"name": "S", "type": "ss", "server": "203.0.113.7", "port": 8388, "cipher": "aes-128-gcm", "password": "x", "udp": true}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+	v2ray := func(opts map[string]any) map[string]any {
+		o := map[string]any{"mode": "websocket"}
+		for k, v := range opts {
+			o[k] = v
+		}
+		return ss(map[string]any{"plugin": "v2ray-plugin", "plugin-opts": o})
+	}
+	trojan := func(smux map[string]any) map[string]any {
+		return map[string]any{"name": "T", "type": "trojan", "server": "203.0.113.7", "port": 443, "password": "p", "sni": "a.example", "smux": smux}
+	}
+	for _, c := range []struct {
+		name string
+		in   map[string]any
+		want string // the outbound's plugin, plugin_opts and multiplex as JSON, "" for no outbound
+	}{
+		{"obfs", ss(map[string]any{"plugin": "obfs", "plugin-opts": map[string]any{"mode": "tls", "host": "a.example"}}),
+			`{"plugin":"obfs-local","plugin_opts":"obfs=tls;obfs-host=a.example"}`},
+		{"obfs of mihomo's host", ss(map[string]any{"plugin": "obfs", "plugin-opts": map[string]any{"mode": "http"}}),
+			`{"plugin":"obfs-local","plugin_opts":"obfs=http;obfs-host=bing.com"}`},
+		{"obfs of no mode", ss(map[string]any{"plugin": "obfs", "plugin-opts": map[string]any{"host": "a.example"}}), ""},
+		{"v2ray-plugin", v2ray(map[string]any{"tls": true, "host": "a.example", "path": `/w;x=1\`, "mux": true, "skip-cert-verify": false, "headers": map[string]any{}}),
+			`{"plugin":"v2ray-plugin","plugin_opts":"mode=websocket;tls;host=a.example;path=/w\\;x\\=1\\\\"}`},
+		{"v2ray-plugin of no mux", v2ray(map[string]any{"mux": false}),
+			`{"plugin":"v2ray-plugin","plugin_opts":"mode=websocket;host=bing.com;mux=0"}`},
+		{"v2ray-plugin of ECH turned off", v2ray(map[string]any{"ech-opts": map[string]any{"enabled": false}}),
+			`{"plugin":"v2ray-plugin","plugin_opts":"mode=websocket;host=bing.com"}`},
+		{"v2ray-plugin of skip-cert-verify", v2ray(map[string]any{"tls": true, "skip-cert-verify": true}), ""},
+		{"v2ray-plugin of headers", v2ray(map[string]any{"headers": map[string]any{"User-Agent": "x"}}), ""},
+		{"v2ray-plugin of a pinned certificate", v2ray(map[string]any{"tls": true, "fingerprint": "ab"}), ""},
+		{"v2ray-plugin of HTTPUpgrade", v2ray(map[string]any{"v2ray-http-upgrade": true}), ""},
+		{"v2ray-plugin over QUIC", v2ray(map[string]any{"mode": "quic"}), ""},
+		{"shadow-tls", ss(map[string]any{"plugin": "shadow-tls", "plugin-opts": map[string]any{"host": "cloud.tencent.com", "password": "p", "version": 2}}), ""},
+		{"gost-plugin", ss(map[string]any{"plugin": "gost-plugin", "plugin-opts": map[string]any{"mode": "websocket"}}), ""},
+		{"smux", ss(map[string]any{"smux": map[string]any{"enabled": true}}), `{"multiplex":{"enabled":true}}`},
+		{"smux beside UDP over TCP", ss(map[string]any{"udp-over-tcp": true, "smux": map[string]any{"enabled": true, "protocol": "smux"}}), `{}`},
+		{"smux turned off", ss(map[string]any{"smux": map[string]any{"enabled": false, "protocol": "smux"}}), `{}`},
+		{"smux of Trojan", trojan(map[string]any{"enabled": true, "protocol": "yamux", "max-connections": 4, "min-streams": 2, "padding": true, "statistic": true}),
+			`{"multiplex":{"enabled":true,"max_connections":4,"min_streams":2,"padding":true,"protocol":"yamux"}}`},
+		{"smux of Brutal", trojan(map[string]any{"enabled": true, "protocol": "h2mux", "max-streams": 8,
+			"brutal-opts": map[string]any{"enabled": true, "up": 50, "down": "100 Mbps"}}),
+			`{"multiplex":{"brutal":{"down_mbps":100,"enabled":true,"up_mbps":50},"enabled":true,"max_streams":8,"protocol":"h2mux"}}`},
+		{"smux of Brutal in MB/s", trojan(map[string]any{"enabled": true, "brutal-opts": map[string]any{"enabled": true, "up": "10 MB/s", "down": 100}}), ""},
+		{"smux of TCP alone", trojan(map[string]any{"enabled": true, "only-tcp": true}), ""},
+		{"smux of an unknown protocol", trojan(map[string]any{"enabled": true, "protocol": "mux.cool"}), ""},
+		{"smux of AnyTLS", map[string]any{"name": "A", "type": "anytls", "server": "203.0.113.7", "port": 443, "password": "p",
+			"smux": map[string]any{"enabled": true}}, ""},
+	} {
+		o, ok := carried(c.in)
+		if ok != (c.want != "") {
+			t.Errorf("%s: carried %v: %v", c.name, ok, o)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		got := map[string]any{}
+		for _, k := range []string{"plugin", "plugin_opts", "multiplex"} {
+			if v, ok := o[k]; ok {
+				got[k] = v
+			}
+		}
+		if raw, _ := json.Marshal(got); string(raw) != c.want {
+			t.Errorf("%s:\n got %s\nwant %s", c.name, raw, c.want)
+		}
+	}
+}
+
 // A proxy of the admin's own Clash profile that sing-box cannot dial is neither an outbound
-// nor a member of the groups that list it; the config sing-box checks has UDP over TCP of
-// version 1.
+// nor a member of the groups that list it, and the preview tells it; those of a plugin or
+// smux it runs too are outbounds. The config sing-box checks has UDP over TCP of version 1,
+// both plugins and every multiplex setting.
 func TestOwnProfileLeavesPluginOut(t *testing.T) {
 	lists(t)
 	src := `proxies:
-  - {name: obfs-ss, type: ss, server: 203.0.113.8, port: 8388, cipher: aes-128-gcm, password: x, plugin: obfs, plugin-opts: {mode: http, host: bing.com}}
+  - {name: tls-ss, type: ss, server: 203.0.113.8, port: 8388, cipher: aes-128-gcm, password: x, plugin: shadow-tls, plugin-opts: {host: cloud.tencent.com, password: p, version: 2}}
   - {name: plain-ss, type: ss, server: 203.0.113.9, port: 8388, cipher: aes-128-gcm, password: x, udp: true, udp-over-tcp: true}
+  - {name: obfs-ss, type: ss, server: 203.0.113.10, port: 8388, cipher: aes-128-gcm, password: x, plugin: obfs, plugin-opts: {mode: tls, host: a.example}}
+  - {name: v2ray-ss, type: ss, server: 203.0.113.11, port: 443, cipher: aes-128-gcm, password: x, plugin: v2ray-plugin, plugin-opts: {mode: websocket, tls: true, host: a.example, path: /w, mux: false}}
+  - {name: mux-trojan, type: trojan, server: 203.0.113.12, port: 443, password: x, sni: a.example, smux: {enabled: true, protocol: smux, max-connections: 4, min-streams: 4, padding: true, brutal-opts: {enabled: true, up: 50, down: 100}}}
+  - {name: mux-vless, type: vless, server: 203.0.113.13, port: 443, uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1, tls: true, servername: a.example, network: ws, ws-opts: {path: /w}, smux: {enabled: true, protocol: yamux, max-streams: 8}}
 proxy-groups:
-  - {name: Сеть, type: select, proxies: [obfs-ss, plain-ss, DIRECT]}
+  - {name: Сеть, type: select, proxies: [tls-ss, plain-ss, obfs-ss, v2ray-ss, mux-trojan, mux-vless, DIRECT]}
 rules:
   - MATCH,Сеть
 `
@@ -197,16 +275,31 @@ rules:
 	if err := json.Unmarshal(raw, &c); err != nil {
 		t.Fatal(err)
 	}
-	if plain := outbound(c, "plain-ss"); outbound(c, "obfs-ss") != nil || plain == nil || !reflect.DeepEqual(plain["udp_over_tcp"], map[string]any{"enabled": true, "version": 1.0}) {
+	if plain := outbound(c, "plain-ss"); outbound(c, "tls-ss") != nil || plain == nil || !reflect.DeepEqual(plain["udp_over_tcp"], map[string]any{"enabled": true, "version": 1.0}) {
 		t.Fatalf("outbounds: %v", c.Outbounds)
 	}
-	// The preview tells it.
-	if !slices.Contains(Dropped(profileOf(subtest.TwoNodes()), model.GroupNames{}, routing.All, subtest.Clash(src)),
-		model.Note{Core: core, Subject: "obfs-ss", Code: "proxy_unsupported"}) {
-		t.Fatal("the preview does not tell the left out proxy")
+	for _, name := range []string{"obfs-ss", "v2ray-ss", "mux-trojan", "mux-vless"} {
+		if o := outbound(c, name); o == nil || o["plugin"] == nil && o["multiplex"] == nil {
+			t.Fatalf("%s has no plugin or multiplex: %v", name, o)
+		}
+	}
+	// The preview tells it, and none of the template's own that went in.
+	var told []string
+	for _, n := range Dropped(profileOf(subtest.TwoNodes()), model.GroupNames{}, routing.All, subtest.Clash(src)) {
+		if n.Code == "proxy_unsupported" {
+			told = append(told, n.Subject)
+		}
+	}
+	if !slices.Contains(told, "tls-ss") {
+		t.Fatalf("the preview does not tell the left out proxy: %v", told)
+	}
+	for _, name := range []string{"obfs-ss", "v2ray-ss", "mux-trojan", "mux-vless"} {
+		if slices.Contains(told, name) {
+			t.Fatalf("the preview tells %s as left out: %v", name, told)
+		}
 	}
 	for _, o := range c.Outbounds {
-		if members, _ := o["outbounds"].([]any); slices.Contains(members, any("obfs-ss")) {
+		if members, _ := o["outbounds"].([]any); slices.Contains(members, any("tls-ss")) {
 			t.Fatalf("a member sing-box has no outbound for: %v", o)
 		}
 	}

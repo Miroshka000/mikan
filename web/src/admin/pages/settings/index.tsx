@@ -16,7 +16,7 @@ import { ServerCheckCard } from "../node-check";
 import { GoalsCard } from "./goals";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { ROUTING_PARTS, RoutingSection, type RoutingPart } from "./routing";
-import { AccessCard, ApiCard, CertificateCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
+import { AccessCard, ApiCard, CertificateCard, PasskeysCard, PasswordCard, SessionsCard, TwoFactorCard } from "./security";
 import { SupportCard } from "./support";
 import { AppsCard, DevicesCard, InactiveCard, SubPortCard, SubscriptionCard, XrayJSONCard } from "./subscription";
 import { SubDomainCard } from "./sub-domain";
@@ -133,6 +133,7 @@ export function SettingsPage() {
                   <>
                     <PasswordCard />
                     <TwoFactorCard />
+                    <PasskeysCard s={s} />
                     <SessionsCard />
                     <AuditCard />
                     <AccessCard s={s} />

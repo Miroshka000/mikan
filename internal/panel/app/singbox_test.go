@@ -30,7 +30,7 @@ func TestSingBoxOverHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	fetch := func(ua string) (*http.Response, []byte) {
-		h.now = h.now.Add(time.Minute)
+		h.advance(time.Minute)
 		return h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": ua})
 	}
 	resp, body := fetch("SFA (sing-box 1.14.2; language en_US)")
