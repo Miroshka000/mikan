@@ -2353,6 +2353,14 @@
               "custom"
             ],
             "type": "string"
+          },
+          "tags": {
+            "description": "Метки подключения, как у пользователя",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
           }
         },
         "required": [
@@ -2383,6 +2391,14 @@
           "name": {
             "maxLength": 200,
             "type": "string"
+          },
+          "tags": {
+            "description": "Метки ноды, как у пользователя",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
           }
         },
         "required": [
@@ -3930,6 +3946,13 @@
             "description": "Имя, которое увидит клиент",
             "type": "string"
           },
+          "tags": {
+            "description": "Метки подключения: свои слова админа, по ним фильтруют список; в подписку не попадают",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "title": {
             "type": "string"
           },
@@ -3973,7 +3996,8 @@
           "client_host",
           "cdn_possible",
           "sni443",
-          "sni443_possible"
+          "sni443_possible",
+          "tags"
         ],
         "type": "object"
       },
@@ -5246,6 +5270,13 @@
             ],
             "type": "string"
           },
+          "tags": {
+            "description": "Метки ноды: свои слова админа, по ним фильтруют список",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "tls": {
             "$ref": "#/components/schemas/NodeTLSView"
           },
@@ -5294,7 +5325,8 @@
           "api_lockdown",
           "api_allow",
           "capacity",
-          "channel_mbps"
+          "channel_mbps",
+          "tags"
         ],
         "type": "object"
       },
@@ -6556,6 +6588,14 @@
             "description": "Поставить за SNI-роутер ноды на 443 (true) или вернуть на свой порт (false)",
             "type": "boolean"
           },
+          "tags": {
+            "description": "Метки подключения целиком; пустой список снимает все",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
           "xhttp": {
             "$ref": "#/components/schemas/XHTTPTuning",
             "description": "Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию"
@@ -6654,6 +6694,14 @@
           "sni_router": {
             "description": "SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним",
             "type": "boolean"
+          },
+          "tags": {
+            "description": "Метки ноды целиком; пустой список снимает все",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
           }
         },
         "type": "object"
@@ -14816,6 +14864,19 @@
     "/api/v1/inbounds": {
       "get": {
         "operationId": "list-inbounds",
+        "parameters": [
+          {
+            "description": "Только подключения с этой меткой (без учёта регистра)",
+            "explode": false,
+            "in": "query",
+            "name": "tag",
+            "schema": {
+              "description": "Только подключения с этой меткой (без учёта регистра)",
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15629,6 +15690,19 @@
     "/api/v1/nodes": {
       "get": {
         "operationId": "list-nodes",
+        "parameters": [
+          {
+            "description": "Только ноды с этой меткой (без учёта регистра)",
+            "explode": false,
+            "in": "query",
+            "name": "tag",
+            "schema": {
+              "description": "Только ноды с этой меткой (без учёта регистра)",
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

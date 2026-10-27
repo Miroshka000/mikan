@@ -6,6 +6,7 @@ import { api, unwrap, type Schemas } from "../../../api/client";
 import { qk, useSpeedTests } from "../../../api/hooks";
 import { Drawer, DrawerFooter } from "../../../components/overlay";
 import { Switch, SwitchRow } from "../../../components/switch";
+import { MAX_TAGS, parseTags } from "../../../components/tags";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented } from "../../../components/ui";
 import { t } from "../../../i18n";
@@ -125,7 +126,7 @@ export function KeyDrawer({ joined, onClose, actions }: { joined: Joined | null;
 export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, front_page: "", in_auto: true, api_lockdown: false, api_allow: "" });
+  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, front_page: "", in_auto: true, api_lockdown: false, api_allow: "", tags: "" });
   const balance = useBalance();
   const [errors, setErrors] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -133,7 +134,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
       // The server as it was given, not the address for clients (its domain when it has one):
       // the field saves the server.
       setForm({ name: node.name, public_name: node.public_name, host: node.server_host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "",
-        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, front_page: node.front_page, in_auto: node.in_auto, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", ") });
+        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, front_page: node.front_page, in_auto: node.in_auto, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", "), tags: node.tags.join(", ") });
       setErrors({});
     }
   }, [node]);
@@ -165,6 +166,12 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
     // A node without a name of its own (the panel's, shown as "Own node") keeps none: an empty
     // field is no new name, and saving the rest must not fail on it.
     if (form.name.trim() || node.name) body.name = form.name.trim();
+    const tags = parseTags(form.tags);
+    if (tags.length > MAX_TAGS) {
+      setErrors({ tags: t("tags.many", { n: MAX_TAGS }) });
+      return;
+    }
+    body.tags = tags;
     const channel = Number(form.channel);
     if (form.channel.trim() || form.fair_share) {
       if (!Number.isInteger(channel) || channel < 1 || channel > 100000) {
@@ -197,7 +204,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
     const balanceChanged = group !== node.balance_group || (capacity ?? null) !== (node.capacity ?? null);
     save.mutate({ id: node.id, body, balance: balanceChanged ? { group, capacity } : undefined });
   };
-  const set = (k: "name" | "public_name" | "host" | "domain") => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const set = (k: "name" | "public_name" | "host" | "domain" | "tags") => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setErrors(({ [k]: _, ...rest }) => rest);
   };
@@ -219,6 +226,9 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
         </Field>
         <Field label={t("nodes.publicName")} htmlFor="e-public-name" hint={t("nodes.publicNameHint")} error={errors.public_name}>
           <input id="e-public-name" className="input" value={form.public_name} onChange={set("public_name")} placeholder={t("nodes.publicNamePlaceholder")} maxLength={80} autoComplete="off" aria-invalid={!!errors.public_name} />
+        </Field>
+        <Field label={t("tags.label")} htmlFor="e-tags" hint={t("tags.nodeHint")} error={errors.tags}>
+          <input id="e-tags" className="input" value={form.tags} onChange={set("tags")} placeholder={t("tags.placeholder")} autoComplete="off" aria-invalid={!!errors.tags} />
         </Field>
         {node && !node.local ? (
           <>

@@ -971,6 +971,8 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	return done, nil
 }
 
+// encodeTags is how labels are kept (users.tags, nodes.tags, inbounds.tags): trimmed, the
+// empty ones dropped, as a JSON array.
 func encodeTags(tags []string) (string, error) {
 	clean := make([]string, 0, len(tags))
 	for _, t := range tags {
@@ -989,6 +991,12 @@ func DecodeTags(raw string) []string {
 		t = []string{}
 	}
 	return t
+}
+
+// HasTag: the labels raw (encodeTags) hold tag, in any letter case.
+func HasTag(raw, tag string) bool {
+	tag = strings.TrimSpace(tag)
+	return slices.ContainsFunc(DecodeTags(raw), func(t string) bool { return strings.EqualFold(t, tag) })
 }
 
 func DecodeInbounds(raw sql.NullString) []int64 {

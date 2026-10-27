@@ -5282,5 +5282,14 @@
       "sub_page_image": "subscription page image {id}",
       "webhook": "webhook #{id}"
     }
+  },
+  "tags": {
+    "label": "Tags",
+    "placeholder": "germany, whitelist",
+    "nodeHint": "Your own words for the node, split by commas: the list of nodes filters by them. Clients do not see them.",
+    "inboundHint": "Your own words for the protocol, split by commas: the list of protocols filters by them. Clients do not see them.",
+    "many": "{n} tags at most",
+    "filter": "Show by tag",
+    "all": "All"
   }
 }

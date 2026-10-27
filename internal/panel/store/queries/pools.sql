@@ -22,6 +22,9 @@ UPDATE inbounds SET pool_id = $1 WHERE id = $2;
 -- name: SetInboundNoAuto :exec
 UPDATE inbounds SET no_auto = $1 WHERE id = $2;
 
+-- name: SetInboundTags :exec
+UPDATE inbounds SET tags = $1 WHERE id = $2;
+
 -- name: SetGroupInbounds :execrows
 -- The group's inbounds become exactly these: the ones listed join it (leaving the group
 -- they were in), the ones it had and the list leaves out go back to the main servers.

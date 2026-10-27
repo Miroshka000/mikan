@@ -163,6 +163,12 @@ In **Edit node** the **In auto select** switch, on by default. Turn it off for a
 
 A node that does not answer the panel for over 5 minutes leaves "Auto" by itself and comes back once it answers. The apps learn of it with their next subscription update.
 
+## Tags
+
+Since 0.5.2.1. In **Edit node** the **Tags** field: your own words split by commas, such as `germany, whitelist`, as a client's tags. The node's card shows them, and the row of tags above the list of nodes shows only the nodes with the tag you pick (while you order the nodes, all of them show). Clients do not see tags. Protocols have tags of their own, see [Protocol presets](/mikan/en/protocols/presets/#connection-settings).
+
+In the API a node has `tags` (up to 20, on create and change), and `GET /api/v1/nodes?tag=hetzner` lists only the nodes with that tag, in any letter case.
+
 ## Front page for strangers
 
 In **Edit node** → **Front page for strangers**: "Maintenance" or "Cats clicker", the same pages as the panel's first page. A stranger who opens the server in a browser sees it instead of a bare 404:

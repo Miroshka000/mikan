@@ -6,6 +6,7 @@ import { api, errorText, unwrap } from "../../../api/client";
 import { qk, useNodes } from "../../../api/hooks";
 import { AcmeAttempts, AcmeProblem, caName } from "../../../components/acme";
 import { certUntil } from "../../../components/cert-drawer";
+import { TagChips } from "../../../components/tags";
 import { useToast } from "../../../components/toast";
 import { Bar, Button, Pill } from "../../../components/ui";
 import { t, tMaybe } from "../../../i18n";
@@ -81,6 +82,11 @@ export function NodeCard({
             <span>·</span>
             <span>{n.local ? t("nodes.kindLocal") : t("nodes.kindRemote")}</span>
           </div>
+          {n.tags.length > 0 ? (
+            <div className="mt-1.5 text-xs">
+              <TagChips tags={n.tags} />
+            </div>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <NodeStatus n={n} />

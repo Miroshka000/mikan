@@ -156,7 +156,9 @@ type NodePatch struct {
 	// which the panel reaches over its socket.
 	APILockdown *bool
 	APIAllow    *[]string
-	Rules       NodeRules
+	// Tags are the admin's labels of the node, as a user's (encodeTags).
+	Tags  *[]string
+	Rules NodeRules
 }
 
 // UpdateNode changes the fields p names and returns the node. Errors: ErrUnknownNode,
@@ -281,6 +283,15 @@ func UpdateNode(ctx context.Context, st *store.Store, id int64, p NodePatch, now
 				cur.ApiAllow = allow
 			}
 			if err := q.SetNodeAPILockdown(ctx, db.SetNodeAPILockdownParams{ApiLockdown: cur.ApiLockdown, ApiAllow: cur.ApiAllow, UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
+				return err
+			}
+		}
+		if p.Tags != nil {
+			tags, err := encodeTags(*p.Tags)
+			if err != nil {
+				return err
+			}
+			if err := q.SetNodeTags(ctx, db.SetNodeTagsParams{Tags: tags, ID: cur.ID}); err != nil {
 				return err
 			}
 		}

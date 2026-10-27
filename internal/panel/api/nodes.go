@@ -98,6 +98,9 @@ type NodeInfo struct {
 	APILockError string   `json:"api_lock_error,omitempty" doc:"Почему на сервере ноды нет правила файрвола для API"`
 	Capacity     *int64   `json:"capacity" doc:"Мест для клиентов в группе; null — без ограничения"`
 	ChannelMbps  *int64   `json:"channel_mbps" doc:"Ширина канала ноды, Мбит/с в каждую сторону; null — не задана"`
+
+	// Tags are the admin's labels of the node, as a user's.
+	Tags []string `json:"tags" doc:"Метки ноды: свои слова админа, по ним фильтруют список"`
 }
 
 type nodesOutput struct{ Body []NodeInfo }
@@ -113,10 +116,11 @@ type nodeKeyOutput struct {
 
 type createNodeInput struct {
 	Body struct {
-		Name    string `json:"name" maxLength:"200"`
-		Host    string `json:"host" maxLength:"253" doc:"IP или имя сервера ноды"`
-		Domain  string `json:"domain,omitempty" maxLength:"253" doc:"Домен для Hysteria2/TUIC и ссылок (необязательно)"`
-		APIPort int    `json:"api_port,omitempty" minimum:"1" maximum:"65535" doc:"Порт API ноды; по умолчанию случайный"`
+		Name    string   `json:"name" maxLength:"200"`
+		Host    string   `json:"host" maxLength:"253" doc:"IP или имя сервера ноды"`
+		Domain  string   `json:"domain,omitempty" maxLength:"253" doc:"Домен для Hysteria2/TUIC и ссылок (необязательно)"`
+		APIPort int      `json:"api_port,omitempty" minimum:"1" maximum:"65535" doc:"Порт API ноды; по умолчанию случайный"`
+		Tags    []string `json:"tags,omitempty" maxItems:"20" doc:"Метки ноды, как у пользователя"`
 	}
 }
 
@@ -138,7 +142,12 @@ type patchNodeInput struct {
 		// The node's API for the panel alone, and the networks added to the panel's own.
 		APILockdown *bool     `json:"api_lockdown,omitempty" doc:"API ноды только с адресов панели; не для ноды панели"`
 		APIAllow    *[]string `json:"api_allow,omitempty" maxItems:"16" doc:"Ещё сети или адреса (203.0.113.5, 198.51.100.0/24), с которых панель ходит к ноде"`
+		Tags        *[]string `json:"tags,omitempty" maxItems:"20" doc:"Метки ноды целиком; пустой список снимает все"`
 	}
+}
+
+type listNodesInput struct {
+	Tag string `query:"tag" maxLength:"100" doc:"Только ноды с этой меткой (без учёта регистра)"`
 }
 
 type nodeIDInput struct {
@@ -188,7 +197,7 @@ func (h *handlers) orderNodes(ctx context.Context, in *orderNodesInput) (*struct
 
 func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inbound) NodeInfo {
 	v := NodeInfo{ID: n.ID, Name: n.Name, PublicName: n.PublicName, Local: n.Address == "", Address: n.Address, Host: domain.NodeHost(n), ServerHost: n.PublicHost, Domain: n.Domain,
-		Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
+		Tags: domain.DecodeTags(n.Tags), Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
 		FairShare: n.FairShare != 0, ChannelMbps: store.Int64Ptr(n.ChannelMbps), BalanceGroup: n.BalanceGroup, Capacity: store.Int64Ptr(n.Capacity),
 		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, FrontPage: n.FrontPage, InAuto: n.NoAuto == 0, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow}
 	if v.APIAllow == nil {
@@ -256,7 +265,7 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 	return v
 }
 
-func (h *handlers) listNodes(ctx context.Context, _ *struct{}) (*nodesOutput, error) {
+func (h *handlers) listNodes(ctx context.Context, in *listNodesInput) (*nodesOutput, error) {
 	nodes, err := h.d.Store.Q.ListNodes(ctx)
 	if err != nil {
 		return nil, err
@@ -271,6 +280,9 @@ func (h *handlers) listNodes(ctx context.Context, _ *struct{}) (*nodesOutput, er
 	}
 	out := &nodesOutput{Body: make([]NodeInfo, 0, len(nodes))}
 	for _, n := range nodes {
+		if in.Tag != "" && !domain.HasTag(n.Tags, in.Tag) {
+			continue
+		}
 		v := h.viewNode(ctx, n, inbounds)
 		v.Traffic24h, v.Cascade24h = day[n.ID].users.Up+day[n.ID].users.Down, day[n.ID].relay.Up+day[n.ID].relay.Down
 		out.Body = append(out.Body, v)
@@ -310,7 +322,7 @@ func (h *handlers) createNode(ctx context.Context, in *createNodeInput) (*nodeKe
 	if err != nil {
 		return nil, err
 	}
-	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: b.Name, Host: b.Host, Domain: b.Domain, APIPort: b.APIPort, PanelURL: h.panelURL(ctx), Rules: rules}, h.d.Now())
+	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: b.Name, Host: b.Host, Domain: b.Domain, APIPort: b.APIPort, Tags: b.Tags, PanelURL: h.panelURL(ctx), Rules: rules}, h.d.Now())
 	if err != nil {
 		return nil, h.nodeErr(err)
 	}
@@ -373,14 +385,14 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 		return nil, err
 	}
 	n, err := domain.UpdateNode(ctx, h.d.Store, in.ID, domain.NodePatch{Name: b.Name, PublicName: b.PublicName, Host: b.Host, Domain: b.Domain,
-		Enabled: b.Enabled, FairShare: b.FairShare, ChannelMbps: b.ChannelMbps, HTTPRedirect: b.HTTPRedirect, SNIRouter: b.SNIRouter, FrontPage: b.FrontPage, InAuto: b.InAuto, APILockdown: b.APILockdown, APIAllow: b.APIAllow, Rules: rules}, h.d.Now())
+		Enabled: b.Enabled, FairShare: b.FairShare, ChannelMbps: b.ChannelMbps, HTTPRedirect: b.HTTPRedirect, SNIRouter: b.SNIRouter, FrontPage: b.FrontPage, InAuto: b.InAuto, APILockdown: b.APILockdown, APIAllow: b.APIAllow, Tags: b.Tags, Rules: rules}, h.d.Now())
 	if err != nil {
 		return nil, h.nodeErr(err)
 	}
 	h.nodesChanged()
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0,
-		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "front_page": n.FrontPage, "in_auto": n.NoAuto == 0, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow})
+		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "front_page": n.FrontPage, "in_auto": n.NoAuto == 0, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow, "tags": domain.DecodeTags(n.Tags)})
 	return h.nodeInfo(ctx, n.ID)
 }
 

@@ -31,6 +31,9 @@ UPDATE nodes SET front_page = $1, updated_at = $2 WHERE id = $3;
 -- name: SetNodeNoAuto :exec
 UPDATE nodes SET no_auto = $1, updated_at = $2 WHERE id = $3;
 
+-- name: SetNodeTags :exec
+UPDATE nodes SET tags = $1 WHERE id = $2;
+
 -- name: SetNodeAPILockdown :exec
 UPDATE nodes SET api_lockdown = $1, api_allow = $2, updated_at = $3 WHERE id = $4;
 
