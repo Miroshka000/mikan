@@ -1,12 +1,14 @@
 package subsrc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -151,10 +153,18 @@ func TestInfoHappLinkIsTheCardsLink(t *testing.T) {
 	if err != nil || !strings.HasPrefix(card, "happ://crypt5/") || page != card {
 		t.Fatalf("the page's link %q, the card's %q %v", page, card, err)
 	}
+	// Off is not a fault: the page does not try and warn. A handler of its own for each case,
+	// since the warning is said once an hour.
 	for name, c := range map[string]Config{"crypt off": {Config: cfg.Config}, "no address": {HappCrypt: HappCryptLocal}} {
 		cfg = c
+		var log bytes.Buffer
+		h = NewHandler(st, func(context.Context) (Config, error) { return cfg, nil }, nil, time.Now, nil, false)
+		h.SetLogger(slog.New(slog.NewTextHandler(&log, nil)))
 		if page := info(); page != "" {
 			t.Errorf("%s: the page's link %q", name, page)
+		}
+		if strings.Contains(log.String(), "Happ crypt link") {
+			t.Errorf("%s: the page warned: %s", name, log.String())
 		}
 		if card, err := h.HappLink(ctx, u); err != nil || card != "" {
 			t.Errorf("%s: the card's link %q %v", name, card, err)
