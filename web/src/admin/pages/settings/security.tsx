@@ -174,6 +174,7 @@ function AuthorityForm({ s, focus }: { s: Schemas["SettingsView"]; focus: number
 }
 
 export function PasswordCard() {
+  const qc = useQueryClient();
   const toast = useToast();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -183,6 +184,8 @@ export function PasswordCard() {
     onSuccess: () => {
       setCurrent("");
       setNext("");
+      // Revoking the keys takes the passkeys with them.
+      if (revokeKeys) void qc.invalidateQueries({ queryKey: qk.passkeys });
       toast.ok(t("settings.passwordChanged"));
     },
     onError: (e) => {
@@ -378,6 +381,8 @@ export function PasskeysCard({ s }: { s: Schemas["SettingsView"] }) {
     onError: (e) => {
       if (passkeyCancelled(e)) return;
       if (e instanceof ApiError) onFormError(e, toast);
+      // The browser refuses a passkey of the panel's domain at another address (its IP).
+      else if (e instanceof DOMException && e.name === "SecurityError") toast.error(t("login.passkeyAddress"));
       else toast.error(t("login.passkeyFailed"));
     },
   });
@@ -441,6 +446,7 @@ export function PasskeysCard({ s }: { s: Schemas["SettingsView"] }) {
               <input id="pk-code" className="input mono max-w-[160px]" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.trim())} autoComplete="one-time-code" />
             </Field>
           ) : null}
+          <p className="mb-4 text-xs text-[var(--ink-500)]">{t("settings.passkeyDomainNote")}</p>
           <FormActions saving={add.isPending} disabled={!pw || (totp && code.length !== 6)} label={t("settings.passkeyAdd")} />
         </form>
       )}

@@ -1948,7 +1948,7 @@
     "certTemp": "temporary",
     "certNote": "Renews automatically. Issuance needs port 80 open, it is held for a few seconds.",
     "passwordChanged": "Password changed, other sessions ended",
-    "revokeKeys": "Revoke API keys too: a key made from a hijacked session would outlive the password change",
+    "revokeKeys": "Revoke API keys and passkeys too: one made from a hijacked session would outlive the password change",
     "twoFactorPasswordHint": "Turning on 2FA needs the password.",
     "currentPassword": "Current password",
     "newPassword": "New password",
@@ -2760,7 +2760,8 @@
     "passkeyDeleteTitle": "Delete the passkey?",
     "passkeyDeleteText": "Signing in with it will stop working. The password stays.",
     "passkeyUnsupported": "This browser cannot make passkeys.",
-    "passkeyNoDomain": "Passkeys need the panel's domain: set it on the General tab, in the Domain field."
+    "passkeyNoDomain": "Passkeys need the panel's domain: set it on the General tab, in the Domain field.",
+    "passkeyDomainNote": "A passkey is bound to the panel's domain: after the domain changes, add the passkeys again."
   },
   "deviceMode": {
     "label": "How to count:",

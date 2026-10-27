@@ -62,6 +62,20 @@ func (q *Queries) DeleteAdminPasskey(ctx context.Context, arg DeleteAdminPasskey
 	return result.RowsAffected()
 }
 
+const deleteAdminPasskeysOf = `-- name: DeleteAdminPasskeysOf :execrows
+DELETE FROM admin_passkeys WHERE admin_id = $1
+`
+
+// With a new password (mikan reset-password, a change that revokes the keys): a passkey
+// added from a hijacked session would outlive the reaction to it.
+func (q *Queries) DeleteAdminPasskeysOf(ctx context.Context, adminID int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteAdminPasskeysOf, adminID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const listAdminPasskeys = `-- name: ListAdminPasskeys :many
 SELECT id, admin_id, credential_id, name, credential, created_at, last_used_at FROM admin_passkeys WHERE admin_id = $1 ORDER BY id
 `

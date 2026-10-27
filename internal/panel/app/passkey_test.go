@@ -248,3 +248,69 @@ func TestPasskeyNeedsDomain(t *testing.T) {
 		t.Fatalf("sign-in with no domain: %d %s", resp.StatusCode, body)
 	}
 }
+
+// A new password ends the passkeys with the API keys (revoke_keys, on by default): one added
+// from a hijacked session would otherwise outlive the reaction to it. Kept, they still work.
+func TestPasswordChangeRevokesPasskeys(t *testing.T) {
+	for _, keep := range []bool{false, true} {
+		h := passkeyHarness(t)
+		if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+			t.Fatal("login")
+		}
+		dev := adminDevice(virtualwebauthn.AuthenticatorOptions{})
+		cred := virtualwebauthn.NewCredential(virtualwebauthn.KeyTypeEC2)
+		if resp, body := h.addPasskey(passkeyRP, dev, cred); resp.StatusCode != http.StatusCreated {
+			t.Fatalf("add: %d %s", resp.StatusCode, body)
+		}
+		body := map[string]any{"current": password, "new": "another-long-password"}
+		if keep {
+			body["revoke_keys"] = false
+		}
+		if resp, out := h.do(http.MethodPost, "/"+adminPath+"/api/v1/auth/password", body, map[string]string{"X-CSRF-Token": h.csrf}); resp.StatusCode != http.StatusNoContent {
+			t.Fatalf("change password: %d %s", resp.StatusCode, out)
+		}
+		resp, _ := h.passkeySignIn(dev, cred)
+		if keep && resp.StatusCode != http.StatusOK {
+			t.Errorf("kept passkeys: the passkey stopped working: %d", resp.StatusCode)
+		}
+		if !keep && resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("revoked passkeys: the passkey still signs in: %d", resp.StatusCode)
+		}
+		if rows, _ := h.st.Q.ListAdminPasskeys(context.Background(), 1); (len(rows) != 0) != keep {
+			t.Errorf("keep=%v: %d passkeys left", keep, len(rows))
+		}
+	}
+}
+
+// A device that did not check who holds it signs nobody in, though the key is the admin's.
+func TestPasskeySignInNeedsUserVerification(t *testing.T) {
+	h := passkeyHarness(t)
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	cred := virtualwebauthn.NewCredential(virtualwebauthn.KeyTypeEC2)
+	if resp, body := h.addPasskey(passkeyRP, adminDevice(virtualwebauthn.AuthenticatorOptions{}), cred); resp.StatusCode != http.StatusCreated {
+		t.Fatalf("add: %d %s", resp.StatusCode, body)
+	}
+	cred.Counter = 1
+	if resp, body, _ := h.passkeyLogin(passkeyRP, adminDevice(virtualwebauthn.AuthenticatorOptions{UserNotVerified: true}), cred); resp.StatusCode != http.StatusUnauthorized || !strings.Contains(string(body), "invalid_passkey") {
+		t.Fatalf("sign-in with no user verification: %d %s", resp.StatusCode, body)
+	}
+	cred.Counter = 2
+	if resp, body, _ := h.passkeyLogin(passkeyRP, adminDevice(virtualwebauthn.AuthenticatorOptions{}), cred); resp.StatusCode != http.StatusOK {
+		t.Fatalf("sign-in with user verification: %d %s", resp.StatusCode, body)
+	}
+}
+
+// An API key reaches no passkey endpoint of the admin: a leaked key must not add a way in.
+func TestKeyCannotManagePasskeys(t *testing.T) {
+	k := newKeyHarness(t)
+	for _, c := range []struct{ method, path string }{
+		{http.MethodGet, "/auth/passkeys"}, {http.MethodPost, "/auth/passkeys/begin"},
+		{http.MethodPost, "/auth/passkeys"}, {http.MethodDelete, "/auth/passkeys/1"},
+	} {
+		if resp, body := k.asKey(k.full, c.method, c.path, map[string]any{"password": password, "name": "k", "credential": map[string]any{}}); resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s %s with a key: %d %s, want 403", c.method, c.path, resp.StatusCode, body)
+		}
+	}
+}
