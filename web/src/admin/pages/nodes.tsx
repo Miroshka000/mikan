@@ -8,6 +8,7 @@ import { CertDrawer } from "../../components/cert-drawer";
 import { Confirm } from "../../components/overlay";
 import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
+import { hasTag, TagFilter } from "../../components/tags";
 import { Button, EmptyState, PageHeader, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
 import { nodeLabel } from "../../lib/node-label";
@@ -44,6 +45,10 @@ export function NodesPage() {
   const [checkOf, setCheckOf] = useState<Node | null>(null);
   // The arrows that order the nodes show only while ordering: most of the time they are noise.
   const [ordering, setOrdering] = useState(false);
+  // One label to show only its nodes. Ordering needs every node, so it shows them all; a
+  // label no node has any more filters nothing.
+  const [tag, setTag] = useState("");
+  const filter = !ordering && tag && nodes.data?.some((n) => hasTag(n.tags, tag)) ? tag : "";
   const many = (nodes.data?.length ?? 0) > 1;
   const [updateOf, setUpdateOf] = useState<Node | "all" | null>(null);
   const refresh = () => {
@@ -181,6 +186,7 @@ export function NodesPage() {
         }
       />
       {nodes.data ? <BalanceGroups nodes={nodes.data} /> : null}
+      {nodes.data && !ordering ? <TagFilter items={nodes.data} value={filter} onChange={setTag} /> : null}
       <QueryBoundary
         query={nodes}
         pending={
@@ -210,7 +216,7 @@ export function NodesPage() {
                   {t("nodes.orderHint")}
                 </p>
               ) : null}
-              {list.map((n, idx) => (
+              {(filter ? list.filter((n) => hasTag(n.tags, filter)) : list).map((n, idx) => (
                 <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onCheck={() => setCheckOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>

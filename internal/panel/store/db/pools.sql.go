@@ -796,6 +796,20 @@ func (q *Queries) SetInboundPool(ctx context.Context, arg SetInboundPoolParams) 
 	return err
 }
 
+const setInboundTags = `-- name: SetInboundTags :exec
+UPDATE inbounds SET tags = $1 WHERE id = $2
+`
+
+type SetInboundTagsParams struct {
+	Tags string
+	ID   int64
+}
+
+func (q *Queries) SetInboundTags(ctx context.Context, arg SetInboundTagsParams) error {
+	_, err := q.db.ExecContext(ctx, setInboundTags, arg.Tags, arg.ID)
+	return err
+}
+
 const setTariffChosenServers = `-- name: SetTariffChosenServers :exec
 UPDATE tariffs SET chosen_servers = $2 WHERE id = $1
 `

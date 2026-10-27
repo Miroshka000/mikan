@@ -216,6 +216,7 @@ type Inbound struct {
 	PoolID      sql.NullInt64
 	Listen      string
 	NoAuto      int64
+	Tags        string
 }
 
 type InboundEvent struct {
@@ -291,6 +292,7 @@ type Node struct {
 	TrafficLimit    int64
 	ResetDay        int64
 	TrafficAlert    int64
+	Tags            string
 }
 
 type NodeAssignment struct {

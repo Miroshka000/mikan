@@ -82,11 +82,12 @@ func NewInbounds(st *store.Store, dry DryRun, now func() time.Time) *Inbounds {
 
 // NewInbound is an inbound to add.
 type NewInbound struct {
-	NodeID int64  // 0: the panel's own node
-	Preset string // presets.Custom takes Config
-	Port   string // "": the preset's
-	Dest   string // a REALITY preset's target; "": the default
-	Config string // the template of presets.Custom
+	NodeID int64    // 0: the panel's own node
+	Preset string   // presets.Custom takes Config
+	Port   string   // "": the preset's
+	Dest   string   // a REALITY preset's target; "": the default
+	Config string   // the template of presets.Custom
+	Tags   []string // the admin's labels, as a user's (encodeTags)
 }
 
 // InboundPatch changes an inbound; a nil field stays as it is.
@@ -112,6 +113,8 @@ type InboundPatch struct {
 	PoolID     *int64  // 0: the main traffic
 	// InAuto: the inbound is in the subscriptions' automatic choice (as a node's switch).
 	InAuto *bool
+	// Tags are the admin's labels (encodeTags): the panel's own, clients see none of them.
+	Tags *[]string
 
 	// FromPort, when set, applies the patch only while the inbound is on this port: an
 	// automatic move decided on what a node reported never lands on a row moved since
@@ -184,7 +187,13 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 		now := s.now().Unix()
 		row, err = q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, base), Preset: info.ID, Port: port,
 			Config: config, CreatedAt: now, UpdatedAt: now})
-		return err
+		if err != nil || len(in.Tags) == 0 {
+			return err
+		}
+		if row.Tags, err = encodeTags(in.Tags); err != nil {
+			return err
+		}
+		return q.SetInboundTags(ctx, db.SetInboundTagsParams{Tags: row.Tags, ID: row.ID})
 	})
 	return row, err
 }
@@ -362,6 +371,15 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 		}
 		if p.PoolID != nil {
 			if err := q.SetInboundPool(ctx, db.SetInboundPoolParams{PoolID: next.PoolID, ID: id}); err != nil {
+				return err
+			}
+		}
+		if p.Tags != nil {
+			tags, err := encodeTags(*p.Tags)
+			if err != nil {
+				return err
+			}
+			if err := q.SetInboundTags(ctx, db.SetInboundTagsParams{Tags: tags, ID: id}); err != nil {
 				return err
 			}
 		}

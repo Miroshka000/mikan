@@ -4132,6 +4132,8 @@ export interface components {
             port?: string;
             /** @enum {string} */
             preset: "vless_reality_xhttp" | "hysteria2" | "hysteria2_gecko" | "tuic_v5" | "vless_reality_vision" | "vless_reality_grpc" | "trojan_reality" | "vless_tls_xhttp" | "vless_tls_vision" | "vless_tls_ws" | "vless_cdn_xhttp" | "vless_cdn_xhttp_get" | "anytls" | "vless_reality_xhttp_pq" | "trusttunnel" | "shadowquic" | "mieru" | "shadowsocks_2022" | "sudoku" | "snell" | "custom";
+            /** @description Метки подключения, как у пользователя */
+            tags?: string[];
         };
         CreateNodeInputBody: {
             /**
@@ -4144,6 +4146,8 @@ export interface components {
             /** @description IP или имя сервера ноды */
             host: string;
             name: string;
+            /** @description Метки ноды, как у пользователя */
+            tags?: string[];
         };
         CreateSubTemplateInputBody: {
             /** @description Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray */
@@ -4689,6 +4693,8 @@ export interface components {
             status: "ok" | "error" | "unknown";
             /** @description Имя, которое увидит клиент */
             sub_name: string;
+            /** @description Метки подключения: свои слова админа, по ним фильтруют список; в подписку не попадают */
+            tags: string[];
             title: string;
             /** @description Тип листенера mihomo */
             type: string;
@@ -5235,6 +5241,8 @@ export interface components {
             sni_router: boolean;
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
+            /** @description Метки ноды: свои слова админа, по ним фильтруют список */
+            tags: string[];
             tls?: components["schemas"]["NodeTLSView"];
             /**
              * Format: int64
@@ -5724,6 +5732,8 @@ export interface components {
             server_name?: string;
             /** @description Поставить за SNI-роутер ноды на 443 (true) или вернуть на свой порт (false) */
             sni443?: boolean;
+            /** @description Метки подключения целиком; пустой список снимает все */
+            tags?: string[];
             /** @description Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию */
             xhttp?: components["schemas"]["XHTTPTuning"];
         };
@@ -5765,6 +5775,8 @@ export interface components {
             public_name?: string;
             /** @description SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним */
             sni_router?: boolean;
+            /** @description Метки ноды целиком; пустой список снимает все */
+            tags?: string[];
         };
         PatchPaymentSettingsInputBody: {
             allow_new?: boolean;
@@ -9901,7 +9913,10 @@ export interface operations {
     };
     "list-inbounds": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Только подключения с этой меткой (без учёта регистра) */
+                tag?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10511,7 +10526,10 @@ export interface operations {
     };
     "list-nodes": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Только ноды с этой меткой (без учёта регистра) */
+                tag?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
