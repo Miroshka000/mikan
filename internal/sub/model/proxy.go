@@ -47,8 +47,17 @@ type Proxy struct {
 	// profile's proxy may ask for quic, the panel's never do.
 	UDPRelay string
 	Cipher   string // Shadowsocks-2022's method
-	Sudoku   *Sudoku
-	Snell    *Snell
+	// Plugin is the Shadowsocks plugin the connection goes through, as mihomo names it (obfs,
+	// v2ray-plugin, shadow-tls, ...); "": none. An own Clash profile's proxy may have one, the
+	// panel's never do.
+	Plugin string
+	// PluginOpts are the plugin's settings as the template holds them (plugin-opts).
+	PluginOpts map[string]any
+	// Smux is the multiplexing (sing-mux) the app runs over the connection; nil: none. An own
+	// Clash profile's proxy may ask for it, the panel's never do.
+	Smux   *Smux
+	Sudoku *Sudoku
+	Snell  *Snell
 }
 
 // TLS is a connection's TLS as the app sends it.
@@ -117,6 +126,23 @@ type Obfs struct {
 	// alike; 0: the core's default.
 	MinPacket, MaxPacket int
 }
+
+// Smux is sing-mux multiplexing as mihomo's smux holds it.
+type Smux struct {
+	Protocol string // smux, yamux or h2mux; "": the core's default
+	// MaxConnections, MinStreams and MaxStreams are how streams spread over connections;
+	// 0: the core's default.
+	MaxConnections, MinStreams, MaxStreams int
+	Padding                                bool
+	// OnlyTCP keeps UDP out of the multiplexing: it goes as the connection carries it.
+	OnlyTCP bool
+	// Brutal is TCP Brutal at the speeds the template gives (up, down; Mbps when a bare
+	// number); nil: off.
+	Brutal *Brutal
+}
+
+// Brutal is the speeds of TCP Brutal as the template gives them.
+type Brutal struct{ Up, Down string }
 
 // Sudoku is what a Sudoku client sends; one key for everyone. Its settings are as the
 // template holds them: only mihomo speaks Sudoku.

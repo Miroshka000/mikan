@@ -65,6 +65,29 @@
     "logout": "Sign out",
     "more": "More"
   },
+  "palette": {
+    "open": "Search",
+    "title": "Command palette",
+    "placeholder": "A client by name or id, a node, a section…",
+    "placeholderNoPeople": "A client by id, a node, a section…",
+    "group": {
+      "users": "Clients",
+      "nodes": "Nodes",
+      "actions": "Actions",
+      "sections": "Sections"
+    },
+    "userById": "Client #{id}",
+    "newUser": "New client",
+    "addNode": "Add node",
+    "nothing": "Nothing found",
+    "peopleHidden": "This access does not search clients by name: type the client's id.",
+    "searchFailed": "Could not search the clients",
+    "searching": "Searching…",
+    "count": "{n, plural, =0 {Nothing found} one {# result} other {# results}}",
+    "hintMove": "move",
+    "hintOpen": "open",
+    "hintClose": "close"
+  },
   "states": {
     "active": "active",
     "expiring": "expiring",
@@ -1110,6 +1133,12 @@
     "boundNoteStrict": "Each device has keys of its own, and the device limit is the number of places. Apps without a device ID get no subscription. An unbound device is cut off at once.",
     "sharedPlace": "Apps without a device ID",
     "addresses": "Connection addresses",
+    "deviceSeen": "Last address {ip} · bound {when}",
+    "deviceBoundAt": "Bound {when}",
+    "liveTitle": "Online now",
+    "liveOwnKeys": "Shared keys of the user",
+    "liveConns": "{n, plural, one {# connection} other {# connections}}",
+    "liveNote": "Where the user is connected now, by server, as the servers last reported (every few seconds). For now a server closes connections only when access goes: a device unbound or banned, the term or the traffic over.",
     "unbind": "Unbind",
     "unbindLabel": "Unbind {name}",
     "unbindTitle": "Unbind “{name}”?",
@@ -1743,7 +1772,7 @@
     "routesPreview": "What the app gets",
     "routesPreviewSub": "The Clash profile of a client with every protocol and these settings, before they are saved. Its keys are placeholders.",
     "routesNotesTitle": "In other apps",
-    "routesNotesSub": "sing-box and Xray have no such group of their own, so they get the nearest one.",
+    "routesNotesSub": "What sing-box and Xray cannot carry as it is: a group gets the nearest kind, the rest is left out.",
     "routesNotes": {
       "fallback_fastest": "“{group}” keeps the fastest server that answers, not the first in order",
       "balance_fastest": "“{group}” keeps the fastest server instead of spreading the load",
@@ -1751,7 +1780,12 @@
       "balance_flat": "“{group}” tests the servers of the groups inside it as one list",
       "select_first": "“{group}” has no choice inside a config: its first member is used",
       "chain_group_hop": "“{group}”: a group before the next hop goes through its first server",
-      "chain_dialer_taken": "“{group}”: a server already goes through another chain and stays in it"
+      "chain_dialer_taken": "“{group}”: a server already goes through another chain and stays in it",
+      "proxy_unsupported": "Server “{group}” is left out: the app cannot connect to it",
+      "rule_unsupported": "Rule “{group}” is left out: the app has no such condition or group",
+      "list_unsupported": "List “{group}” is left out: the app cannot read it",
+      "dns_policy_unsupported": "DNS policy “{group}” is left out: the app cannot write it",
+      "category_missing": "Category “{group}” is left out: the app's usual geodata has no such category"
     },
     "routesPreviewShow": "Show the profile",
     "routesTemplateOn": "Clash apps get your own template",

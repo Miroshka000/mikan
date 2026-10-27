@@ -95,7 +95,7 @@ type previewSubTemplateInput struct {
 type previewSubTemplateOutput struct {
 	Body struct {
 		Profile string          `json:"profile" doc:"Что получит пользователь со всеми подключениями: профиль Clash (YAML), конфиг sing-box или список конфигов Xray (JSON); ключи — заглушки"`
-		Notes   []submodel.Note `json:"notes" doc:"Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть"`
+		Notes   []submodel.Note `json:"notes" doc:"Что sing-box и Xray делают с шаблоном Clash, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают"`
 	}
 }
 

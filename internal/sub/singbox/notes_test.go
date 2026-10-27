@@ -93,3 +93,28 @@ func TestDroppedBuiltin(t *testing.T) {
 		}
 	}
 }
+
+// A profile of no proxy sing-box carries renders to nothing (model.ErrNoProxies): the
+// preview is still told of each of them, and of nothing else.
+func TestDroppedNoProxies(t *testing.T) {
+	prof := profileOf(subtest.Multi())
+	var unsupported []string
+	for _, n := range Dropped(prof, model.GroupNames{}, routing.All, model.Template{}) {
+		if n.Code == "proxy_unsupported" {
+			unsupported = append(unsupported, n.Subject)
+		}
+	}
+	prof.Proxies = slices.DeleteFunc(prof.Proxies, func(x model.Proxy) bool { return !slices.Contains(unsupported, x.Name) })
+	if len(prof.Proxies) == 0 {
+		t.Fatal("no proxy sing-box cannot carry")
+	}
+	for _, tpl := range []model.Template{{}, subtest.Clash(subtest.DroppedTemplate)} {
+		var want []model.Note
+		for _, name := range unsupported {
+			want = append(want, model.Note{Core: "singbox", Subject: name, Code: "proxy_unsupported"})
+		}
+		if got := Dropped(prof, model.GroupNames{}, routing.All, tpl); !slices.Equal(got, want) {
+			t.Errorf("%q: %+v", tpl.Core, got)
+		}
+	}
+}

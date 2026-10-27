@@ -1,6 +1,7 @@
 package xray
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -75,4 +76,62 @@ func split(notes []model.Note) (proxies []string, rest []model.Note) {
 		}
 	}
 	return proxies, rest
+}
+
+// A Clash profile's rule-provider named after a panel's list is matched by the geodata's
+// categories of it: one the usual geodata has none of (ru-blocked) is told, one it has
+// (category-ru) is not, and its rule stays.
+func TestDroppedListWithoutGeodata(t *testing.T) {
+	if s, ips := routing.Common.List("mikan-blocked"); len(s)+len(ips) != 0 {
+		t.Fatalf("the usual geodata has mikan-blocked: %q %q", s, ips)
+	}
+	if s, _ := routing.Common.List("mikan-ru-core"); len(s) == 0 {
+		t.Fatal("the usual geodata has no mikan-ru-core")
+	}
+	const src = `mode: rule
+proxy-groups:
+  - name: Сеть
+    type: select
+    include-all-proxies: true
+rule-providers:
+  mikan-blocked:
+    type: http
+    behavior: classical
+    url: https://example.com/mikan-blocked.yaml
+    path: ./mikan-blocked.yaml
+  mikan-ru-core:
+    type: http
+    behavior: domain
+    url: https://example.com/mikan-ru-core.yaml
+    path: ./mikan-ru-core.yaml
+rules:
+  - RULE-SET,mikan-blocked,Сеть
+  - RULE-SET,mikan-ru-core,DIRECT
+  - MATCH,Сеть
+`
+	prof := profileOf(subtest.Multi())
+	_, rest := split(Dropped(prof, model.GroupNames{}, routing.All, subtest.Clash(src)))
+	if want := []model.Note{{Core: "xray", Subject: "mikan-blocked", Code: "list_unsupported"}}; !slices.Equal(rest, want) {
+		t.Fatalf("notes: %+v", rest)
+	}
+	pl, err := planOf(prof, model.GroupNames{}, routing.All, subtest.Clash(src))
+	if err != nil || len(pl.rules) == 0 || fmt.Sprint(pl.rules[len(pl.rules)-1].fields) != "[map[domain:[geosite:category-ru]]]" {
+		t.Fatalf("rules: %+v %v", pl.rules, err)
+	}
+}
+
+// A profile of no proxy xray carries renders to nothing (model.ErrNoProxies): the preview is
+// still told of each of them.
+func TestDroppedNoProxies(t *testing.T) {
+	prof := profileOf(subtest.Multi())
+	unsupported, _ := split(Dropped(prof, model.GroupNames{}, routing.All, model.Template{}))
+	prof.Proxies = slices.DeleteFunc(prof.Proxies, func(x model.Proxy) bool { return !slices.Contains(unsupported, x.Name) })
+	if len(prof.Proxies) == 0 {
+		t.Fatal("no proxy xray cannot carry")
+	}
+	for _, tpl := range []model.Template{{}, subtest.Clash(subtest.DroppedTemplate)} {
+		if proxies, rest := split(Dropped(prof, model.GroupNames{}, routing.All, tpl)); !slices.Equal(proxies, unsupported) || len(rest) != 0 {
+			t.Errorf("%q: proxies %q, rest %+v", tpl.Core, proxies, rest)
+		}
+	}
 }
