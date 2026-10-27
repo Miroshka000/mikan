@@ -11,6 +11,17 @@ This guide is new in 0.5.2.1. The Bot API proxy it describes has been there sinc
 
 The subscribers' bot in the panel is an addon, and your own bot, on any framework (aiogram, grammY, python-telegram-bot), can take its place. The panel stays the gateway to Telegram: it keeps the bot's real token, polls Telegram, takes the payments and keeps Telegram's sending limits. Your bot talks to it as it would to `api.telegram.org`, only at the panel's address and with the addon's token.
 
+## Your own token or your own code
+
+- **You only want a Telegram bot of your own**, with your name and avatar, and the panel's bot answers the subscribers: create a bot with [@BotFather](https://t.me/BotFather) and paste its token into **Telegram → Connection** ([more](/mikan/en/billing/telegram/)). Nothing else is needed, and the rest of this page is not for you.
+- **You want logic of your own**: your commands, your answers, your database. Then your code connects to the same bot as described below. The token is still entered in **Telegram → Connection**, and your code gets an addon's token of its own.
+
+## What MIKAN_BOT_API_URL is
+
+It is the address of the Bot API proxy in the panel itself. It answers the same requests as `api.telegram.org` (`<address>/bot<token>/<method>`), so any framework works with it as it is: it only needs another Bot API server address. The proxy is not reachable from outside: it listens on `127.0.0.1` of the panel's server (and on the Docker bridge while image addons run), so a process of your own runs on that same server. The address is given out with the first addon of protocol 2 and stays the same after. `MIKAN_BOT_TOKEN` goes with it: the addon's token, not the one from BotFather. The proxy puts the bot's real token in by itself and lets nothing extra through (webhooks, payments, `logOut`).
+
+The official mikan bot and any bot addon from an image get the same two variables: mikan sets them for the container.
+
 :::caution
 mikan does not review the code of your bot. An addon with the "Telegram bot" permission sees the messages of every subscriber and answers as the bot, so run only code you trust as you trust yourself.
 :::
@@ -25,7 +36,7 @@ mikan does not review the code of your bot. An addon with the "Telegram bot" per
 
 <Steps>
 
-1. **Create the addon.** **Addons → Developer mode**. Fill in:
+1. **Create the addon.** **Addons → Developer mode**. With the kind "Telegram bot" the form shows these steps in short, and the **Fill for a bot** button picks the mode "Runs in the background", clears the address and ticks the "Telegram bot" permission by itself. Fill in:
    - **Name**: lowercase Latin letters, digits and a hyphen, up to 32 characters, for example `my-bot`;
    - **Kind**: "Telegram bot";
    - **Mode**: "Runs in the background" if the bot has no HTTP server of its own (a bot on aiogram, grammY or python-telegram-bot with long polling has none). Then the address can stay empty;
