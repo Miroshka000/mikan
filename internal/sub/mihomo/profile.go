@@ -27,7 +27,7 @@ func renderConfig(p profile.Profile, g model.GroupNames, m routing.Mode) (map[st
 	if !p.App.TakesOwnProfile() {
 		in = in.Plain()
 	}
-	routes := taken(p, in.Routes)
+	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return takes(p, pr) })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.MihomoBalance(), routes, p.Lang)
 	proxies := make([]map[string]any, len(p.Proxies))
 	for i, x := range p.Proxies {
@@ -37,16 +37,15 @@ func renderConfig(p profile.Profile, g model.GroupNames, m routing.Mode) (map[st
 	for i, gr := range gs.List {
 		groups[i] = groupOf(gr)
 	}
-	rt := route(routes, gs, in.Mode == routing.Blocked)
 	// The panel and the nodes stay out of the tunnel whatever the admin's rules say.
+	pre, routedRules, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
+	rt := route(routes, routedRules, gs, in.Mode == routing.Blocked)
 	var rules []string
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
-		for _, r := range part {
-			rules = append(rules, r.Clash(targetName(gs, r.To, -1)))
-		}
+	for _, r := range pre {
+		rules = append(rules, r.Clash(targetName(gs, r.To, -1)))
 	}
 	rules = append(rules, rt.rules...)
-	for _, r := range in.Tail() {
+	for _, r := range tail {
 		rules = append(rules, r.Clash(targetName(gs, r.To, -1)))
 	}
 	cfg := map[string]any{
@@ -74,7 +73,7 @@ func renderConfig(p profile.Profile, g model.GroupNames, m routing.Mode) (map[st
 	// address. REJECT makes such apps fall back to TCP instead. In the "blocked" mode the
 	// rest goes direct by design; its tunnel rules get their own REJECT twins (rejectTwins).
 	last := []string{"MATCH,DIRECT"}
-	if final := in.Final(); final.Kind != routing.ToDirect {
+	if final.Kind != routing.ToDirect {
 		last = []string{"MATCH," + targetName(gs, final, -1), "MATCH,REJECT"}
 	}
 	cfg["rules"] = append(rules, last...)
