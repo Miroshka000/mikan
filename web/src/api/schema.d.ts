@@ -2017,6 +2017,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sub-templates/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Готовые шаблоны подписки
+         * @description Каталог, из которого редактор загружает шаблон. В базу панель их сама не кладёт.
+         */
+        get: operations["list-ready-sub-templates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sub-templates/ready/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Готовый шаблон подписки с текстом
+         * @description Ничего не сохраняет: текст для редактора.
+         */
+        get: operations["get-ready-sub-template"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sub-templates/{id}": {
         parameters: {
             query?: never;
@@ -3326,6 +3366,13 @@ export interface components {
         AlertsConfig: {
             admin_enabled: boolean;
             events: components["schemas"]["Events"];
+            /** @description Группа Telegram, куда тоже идут уведомления админу: @username или числовой ID; пусто — нет */
+            group_chat?: string;
+            /**
+             * Format: int64
+             * @description Тема группы (message_thread_id) для групп с темами; 0 — общий чат группы
+             */
+            group_thread?: number;
             public_changes: boolean;
             public_channel?: string;
             public_enabled: boolean;
@@ -3333,7 +3380,12 @@ export interface components {
         };
         AlertsConfigPatch: {
             admin_enabled?: boolean;
+            /** @description Адрес webhook канала Discord (https://discord.com/api/webhooks/…), куда тоже идут уведомления админу; пустая строка — удалить. В ответе не возвращается */
+            discord_webhook?: string;
             events?: components["schemas"]["EventsPatch"];
+            group_chat?: string;
+            /** Format: int64 */
+            group_thread?: number;
             public_changes?: boolean;
             public_channel?: string;
             public_enabled?: boolean;
@@ -4401,7 +4453,7 @@ export interface components {
         };
         ImportRunInputBody: {
             /** @enum {string} */
-            kind: "marzban" | "pasarguard" | "remnawave";
+            kind: "marzban" | "pasarguard" | "remnawave" | "3xui";
             password?: string;
             /**
              * Format: int64
@@ -4414,13 +4466,13 @@ export interface components {
         };
         ImportSource: {
             /** @enum {string} */
-            kind: "marzban" | "pasarguard" | "remnawave";
+            kind: "marzban" | "pasarguard" | "remnawave" | "3xui";
             password?: string;
-            /** @description Remnawave: API-токен; PasarGuard: API-ключ вместо логина */
+            /** @description Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина */
             token?: string;
-            /** @description Адрес старой панели: https://panel.example.com; http:// — только для этого сервера или локальной сети */
+            /** @description Адрес старой панели: https://panel.example.com, у 3x-ui — с его секретным путём; http:// — только для этого сервера или локальной сети */
             url: string;
-            /** @description Marzban, PasarGuard: логин администратора */
+            /** @description Marzban, PasarGuard, 3x-ui: логин администратора */
             username?: string;
         };
         InactiveOutputBody: {
@@ -4600,20 +4652,20 @@ export interface components {
         LegacyLinks: {
             /** @description Старые ссылки сейчас открываются: задан их путь, а для подписанных ещё и секрет старой панели */
             active: boolean;
-            /** @description Из какой панели: marzban, pasarguard или remnawave */
+            /** @description Из какой панели: marzban, pasarguard, remnawave или 3xui */
             source: string;
-            /** @description Ссылка целиком. Только у Remnawave: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи */
+            /** @description Ссылка целиком. Только у Remnawave и 3x-ui: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи */
             url?: string;
         };
         LegacyView: {
-            /** @description Чьи ссылки: marzban, pasarguard или remnawave; импорт ставит его сам */
+            /** @description Чьи ссылки: marzban, pasarguard, remnawave или 3xui; импорт ставит его сам */
             kind: string;
             /**
              * Format: int64
              * @description У скольких пользователей заведены старые ссылки
              */
             links: number;
-            /** @description Путь старых ссылок подписки: sub у Marzban и PasarGuard, api/sub у Remnawave; пусто — выключено */
+            /** @description Путь старых ссылок подписки: sub у Marzban, PasarGuard и 3x-ui, api/sub у Remnawave; пусто — выключено */
             path: string;
             /** @description Секрет старой панели задан; сам он не возвращается */
             secret_set: boolean;
@@ -5538,7 +5590,7 @@ export interface components {
         };
         PatchLegacyInputBody: {
             /** @enum {string} */
-            kind?: "marzban" | "pasarguard" | "remnawave" | "";
+            kind?: "marzban" | "pasarguard" | "remnawave" | "3xui" | "";
             path?: string;
             /** @description Секрет из таблицы jwt базы старой панели; пусто — убрать */
             secret?: string;
@@ -6167,6 +6219,42 @@ export interface components {
             home: boolean;
             network: string;
             ports: components["schemas"]["ReachPort"][];
+        };
+        ReadySubTemplate: {
+            author: string;
+            /** @description Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают */
+            builtin: boolean;
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            id: string;
+            /** @description Лицензия текста шаблона, SPDX */
+            license: string;
+            name: string;
+            /** @description Откуда шаблон и списки, на которые он ссылается */
+            source: string;
+            /** @description Описание по-русски; панель переводит его по id */
+            summary: string;
+        };
+        ReadySubTemplateOutputBody: {
+            author: string;
+            /** @description Текст шаблона: для своего шаблона mikan собран из текущих настроек панели */
+            body: string;
+            /** @description Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают */
+            builtin: boolean;
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            id: string;
+            /** @description Лицензия текста шаблона, SPDX */
+            license: string;
+            name: string;
+            /** @description Откуда шаблон и списки, на которые он ссылается */
+            source: string;
+            /** @description Описание по-русски; панель переводит его по id */
+            summary: string;
+        };
+        ReadySubTemplatesOutputBody: {
+            /** @description По ядрам, в порядке каталога */
+            templates: components["schemas"]["ReadySubTemplate"][];
         };
         RecordingInfo: {
             /**
@@ -7174,7 +7262,7 @@ export interface components {
              */
             accounts: number;
             admin_chat_set: boolean;
-            /** @description Последнее уведомление, которое Telegram отверг насовсем (бот заблокирован, чат или канал недоступен): оно не доставлено и не повторяется */
+            /** @description Последнее уведомление, которое Telegram или Discord отверг насовсем (бот заблокирован, чат, канал или webhook недоступен): оно не доставлено и не повторяется */
             alerts_refused?: components["schemas"]["Refused"];
             bot?: components["schemas"]["TelegramBot"];
             /** @description Последняя рассылка с запуска панели */
@@ -7184,6 +7272,10 @@ export interface components {
             config: components["schemas"]["Config"];
             /** @description Встроенные тексты на языке бота: пустое поле берёт их */
             defaults: components["schemas"]["Texts"];
+            /** @description Имя webhook в Discord */
+            discord_name?: string;
+            /** @description Webhook Discord для уведомлений админу сохранён; сам адрес не возвращается */
+            discord_set: boolean;
             enabled: boolean;
             /** @description token_invalid, token_revoked, token_conflict (токен опрашивает ещё одна программа), unreachable или ответ Telegram */
             error?: string;
@@ -12718,6 +12810,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PreviewSubTemplateOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-ready-sub-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadySubTemplatesOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-ready-sub-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadySubTemplateOutputBody"];
                 };
             };
             /** @description Error */

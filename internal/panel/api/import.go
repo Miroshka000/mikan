@@ -20,11 +20,11 @@ import (
 // for the request and kept nowhere.
 
 type importSource struct {
-	Kind     string `json:"kind" enum:"marzban,pasarguard,remnawave"`
-	URL      string `json:"url" maxLength:"300" doc:"Адрес старой панели: https://panel.example.com; http:// — только для этого сервера или локальной сети"`
-	Username string `json:"username,omitempty" maxLength:"200" doc:"Marzban, PasarGuard: логин администратора"`
+	Kind     string `json:"kind" enum:"marzban,pasarguard,remnawave,3xui"`
+	URL      string `json:"url" maxLength:"300" doc:"Адрес старой панели: https://panel.example.com, у 3x-ui — с его секретным путём; http:// — только для этого сервера или локальной сети"`
+	Username string `json:"username,omitempty" maxLength:"200" doc:"Marzban, PasarGuard, 3x-ui: логин администратора"`
 	Password string `json:"password,omitempty" maxLength:"500"`
-	Token    string `json:"token,omitempty" maxLength:"4096" doc:"Remnawave: API-токен; PasarGuard: API-ключ вместо логина"`
+	Token    string `json:"token,omitempty" maxLength:"4096" doc:"Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина"`
 }
 
 func (s importSource) source() panelimport.Source {
@@ -45,7 +45,7 @@ type importPreviewInput struct{ Body importSource }
 
 type importRunInput struct {
 	Body struct {
-		Kind     string `json:"kind" enum:"marzban,pasarguard,remnawave"`
+		Kind     string `json:"kind" enum:"marzban,pasarguard,remnawave,3xui"`
 		URL      string `json:"url" maxLength:"300"`
 		Username string `json:"username,omitempty" maxLength:"200"`
 		Password string `json:"password,omitempty" maxLength:"500"`
@@ -57,8 +57,8 @@ type importRunInput struct {
 type importStateOutput struct{ Body panelimport.JobState }
 
 type LegacyView struct {
-	Path      string `json:"path" doc:"Путь старых ссылок подписки: sub у Marzban и PasarGuard, api/sub у Remnawave; пусто — выключено"`
-	Kind      string `json:"kind" doc:"Чьи ссылки: marzban, pasarguard или remnawave; импорт ставит его сам"`
+	Path      string `json:"path" doc:"Путь старых ссылок подписки: sub у Marzban, PasarGuard и 3x-ui, api/sub у Remnawave; пусто — выключено"`
+	Kind      string `json:"kind" doc:"Чьи ссылки: marzban, pasarguard, remnawave или 3xui; импорт ставит его сам"`
 	SecretSet bool   `json:"secret_set" doc:"Секрет старой панели задан; сам он не возвращается"`
 	Links     int64  `json:"links" doc:"У скольких пользователей заведены старые ссылки"`
 }
@@ -68,7 +68,7 @@ type legacyOutput struct{ Body LegacyView }
 type patchLegacyInput struct {
 	Body struct {
 		Path   *string `json:"path,omitempty" maxLength:"64"`
-		Kind   *string `json:"kind,omitempty" enum:"marzban,pasarguard,remnawave,"`
+		Kind   *string `json:"kind,omitempty" enum:"marzban,pasarguard,remnawave,3xui,"`
 		Secret *string `json:"secret,omitempty" maxLength:"500" doc:"Секрет из таблицы jwt базы старой панели; пусто — убрать"`
 	}
 }

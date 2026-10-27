@@ -10,10 +10,16 @@ import { useDraft } from "../../../lib/draft";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { Select } from "../../../components/select";
 
-type Kind = "marzban" | "pasarguard" | "remnawave";
-const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave"];
+type Kind = "marzban" | "pasarguard" | "remnawave" | "3xui";
+const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave", "3xui"];
 // Where each panel keeps its subscription links, for the old-links path.
-const OLD_PATH: Record<Kind, string> = { marzban: "sub", pasarguard: "sub", remnawave: "api/sub" };
+const OLD_PATH: Record<Kind, string> = { marzban: "sub", pasarguard: "sub", remnawave: "api/sub", "3xui": "sub" };
+// The token field of each panel that has one: its label and hint.
+const TOKEN: Partial<Record<Kind, [Key, Key]>> = {
+  pasarguard: ["settings.import.apiKey", "settings.import.apiKeyHint"],
+  remnawave: ["settings.import.token", "settings.import.tokenHint"],
+  "3xui": ["settings.import.xuiToken", "settings.import.xuiTokenHint"],
+};
 
 /** Users from another panel: a preview first, then the import onto a chosen plan; both run
  * in the background and the card follows them. */
@@ -62,6 +68,7 @@ export function ImportCard() {
   const legacy = useQuery({ queryKey: ["legacy-links"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/legacy", { signal })), enabled: !!report?.links });
   const linksOff = !!report?.links && !!legacy.data && !legacyActive(legacy.data);
   const usesPassword = src.kind !== "remnawave";
+  const token = TOKEN[src.kind];
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
       <form onSubmit={submit} noValidate>
@@ -75,8 +82,8 @@ export function ImportCard() {
             ))}
           </Select>
         </Field>
-        <Field label={t("settings.import.url")} htmlFor="imp-url" hint={t("settings.import.urlHint")}>
-          <input id="imp-url" className="input" value={src.url} onChange={set("url")} placeholder="https://panel.example.com" autoComplete="off" disabled={running} />
+        <Field label={t("settings.import.url")} htmlFor="imp-url" hint={t(src.kind === "3xui" ? "settings.import.xuiUrlHint" : "settings.import.urlHint")}>
+          <input id="imp-url" className="input" value={src.url} onChange={set("url")} placeholder={src.kind === "3xui" ? "https://panel.example.com:2053/path" : "https://panel.example.com"} autoComplete="off" disabled={running} />
         </Field>
         {usesPassword ? (
           <div className="grid gap-x-3 sm:grid-cols-2">
@@ -88,8 +95,8 @@ export function ImportCard() {
             </Field>
           </div>
         ) : null}
-        {src.kind !== "marzban" ? (
-          <Field label={t(src.kind === "remnawave" ? "settings.import.token" : "settings.import.apiKey")} htmlFor="imp-token" hint={t(src.kind === "remnawave" ? "settings.import.tokenHint" : "settings.import.apiKeyHint")}>
+        {token ? (
+          <Field label={t(token[0])} htmlFor="imp-token" hint={t(token[1])}>
             <input id="imp-token" className="input mono" type="password" value={src.token} onChange={set("token")} autoComplete="off" disabled={running} />
           </Field>
         ) : null}

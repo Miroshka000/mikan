@@ -180,11 +180,14 @@ func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Temp
 	}
 	sets := ruleSets{lists: pl.lists, used: map[string]map[string]any{}, preview: true}
 	tags := map[string]bool{"direct": true}
+	for _, name := range pl.unread {
+		sets.drop("proxy_unsupported", name)
+	}
 	for _, x := range pl.proxies {
 		if o, ok := singboxOutbound(x); ok {
 			tags[str(o["tag"])] = true
 		} else {
-			sets.drop("proxy_unsupported", str(x["name"]))
+			sets.drop("proxy_unsupported", x.Name)
 		}
 	}
 	for _, gr := range convertGroups(pl.groups, tags).outbounds {

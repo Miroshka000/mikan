@@ -67,6 +67,7 @@ type Monitor struct {
 	updates     UpdateSource
 	nodeUpdates NodeUpdateSource
 	bot         Telegram
+	discord     discordPoster // posts to the webhook under KeyDiscord
 	log         *slog.Logger
 	now         func() time.Time
 	roundMu     sync.Mutex
@@ -89,7 +90,7 @@ type Monitor struct {
 
 func New(st *store.Store, set *settings.Settings, runtime Runtime, tuner Tuner, cert CertificateSource, updates UpdateSource,
 	bot Telegram, log *slog.Logger, now func() time.Time) *Monitor {
-	return &Monitor{store: st, settings: set, runtime: runtime, tuner: tuner, cert: cert, updates: updates, bot: bot, log: log, now: now}
+	return &Monitor{store: st, settings: set, runtime: runtime, tuner: tuner, cert: cert, updates: updates, bot: bot, discord: NewDiscordClient(), log: log, now: now}
 }
 
 // WatchNodeUpdates makes the monitor tell the admin about the updates of nodes that failed

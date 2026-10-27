@@ -606,6 +606,17 @@
           "events": {
             "$ref": "#/components/schemas/Events"
           },
+          "group_chat": {
+            "description": "Группа Telegram, куда тоже идут уведомления админу: @username или числовой ID; пусто — нет",
+            "maxLength": 40,
+            "type": "string"
+          },
+          "group_thread": {
+            "description": "Тема группы (message_thread_id) для групп с темами; 0 — общий чат группы",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "public_changes": {
             "type": "boolean"
           },
@@ -634,8 +645,22 @@
           "admin_enabled": {
             "type": "boolean"
           },
+          "discord_webhook": {
+            "description": "Адрес webhook канала Discord (https://discord.com/api/webhooks/…), куда тоже идут уведомления админу; пустая строка — удалить. В ответе не возвращается",
+            "maxLength": 300,
+            "type": "string"
+          },
           "events": {
             "$ref": "#/components/schemas/EventsPatch"
+          },
+          "group_chat": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "group_thread": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
           },
           "public_changes": {
             "type": "boolean"
@@ -3605,7 +3630,8 @@
             "enum": [
               "marzban",
               "pasarguard",
-              "remnawave"
+              "remnawave",
+              "3xui"
             ],
             "type": "string"
           },
@@ -3646,7 +3672,8 @@
             "enum": [
               "marzban",
               "pasarguard",
-              "remnawave"
+              "remnawave",
+              "3xui"
             ],
             "type": "string"
           },
@@ -3655,17 +3682,17 @@
             "type": "string"
           },
           "token": {
-            "description": "Remnawave: API-токен; PasarGuard: API-ключ вместо логина",
+            "description": "Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина",
             "maxLength": 4096,
             "type": "string"
           },
           "url": {
-            "description": "Адрес старой панели: https://panel.example.com; http:// — только для этого сервера или локальной сети",
+            "description": "Адрес старой панели: https://panel.example.com, у 3x-ui — с его секретным путём; http:// — только для этого сервера или локальной сети",
             "maxLength": 300,
             "type": "string"
           },
           "username": {
-            "description": "Marzban, PasarGuard: логин администратора",
+            "description": "Marzban, PasarGuard, 3x-ui: логин администратора",
             "maxLength": 200,
             "type": "string"
           }
@@ -4146,11 +4173,11 @@
             "type": "boolean"
           },
           "source": {
-            "description": "Из какой панели: marzban, pasarguard или remnawave",
+            "description": "Из какой панели: marzban, pasarguard, remnawave или 3xui",
             "type": "string"
           },
           "url": {
-            "description": "Ссылка целиком. Только у Remnawave: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи",
+            "description": "Ссылка целиком. Только у Remnawave и 3x-ui: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи",
             "type": "string"
           }
         },
@@ -4164,7 +4191,7 @@
         "additionalProperties": false,
         "properties": {
           "kind": {
-            "description": "Чьи ссылки: marzban, pasarguard или remnawave; импорт ставит его сам",
+            "description": "Чьи ссылки: marzban, pasarguard, remnawave или 3xui; импорт ставит его сам",
             "type": "string"
           },
           "links": {
@@ -4173,7 +4200,7 @@
             "type": "integer"
           },
           "path": {
-            "description": "Путь старых ссылок подписки: sub у Marzban и PasarGuard, api/sub у Remnawave; пусто — выключено",
+            "description": "Путь старых ссылок подписки: sub у Marzban, PasarGuard и 3x-ui, api/sub у Remnawave; пусто — выключено",
             "type": "string"
           },
           "secret_set": {
@@ -6622,6 +6649,7 @@
               "marzban",
               "pasarguard",
               "remnawave",
+              "3xui",
               ""
             ],
             "type": "string"
@@ -8319,6 +8347,125 @@
           "asn",
           "home",
           "control"
+        ],
+        "type": "object"
+      },
+      "ReadySubTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "builtin": {
+            "description": "Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают",
+            "type": "boolean"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "license": {
+            "description": "Лицензия текста шаблона, SPDX",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Откуда шаблон и списки, на которые он ссылается",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Описание по-русски; панель переводит его по id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name",
+          "summary",
+          "author",
+          "license",
+          "source",
+          "builtin"
+        ],
+        "type": "object"
+      },
+      "ReadySubTemplateOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "body": {
+            "description": "Текст шаблона: для своего шаблона mikan собран из текущих настроек панели",
+            "type": "string"
+          },
+          "builtin": {
+            "description": "Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают",
+            "type": "boolean"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "license": {
+            "description": "Лицензия текста шаблона, SPDX",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Откуда шаблон и списки, на которые он ссылается",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Описание по-русски; панель переводит его по id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "id",
+          "core",
+          "name",
+          "summary",
+          "author",
+          "license",
+          "source",
+          "builtin"
+        ],
+        "type": "object"
+      },
+      "ReadySubTemplatesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "templates": {
+            "description": "По ядрам, в порядке каталога",
+            "items": {
+              "$ref": "#/components/schemas/ReadySubTemplate"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates"
         ],
         "type": "object"
       },
@@ -11039,7 +11186,7 @@
           },
           "alerts_refused": {
             "$ref": "#/components/schemas/Refused",
-            "description": "Последнее уведомление, которое Telegram отверг насовсем (бот заблокирован, чат или канал недоступен): оно не доставлено и не повторяется"
+            "description": "Последнее уведомление, которое Telegram или Discord отверг насовсем (бот заблокирован, чат, канал или webhook недоступен): оно не доставлено и не повторяется"
           },
           "bot": {
             "$ref": "#/components/schemas/TelegramBot"
@@ -11058,6 +11205,14 @@
           "defaults": {
             "$ref": "#/components/schemas/Texts",
             "description": "Встроенные тексты на языке бота: пустое поле берёт их"
+          },
+          "discord_name": {
+            "description": "Имя webhook в Discord",
+            "type": "string"
+          },
+          "discord_set": {
+            "description": "Webhook Discord для уведомлений админу сохранён; сам адрес не возвращается",
+            "type": "boolean"
           },
           "enabled": {
             "type": "boolean"
@@ -11105,7 +11260,8 @@
           "accounts",
           "route",
           "infrastructure",
-          "admin_chat_set"
+          "admin_chat_set",
+          "discord_set"
         ],
         "type": "object"
       },
@@ -19244,6 +19400,81 @@
           }
         },
         "summary": "Профиль из шаблона, без сохранения",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
+    "/api/v1/sub-templates/ready": {
+      "get": {
+        "description": "Каталог, из которого редактор загружает шаблон. В базу панель их сама не кладёт.",
+        "operationId": "list-ready-sub-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadySubTemplatesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Готовые шаблоны подписки",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
+    "/api/v1/sub-templates/ready/{id}": {
+      "get": {
+        "description": "Ничего не сохраняет: текст для редактора.",
+        "operationId": "get-ready-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadySubTemplateOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Готовый шаблон подписки с текстом",
         "tags": [
           "sub-templates"
         ]
