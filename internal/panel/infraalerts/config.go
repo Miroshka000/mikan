@@ -22,6 +22,8 @@ type Events struct {
 	TLS              bool `json:"tls"`
 	Update           bool `json:"update"`
 	Torrent          bool `json:"torrent"`
+	// Billing: a node's payment is near, or its server's plan has carried the alert percent.
+	Billing bool `json:"billing"`
 }
 
 type AlertsConfig struct {
@@ -54,6 +56,7 @@ type EventsPatch struct {
 	TLS              *bool `json:"tls,omitempty"`
 	Update           *bool `json:"update,omitempty"`
 	Torrent          *bool `json:"torrent,omitempty"`
+	Billing          *bool `json:"billing,omitempty"`
 }
 
 func (p AlertsConfigPatch) Merge(c AlertsConfig) AlertsConfig {
@@ -100,13 +103,16 @@ func (p AlertsConfigPatch) Merge(c AlertsConfig) AlertsConfig {
 		if e.Torrent != nil {
 			c.Events.Torrent = *e.Torrent
 		}
+		if e.Billing != nil {
+			c.Events.Billing = *e.Billing
+		}
 	}
 	return c
 }
 
 func Default() AlertsConfig {
 	return AlertsConfig{Events: Events{Node: true, Warp: true, Exit: true, Inbound: true, Autotune: true,
-		AutotuneRecovery: true, TLS: true, Update: true, Torrent: true}, PublicSummary: true, PublicChanges: true}
+		AutotuneRecovery: true, TLS: true, Update: true, Torrent: true, Billing: true}, PublicSummary: true, PublicChanges: true}
 }
 
 // Validate trims the channel target and rejects values that cannot identify a Telegram

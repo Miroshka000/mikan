@@ -4154,6 +4154,7 @@ export interface components {
         Events: {
             autotune: boolean;
             autotune_recovery: boolean;
+            billing: boolean;
             exit: boolean;
             inbound: boolean;
             node: boolean;
@@ -4165,6 +4166,7 @@ export interface components {
         EventsPatch: {
             autotune?: boolean;
             autotune_recovery?: boolean;
+            billing?: boolean;
             exit?: boolean;
             inbound?: boolean;
             node?: boolean;
@@ -4893,6 +4895,37 @@ export interface components {
              */
             term_days: number | null;
         };
+        NodeBilling: {
+            /** @description Дата оплаты, YYYY-MM-DD (UTC); пусто — не задана. С pay_months — любая оплата из череды, следующую считает панель */
+            pay_date: string;
+            /**
+             * Format: int64
+             * @description Оплата повторяется каждые столько месяцев; 0 — разовая
+             */
+            pay_months: number;
+            /** @description Хостер сервера, как его назвал админ */
+            provider: string;
+            /**
+             * Format: int64
+             * @description За сколько дней до оплаты напомнить админу в Telegram; 0 — не напоминать
+             */
+            remind_days: number;
+            /**
+             * Format: int64
+             * @description День месяца, с которого хостер считает трафик заново; в коротком месяце — его последний день
+             */
+            reset_day: number;
+            /**
+             * Format: int64
+             * @description При скольких процентах лимита сказать админу; раз за период
+             */
+            traffic_alert: number;
+            /**
+             * Format: int64
+             * @description Трафик тарифа сервера за период, байты; 0 — без лимита
+             */
+            traffic_limit: number;
+        };
         NodeCertInputBody: {
             /** @description Цепочка в PEM: сначала сертификат, за ним промежуточные (fullchain.pem) */
             cert: string;
@@ -4939,6 +4972,7 @@ export interface components {
             balance_group: string;
             /** @description Нода старее панели */
             behind: boolean;
+            billing: components["schemas"]["NodeBilling"];
             /** @description Панель может обновить ноду сама: удалённая, отвечает, версия 0.5.0.2 или новее; старую обновляют один раз вручную командой mikan update на её сервере */
             can_update: boolean;
             /**
@@ -5027,6 +5061,8 @@ export interface components {
             mem_used: number;
             /** @description Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений */
             name: string;
+            /** @description Ближайшая оплата сегодня или позже, YYYY-MM-DD (UTC); нет — оплата не задана или разовая прошла */
+            next_payment?: string;
             /**
              * Format: double
              * @description Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4
@@ -5053,6 +5089,8 @@ export interface components {
             /** @description Как идёт или прошло обновление ноды */
             update?: components["schemas"]["UpdateStatus"];
             version?: string;
+            /** @description Трафик тарифа сервера за текущий период; только с billing.traffic_limit */
+            vps_traffic?: components["schemas"]["VPSTraffic"];
         };
         NodeKeyOutputBody: {
             /** @description Команда установки на сервере ноды */
@@ -5510,6 +5548,8 @@ export interface components {
             api_allow?: string[];
             /** @description API ноды только с адресов панели; не для ноды панели */
             api_lockdown?: boolean;
+            /** @description Учёт сервера у хостера, целиком */
+            billing?: components["schemas"]["NodeBilling"];
             /**
              * Format: int64
              * @description Ширина канала ноды, Мбит/с в каждую сторону
@@ -7588,6 +7628,17 @@ export interface components {
             used_down: number;
             /** Format: int64 */
             used_up: number;
+        };
+        VPSTraffic: {
+            /** @description День, с которого начнётся следующий период, YYYY-MM-DD (UTC) */
+            resets: string;
+            /** @description Первый день периода, YYYY-MM-DD (UTC) */
+            since: string;
+            /**
+             * Format: int64
+             * @description Сколько нода унесла с начала периода: трафик пользователей и каскада других нод, вверх и вниз вместе, байты
+             */
+            used: number;
         };
         ValidateInboundInputBody: {
             config: string;

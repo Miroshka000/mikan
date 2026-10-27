@@ -70,7 +70,8 @@ type Monitor struct {
 	log         *slog.Logger
 	now         func() time.Time
 	roundMu     sync.Mutex
-	world       *world // under roundMu
+	world       *world    // under roundMu
+	billingAt   time.Time // when the round last ran checkBilling (under roundMu)
 	dispatchMu  sync.Mutex
 	dispatching bool
 	again       bool // a delivery was asked for while one ran (startDelivery)

@@ -151,6 +151,8 @@ type NodePatch struct {
 	// InAuto: the node's servers are in the subscriptions' automatic choice; off for a
 	// server the apps must not pick on their own (one for whitelist-only networks).
 	InAuto *bool
+	// Billing is the node's server at its provider (NodeBilling), written whole.
+	Billing *NodeBilling
 	// APILockdown: the node's API answers only the panel; APIAllow the networks the admin
 	// adds to the panel's own addresses (NormalizeAPIAllow). Not on the panel's own node,
 	// which the panel reaches over its socket.
@@ -161,7 +163,8 @@ type NodePatch struct {
 
 // UpdateNode changes the fields p names and returns the node. Errors: ErrUnknownNode,
 // ErrLocalNode (a host or domain for the panel's own node), ErrLocalLockdown, ErrBadHost,
-// ErrBadDomain, *NameError, *DomainError, ErrChannelRequired, *APIAllowError, ErrManyAPIAllow.
+// ErrBadDomain, *NameError, *DomainError, ErrChannelRequired, *APIAllowError, ErrManyAPIAllow,
+// *FieldError (a front page or a billing out of bounds).
 //
 // The checks run first, the domain's one over the network included. Only what p names is
 // written, over the row as it is by then and in one transaction: an edit made meanwhile
@@ -270,6 +273,15 @@ func UpdateNode(ctx context.Context, st *store.Store, id int64, p NodePatch, now
 		}
 		if p.InAuto != nil {
 			if err := q.SetNodeNoAuto(ctx, db.SetNodeNoAutoParams{NoAuto: Flag(!*p.InAuto), UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
+				return err
+			}
+		}
+		if b := p.Billing; b != nil {
+			if err := b.check(); err != nil {
+				return err
+			}
+			if err := q.SetNodeBilling(ctx, db.SetNodeBillingParams{BillingProvider: b.Provider, PayDay: b.PayDay, PayMonths: b.PayMonths, RemindDays: b.RemindDays,
+				TrafficLimit: b.TrafficLimit, ResetDay: b.ResetDay, TrafficAlert: b.TrafficAlert, UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
 				return err
 			}
 		}

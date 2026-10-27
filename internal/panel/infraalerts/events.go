@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"mikan/internal/panel/autotune"
+	"mikan/internal/panel/domain"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/textutil"
 )
 
 // certExpiryWarning is how long before the TLS certificate expires it is called a problem.
@@ -207,4 +210,67 @@ func (m *Monitor) torrentEvents(ctx context.Context, st *persistentState, cfg Al
 		}
 	}
 	st.Pending = appendPending(st.Pending, delivery{Key: fmt.Sprintf("torrent/%d", st.TorrentCursor), Target: targetAdmin, Text: b.String()})
+}
+
+// billingEvery is how often the round looks at the nodes' payments and plans: they move by
+// the day, and the plan's traffic is read from the database.
+const billingEvery = time.Minute
+
+// checkBilling reminds the admin of a node's payment RemindDays before it, once a payment,
+// and tells once a period when the node's server has carried TrafficAlert percent of its
+// plan (domain.NodeBilling). The days are UTC days.
+func (m *Monitor) checkBilling(ctx context.Context, st *persistentState, cfg AlertsConfig, nodes []db.Node, lang string) {
+	// A node that was removed is not remembered.
+	for _, told := range []map[string]int64{st.BillingPaid, st.BillingTraffic} {
+		for id := range told {
+			if !slices.ContainsFunc(nodes, func(n db.Node) bool { return strconv.FormatInt(n.ID, 10) == id }) {
+				delete(told, id)
+			}
+		}
+	}
+	if !cfg.Events.Billing {
+		return
+	}
+	t := textsFor(lang)
+	now := m.now()
+	today := domain.Day(now)
+	date := func(day int64) string { return time.Unix(day*86400, 0).UTC().Format("02.01.2006") }
+	for _, n := range nodes {
+		b := domain.BillingOf(n)
+		id := strconv.FormatInt(n.ID, 10)
+		name := html.EscapeString(n.Name)
+		if b.Provider != "" {
+			name += " (" + html.EscapeString(b.Provider) + ")"
+		}
+		if pay, ok := b.RemindPayment(today); ok && st.BillingPaid[id] != pay {
+			if st.BillingPaid == nil {
+				st.BillingPaid = map[string]int64{}
+			}
+			st.BillingPaid[id] = pay
+			st.Pending = appendPending(st.Pending, delivery{Key: "billing-pay/" + id + "/" + strconv.FormatInt(pay, 10), Target: targetAdmin,
+				Text: fmt.Sprintf(t.billingDue, name, date(pay))})
+		}
+		if b.TrafficLimit == 0 {
+			continue
+		}
+		from, next := b.TrafficPeriod(now)
+		if st.BillingTraffic[id] == from {
+			continue
+		}
+		used, err := m.store.Q.NodeTrafficSinceDay(ctx, db.NodeTrafficSinceDayParams{NodeID: n.ID, Day: from})
+		if err != nil {
+			m.logError("infrastructure alerts: node traffic", err)
+			continue
+		}
+		pct := float64(used) * 100 / float64(b.TrafficLimit)
+		if pct < float64(b.TrafficAlert) {
+			continue
+		}
+		if st.BillingTraffic == nil {
+			st.BillingTraffic = map[string]int64{}
+		}
+		st.BillingTraffic[id] = from
+		st.Pending = appendPending(st.Pending, delivery{Key: "billing-traffic/" + id + "/" + strconv.FormatInt(from, 10), Target: targetAdmin,
+			Text: fmt.Sprintf(t.billingTraffic, name, textutil.Size(used, lang), textutil.Size(b.TrafficLimit, lang), int(pct), date(next))})
+	}
 }
