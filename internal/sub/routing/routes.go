@@ -273,8 +273,8 @@ func DirectSetByID(id string) (DirectSet, bool) {
 }
 
 // Check refuses what would break the profiles: an unknown service, list or target, a node
-// that does not exist, a DNS server mihomo would not read. The error is a code for the
-// admin panel.
+// that does not exist, a DNS server or a key of the DNS policy mihomo would not read. The
+// error is a code for the admin panel.
 func (r Routes) Check(nodeExists func(int64) bool) error {
 	target := func(t string) bool {
 		switch t {
@@ -311,7 +311,10 @@ func (r Routes) Check(nodeExists func(int64) bool) error {
 		}
 	}
 	for _, p := range r.DNS.Policy {
-		if p.Match == "" || strings.ContainsAny(p.Match, " \t\n") || len(p.Servers) == 0 {
+		if !policyKey(p.Match) {
+			return errors.New("routes_dns_policy")
+		}
+		if len(p.Servers) == 0 {
 			return errors.New("routes_dns")
 		}
 		for _, s := range p.Servers {

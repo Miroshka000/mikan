@@ -83,6 +83,7 @@ export default defineConfig({
 						{ slug: 'start/install' },
 						{ slug: 'start/first-steps' },
 						{ slug: 'start/domain' },
+						{ slug: 'start/migrate' },
 					],
 				},
 				{

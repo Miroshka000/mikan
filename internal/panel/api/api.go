@@ -70,8 +70,11 @@ type Deps struct {
 	Pool      *domain.Pool
 	Changes   domain.Changes
 	Online    func() map[string]nodeapi.Online
-	Cert      func() acme.Status
-	RenewCert func()
+	// NodeOnline is the live view of each node apart, by node id (nodesync.Manager.OnlineByNode);
+	// nil when the panel runs without nodes.
+	NodeOnline func() map[int64]map[string]nodeapi.Online
+	Cert       func() acme.Status
+	RenewCert  func()
 	// RenewCertNow tries the panel's certificate now and waits up to wait for the outcome;
 	// done is false when the order still runs then. nil in development.
 	RenewCertNow func(ctx context.Context, wait time.Duration) (st acme.Status, done bool)
