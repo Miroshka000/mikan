@@ -362,3 +362,43 @@ rules:
   - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
   - MATCH,🌍 Сеть
 `
+
+// DroppedTemplate is an admin's own Clash profile with what sing-box and xray leave out and
+// tell the preview of: a rule by an AS number, a list of mihomo's binary format, a category
+// the usual geodata lacks, a DNS policy of a negated category, and a group of only the
+// Hysteria2 and TUIC proxies, which are on the nodes' pinned certificates for Multi.
+const DroppedTemplate = `mode: rule
+dns:
+  enable: true
+  nameserver: [https://1.1.1.1/dns-query]
+  nameserver-policy:
+    "geosite:!cn": [https://8.8.8.8/dns-query]
+    "+.example.com": [https://9.9.9.9/dns-query]
+proxy-groups:
+  - name: Сеть
+    type: select
+    include-all-proxies: true
+  - name: Закреплённые
+    type: select
+    include-all-proxies: true
+    filter: "Hysteria2|TUIC"
+rule-providers:
+  ads:
+    type: http
+    behavior: domain
+    format: mrs
+    url: https://example.com/ads.mrs
+    path: ./ads.mrs
+  ru:
+    type: http
+    behavior: domain
+    url: https://example.com/ru.yaml
+    path: ./ru.yaml
+rules:
+  - IP-ASN,13335,DIRECT
+  - RULE-SET,ads,REJECT
+  - RULE-SET,ru,DIRECT
+  - GEOSITE,no-such-category,DIRECT
+  - DOMAIN-SUFFIX,pinned.example,Закреплённые
+  - MATCH,Сеть
+`

@@ -79,10 +79,12 @@ func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets, via string
 		}
 		// Each name on its own: a "*." name drops only itself, not the plain names of its key.
 		if len(fields) == 0 {
+			sets.drop("dns_policy_unsupported", k)
 			continue // a pattern of mihomo's own
 		}
 		tag := "policy-" + strconv.Itoa(len(rules))
 		if len(policy[k]) == 0 || !add(tag, policy[k][0]) {
+			sets.drop("dns_policy_unsupported", k)
 			continue
 		}
 		rule := map[string]any{"server": tag}
