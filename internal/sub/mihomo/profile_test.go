@@ -431,6 +431,21 @@ func TestGRPCKeepalive(t *testing.T) {
 	}
 }
 
+// A proxy name with a line break in front, written to the database past the panel, does not
+// fail the profile: the encoder cannot write such a name, so build drops the character.
+func TestProxyNameWithLineBreakRenders(t *testing.T) {
+	u := subtest.TwoNodes()
+	u.Build.Inbounds[0].Name, u.Build.Inbounds[0].Named = "\nА", true
+	raw, err := Render(profileOf(u), model.GroupNames{}, routing.All)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coreAccepts(t, raw)
+	if !strings.Contains(string(raw), "name: А\n") {
+		t.Fatalf("no proxy А:\n%s", raw)
+	}
+}
+
 // Every built-in profile and every starter begins with base.yaml, in its order and with
 // its values: the panel only adds to it, the geodata keys go only where nothing names
 // geodata, "real IP" turns fake-ip to redir-host with no range, and the sniffer is
