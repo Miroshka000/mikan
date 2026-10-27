@@ -81,6 +81,12 @@ In the bot (Subscription → "🔄 New link") and in the Mini App ("Change the l
 
 A device is called what its app reports: the model, the system or the app itself. The administrator (the pencil in the user card) or the subscriber (on the subscription page and in the Mini App) can give it a name of up to 40 characters. An empty name brings back the one from the app. The bot lists devices by these names.
 
+### Devices and who is online in the card
+
+In the card's "Devices" block each bound device shows what its app reported (model, system and its version, app and its version), when it was last online or last fetched the subscription, its last address (masked) and when it was bound. Unbind, ban and rename are the buttons on the right.
+
+While the user is connected, an **Online now** list shows below: on which server, with whose keys (a bound device's or the user's shared keys), from which addresses and how many connections are open. It refreshes itself from the servers' latest reports (every few seconds); the API gives the same: `GET /api/v1/users/{id}/online`. Connections are cut by unbinding or banning a device. There is no separate "drop connections" button that keeps access: the servers cannot do that yet.
+
 ### Banning a device
 
 An unbound device takes a place again on its next subscription update. To stop that, press **Ban** next to the device in the card:
