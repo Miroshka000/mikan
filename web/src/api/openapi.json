@@ -8274,6 +8274,125 @@
         ],
         "type": "object"
       },
+      "ReadySubTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "builtin": {
+            "description": "Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают",
+            "type": "boolean"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "license": {
+            "description": "Лицензия текста шаблона, SPDX",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Откуда шаблон и списки, на которые он ссылается",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Описание по-русски; панель переводит его по id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name",
+          "summary",
+          "author",
+          "license",
+          "source",
+          "builtin"
+        ],
+        "type": "object"
+      },
+      "ReadySubTemplateOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "body": {
+            "description": "Текст шаблона: для своего шаблона mikan собран из текущих настроек панели",
+            "type": "string"
+          },
+          "builtin": {
+            "description": "Свой шаблон mikan: панель собирает его из своих настроек, когда его загружают",
+            "type": "boolean"
+          },
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "license": {
+            "description": "Лицензия текста шаблона, SPDX",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "description": "Откуда шаблон и списки, на которые он ссылается",
+            "type": "string"
+          },
+          "summary": {
+            "description": "Описание по-русски; панель переводит его по id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "id",
+          "core",
+          "name",
+          "summary",
+          "author",
+          "license",
+          "source",
+          "builtin"
+        ],
+        "type": "object"
+      },
+      "ReadySubTemplatesOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "templates": {
+            "description": "По ядрам, в порядке каталога",
+            "items": {
+              "$ref": "#/components/schemas/ReadySubTemplate"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "templates"
+        ],
+        "type": "object"
+      },
       "RecordingInfo": {
         "additionalProperties": false,
         "properties": {
@@ -19181,6 +19300,81 @@
           }
         },
         "summary": "Профиль из шаблона, без сохранения",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
+    "/api/v1/sub-templates/ready": {
+      "get": {
+        "description": "Каталог, из которого редактор загружает шаблон. В базу панель их сама не кладёт.",
+        "operationId": "list-ready-sub-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadySubTemplatesOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Готовые шаблоны подписки",
+        "tags": [
+          "sub-templates"
+        ]
+      }
+    },
+    "/api/v1/sub-templates/ready/{id}": {
+      "get": {
+        "description": "Ничего не сохраняет: текст для редактора.",
+        "operationId": "get-ready-sub-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadySubTemplateOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Готовый шаблон подписки с текстом",
         "tags": [
           "sub-templates"
         ]
