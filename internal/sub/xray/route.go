@@ -282,33 +282,26 @@ func dnsOf(r routing.Resolvers, geo routing.Geodata, via func(group string) (Ref
 }
 
 // policyDomains are the names a DNS policy's key covers (mihomo's nameserver-policy) as
-// xray's DNS reads them: "geosite:" and "rule-set:" keys list categories and lists after
-// the prefix, the others domains ("+." with every subdomain, "*." one label deep); none
+// xray's DNS reads them (routing.PolicyNames): categories, the panel's lists as their
+// nearest categories, and domains ("+." with every subdomain, "*." one label deep); none
 // for what xray has no form of, or a category geo lacks.
 func policyDomains(key string, geo routing.Geodata) []string {
 	var out []string
-	if rest, ok := strings.CutPrefix(key, "geosite:"); ok {
-		for _, v := range strings.Split(rest, ",") {
-			if v = strings.ToLower(strings.TrimSpace(v)); geo.Has("geosite", v) {
+	kind, names := routing.PolicyNames(key)
+	for _, v := range names {
+		switch {
+		case kind == "geosite":
+			if geo.Has("geosite", v) {
 				out = append(out, "geosite:"+v)
 			}
-		}
-		return out
-	}
-	if rest, ok := strings.CutPrefix(key, "rule-set:"); ok {
-		for _, v := range strings.Split(rest, ",") {
-			sites, _ := geo.List(strings.TrimSpace(v))
+		case kind == "rule-set":
+			sites, _ := geo.List(v)
 			out = append(out, sites...)
-		}
-		return out
-	}
-	for _, v := range strings.Split(key, ",") {
-		switch v = strings.TrimSpace(v); {
 		case strings.HasPrefix(v, "+."):
 			out = append(out, "domain:"+v[2:])
 		case strings.HasPrefix(v, "*."):
 			out = append(out, "regexp:"+wildcard(v, "[^.]+"))
-		case v != "" && !strings.ContainsAny(v, "*:"):
+		case !strings.ContainsAny(v, "*:"):
 			out = append(out, "full:"+v)
 		}
 	}
