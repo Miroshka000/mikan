@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -549,6 +550,23 @@ func TestBrokenTemplateMakesNoProxy(t *testing.T) {
 	for _, src := range []string{"type: vless\nws-path: /ws\n", "type: socks\n"} {
 		if _, err := build.Proxy(mustParse(t, src), build.Input{Name: "X", Host: "203.0.113.7", Port: 443, Keys: keys}); err == nil {
 			t.Errorf("%q made a proxy", src)
+		}
+	}
+}
+
+// Sudoku's httpmask and Snell's obfs-opts reach the client as the template holds them,
+// numbers as numbers.
+func TestSectionsReachTheClient(t *testing.T) {
+	in := build.Input{Name: "X", Host: "vpn.example.com", Port: 4443, Keys: keys}
+	for src, want := range map[string]map[string]any{
+		"type: sudoku\nkey: k\nhttpmask: {disable: false, mode: ws, path-root: 2024}\n": {"httpmask": map[string]any{"disable": false, "mode": "ws", "path-root": 2024}},
+		"type: snell\npsk: p5k-Secret\nversion: 4\nobfs-opts: {mode: tls, host: 443}\n": {"obfs-opts": map[string]any{"mode": "tls", "host": 443}},
+	} {
+		m, _ := client(t, mustParse(t, src), in)
+		for k, v := range want {
+			if !reflect.DeepEqual(m[k], v) {
+				t.Errorf("%s: %#v, want %#v, numbers as int", k, m[k], v)
+			}
 		}
 	}
 }
