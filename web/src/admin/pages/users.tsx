@@ -126,8 +126,9 @@ export function UsersPage() {
   // search, another filter, a user deleted elsewhere) drops out of the selection with it.
   const chosen = useMemo(() => items.filter((u) => selected.has(u.id)), [items, selected]);
   const allSelected = items.length > 0 && chosen.length === items.length;
-  // A page loaded since leaves rows unticked: then the selection is what is ticked again.
-  const byFilter = matching && allSelected;
+  // Once chosen, everyone matching stays chosen until a row, the filter or the search
+  // changes: the list's refresh or another page loaded leaves the choice as it is.
+  const byFilter = matching;
   const openUser = useCallback((id?: number) => void navigate({ search: (s) => ({ ...s, user: id, create: undefined }) }), [navigate]);
   const toggle = useCallback((id: number) => {
     setMatching(false);
@@ -146,6 +147,11 @@ export function UsersPage() {
   const setFilter = (patch: Partial<UsersSearch>) => {
     clear();
     void navigate({ search: (s) => ({ ...s, ...patch }) });
+  };
+  // Another search is another set of users: the choice of everyone matching ends with it.
+  const typeQ = (text: string) => {
+    setMatching(false);
+    setQ(text);
   };
   const resetFilters = () => {
     clearQ();
@@ -199,7 +205,7 @@ export function UsersPage() {
           <div className="flex items-center gap-2">
             <label className="search-field">
               <Search size={16} aria-hidden />
-              <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("users.searchLabel")} />
+              <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => typeQ(e.target.value)} aria-label={t("users.searchLabel")} />
             </label>
             {showFolders || showSources || showHidden ? (
               <Menu.Root>
@@ -294,7 +300,7 @@ export function UsersPage() {
                 ) : (
                   <>
                     {/* Everyone on the page ticked, and the filter holds more: the way to all of them. */}
-                    {allSelected && (data.total > items.length || byFilter) ? (
+                    {byFilter || (allSelected && data.total > items.length) ? (
                       <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--hairline)] px-3 py-2 text-[13px]" role="status">
                         {byFilter ? (
                           <>
@@ -594,9 +600,10 @@ function bulkFilter(s: UsersSearch): Schemas["BulkFilter"] {
   return { state: s.state, q: s.q || undefined, folder: s.folder === undefined ? "all" : String(s.folder), source: s.source ?? "all", hidden: s.hidden ?? "hide" };
 }
 
-/** What the bulk preview found for an action the admin is asked to confirm; byFilter: it goes
- * to everyone the list's filter matches, as many as the server counted. */
-type Asked = { action: Exclude<BulkAction, "enable">; extra?: MoveTo; byFilter: boolean; plan: Schemas["BulkPreviewOutputBody"] };
+/** What the bulk preview found for an action the admin is asked to confirm, and the body the
+ * confirmation sends: the ids or the filter previewed, by filter with the preview's digest as
+ * expect, so the action reaches the very users counted or nobody. */
+type Asked = { action: Exclude<BulkAction, "enable">; body: Schemas["BulkInputBody"]; byFilter: boolean; plan: Schemas["BulkPreviewOutputBody"] };
 
 /** Everyone the list's filter matches, as the list counted them. */
 type Matching = { filter: Schemas["BulkFilter"]; total: number };
@@ -619,10 +626,9 @@ function BulkBar({ chosen, matching, clear, folders }: { chosen: User[]; matchin
   // are hidden (by filter: the list shows only the hidden), hide them otherwise.
   const unhide = matching ? matching.filter.hidden === "only" : n > 0 && chosen.every((u) => u.hidden);
   const hideAction: Asked["action"] = unhide ? "unhide" : "hide";
-  // expect: the number confirmed by filter; another one by then is refused (filter_changed).
-  const run = (action: Asked["action"], extra?: MoveTo, expect?: number) =>
+  const run = (action: Asked["action"], body: Schemas["BulkInputBody"]) =>
     bulk.mutate(
-      { ...target, action, ...extra, ...(matching && expect !== undefined ? { expect } : {}) },
+      body,
       {
         onSuccess: (r) => {
           toast.ok(t(`users.bulkDone.${action}`, { n: r.affected }));
@@ -631,17 +637,19 @@ function BulkBar({ chosen, matching, clear, folders }: { chosen: User[]; matchin
         },
         onError: (e) => {
           toast.error(errorText(e));
-          // The number confirmed may be old (filter_changed): it is counted again on the next ask.
-          if (matching) setAsked(null);
+          // The users confirmed may be others by now (filter_changed): counted again on the next ask.
+          if (body.filter) setAsked(null);
         },
       },
     );
-  const ask = (action: Asked["action"], extra?: MoveTo) =>
-    preview.mutate(
-      { ...target, action, ...extra },
-      { onSuccess: (plan) => setAsked({ action, extra, byFilter: !!matching, plan }), onError: (e) => toast.error(errorText(e)) },
-    );
-  const now = (action: Asked["action"], extra?: MoveTo) => (matching ? ask(action, extra) : run(action, extra));
+  const ask = (action: Asked["action"], extra?: MoveTo) => {
+    const body = { ...target, action, ...extra };
+    preview.mutate(body, {
+      onSuccess: (plan) => setAsked({ action, body: body.filter ? { ...body, expect: plan.digest } : body, byFilter: !!body.filter, plan }),
+      onError: (e) => toast.error(errorText(e)),
+    });
+  };
+  const now = (action: Asked["action"], extra?: MoveTo) => (matching ? ask(action, extra) : run(action, { ...target, action, ...extra }));
   // The confirmation has nothing to confirm once the selection is gone.
   useEffect(() => {
     if (n === 0) setAsked(null);
@@ -688,7 +696,7 @@ function BulkBar({ chosen, matching, clear, folders }: { chosen: User[]; matchin
           <X size={16} />
         </button>
       </FloatingBar>
-      {asked ? <BulkConfirm asked={asked} loading={bulk.isPending} onClose={() => setAsked(null)} onConfirm={() => run(asked.action, asked.extra, asked.plan.found)} /> : null}
+      {asked ? <BulkConfirm asked={asked} loading={bulk.isPending} onClose={() => setAsked(null)} onConfirm={() => run(asked.action, asked.body)} /> : null}
     </>
   );
 }
