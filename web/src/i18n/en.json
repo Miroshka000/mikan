@@ -631,6 +631,7 @@
       "required": "Fill in this field",
       "resp_rules_many": "Too many rules: at most {value}",
       "resp_name": "A rule needs a name: 1 to 80 characters, no line breaks",
+      "resp_name_reserved": "The panel names its own decisions «apps» and «builtin:…»: give the rule another name",
       "resp_group_op": "A group of conditions holds when all of them do or when any does",
       "resp_conds": "Too many conditions in the rule: at most {value}",
       "resp_group_empty": "The nested group is empty: add a condition or remove it",

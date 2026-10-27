@@ -23,6 +23,7 @@ func TestDetectApp(t *testing.T) {
 		"clash.meta/v1.19.32 SlothClash/0.9.4": {Family: FamilyMihomo, Core: Version{1, 19, 32}},
 		"clash.meta/mihomo SlothClash/0.9.4":   {Family: FamilyMihomo},
 		"mihomo/1.19.32 Mikan/0.1.3":           {Family: FamilyMihomo, Core: Version{1, 19, 32}},
+		"Mikan/0.1.3":                          {Family: FamilyMihomo}, // its update check, or a User-Agent of the user's own
 		"mihomo/1.19.33 Kabosu/1.0.0":          {Family: FamilyMihomo, Core: Version{1, 19, 33}},
 		"kabosu/1.0.0":                         {Family: FamilyMihomo}, // a desktop app that names no core still gets Clash
 		"Happ/3.4.1":                           {Family: FamilyXray},
@@ -234,18 +235,17 @@ var pinnedUAs = []struct {
 	{"Stash/2.8.0 Clash/1.11.0", App{Family: FamilyStash}, "stash", false, false, false, ""},
 	// The Mikan app asks for a subscription as "mihomo[/core] Mikan/x", the mihomo on
 	// purpose (MikanApp's SubscriptionOverrides.buildDefaultUserAgent). A bare "Mikan/x"
-	// comes only from its update check or a user's own User-Agent: Identify calls it Mikan,
-	// DetectApp, which has no "mikan" word, an unknown app. Unhandled, not the app's fault.
-	{"Mikan/0.1.3", App{Family: FamilyOther}, "mikan", false, false, false, ""},
+	// comes from its update check or a user's own User-Agent, and is the Clash app too.
+	{"Mikan/0.1.3", App{Family: FamilyMihomo}, "mikan", false, false, false, ""},
 	{"mihomo/1.19.32 Mikan/0.1.3", App{Family: FamilyMihomo, Core: Version{1, 19, 32}}, "mikan", false, false, false, ""},
 	{"mihomo Mikan/1.1.1", App{Family: FamilyMihomo}, "mikan", false, false, false, ""},
-	// Looks wrong: the discontinued Clash apps (the Clash Premium core, not mihomo) are the
-	// generic mihomo app; the built-in rule turns them away before that matters.
-	{"ClashforWindows/0.20.39", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
-	{"Clash for Windows/0.20.39", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
-	{"ClashForAndroid/2.5.12", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
-	{"ClashX/1.118.0 (com.west2online.ClashX; build:1.118.0; macOS 14.0.0) Alamofire/5.8.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, RuleOld},
-	{"ClashX Meta/1.3.0 (com.metacubex.ClashX.meta; build:1.3.0; macOS 14.0.0) Alamofire/5.8.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
+	// The discontinued Clash apps (the Clash Premium core, not mihomo) are apps of their own,
+	// so the tester and the log name them; the built-in rule turns them away.
+	{"ClashforWindows/0.20.39", App{Family: FamilyMihomo}, "cfw", false, false, false, RuleOld},
+	{"Clash for Windows/0.20.39", App{Family: FamilyMihomo}, "cfw", false, false, false, RuleOld},
+	{"ClashForAndroid/2.5.12", App{Family: FamilyMihomo}, "cfa", false, false, false, RuleOld},
+	{"ClashX/1.118.0 (com.west2online.ClashX; build:1.118.0; macOS 14.0.0) Alamofire/5.8.0", App{Family: FamilyMihomo}, "clashx", false, false, false, RuleOld},
+	{"ClashX Meta/1.3.0 (com.metacubex.ClashX.meta; build:1.3.0; macOS 14.0.0) Alamofire/5.8.0", App{Family: FamilyMihomo}, "clashxmeta", false, false, false, ""},
 	{"ShadowsocksR/2.5.6", App{Family: FamilyOther}, "", false, false, false, RuleSSR},
 	{"ssr/1.0", App{Family: FamilyOther}, "", false, false, false, RuleSSR},
 	{"", App{Family: FamilyOther}, "", false, false, false, ""},
@@ -278,7 +278,7 @@ var pinnedUAs = []struct {
 
 	// A row for every word and prefix of the Catalog, as word+"/1.0": TestDetectionIsPinned
 	// fails for one that has none, so a new entry is pinned when it is added.
-	{"mikan/1.0", App{Family: FamilyOther}, "mikan", false, false, false, ""}, // a bare Mikan: see Mikan/0.1.3
+	{"mikan/1.0", App{Family: FamilyMihomo}, "mikan", false, false, false, ""},
 	{"kabosu/1.0", App{Family: FamilyMihomo}, "kabosu", false, false, false, ""},
 	{"koala/1.0", App{Family: FamilyMihomo}, "koala", false, false, false, ""},
 	{"clashfest/1.0", App{Family: FamilyMihomo}, "clashfest", false, false, false, ""},
@@ -286,6 +286,14 @@ var pinnedUAs = []struct {
 	{"flclash/1.0", App{Family: FamilyMihomo}, "flclash", false, false, false, ""},
 	{"verge/1.0", App{Family: FamilyMihomo}, "verge", false, false, false, ""},
 	{"clashmetaforandroid/1.0", App{Family: FamilyMihomo}, "clashmeta", false, false, false, ""},
+	{"clashx meta/1.0", App{Family: FamilyMihomo}, "clashxmeta", false, false, false, ""},
+	{"clashxmeta/1.0", App{Family: FamilyMihomo}, "clashxmeta", false, false, false, ""},
+	{"clash for windows/1.0", App{Family: FamilyMihomo}, "cfw", false, false, false, RuleOld},
+	{"clashforwindows/1.0", App{Family: FamilyMihomo}, "cfw", false, false, false, RuleOld},
+	// The built-in rule reads "clash ?for ?windows", with no hyphens: the app is told all the same.
+	{"clash-for-windows/1.0", App{Family: FamilyMihomo}, "cfw", false, false, false, ""},
+	{"clashforandroid/1.0", App{Family: FamilyMihomo}, "cfa", false, false, false, RuleOld},
+	{"clashx/1.0", App{Family: FamilyMihomo}, "clashx", false, false, false, RuleOld},
 	{"mihomo/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
 	{"clash/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},
 	{"prizrak/1.0", App{Family: FamilyMihomo}, "mihomo", false, false, false, ""},

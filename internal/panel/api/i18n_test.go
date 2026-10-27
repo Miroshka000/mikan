@@ -54,7 +54,7 @@ var codesByText = []string{
 	"routes_service", "routes_target", "routes_direct", "routes_dns",
 	"routes_lists_many", "routes_list_name", "routes_list_url", "routes_list_behavior", "routes_list_format", "routes_servers",
 	// apps.CheckError, as a detail's Message: the response rules of the subscription.
-	"resp_rules_many", "resp_name", "resp_group_op", "resp_conds", "resp_group_empty", "resp_groups", "resp_header", "resp_value", "resp_value_empty", "resp_regex",
+	"resp_rules_many", "resp_name", "resp_name_reserved", "resp_group_op", "resp_conds", "resp_group_empty", "resp_groups", "resp_header", "resp_value", "resp_value_empty", "resp_regex",
 	"resp_op", "resp_respond", "resp_format", "resp_template", "resp_text", "resp_html", "resp_headers_many", "resp_header_name", "resp_header_value",
 	// model.TemplateError of the subscription templates, as a detail's Message.
 	"template_yaml", "template_empty", "template_groups", "template_group_name", "template_group_dup", "template_group_member",

@@ -97,9 +97,9 @@ func koalaCore(app Version) Version {
 func DetectApp(userAgent string) App {
 	ua := strings.ToLower(userAgent)
 	switch {
-	case names(FamilyStash, ua, ""):
+	case names(FamilyStash, ua):
 		return App{Family: FamilyStash}
-	case names(FamilySingBox, ua, ""):
+	case names(FamilySingBox, ua):
 		if byID["hiddify"].matches(ua) {
 			// Hiddify 4 (2026) runs a sing-box 1.13 fork; the 2.x of 2024 had no AnyTLS. One
 			// that does not say its version is taken for the old one.
@@ -115,9 +115,7 @@ func DetectApp(userAgent string) App {
 			a.Core = versionOf(m)
 		}
 		return a
-	// The Mikan app asks for a subscription as "mihomo[/core] Mikan/x"; a bare "Mikan/x" stays
-	// an app we do not know, as before the Catalog had Mikan.
-	case names(FamilyMihomo, ua, "mikan"):
+	case names(FamilyMihomo, ua):
 		a := App{Family: FamilyMihomo}
 		if m := mihomoVersion.FindStringSubmatch(ua); m != nil {
 			a.Core = versionOf(m)
@@ -125,7 +123,7 @@ func DetectApp(userAgent string) App {
 			a.Core = koalaCore(versionOf(m))
 		}
 		return a
-	case names(FamilyXray, ua, ""):
+	case names(FamilyXray, ua):
 		return App{Family: FamilyXray}
 	}
 	return App{Family: FamilyOther}

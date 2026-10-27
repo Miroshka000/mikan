@@ -141,14 +141,21 @@ func (e *CheckError) Error() string { return e.Path + ": " + e.Code }
 
 func bad(path, code, detail string) error { return &CheckError{Path: path, Code: code, Detail: detail} }
 
-// CheckRules checks the admin's rules as a list.
+// CheckRules checks the admin's rules as a list, as they are written. A rule's name is what
+// the tester and the log say decided, next to the panel's own labels (RuleApps, RuleSSR,
+// RuleOld): a rule may not take one of them, or a builtin:* one the panel may add later.
+// Check leaves names alone, so a rule saved before still loads and runs.
 func CheckRules(rules []Rule, opts CheckOpts) error {
 	if len(rules) > MaxRules {
 		return bad("rules", "resp_rules_many", strconv.Itoa(MaxRules))
 	}
 	for i, r := range rules {
-		if err := r.Check("rules."+strconv.Itoa(i), opts); err != nil {
+		path := "rules." + strconv.Itoa(i)
+		if err := r.Check(path, opts); err != nil {
 			return err
+		}
+		if name := strings.TrimSpace(r.Name); name == RuleApps || strings.HasPrefix(name, "builtin:") {
+			return bad(path+".name", "resp_name_reserved", name)
 		}
 	}
 	return nil

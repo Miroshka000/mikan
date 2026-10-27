@@ -95,6 +95,13 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(out), "resp_regex") || !strings.Contains(string(out), "body.rules[0].when.conds[0].value") {
 		t.Fatalf("a regular expression that does not compile: %d %s", resp.StatusCode, out)
 	}
+	// A rule may not take a name the panel gives its own decisions.
+	reserved := map[string]any{"builtin": true, "rules": []apps.Rule{{Name: apps.RuleOld, Enabled: true,
+		When: apps.Group{Op: apps.And, Conds: []apps.Cond{}, Groups: []apps.Inner{}}, Do: apps.Action{Respond: apps.Respond403}}}}
+	resp, out = h.do(http.MethodPut, api+"/sub-rules", reserved, csrf)
+	if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(out), "resp_name_reserved") || !strings.Contains(string(out), "body.rules[0].name") {
+		t.Fatalf("a reserved name: %d %s", resp.StatusCode, out)
+	}
 	// A change is the session's own: without its CSRF token nothing is saved.
 	if resp, _ := h.do(http.MethodPut, api+"/sub-rules", bad, nil); resp.StatusCode == http.StatusOK {
 		t.Fatal("a save without the session's CSRF token went through")
@@ -158,7 +165,7 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 		t.Errorf("saved rules: %+v", test)
 	}
 	test = probe(map[string]any{"user_agent": "ClashforWindows/0.20.39", "headers": []apps.Header{}})
-	if test.Rule != apps.RuleOld || test.Respond != "stub" || test.Position != 0 || !strings.Contains(test.Text, "not supported") && !strings.Contains(test.Text, "не поддерживается") {
+	if test.Rule != apps.RuleOld || test.Respond != "stub" || test.Position != 0 || test.AppID != "cfw" || !strings.Contains(test.Text, "not supported") && !strings.Contains(test.Text, "не поддерживается") {
 		t.Errorf("a discontinued app: %+v", test)
 	}
 	test = probe(map[string]any{"user_agent": "curl/8.9", "headers": []apps.Header{}, "rules": []apps.Rule{}, "builtin": false})

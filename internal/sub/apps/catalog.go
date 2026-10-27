@@ -35,6 +35,14 @@ var Catalog = []Known{
 	{ID: "flclash", Name: "FlClash", Family: FamilyMihomo, Words: []string{"flclash"}},
 	{ID: "verge", Name: "Clash Verge", Family: FamilyMihomo, Words: []string{"verge"}},
 	{ID: "clashmeta", Name: "Clash Meta for Android", Family: FamilyMihomo, Words: []string{"clashmetaforandroid"}},
+	// The Clash apps that were given up on, on the Clash Premium core: the built-in rule
+	// (RuleOld) turns them away, and with it off the admin blocks them here. The order
+	// matters: ClashX Meta, a current mihomo app, is told before ClashX, whose word it holds
+	// (FlClashX is told as FlClash, further up).
+	{ID: "clashxmeta", Name: "ClashX Meta", Family: FamilyMihomo, Words: []string{"clashx meta", "clashxmeta"}},
+	{ID: "cfw", Name: "Clash for Windows", Family: FamilyMihomo, Words: []string{"clash for windows", "clashforwindows", "clash-for-windows"}},
+	{ID: "cfa", Name: "Clash for Android", Family: FamilyMihomo, Words: []string{"clashforandroid"}},
+	{ID: "clashx", Name: "ClashX", Family: FamilyMihomo, Words: []string{"clashx"}},
 	{ID: "mihomo", Name: "mihomo", Family: FamilyMihomo, Generic: true, Words: []string{"mihomo", "clash", "prizrak", "flowvy", "murge", "rabbit"}},
 
 	{ID: "happ", Name: "Happ", Family: FamilyXray, Words: []string{"happ"}},
@@ -100,11 +108,10 @@ func (k Known) matches(ua string) bool {
 	return false
 }
 
-// names says whether ua (lowercase) holds a word or prefix of an app of family f, the app
-// except left out.
-func names(f Family, ua, except string) bool {
+// names says whether ua (lowercase) holds a word or prefix of an app of family f.
+func names(f Family, ua string) bool {
 	for _, k := range Catalog {
-		if k.Family == f && k.ID != except && k.matches(ua) {
+		if k.Family == f && k.matches(ua) {
 			return true
 		}
 	}
@@ -113,7 +120,7 @@ func names(f Family, ua, except string) bool {
 
 // FamilyNamed says whether the User-Agent holds a word or prefix of an app of family f.
 func FamilyNamed(f Family, userAgent string) bool {
-	return names(f, strings.ToLower(userAgent), "")
+	return names(f, strings.ToLower(userAgent))
 }
 
 // Named says whether the User-Agent holds a word or prefix of the app id, whatever app
