@@ -224,6 +224,12 @@ type handlers struct {
 	pendingMu sync.Mutex
 	pending   map[int64]pendingTOTP
 
+	// passkeyMu guards the passkey ceremonies under way (passkeys.go): adding one, by admin,
+	// and signing in, by the ceremony's id.
+	passkeyMu     sync.Mutex
+	passkeyAdd    map[int64]passkeyCeremony
+	passkeyLogins map[string]passkeyCeremony
+
 	metricsCache metricsCache
 
 	// speedCooldown spaces the speed tests of a node.
@@ -298,9 +304,11 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	h := &handlers{d: d, api: api, dummyHash: dummy, hashSem: make(chan struct{}, 4), pending: map[int64]pendingTOTP{}}
+	h := &handlers{d: d, api: api, dummyHash: dummy, hashSem: make(chan struct{}, 4), pending: map[int64]pendingTOTP{},
+		passkeyAdd: map[int64]passkeyCeremony{}, passkeyLogins: map[string]passkeyCeremony{}}
 	api.UseMiddleware(h.middleware)
 	h.registerAuth()
+	h.registerPasskeys()
 	h.registerUsers()
 	h.registerFolders()
 	h.registerHapp()

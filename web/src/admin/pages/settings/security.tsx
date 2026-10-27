@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Copy, KeyRound, LogOut, ShieldCheck } from "lucide-react";
+import { ChevronRight, Copy, Fingerprint, KeyRound, LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../../api/client";
 import { meQuery, qk } from "../../../api/hooks";
@@ -13,7 +13,8 @@ import { caName, certLine, CertPill, CertStatusBlock } from "../../../components
 import { t } from "../../../i18n";
 import { useCopy } from "../../../lib/copy";
 import { fieldErrors, onFormError } from "../../../lib/fields";
-import { ago } from "../../../lib/format";
+import { ago, dateShort } from "../../../lib/format";
+import { createPasskey, passkeyCancelled, passkeysSupported } from "../../../lib/passkey";
 
 export function AccessCard({ s }: { s: Schemas["SettingsView"] }) {
   const toast = useToast();
@@ -342,6 +343,119 @@ export function TwoFactorCard() {
           <FormActions saving={start.isPending} disabled={!startPw} label={t("settings.twoFactorEnable")} />
         </form>
       )}
+    </section>
+  );
+}
+
+/**
+ * Passkeys: a way in beside the password. Adding one asks for the password (and the code when
+ * 2FA is on) before the browser makes the key; the panel needs its domain for them.
+ */
+export function PasskeysCard({ s }: { s: Schemas["SettingsView"] }) {
+  const me = useQuery(meQuery);
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [pw, setPw] = useState("");
+  const [code, setCode] = useState("");
+  const [deleting, setDeleting] = useState<Schemas["PasskeyView"] | null>(null);
+  const totp = !!me.data?.admin.totp_enabled;
+  const usable = !!s.domain && passkeysSupported();
+  const list = useQuery({ queryKey: qk.passkeys, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/auth/passkeys", { signal })) });
+  const add = useMutation({
+    mutationFn: async () => {
+      const begin = await unwrap(api.POST("/api/v1/auth/passkeys/begin", { body: { password: pw, totp: totp ? code : undefined } }));
+      const credential = await createPasskey(begin.options);
+      return unwrap(api.POST("/api/v1/auth/passkeys", { body: { name: name.trim() || t("settings.passkeyNameDefault"), credential } }));
+    },
+    onSuccess: () => {
+      setName("");
+      setPw("");
+      setCode("");
+      void qc.invalidateQueries({ queryKey: qk.passkeys });
+      toast.ok(t("settings.passkeyAdded"));
+    },
+    onError: (e) => {
+      if (passkeyCancelled(e)) return;
+      if (e instanceof ApiError) onFormError(e, toast);
+      else toast.error(t("login.passkeyFailed"));
+    },
+  });
+  const remove = useMutation({
+    mutationFn: (id: number) => unwrap(api.DELETE("/api/v1/auth/passkeys/{id}", { params: { path: { id } } })),
+    onSuccess: () => {
+      setDeleting(null);
+      void qc.invalidateQueries({ queryKey: qk.passkeys });
+      toast.ok(t("settings.passkeyDeleted"));
+    },
+    onError: (e) => toast.error(errorText(e)),
+  });
+  const errors = fieldErrors(add.error);
+  return (
+    <section className="card glass reveal" style={{ "--i": 3 } as React.CSSProperties}>
+      <CardHead title={t("settings.passkeys")} sub={t("settings.passkeysSub")} aside={<Fingerprint size={20} className="text-[var(--ink-300)]" aria-hidden />} />
+      <QueryBoundary query={list} pending={<Skeleton style={{ height: 48 }} />}>
+        {(keys) =>
+          keys.length === 0 ? (
+            <p className="mb-4 text-[13px] text-[var(--ink-500)]">{t("settings.passkeysNone")}</p>
+          ) : (
+            <ul className="row-list mb-4">
+              {keys.map((k) => (
+                <li key={k.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-medium">{k.name}</div>
+                    <div className="text-xs text-[var(--ink-500)]">
+                      {t("settings.passkeyAddedOn", { date: dateShort(k.created_at) })} · {k.last_used_at ? t("settings.passkeyUsed", { ago: ago(k.last_used_at) }) : t("settings.passkeyNeverUsed")}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="danger" onClick={() => setDeleting(k)}>
+                    {t("common.delete")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </QueryBoundary>
+      {!s.domain ? (
+        <p className="text-[13px] text-[var(--ink-500)]">{t("settings.passkeyNoDomain")}</p>
+      ) : !usable ? (
+        <p className="text-[13px] text-[var(--ink-500)]">{t("settings.passkeyUnsupported")}</p>
+      ) : (
+        <form
+          className="border-t border-[var(--hairline)] pt-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            add.mutate();
+          }}
+          noValidate
+        >
+          <Field label={t("settings.passkeyName")} htmlFor="pk-name" error={errors.name}>
+            <input id="pk-name" className="input max-w-[320px]" maxLength={60} placeholder={t("settings.passkeyNameDefault")} value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field label={t("login.password")} htmlFor="pk-pw" hint={t("settings.passkeyPasswordHint")} error={errors.password}>
+            <input id="pk-pw" type="password" className="input max-w-[320px]" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="current-password" />
+          </Field>
+          {totp ? (
+            <Field label={t("settings.totpCode")} htmlFor="pk-code" error={errors.totp}>
+              <input id="pk-code" className="input mono max-w-[160px]" inputMode="numeric" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.trim())} autoComplete="one-time-code" />
+            </Field>
+          ) : null}
+          <FormActions saving={add.isPending} disabled={!pw || (totp && code.length !== 6)} label={t("settings.passkeyAdd")} />
+        </form>
+      )}
+      <Confirm
+        open={!!deleting}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+        title={t("settings.passkeyDeleteTitle")}
+        text={t("settings.passkeyDeleteText")}
+        confirm={t("common.delete")}
+        danger
+        loading={remove.isPending}
+        onConfirm={() => deleting && remove.mutate(deleting.id)}
+      />
     </section>
   );
 }
