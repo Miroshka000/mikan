@@ -55,7 +55,7 @@ func TestAutoSwitchesAndSubscriptionFetch(t *testing.T) {
 		t.Fatal(err)
 	}
 	x := inbounds[0]
-	h.now = h.now.Add(time.Hour)
+	h.advance(time.Hour)
 	resp, body := h.do(http.MethodPatch, "/"+adminPath+"/api/v1/inbounds/"+strconv.FormatInt(x.ID, 10), map[string]any{"auto_port": false}, csrf)
 	var view struct {
 		AutoPort bool           `json:"auto_port"`

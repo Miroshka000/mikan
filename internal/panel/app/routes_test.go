@@ -81,7 +81,7 @@ func TestRoutesOverHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.now = h.now.Add(time.Minute) // past the profile cache
+	h.advance(time.Minute) // past the profile cache
 	resp, body = h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "mihomo/1.19.31"})
 	var cfg struct {
 		Rules []string `json:"rules"`

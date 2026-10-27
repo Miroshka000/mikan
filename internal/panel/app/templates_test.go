@@ -95,7 +95,7 @@ func TestSubTemplatesOverHTTP(t *testing.T) {
 	}
 	fetch := func(ua, query string) string {
 		t.Helper()
-		h.now = h.now.Add(time.Minute) // past the profile cache
+		h.advance(time.Minute) // past the profile cache
 		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken+query, nil, map[string]string{"User-Agent": ua})
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("%s: %d %s", ua, resp.StatusCode, body)

@@ -116,7 +116,7 @@ func TestHappAutoRouting(t *testing.T) {
 	}
 	profile := func() map[string]any {
 		t.Helper()
-		k.now = k.now.Add(time.Minute) // past the settings cache
+		k.advance(time.Minute) // past the settings cache
 		resp, _ := k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "Happ/3.6.0/Android/1"})
 		link := resp.Header.Get("routing")
 		payload, ok := strings.CutPrefix(link, "happ://routing/onadd/")
@@ -168,7 +168,7 @@ func TestXrayJSONSwitch(t *testing.T) {
 	}
 	fetch := func() (*http.Response, []byte) {
 		t.Helper()
-		k.now = k.now.Add(time.Minute) // past the settings cache
+		k.advance(time.Minute) // past the settings cache
 		return k.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "Happ/3.6.0/Android/1", "X-Hwid": "phone-0123456789"})
 	}
 	var configs []map[string]any
