@@ -45,7 +45,9 @@ type TelegramView struct {
 	Route          TelegramRoute            `json:"route" doc:"Как бот ходит в Telegram"`
 	Infrastructure infraalerts.AlertsConfig `json:"infrastructure"`
 	AdminChatSet   bool                     `json:"admin_chat_set"`
-	AlertsRefused  *infraalerts.Refused     `json:"alerts_refused,omitempty" doc:"Последнее уведомление, которое Telegram отверг насовсем (бот заблокирован, чат или канал недоступен): оно не доставлено и не повторяется"`
+	DiscordSet     bool                     `json:"discord_set" doc:"Webhook Discord для уведомлений админу сохранён; сам адрес не возвращается"`
+	DiscordName    string                   `json:"discord_name,omitempty" doc:"Имя webhook в Discord"`
+	AlertsRefused  *infraalerts.Refused     `json:"alerts_refused,omitempty" doc:"Последнее уведомление, которое Telegram или Discord отверг насовсем (бот заблокирован, чат, канал или webhook недоступен): оно не доставлено и не повторяется"`
 	ChannelError   string                   `json:"channel_error,omitempty" doc:"Почему бот не может проверить подписку на канал: channel_not_admin (бот не администратор канала), channel_not_found, unreachable или ответ Telegram. Пока ошибка есть, обязательная подписка никого не останавливает"`
 }
 
@@ -217,6 +219,11 @@ func (h *handlers) telegramView(ctx context.Context) (TelegramView, error) {
 			return v, err
 		}
 	}
+	if d, ok, err := settings.Get[infraalerts.Discord](ctx, h.d.Settings, infraalerts.KeyDiscord); err != nil {
+		return v, err
+	} else if ok && d.URL != "" {
+		v.DiscordSet, v.DiscordName = true, d.Name
+	}
 	if r, ok, err := settings.Get[infraalerts.Refused](ctx, h.d.Settings, infraalerts.KeyRefused); err != nil {
 		return v, err
 	} else if ok && r.At > 0 {
@@ -324,6 +331,10 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 	if b.Infrastructure != nil {
 		details["infrastructure"] = true
 	}
+	discord, err := h.nextDiscord(ctx, b.Infrastructure, details)
+	if err != nil {
+		return nil, err
+	}
 	if b.Enabled != nil && *b.Enabled && token == "" {
 		return nil, fieldErr("body.enabled", "tg_no_token")
 	}
@@ -381,6 +392,11 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 				return err
 			}
 		}
+		if discord != nil {
+			if err := settings.Set(ctx, set, infraalerts.KeyDiscord, *discord); err != nil {
+				return err
+			}
+		}
 		if b.Enabled != nil {
 			// Turning the bot on again brings the official bot addon back if none answers, also
 			// after the admin removed it.
@@ -408,6 +424,44 @@ func (h *handlers) updateTelegram(ctx context.Context, in *patchTelegramInput) (
 		return nil, err
 	}
 	return &telegramOutput{Body: v}, nil
+}
+
+// DiscordChecker asks Discord about a webhook (*infraalerts.DiscordClient): its name, or a
+// *infraalerts.DiscordError when Discord has no such webhook.
+type DiscordChecker interface {
+	Check(ctx context.Context, hook string) (string, error)
+}
+
+// nextDiscord is the Discord webhook a PATCH sets for the admin's alerts: nil when it leaves
+// the webhook as it is, an empty one when it removes it. A new address is asked of Discord
+// first, so one that names no webhook is refused here and not at the first alert. The
+// journal says that it changed, never the address: that is the secret.
+func (h *handlers) nextDiscord(ctx context.Context, p *infraalerts.AlertsConfigPatch, details map[string]any) (*infraalerts.Discord, error) {
+	if p == nil || p.DiscordWebhook == nil {
+		return nil, nil
+	}
+	if strings.TrimSpace(*p.DiscordWebhook) == "" {
+		details["discord"] = "removed"
+		return &infraalerts.Discord{}, nil
+	}
+	hook, err := infraalerts.ParseDiscordWebhook(*p.DiscordWebhook)
+	if err != nil {
+		return nil, fieldErr("body.infrastructure.discord_webhook", "discord_webhook_format")
+	}
+	check := h.d.Discord
+	if check == nil {
+		check = infraalerts.NewDiscordClient()
+	}
+	name, err := check.Check(ctx, hook)
+	var de *infraalerts.DiscordError
+	switch {
+	case errors.As(err, &de) && de.Code >= 400 && de.Code < 500 && de.Code != 429:
+		return nil, fieldErr("body.infrastructure.discord_webhook", "discord_webhook_invalid")
+	case err != nil:
+		return nil, huma.Error502BadGateway("discord_unreachable")
+	}
+	details["discord"] = "set"
+	return &infraalerts.Discord{URL: hook, Name: name}, nil
 }
 
 // proxyHostOK: where the bot may connect as its proxy. A proxy next to the panel (an

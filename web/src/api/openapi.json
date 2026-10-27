@@ -606,6 +606,17 @@
           "events": {
             "$ref": "#/components/schemas/Events"
           },
+          "group_chat": {
+            "description": "Группа Telegram, куда тоже идут уведомления админу: @username или числовой ID; пусто — нет",
+            "maxLength": 40,
+            "type": "string"
+          },
+          "group_thread": {
+            "description": "Тема группы (message_thread_id) для групп с темами; 0 — общий чат группы",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "public_changes": {
             "type": "boolean"
           },
@@ -634,8 +645,22 @@
           "admin_enabled": {
             "type": "boolean"
           },
+          "discord_webhook": {
+            "description": "Адрес webhook канала Discord (https://discord.com/api/webhooks/…), куда тоже идут уведомления админу; пустая строка — удалить. В ответе не возвращается",
+            "maxLength": 300,
+            "type": "string"
+          },
           "events": {
             "$ref": "#/components/schemas/EventsPatch"
+          },
+          "group_chat": {
+            "maxLength": 40,
+            "type": "string"
+          },
+          "group_thread": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
           },
           "public_changes": {
             "type": "boolean"
@@ -10960,7 +10985,7 @@
           },
           "alerts_refused": {
             "$ref": "#/components/schemas/Refused",
-            "description": "Последнее уведомление, которое Telegram отверг насовсем (бот заблокирован, чат или канал недоступен): оно не доставлено и не повторяется"
+            "description": "Последнее уведомление, которое Telegram или Discord отверг насовсем (бот заблокирован, чат, канал или webhook недоступен): оно не доставлено и не повторяется"
           },
           "bot": {
             "$ref": "#/components/schemas/TelegramBot"
@@ -10979,6 +11004,14 @@
           "defaults": {
             "$ref": "#/components/schemas/Texts",
             "description": "Встроенные тексты на языке бота: пустое поле берёт их"
+          },
+          "discord_name": {
+            "description": "Имя webhook в Discord",
+            "type": "string"
+          },
+          "discord_set": {
+            "description": "Webhook Discord для уведомлений админу сохранён; сам адрес не возвращается",
+            "type": "boolean"
           },
           "enabled": {
             "type": "boolean"
@@ -11026,7 +11059,8 @@
           "accounts",
           "route",
           "infrastructure",
-          "admin_chat_set"
+          "admin_chat_set",
+          "discord_set"
         ],
         "type": "object"
       },
