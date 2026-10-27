@@ -32,7 +32,9 @@ func TemplateParts(p profile.Profile, src string) (Parts, error) {
 	}
 	var out Parts
 	all := anyList(cfg["proxies"])
-	for _, x := range all[:len(all)-len(in)] { // the template's own come first
+	// fillTemplate keeps the template's own proxies first and puts the panel's that went in
+	// (in) after them: the own are all but the last len(in).
+	for _, x := range all[:len(all)-len(in)] {
 		if m, ok := x.(map[string]any); ok {
 			if y, ok := ReadProxy(m); ok {
 				out.Proxies = append(out.Proxies, y)

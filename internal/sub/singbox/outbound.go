@@ -46,7 +46,11 @@ func singboxOutbound(p model.Proxy) (map[string]any, bool) {
 		}
 	case "tuic":
 		o["type"], o["uuid"], o["password"] = "tuic", p.UUID, p.Password
-		o["congestion_control"], o["udp_relay_mode"] = p.Congestion, "native"
+		relay := p.UDPRelay
+		if relay == "" {
+			relay = "native"
+		}
+		o["congestion_control"], o["udp_relay_mode"] = p.Congestion, relay
 	case "anytls":
 		o["type"], o["password"] = "anytls", p.Password
 	case "shadowsocks":
@@ -66,8 +70,15 @@ func singboxOutbound(p model.Proxy) (map[string]any, bool) {
 		case "tcp":
 		case "ws":
 			t := map[string]any{"type": "ws", "path": tr.Path}
+			h := map[string]any{}
+			for k, v := range tr.Headers {
+				h[k] = v
+			}
 			if tr.Host != "" {
-				t["headers"] = map[string]any{"Host": tr.Host}
+				h["Host"] = tr.Host
+			}
+			if len(h) > 0 {
+				t["headers"] = h
 			}
 			o["transport"] = t
 		case "grpc":

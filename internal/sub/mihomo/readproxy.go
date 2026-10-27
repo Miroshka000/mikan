@@ -13,12 +13,9 @@ import (
 // Trojan, Hysteria2, TUIC, AnyTLS, Shadowsocks); false for one the model cannot hold: a
 // protocol of mihomo's own, a Shadowsocks plugin or smux, UDP over TCP of a version mihomo
 // refuses, a transport but TCP, WebSocket and gRPC (an XHTTP of the template's has none of
-// the Xray names the model keeps), a WebSocket header but Host, no port.
+// the Xray names the model keeps), no port (but a Hysteria2 range).
 func ReadProxy(m map[string]any) (model.Proxy, bool) {
 	p := model.Proxy{Name: str(m["name"]), Type: str(m["type"]), Server: str(m["server"]), Port: number(m["port"])}
-	if p.Port == 0 {
-		return p, false
-	}
 	// A proxy that leaves udp out is taken as carrying it, as the sing-box config made of
 	// the profile has always had it.
 	p.UDP = m["udp"] != false
@@ -39,10 +36,11 @@ func ReadProxy(m map[string]any) (model.Proxy, bool) {
 				MinPacket: number(m["obfs-min-packet-size"]), MaxPacket: number(m["obfs-max-packet-size"])}
 		}
 	case "tuic":
-		// The model's TUIC relays UDP natively, whatever udp-relay-mode the template gives:
-		// a TUIC server takes both.
 		p.UUID, p.Password, p.UDP = str(m["uuid"]), str(m["password"]), true
 		p.Congestion = str(m["congestion-controller"])
+		if r := str(m["udp-relay-mode"]); r != "native" {
+			p.UDPRelay = r
+		}
 	case "ss":
 		p.Type, p.Cipher, p.Password = "shadowsocks", str(m["cipher"]), str(m["password"])
 		if str(m["plugin"]) != "" || anyMap(m["smux"])["enabled"] == true {
@@ -76,7 +74,8 @@ func ReadProxy(m map[string]any) (model.Proxy, bool) {
 	case "hysteria2", "tuic", "anytls": // TLS by themselves
 		p.TLS = tlsOf(m, reality)
 	}
-	return p, true
+	// A Hysteria2 proxy may give its hopping range alone.
+	return p, p.Port != 0 || p.Ports != ""
 }
 
 // tlsOf is the TLS of a proxy that has it.
@@ -102,10 +101,14 @@ func transportOf(m map[string]any) (*model.Transport, bool) {
 		w := anyMap(m["ws-opts"])
 		tr := &model.Transport{Network: n, Path: str(w["path"])}
 		for k, v := range anyMap(w["headers"]) {
-			if !strings.EqualFold(k, "Host") {
-				return nil, false
+			if strings.EqualFold(k, "Host") {
+				tr.Host = str(v)
+				continue
 			}
-			tr.Host = str(v)
+			if tr.Headers == nil {
+				tr.Headers = map[string]string{}
+			}
+			tr.Headers[k] = str(v)
 		}
 		return tr, true
 	case "grpc":

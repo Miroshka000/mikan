@@ -43,13 +43,15 @@ func TestOutbound(t *testing.T) {
 			`{"packet_encoding":"xudp",` + host + `,"tag":"V","transport":{"idle_timeout":"15s","ping_timeout":"10s","service_name":"api","type":"grpc"},"type":"vless","uuid":"u"}`},
 		{"Trojan WebSocket of no UDP", model.Proxy{Name: "T", Type: "trojan", Server: "203.0.113.7", Port: 443, Password: "p",
 			TLS:       &model.TLS{SNI: "a.example", Insecure: true},
-			Transport: &model.Transport{Network: "ws", Path: "/w", Host: "cdn.example"}},
-			`{"network":"tcp","password":"p",` + host + `,"tag":"T","tls":{"enabled":true,"insecure":true,"server_name":"a.example"},"transport":{"headers":{"Host":"cdn.example"},"path":"/w","type":"ws"},"type":"trojan"}`},
+			Transport: &model.Transport{Network: "ws", Path: "/w", Host: "cdn.example", Headers: map[string]string{"User-Agent": "x"}}},
+			`{"network":"tcp","password":"p",` + host + `,"tag":"T","tls":{"enabled":true,"insecure":true,"server_name":"a.example"},"transport":{"headers":{"Host":"cdn.example","User-Agent":"x"},"path":"/w","type":"ws"},"type":"trojan"}`},
 		{"Hysteria2", model.Proxy{Name: "H", Type: "hysteria2", Server: "203.0.113.7", Port: 443, Ports: "20000-30000, 40000", Password: "p", ALPN: []string{"h3"},
 			Obfs: &model.Obfs{Type: "salamander", Password: "o"}, TLS: &model.TLS{SNI: "a.example", Fingerprint: "chrome"}},
 			`{"obfs":{"password":"o","type":"salamander"},"password":"p","server":"203.0.113.7","server_ports":["20000:30000","40000"],"tag":"H","tls":{"alpn":["h3"],"enabled":true,"server_name":"a.example"},"type":"hysteria2"}`},
 		{"TUIC", model.Proxy{Name: "U", Type: "tuic", Server: "203.0.113.7", Port: 443, UUID: "u", Password: "p", ALPN: []string{"h3"}, Congestion: "bbr"},
 			`{"congestion_control":"bbr","password":"p",` + host + `,"tag":"U","tls":{"alpn":["h3"],"enabled":true},"type":"tuic","udp_relay_mode":"native","uuid":"u"}`},
+		{"TUIC of QUIC relaying", model.Proxy{Name: "U", Type: "tuic", Server: "203.0.113.7", Port: 443, UUID: "u", Password: "p", Congestion: "bbr", UDPRelay: "quic"},
+			`{"congestion_control":"bbr","password":"p",` + host + `,"tag":"U","tls":{"enabled":true},"type":"tuic","udp_relay_mode":"quic","uuid":"u"}`},
 		{"AnyTLS", model.Proxy{Name: "A", Type: "anytls", Server: "203.0.113.7", Port: 443, Password: "p", UDP: true, TLS: &model.TLS{SNI: "a.example", Fingerprint: "chrome"}},
 			`{"password":"p",` + host + `,"tag":"A","tls":{"enabled":true,"server_name":"a.example","utls":{"enabled":true,"fingerprint":"chrome"}},"type":"anytls"}`},
 		{"Shadowsocks", model.Proxy{Name: "S", Type: "shadowsocks", Server: "203.0.113.7", Port: 443, Cipher: "2022-blake3-aes-128-gcm", Password: "k", UDP: true, UDPOverTCP: 2},
@@ -79,8 +81,10 @@ func TestOwnProfileProxies(t *testing.T) {
 	lists(t)
 	src := `proxies:
   - {name: вход, type: trojan, server: 198.51.100.7, port: 443, password: x, sni: entry.example, tls: true, skip-cert-verify: true, udp: true}
+  - {name: прыжки, type: hysteria2, server: 198.51.100.8, ports: 20000-30000, password: x}
+  - {name: cdn, type: vless, server: 198.51.100.9, port: 443, uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1, tls: true, network: ws, ws-opts: {path: /w, headers: {Host: cdn.example, User-Agent: x}}}
 proxy-groups:
-  - {name: Сеть, type: select, proxies: [Цепь, вход, DIRECT]}
+  - {name: Сеть, type: select, proxies: [Цепь, вход, прыжки, cdn, DIRECT]}
   - {name: Серверы, type: url-test, include-all-proxies: true}
   - {name: Цепь, type: chain, proxies: [вход, Серверы]}
 rules:
@@ -100,8 +104,16 @@ rules:
 		tls["server_name"] != "entry.example" || tls["insecure"] != true {
 		t.Fatalf("the template's own proxy: %v", entry)
 	}
-	if !slices.Contains(anyList(outbound(c, "Сеть")["outbounds"]), any("вход")) {
-		t.Fatalf("the group: %v", outbound(c, "Сеть"))
+	if h := outbound(c, "прыжки"); h == nil || !reflect.DeepEqual(h["server_ports"], []any{"20000:30000"}) {
+		t.Fatalf("a Hysteria2 of a range alone: %v", h)
+	}
+	if w := outbound(c, "cdn"); w == nil || !reflect.DeepEqual(anyMap(w["transport"])["headers"], map[string]any{"Host": "cdn.example", "User-Agent": "x"}) {
+		t.Fatalf("a WebSocket of its own headers: %v", w)
+	}
+	for _, m := range []string{"вход", "прыжки", "cdn"} {
+		if !slices.Contains(anyList(outbound(c, "Сеть")["outbounds"]), any(m)) {
+			t.Fatalf("%s is not in the group: %v", m, outbound(c, "Сеть"))
+		}
 	}
 	dialed := 0
 	for _, p := range prof.Proxies {

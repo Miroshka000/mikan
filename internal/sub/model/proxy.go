@@ -43,9 +43,12 @@ type Proxy struct {
 	ALPN       []string
 	Obfs       *Obfs  // Hysteria2's obfuscation; nil: none
 	Congestion string // TUIC's congestion control
-	Cipher     string // Shadowsocks-2022's method
-	Sudoku     *Sudoku
-	Snell      *Snell
+	// UDPRelay is how TUIC relays UDP: quic; "": native, packet by packet. An own Clash
+	// profile's proxy may ask for quic, the panel's never do.
+	UDPRelay string
+	Cipher   string // Shadowsocks-2022's method
+	Sudoku   *Sudoku
+	Snell    *Snell
 }
 
 // TLS is a connection's TLS as the app sends it.
@@ -79,7 +82,11 @@ type Transport struct {
 	Network string // tcp, ws, grpc or xhttp
 	Path    string // ws and xhttp; "": none
 	// Host is the HTTP Host the app sends over WebSocket or XHTTP; "": the server's.
-	Host    string
+	Host string
+	// Headers are the other HTTP headers the app sends over WebSocket: an own Clash
+	// profile's proxy may give them (a User-Agent a CDN asks for), the panel's never do, and
+	// xray goes without them.
+	Headers map[string]string
 	Service string // grpc: the service name
 	XHTTP   *XHTTP // xhttp
 }

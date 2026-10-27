@@ -44,6 +44,16 @@ func TestReadProxyRoundTrip(t *testing.T) {
 			t.Errorf("no %s proxy read back", typ)
 		}
 	}
+	// What a template's own proxy holds and the panel's never do reads back too.
+	for _, p := range []model.Proxy{
+		{Name: "W", Type: "vless", Server: "203.0.113.7", Port: 443, UUID: "u", UDP: true, TLS: &model.TLS{SNI: "a.example", Insecure: true},
+			Transport: &model.Transport{Network: "ws", Path: "/w", Host: "cdn.example", Headers: map[string]string{"User-Agent": "x"}}},
+		{Name: "U", Type: "tuic", Server: "203.0.113.7", Port: 443, UUID: "u", Password: "p", ALPN: []string{"h3"}, UDPRelay: "quic", UDP: true, TLS: &model.TLS{}},
+	} {
+		if got, ok := ReadProxy(Proxy(p)); !ok || !reflect.DeepEqual(got, p) {
+			t.Errorf("%s:\n got %+v\nwant %+v", p.Name, got, p)
+		}
+	}
 }
 
 // A proxy of a template reads as the model holds it, or not at all where the model cannot
@@ -96,10 +106,18 @@ func TestReadProxy(t *testing.T) {
 		{"WebSocket", vless(map[string]any{"network": "ws", "ws-opts": map[string]any{"path": "/w", "headers": map[string]any{"host": "cdn.example"}}}),
 			&model.Proxy{Name: "V", Type: "vless", Server: "203.0.113.7", Port: 443, UUID: "u", UDP: true,
 				Transport: &model.Transport{Network: "ws", Path: "/w", Host: "cdn.example"}}},
-		{"WebSocket header but Host", vless(map[string]any{"network": "ws", "ws-opts": map[string]any{"headers": map[string]any{"User-Agent": "x"}}}), nil},
+		{"WebSocket headers but Host", vless(map[string]any{"network": "ws", "ws-opts": map[string]any{"headers": map[string]any{"Host": "cdn.example", "User-Agent": "x"}}}),
+			&model.Proxy{Name: "V", Type: "vless", Server: "203.0.113.7", Port: 443, UUID: "u", UDP: true,
+				Transport: &model.Transport{Network: "ws", Host: "cdn.example", Headers: map[string]string{"User-Agent": "x"}}}},
 		{"HTTP/2", vless(map[string]any{"network": "h2"}), nil},
+		{"Hysteria2 of a range alone", map[string]any{"name": "H", "type": "hysteria2", "server": "203.0.113.7", "ports": "20000-30000", "password": "p"},
+			&model.Proxy{Name: "H", Type: "hysteria2", Server: "203.0.113.7", Ports: "20000-30000", Password: "p", UDP: true, TLS: &model.TLS{}}},
+		{"Hysteria2 of neither", map[string]any{"name": "H", "type": "hysteria2", "server": "203.0.113.7", "password": "p"}, nil},
 		{"TUIC of QUIC relaying", map[string]any{"name": "U", "type": "tuic", "server": "203.0.113.7", "port": 443, "uuid": "u", "password": "p",
 			"udp-relay-mode": "quic", "udp": false},
+			&model.Proxy{Name: "U", Type: "tuic", Server: "203.0.113.7", Port: 443, UUID: "u", Password: "p", UDPRelay: "quic", UDP: true, TLS: &model.TLS{}}},
+		{"TUIC of native relaying", map[string]any{"name": "U", "type": "tuic", "server": "203.0.113.7", "port": 443, "uuid": "u", "password": "p",
+			"udp-relay-mode": "native"},
 			&model.Proxy{Name: "U", Type: "tuic", Server: "203.0.113.7", Port: 443, UUID: "u", Password: "p", UDP: true, TLS: &model.TLS{}}},
 		{"VMess", map[string]any{"name": "M", "type": "vmess", "server": "203.0.113.7", "port": 443, "uuid": "u"}, nil},
 	} {
