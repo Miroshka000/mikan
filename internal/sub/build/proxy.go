@@ -60,7 +60,8 @@ func Proxy(t proto.Template, in Input) (model.Proxy, error) {
 	return p, nil
 }
 
-// overrides is c with the empty fields taken from the template's own.
+// overrides is c with the empty fields taken from the template's own; a fingerprint of the
+// wrong shape counts as empty (fingerprint still guards the template's).
 func overrides(c, tpl proto.ClientOverrides) proto.ClientOverrides {
 	if c.Server == "" {
 		c.Server = tpl.Server
@@ -74,7 +75,7 @@ func overrides(c, tpl proto.ClientOverrides) proto.ClientOverrides {
 	if c.Host == "" {
 		c.Host = tpl.Host
 	}
-	if c.Fingerprint == "" {
+	if !proto.ValidFingerprint(c.Fingerprint) {
 		c.Fingerprint = tpl.Fingerprint
 	}
 	return c

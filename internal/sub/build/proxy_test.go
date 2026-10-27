@@ -147,6 +147,15 @@ func TestInputClient(t *testing.T) {
 	if m["fingerprint"] != "ab12" {
 		t.Fatalf("pin dropped: %v", m)
 	}
+	// A fingerprint of its own replaces the template's; one of the wrong shape keeps it.
+	in.Client.Fingerprint = "firefox"
+	if m, _ := client(t, tpl, in); m["client-fingerprint"] != "firefox" {
+		t.Fatalf("Input.Client fingerprint: %v", m)
+	}
+	in.Client.Fingerprint = "Not A Profile!"
+	if m, _ := client(t, tpl, in); m["client-fingerprint"] != "ios" {
+		t.Fatalf("malformed Input.Client fingerprint: %v", m)
+	}
 
 	// The SNI of REALITY and ShadowQUIC, and a port that replaces hopping, come from it too.
 	priv, _ := realityKey(t)
