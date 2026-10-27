@@ -62,14 +62,13 @@ func dnsOf(r routing.Resolvers, tags map[string]bool, sets *ruleSets, via string
 		// A key resolves its names with one server, whatever the names: a rule of their
 		// fields, which sing-box ORs.
 		fields := map[string][]string{}
-		kind, names := routing.PolicyNames(k)
-		for _, v := range names {
-			switch {
-			case kind == "geosite":
+		for _, n := range routing.PolicyNames(k) {
+			switch v := n.Name; {
+			case n.Kind == "geosite":
 				if category(v) {
 					fields["rule_set"] = append(fields["rule_set"], v)
 				}
-			case kind != "":
+			case n.Kind != "":
 				// a rule list's names stay mihomo's
 			case strings.HasPrefix(v, "+."):
 				fields["domain_suffix"] = append(fields["domain_suffix"], v[2:])
