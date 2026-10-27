@@ -85,16 +85,21 @@ func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Temp
 	var out []model.Note
 	for _, x := range p.Proxies {
 		if _, ok := outbound(x, ""); !ok {
-			out = append(out, model.Note{Core: core, Subject: x.Name, Code: "proxy_unsupported"})
+			out = append(out, note(x.Name, "proxy_unsupported"))
 		}
 	}
 	out = append(out, pl.dropped...)
 	for _, x := range pl.dns.Policy {
 		if len(policyDomains(x.Match, routing.Common)) == 0 {
-			out = append(out, model.Note{Core: core, Subject: x.Match, Code: "dns_policy_unsupported"})
+			out = append(out, note(x.Match, "dns_policy_unsupported"))
 		}
 	}
 	return out
+}
+
+// note is what xray left out of the subject: a code of model.Note, the preview's words.
+func note(subject, code string) model.Note {
+	return model.Note{Core: core, Subject: subject, Code: code}
 }
 
 // plan is what the configs are made of, whether of the panel's routing or of an own profile.
@@ -130,7 +135,7 @@ func (pl *plan) drop(when []routing.Match) {
 			subject, code = strings.ToLower(m.Type)+":"+strings.ToLower(strings.TrimSpace(m.Value)), "category_missing"
 		}
 	}
-	if n := (model.Note{Core: core, Subject: subject, Code: code}); !slices.Contains(pl.dropped, n) {
+	if n := note(subject, code); !slices.Contains(pl.dropped, n) {
 		pl.dropped = append(pl.dropped, n)
 	}
 }
