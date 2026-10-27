@@ -412,7 +412,7 @@ func TestNeverReachedIsNoEvidence(t *testing.T) {
 // own fetch (not by the address), and remembers what they reached across a restart.
 func TestBoundDevices(t *testing.T) {
 	e := setup(t)
-	e.boundPhone(t, true)
+	e.boundPhone(t, visit{profileTo: home})
 	if s, _ := e.tn.Status(e.inbound(t, "vless-xhttp").ID); !s.CutOff || s.Blocked != 2 {
 		t.Fatalf("the bound device must count, and what it reached must survive a restart: %+v", s)
 	}
@@ -421,30 +421,52 @@ func TestBoundDevices(t *testing.T) {
 // A bound device is seen as it asks for its keys, before its profile is made: one turned
 // away with a notice, or left without a profile by an error, took nothing and never counts.
 func TestBoundDeviceWithoutProfile(t *testing.T) {
-	e := setup(t)
-	e.boundPhone(t, false)
-	if s, _ := e.tn.Status(e.inbound(t, "vless-xhttp").ID); s.CutOff || s.Blocked != 0 {
-		t.Fatalf("a bound device that took no profile counted: %+v", s)
+	for name, visits := range map[string][]visit{
+		"no profile": {{}},
+		// Past the 5 minutes a known device is written down at most once in: its last visit
+		// moves on, and it took nothing then.
+		"turned away after a profile": {{profileTo: home}, {after: 6 * time.Minute}},
+		"profile to another address":  {{profileTo: "192.0.2.99"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t)
+			e.boundPhone(t, visits...)
+			if s, _ := e.tn.Status(e.inbound(t, "vless-xhttp").ID); s.CutOff || s.Blocked != 0 {
+				t.Fatalf("a bound device that took no profile counted: %+v", s)
+			}
+		})
 	}
 }
 
-// boundPhone: a bound device asks for its keys from home, and the profile goes out to it
-// there or not (profile); then it reaches everything, and after a restart all but XHTTP.
-func (e *env) boundPhone(t *testing.T, profile bool) {
+// home is where the bound phone asks for its keys from.
+const home = "198.51.100.30"
+
+// visit: after a pause, the phone asks for its keys from home, and its user's profile goes
+// out to profileTo ("" = the phone got none).
+type visit struct {
+	after     time.Duration
+	profileTo string
+}
+
+// boundPhone: a bound device makes its visits; then it reaches everything, and after a
+// restart all but XHTTP.
+func (e *env) boundPhone(t *testing.T, visits ...visit) {
 	t.Helper()
 	clock := func() time.Time { return e.now }
 	u, err := e.st.Q.GetUser(e.ctx, e.user)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const home = "198.51.100.30"
-	phone, err := domain.NewDevices(e.st, domain.NewPool(e.st, clock), e.ch, clock).Bind(e.ctx, u, domain.DeviceInfo{HWID: "phone-0123456789", App: "Happ/3.4.1", IP: home}, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if profile {
-		if err := e.st.Q.RecordSubFetch(e.ctx, db.RecordSubFetchParams{UserID: e.user, Ip: home, FetchedAt: e.now.Unix()}); err != nil {
+	var phone db.Slot
+	for _, v := range visits {
+		e.now = e.now.Add(v.after)
+		if phone, err = domain.NewDevices(e.st, domain.NewPool(e.st, clock), e.ch, clock).Bind(e.ctx, u, domain.DeviceInfo{HWID: "phone-0123456789", App: "Happ/3.4.1", IP: home}, false); err != nil {
 			t.Fatal(err)
+		}
+		if v.profileTo != "" {
+			if err := e.st.Q.RecordSubFetch(e.ctx, db.RecordSubFetchParams{UserID: e.user, Ip: v.profileTo, FetchedAt: e.now.Unix()}); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	act := func(names ...string) {
