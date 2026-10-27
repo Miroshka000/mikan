@@ -184,14 +184,14 @@ func TestReachLeavesOutWhatDoesNotServe(t *testing.T) {
 
 // balanceEnv is a balance group of three nodes, the first of which serves nothing (its only
 // inbound is off), and a node outside the group.
-func balanceEnv(t *testing.T) (e *sourceEnv, u db.User, dark, x, y db.Node) {
+func balanceEnv(t *testing.T) (e *sourceEnv, u db.User, dark, x, y, solo db.Node) {
 	e = newSourceEnv(t)
 	u = newUser(t, e.st, 1)
 	b := domain.NewBalancer(e.st, e.h.now, slog.New(slog.DiscardHandler))
 	// dark has the lowest id and the most room: the balancer would place the client there
 	// first, were it among the candidates.
 	dark, x, y = e.node("dark", true), e.node("x", true), e.node("y", true)
-	solo := e.node("solo", true)
+	solo = e.node("solo", true)
 	for id, capacity := range map[int64]int64{dark.ID: 100, x.ID: 1, y.ID: 1} {
 		if err := b.SetNode(e.ctx, id, "eu", sql.NullInt64{Int64: capacity, Valid: true}); err != nil {
 			t.Fatal(err)
@@ -202,13 +202,13 @@ func balanceEnv(t *testing.T) (e *sourceEnv, u db.User, dark, x, y db.Node) {
 	e.inbound(y, "y1", true)
 	e.inbound(solo, "solo1", true)
 	e.h.SetBalancer(b)
-	return e, u, dark, x, y
+	return e, u, dark, x, y, solo
 }
 
 // The balancer keeps the client on one node of the group, chosen among the nodes that
 // serve the client: never one whose protocols the client cannot use.
 func TestReachBalancesAmongTheNodesThatServe(t *testing.T) {
-	e, u, dark, x, _ := balanceEnv(t)
+	e, u, dark, x, _, _ := balanceEnv(t)
 	if got, want := e.names(u), []string{"x1", "solo1"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("reach: %v, want %v", got, want)
 	}
@@ -229,14 +229,36 @@ func (f *failingBalancer) Nodes(_ context.Context, _ int64, on map[int64]bool) (
 // A balancer that fails leaves the group whole rather than the client without servers.
 // It is asked about the nodes that serve the client, not every node the panel knows of.
 func TestReachKeepsEveryNodeWhenTheBalancerFails(t *testing.T) {
-	e, u, _, x, y := balanceEnv(t)
+	e, u, _, x, y, solo := balanceEnv(t)
 	f := &failingBalancer{}
 	e.h.balance = f
 	if got, want := e.names(u), []string{"x1", "y1", "solo1"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("reach: %v, want %v", got, want)
 	}
-	solo := e.cfg.Nodes[3].ID
-	if want := map[int64]bool{x.ID: true, y.ID: true, solo: true}; !reflect.DeepEqual(f.asked, want) {
+	if want := map[int64]bool{x.ID: true, y.ID: true, solo.ID: true}; !reflect.DeepEqual(f.asked, want) {
 		t.Errorf("asked about %v, want %v", f.asked, want)
+	}
+}
+
+// The admin's preview is of no client (sample): the balancer is not asked, every node shows.
+func TestReachDoesNotBalanceThePreview(t *testing.T) {
+	e, _, _, _, _, _ := balanceEnv(t)
+	f := &failingBalancer{}
+	e.h.balance = f
+	if got, want := e.names(db.User{}), []string{"x1", "y1", "solo1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("preview: %v, want %v", got, want)
+	}
+	if f.asked != nil {
+		t.Errorf("the balancer was asked about the preview: %v", f.asked)
+	}
+}
+
+// A panel without a balancer shows every node, SetBalancer(nil) included.
+func TestReachWithoutABalancer(t *testing.T) {
+	e, u, _, _, _, _ := balanceEnv(t)
+	e.h.balance = nil
+	e.h.SetBalancer(nil)
+	if got, want := e.names(u), []string{"x1", "y1", "solo1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("reach: %v, want %v", got, want)
 	}
 }
