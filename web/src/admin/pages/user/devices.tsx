@@ -1,7 +1,7 @@
-import { Ban, Hourglass, Laptop, Layers, Pencil, Smartphone, Unlink } from "lucide-react";
+import { Ban, Hourglass, Laptop, Layers, Pencil, Server, Smartphone, Unlink } from "lucide-react";
 import { useState } from "react";
 import { ApiError, errorText, type Schemas, type User } from "../../../api/client";
-import { useBoundDevices, useDeviceBans, useDevices, userActions, useSettings, useUserMutation } from "../../../api/hooks";
+import { useBoundDevices, useDeviceBans, useDevices, userActions, useSettings, useUserMutation, useUserOnline } from "../../../api/hooks";
 import { Confirm, NameDialog } from "../../../components/overlay";
 import { QueryBoundary } from "../../../components/query";
 import { useToast } from "../../../components/toast";
@@ -47,6 +47,7 @@ export function DevicesSection({ u }: { u: User }) {
         ) : null}
       </div>
       <BoundDevices u={u} />
+      <OnlineNow u={u} />
       <h4 className="mt-5 mb-2 text-xs font-medium text-[var(--ink-500)]">{t("userDrawer.addresses")}</h4>
       <QueryBoundary query={devices} pending={<Skeleton style={{ height: 52, borderRadius: 16 }} />}>
         {(list) =>
@@ -131,6 +132,11 @@ function BoundDevices({ u }: { u: User }) {
                       <div className="truncate text-xs text-[var(--ink-500)]">
                         {meta ? `${meta} · ` : ""}
                         {d.online ? <span className="text-[var(--leaf-700)]">{t("users.onlineNow")}</span> : ago(d.last_seen)}
+                      </div>
+                      <div className="truncate text-xs text-[var(--ink-500)]">
+                        {d.last_ip
+                          ? t("userDrawer.deviceSeen", { ip: maskIP(d.last_ip), when: dateShort(d.created_at) })
+                          : t("userDrawer.deviceBoundAt", { when: dateShort(d.created_at) })}
                       </div>
                       {d.traffic_up + d.traffic_down > 0 ? (
                         <div className="num text-xs text-[var(--ink-500)]" title={t("userDrawer.deviceTrafficHint")}>
@@ -233,6 +239,50 @@ function BoundDevices({ u }: { u: User }) {
           )
         }
       />
+    </>
+  );
+}
+
+/**
+ * Where the user is online now, by node and by keys (a bound device's or the user's own),
+ * as the nodes last reported. Nothing shows while nobody is online. It only shows: for
+ * now a node closes a slot's connections only when its access goes (unbind, ban, expiry, quota).
+ */
+function OnlineNow({ u }: { u: User }) {
+  const online = useUserOnline(u.id);
+  const bound = useBoundDevices(u.id);
+  const list = online.data ?? [];
+  if (list.length === 0) return null;
+  const device = (id: number | null) => {
+    const d = id == null ? undefined : bound.data?.find((b) => b.id === id);
+    return d ? deviceName(d) : t("userDrawer.liveOwnKeys");
+  };
+  return (
+    <>
+      <h4 className="mt-5 mb-2 flex justify-between gap-2 text-xs font-medium text-[var(--ink-500)]">
+        {t("userDrawer.liveTitle")}
+        <span className="num">{list.length}</span>
+      </h4>
+      <ul className="flex flex-col gap-2" aria-label={t("userDrawer.liveTitle")}>
+        {list.map((s) => (
+          <li key={`${s.node_id}-${s.device_id ?? 0}`} className="panel-soft grid grid-cols-[36px_minmax(0,1fr)] items-center gap-3 p-2">
+            <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-[var(--hover)] text-[var(--leaf-700)]" aria-hidden>
+              <Server size={18} />
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-medium">
+                {s.node_name || `#${s.node_id}`} · {device(s.device_id)}
+              </div>
+              <div className="truncate text-xs text-[var(--ink-500)]">
+                {s.online_ips.length > 0 ? <span className="mono">{s.online_ips.map(maskIP).join(", ")}</span> : null}
+                {s.online_ips.length > 0 ? " · " : ""}
+                <span className="num">{t("userDrawer.liveConns", { n: s.conns })}</span>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs text-[var(--ink-500)]">{t("userDrawer.liveNote")}</p>
     </>
   );
 }

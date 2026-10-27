@@ -178,32 +178,7 @@ func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Temp
 	if err != nil {
 		return nil
 	}
-	sets := ruleSets{lists: pl.lists, used: map[string]map[string]any{}, preview: true}
-	tags := map[string]bool{"direct": true}
-	for _, name := range pl.unread {
-		sets.drop("proxy_unsupported", name)
-	}
-	for _, x := range pl.proxies {
-		if o, ok := singboxOutbound(x); ok {
-			tags[str(o["tag"])] = true
-		} else {
-			sets.drop("proxy_unsupported", x.Name)
-		}
-	}
-	for _, gr := range convertGroups(pl.groups, tags).outbounds {
-		tags[str(gr["tag"])] = true
-	}
-	// The rules as config takes them: up to the first MATCH.
-	for _, r := range pl.rules {
-		if len(r.When) == 0 {
-			break
-		}
-		if _, ok := action(r.To, tags); !ok {
-			sets.drop("rule_unsupported", r.Clash(r.To.Group))
-			continue
-		}
-		sets.rule(r)
-	}
-	dnsOf(pl.dns, tags, &sets, "")
+	sets := ruleSets{preview: true}
+	config(pl, &sets)
 	return sets.dropped
 }

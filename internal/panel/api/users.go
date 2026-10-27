@@ -372,6 +372,7 @@ func (h *handlers) registerUsers() {
 	huma.Register(h.api, huma.Operation{OperationID: "ban-device", Method: http.MethodPost, Path: "/api/v1/users/{id}/bound-devices/{device}/ban", Summary: "Заблокировать устройство: отвязать и не давать привязаться снова по его ID", Tags: tags, DefaultStatus: http.StatusCreated}, h.banDevice)
 	huma.Register(h.api, huma.Operation{OperationID: "device-bans", Method: http.MethodGet, Path: "/api/v1/users/{id}/device-bans", Summary: "Заблокированные устройства пользователя", Tags: tags}, h.deviceBans)
 	huma.Register(h.api, huma.Operation{OperationID: "unban-device", Method: http.MethodDelete, Path: "/api/v1/users/{id}/device-bans/{ban}", Summary: "Разблокировать устройство: оно снова сможет привязаться", Tags: tags, DefaultStatus: http.StatusNoContent}, h.unbanDevice)
+	h.registerUserOnline(tags)
 	h.registerLifecycle()
 }
 

@@ -531,10 +531,20 @@ type PreviewRequest struct {
 }
 
 // Preview is what the admin panel shows of a profile before it is saved: the profile, and
-// what the other cores make of the groups of a Clash one they cannot carry as they are.
+// what the other cores make of a Clash one they cannot carry as it is: the nearest form of
+// a group, a proxy, rule, list, DNS policy or category left out.
 type Preview struct {
 	Profile []byte
 	Notes   []submodel.Note
+}
+
+// previewNotes are the notes of sing-box and xray on the Clash profile of p and t (the
+// built-in one for none), each core's groups first and what it leaves out after. mihomo
+// carries the profile as it is: it has none.
+func previewNotes(p profile.Profile, g submodel.GroupNames, m routing.Mode, t submodel.Template) []submodel.Note {
+	out := append(singbox.Notes(p, g, m, t), singbox.Dropped(p, g, m, t)...)
+	out = append(out, xray.Notes(p, g, m, t)...)
+	return append(out, xray.Dropped(p, g, m, t)...)
 }
 
 // Preview is the built-in profile of a user given every inbound, as req sets it. Its keys
@@ -558,7 +568,7 @@ func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 		return Preview{}, err
 	}
 	none := submodel.Template{}
-	return Preview{Profile: body, Notes: append(singbox.Notes(prof, g, req.Mode, none), xray.Notes(prof, g, req.Mode, none)...)}, nil
+	return Preview{Profile: body, Notes: previewNotes(prof, g, req.Mode, none)}, nil
 }
 
 // sample is the profile of a user given every inbound, with placeholder keys.
