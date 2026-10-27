@@ -1,5 +1,5 @@
 // Package serve answers the fetches of subscriptions over HTTP. It reads a subscription
-// from a Source, picks the format the app takes (Format), sets every header the answer
+// from a Source, picks the format the app takes (Resolve), sets every header the answer
 // carries (headers.go), and has the cores' renderers write the profile, or a stub in place
 // of the servers when there is nothing to connect to (stub.go).
 package serve
@@ -224,7 +224,7 @@ func internalError(w http.ResponseWriter) {
 }
 
 // Serve answers a fetch of the subscription of token: the page for a browser or a
-// messenger's preview, the profile in the format the app asks for otherwise (Format). The
+// messenger's preview, the profile in the format the app asks for otherwise (Resolve). The
 // response rules go first (rules.go): they may answer for the profile, or name the format
 // and what the device is asked for. The order is fixed: the headers go before the keys are
 // handed out (a HEAD stops after them), the device gets its keys before the profile is made,
@@ -265,13 +265,17 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	}
 	ua := r.Header.Get("User-Agent")
 	format := Resolve(r.Header, r.URL.Query().Get("format"), dec, cfg.XrayJSON)
-	ex.format = format
 	// A messenger that builds a preview of a pasted link gets the page, which has the
 	// preview's title and picture and nothing of the user's.
 	if (format == FormatHTML || LinkPreview(ua) && r.URL.Query().Get("format") == "") && h.page != nil {
+		ex.format = FormatHTML
 		h.page(w, r, cfg)
 		return OutcomeServed
 	}
+	if format == FormatHTML {
+		format = FormatURI // no page to send: a browser gets the links
+	}
+	ex.format = format
 	u, err := sub.User(ctx)
 	if err != nil {
 		internalError(w)
@@ -298,21 +302,21 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	if dec.Responds() == apps.RespondStub {
 		// An app that is turned away gets no keys: it must not take a place of the
 		// subscriber's devices.
-		h.stub(w, cfg, format, &unsupportedError{text: StubText(cfg.Lang, dec)})
+		h.stub(w, cfg, ex, &unsupportedError{text: StubText(cfg.Lang, dec)})
 		return OutcomeStub
 	}
 	keys, err := sub.Keys(ctx, Device{HWID: r.Header.Get("X-Hwid"), OS: r.Header.Get("X-Device-Os"), OSVersion: r.Header.Get("X-Ver-Os"),
 		Model: r.Header.Get("X-Device-Model"), App: ua, IP: h.ip(r), SkipHWID: dec.Action.SkipHWID})
 	switch {
 	case errors.Is(err, ErrDeviceLimit), errors.Is(err, ErrNoHWID), errors.Is(err, ErrDeviceBanned), errors.As(err, new(*UnboundError)):
-		h.stub(w, cfg, format, err)
+		h.stub(w, cfg, ex, err)
 		return OutcomeStub
 	case err != nil:
 		internalError(w)
 		return ""
 	}
 	if notice := inactiveNotice(cfg, u.State, vars); notice != nil {
-		h.stub(w, cfg, format, notice)
+		h.stub(w, cfg, ex, notice)
 		return OutcomeStub
 	}
 	ins, err := sub.Inbounds(ctx)
@@ -334,7 +338,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		prof.Rules, prof.App = mihomo.RulesFor(cfg.Rules, app), app
 		body, ps, err := h.clashProfile(prof, cfg, tpl)
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, profileTitle(cfg, vars))
@@ -342,21 +346,21 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	case FormatSingBox:
 		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return singbox.Render(ctx, prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		profileHeaders(hd, format, profileTitle(cfg, vars))
 		_, _ = w.Write(body)
 	case FormatXray:
 		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return xray.Render(prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		profileHeaders(hd, format, "")
 		_, _ = w.Write(body)
 	default:
 		links, ps, err := xray.Links(proxies)
 		if err != nil {
-			return h.profileFailed(w, cfg, format, err)
+			return h.profileFailed(w, cfg, ex, err)
 		}
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, "")
@@ -383,9 +387,9 @@ func (h *Handler) clashProfile(prof profile.Profile, cfg Config, t model.Templat
 // profileFailed answers a profile that could not be made: with nothing for this app to
 // connect to (model.ErrNoProxies) the stub that says so, otherwise the panel's own failure.
 // The outcome is the request log's: a failure of the panel's own is not logged.
-func (h *Handler) profileFailed(w http.ResponseWriter, cfg Config, format string, err error) Outcome {
+func (h *Handler) profileFailed(w http.ResponseWriter, cfg Config, ex *exchange, err error) Outcome {
 	if errors.Is(err, model.ErrNoProxies) {
-		h.stub(w, cfg, format, err)
+		h.stub(w, cfg, ex, err)
 		return OutcomeStub
 	}
 	internalError(w)
