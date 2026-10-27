@@ -93,12 +93,14 @@ func NodePrefix(name string) string {
 func isRegional(r rune) bool { return r >= 0x1F1E6 && r <= 0x1F1FF }
 
 // ForApp keeps the inbounds the app can use. Inbounds with one key for everyone go only
-// to users whose access is on (active): the node cannot cut anyone off there.
+// to users whose access is on (active): the node cannot cut anyone off there. One whose
+// template no longer parses is kept: Proxies leaves it out and tells Profile.Skip, so the
+// admin hears of it.
 func ForApp(ins []model.Inbound, app apps.App, active bool) []model.Inbound {
 	out := make([]model.Inbound, 0, len(ins))
 	for _, in := range ins {
 		t, err := parseTemplate(in.Config)
-		if err != nil || !app.Supports(proto.NeedsOf(t)) || proto.Shared(t) && !active {
+		if err == nil && (!app.Supports(proto.NeedsOf(t)) || proto.Shared(t) && !active) {
 			continue
 		}
 		out = append(out, in)

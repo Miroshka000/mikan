@@ -59,6 +59,26 @@ func TestProxiesFollowTheNodes(t *testing.T) {
 	}
 }
 
+// Names the admin typed are kept as they are and preset names get the node's flag; a name
+// taken already gets a number, since mihomo refuses two proxies of one name.
+func TestProxyNames(t *testing.T) {
+	nodes := []model.Node{{ID: 1, Name: "🇳🇱 Нидерланды", Endpoint: model.Endpoint{Host: "nl.example.com"}},
+		{ID: 2, Name: "🇺🇸 США", Endpoint: model.Endpoint{Host: "us.example.com"}}}
+	tuic := proto.Marshal(proto.Template{"type": "tuic", "alpn": []any{"h3"}})
+	ins := []model.Inbound{
+		{ID: 1, Node: 1, Name: "Fast", Named: true, Port: 443, PortSpec: "443", Config: tuic},
+		{ID: 2, Node: 2, Name: "Fast", Named: true, Port: 443, PortSpec: "443", Config: tuic},
+		{ID: 3, Node: 2, Name: "TUIC", Port: 8443, PortSpec: "8443", Config: tuic},
+	}
+	var got []string
+	for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: ins, Nodes: nodes}) {
+		got = append(got, p.Name)
+	}
+	if want := []string{"Fast", "Fast 2", "🇺🇸 TUIC"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("names %q, want %q", got, want)
+	}
+}
+
 // One inbound that cannot be rendered is left out and reported, not the end of everyone's
 // subscription.
 func TestBadInboundIsSkippedAndReported(t *testing.T) {
@@ -68,14 +88,18 @@ func TestBadInboundIsSkippedAndReported(t *testing.T) {
 	bad.ID, bad.Label, bad.Port, bad.PortSpec = 99, "broken-port", 0, "not-a-port"
 	broken := ins[1]
 	broken.ID, broken.Label, broken.Config = 98, "broken-config", "type: [unclosed"
-	ins = append(ins, bad, broken)
+	// It parses, but proto.Validate knows no such type.
+	unknown := ins[1]
+	unknown.ID, unknown.Label, unknown.Config = 97, "unknown-type", "type: socks\n"
+	ins = append(ins, bad, broken, unknown)
 	var skipped []string
 	p := Profile{Keys: testKeys, Inbounds: ins, Nodes: []model.Node{{ID: 1, Endpoint: model.Endpoint{Host: "203.0.113.7"}}},
 		Skip: func(in model.Inbound, err error) { skipped = append(skipped, in.Label+": "+err.Error()) }}
 	if got := len(Proxies(p)); got != want {
 		t.Fatalf("%d proxies, want the %d good ones", got, want)
 	}
-	if len(skipped) != 2 || skipped[0] != `broken-port: bad port "not-a-port"` || !strings.HasPrefix(skipped[1], "broken-config") {
+	if len(skipped) != 3 || skipped[0] != `broken-port: bad port "not-a-port"` || !strings.HasPrefix(skipped[1], "broken-config: ") ||
+		!strings.HasPrefix(skipped[2], "unknown-type: ") {
 		t.Fatalf("skipped: %v", skipped)
 	}
 	// Without a listener nothing is reported and nothing panics.
@@ -129,6 +153,8 @@ func TestForApp(t *testing.T) {
 		{ID: 3, Config: "type: trusttunnel\n"},
 		// With an AES method every user has a key of its own: no longer shared.
 		{ID: 4, Config: "type: shadowsocks\ncipher: 2022-blake3-aes-128-gcm\npassword: AAAAAAAAAAAAAAAAAAAAAA==\n"},
+		// A template that no longer parses is kept for Proxies, which reports it.
+		{ID: 5, Config: "type: [unclosed"},
 	}
 	ids := func(list []model.Inbound) []int64 {
 		out := []int64{}
@@ -142,10 +168,10 @@ func TestForApp(t *testing.T) {
 		active bool
 		want   []int64
 	}{
-		{"mihomo/1.19.31", true, []int64{1, 2, 3, 4}},
-		{"mihomo/1.19.31", false, []int64{1, 3, 4}},
-		{"Happ/3.4.1", true, []int64{2, 4}},
-		{"Happ/3.4.1", false, []int64{4}},
+		{"mihomo/1.19.31", true, []int64{1, 2, 3, 4, 5}},
+		{"mihomo/1.19.31", false, []int64{1, 3, 4, 5}},
+		{"Happ/3.4.1", true, []int64{2, 4, 5}},
+		{"Happ/3.4.1", false, []int64{4, 5}},
 	} {
 		if got := ids(ForApp(ins, apps.DetectApp(c.ua), c.active)); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s, active %v: %v, want %v", c.ua, c.active, got, c.want)
