@@ -12,6 +12,7 @@ import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/build"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -303,7 +304,7 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 			nodes = append(nodes, model.Node{ID: id, Name: names[id], Endpoint: model.Endpoint{Host: "203.0.113.7"}})
 			wantGroups = append(wantGroups, names[id])
 		}
-		p := Profile{Proxies: build.Proxies(build.Profile{Keys: subtest.Keys, Inbounds: ins, Nodes: nodes}), Nodes: nodes}
+		p := profile.Profile{Proxies: build.Proxies(build.Profile{Keys: subtest.Keys, Inbounds: ins, Nodes: nodes}), Nodes: nodes}
 		raw, err := Render(p, model.GroupNames{}, routing.All)
 		if err != nil {
 			t.Fatal(err)
@@ -332,10 +333,10 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 }
 
 func TestNothingToServeIsAnError(t *testing.T) {
-	if _, err := Render(Profile{}, model.GroupNames{}, routing.All); !errors.Is(err, model.ErrNoProxies) {
+	if _, err := Render(profile.Profile{}, model.GroupNames{}, routing.All); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("a profile with empty groups is not served: %v", err)
 	}
-	if _, _, err := Template(Profile{}, "rules: [MATCH,DIRECT]\n"); !errors.Is(err, model.ErrNoProxies) {
+	if _, _, err := Template(profile.Profile{}, "rules: [MATCH,DIRECT]\n"); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("an own profile with no proxies: %v", err)
 	}
 }
@@ -393,23 +394,27 @@ func TestRulesInProfile(t *testing.T) {
 }
 
 // An idle gRPC connection is pinged, so that the app does not stay on one a middlebox cut
-// while it was silent; Stash's profile, the built-in one and the own one, goes without.
+// while it was silent; Stash's profile, always the built-in one, goes without.
 func TestGRPCKeepalive(t *testing.T) {
 	grpc := model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID, Transport: &model.Transport{Network: "grpc", Service: "api"}}
 	if o := Proxy(grpc)["grpc-opts"].(map[string]any); o["ping-interval"] != 15 || o["grpc-service-name"] != "api" {
 		t.Fatalf("grpc-opts: %v", o)
 	}
 	for _, app := range []apps.App{{Family: apps.FamilyMihomo}, {Family: apps.FamilyStash}} {
-		p := Profile{Proxies: []model.Proxy{grpc}, App: app}
-		built, err := Config(p, model.GroupNames{}, routing.DefaultMode)
+		p := profile.Profile{Proxies: []model.Proxy{grpc}, App: app}
+		built, err := renderConfig(p, model.GroupNames{}, routing.DefaultMode)
 		if err != nil {
 			t.Fatal(err)
 		}
-		own, _, err := TemplateConfig(p, subtest.OwnTemplate)
-		if err != nil {
-			t.Fatal(err)
+		cfgs := map[string]map[string]any{"built-in": built}
+		if p.App.TakesOwnProfile() { // Stash gets no own profile
+			own, _, err := templateConfig(p, subtest.OwnTemplate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfgs["own"] = own
 		}
-		for name, cfg := range map[string]map[string]any{"built-in": built, "own": own} {
+		for name, cfg := range cfgs {
 			var opts map[string]any
 			switch ps := cfg["proxies"].(type) {
 			case []map[string]any:

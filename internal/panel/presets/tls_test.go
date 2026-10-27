@@ -12,6 +12,7 @@ import (
 	builder "mikan/internal/sub/build"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/singbox"
 	"mikan/internal/sub/xray"
@@ -20,7 +21,7 @@ import (
 // singboxTLS is the tls of c's outbound in the sing-box profile an app gets.
 func singboxTLS(t *testing.T, c model.Proxy) (map[string]any, bool) {
 	t.Helper()
-	body, err := singbox.Render(context.Background(), mihomo.Profile{Proxies: []model.Proxy{c}}, model.GroupNames{}.WithDefaults(""), routing.DefaultMode, model.Template{})
+	body, err := singbox.Render(context.Background(), profile.Profile{Proxies: []model.Proxy{c}}, model.GroupNames{}.WithDefaults(""), routing.DefaultMode, model.Template{})
 	if err != nil {
 		t.Fatal(err)
 	}

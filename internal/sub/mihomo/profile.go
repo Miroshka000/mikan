@@ -1,72 +1,51 @@
 package mihomo
 
 import (
-	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
-// Profile is what a mihomo profile is made of.
-type Profile struct {
-	Proxies []model.Proxy // the user's (build.Proxies)
-	Nodes   []model.Node  // enabled nodes in display order
-	Direct  []string      // hosts that bypass the tunnel: the panel and every node
-	// Rules are the admin's own rules (routing.ServedRules) that the app's core parses
-	// (RulesFor), before the built-in routing.
-	Rules []routing.Rule
-	// Routes go after the admin's rules, for the apps that take rule lists (App); Lang
-	// names the groups they add.
-	Routes routing.Routes
-	App    apps.App
-	Lang   string
-}
-
 // Render is a complete client profile.
-func Render(p Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
-	cfg, err := Config(p, g, m)
+func Render(p profile.Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
+	cfg, err := renderConfig(p, g, m)
 	if err != nil {
 		return nil, err
 	}
 	return marshalYAML(cfg)
 }
 
-// Config is the profile Render writes.
-func Config(p Profile, g model.GroupNames, m routing.Mode) (map[string]any, error) {
+// renderConfig is the profile Render writes: the intent of the settings as the app takes
+// it (routing.Intent), written the Clash way.
+func renderConfig(p profile.Profile, g model.GroupNames, m routing.Mode) (map[string]any, error) {
 	if len(p.Proxies) == 0 {
 		// Groups with no proxies in them are a profile mihomo may refuse whole.
 		return nil, model.ErrNoProxies
 	}
-	return configOf(p, g, m), nil
-}
-
-// configOf is the profile of p.Proxies, whatever they are: the intent of the settings as
-// the app takes it (routing.Intent), written the Clash way.
-func configOf(p Profile, g model.GroupNames, m routing.Mode) map[string]any {
 	g = g.WithDefaults("")
 	in := routing.NewIntent(m, p.Rules, p.Routes)
-	if !p.Routable() {
+	if !p.App.TakesOwnProfile() {
 		in = in.Plain()
 	}
-	routes := p.taken(in.Routes)
+	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return takes(p, pr) })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.MihomoBalance(), routes, p.Lang)
 	proxies := make([]map[string]any, len(p.Proxies))
 	for i, x := range p.Proxies {
-		proxies[i] = p.proxy(x)
+		proxies[i] = proxy(p, x)
 	}
 	groups := make([]map[string]any, len(gs.List))
 	for i, gr := range gs.List {
 		groups[i] = groupOf(gr)
 	}
-	rt := route(routes, gs, in.Mode == routing.Blocked)
 	// The panel and the nodes stay out of the tunnel whatever the admin's rules say.
+	pre, routedRules, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
+	rt := route(routes, routedRules, gs, in.Mode == routing.Blocked)
 	var rules []string
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
-		for _, r := range part {
-			rules = append(rules, r.Clash(targetName(gs, r.To, -1)))
-		}
+	for _, r := range pre {
+		rules = append(rules, r.Clash(targetName(gs, r.To, -1)))
 	}
 	rules = append(rules, rt.rules...)
-	for _, r := range in.Tail() {
+	for _, r := range tail {
 		rules = append(rules, r.Clash(targetName(gs, r.To, -1)))
 	}
 	cfg := map[string]any{
@@ -94,11 +73,11 @@ func configOf(p Profile, g model.GroupNames, m routing.Mode) map[string]any {
 	// address. REJECT makes such apps fall back to TCP instead. In the "blocked" mode the
 	// rest goes direct by design; its tunnel rules get their own REJECT twins (rejectTwins).
 	last := []string{"MATCH,DIRECT"}
-	if final := in.Final(); final.Kind != routing.ToDirect {
+	if final.Kind != routing.ToDirect {
 		last = []string{"MATCH," + targetName(gs, final, -1), "MATCH,REJECT"}
 	}
 	cfg["rules"] = append(rules, last...)
-	return cfg
+	return cfg, nil
 }
 
 // groupOf is gr as a Clash proxy group.

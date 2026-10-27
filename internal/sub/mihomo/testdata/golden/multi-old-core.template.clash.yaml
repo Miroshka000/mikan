@@ -3,26 +3,6 @@ dns:
   enable: true
   enhanced-mode: fake-ip
 proxies:
-  - name: "\U0001F1F3\U0001F1F1 VLESS XHTTP"
-    type: vless
-    server: 203.0.113.7
-    port: 443
-    client-fingerprint: chrome
-    network: xhttp
-    reality-opts:
-      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
-      short-id: a1b2c3d4
-    servername: www.example.com
-    tls: true
-    udp: true
-    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-    xhttp-opts:
-      mode: stream-one
-      path: /golden-path
-      reuse-settings:
-        h-max-request-times: 600-900
-        h-max-reusable-secs: 1800-3000
-        max-concurrency: 16-32
   - name: "\U0001F1F3\U0001F1F1 Hysteria2"
     type: hysteria2
     server: 203.0.113.7
@@ -73,16 +53,6 @@ proxies:
     sni: www.example.com
     tls: true
     udp: true
-  - name: "\U0001F1F3\U0001F1F1 AnyTLS"
-    type: anytls
-    server: 203.0.113.7
-    port: 2083
-    client-fingerprint: chrome
-    fingerprint: aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11
-    password: S3cr3t+/=
-    skip-cert-verify: false
-    tls: true
-    udp: true
   - name: "\U0001F1F3\U0001F1F1 VLESS gRPC"
     type: vless
     server: 203.0.113.7
@@ -99,26 +69,6 @@ proxies:
     tls: true
     udp: true
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: Особый
-    type: vless
-    server: usa.example.com
-    port: 443
-    client-fingerprint: chrome
-    network: xhttp
-    reality-opts:
-      public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
-      short-id: a1b2c3d4
-    servername: www.example.com
-    tls: true
-    udp: true
-    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-    xhttp-opts:
-      mode: stream-one
-      path: /golden-path
-      reuse-settings:
-        h-max-request-times: 600-900
-        h-max-reusable-secs: 1800-3000
-        max-concurrency: 16-32
   - name: "\U0001F1FA\U0001F1F8 Hysteria2"
     type: hysteria2
     server: usa.example.com
@@ -168,13 +118,10 @@ proxy-groups:
   - name: ⚡ Авто
     type: url-test
     proxies:
-      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
       - "\U0001F1F3\U0001F1F1 TUIC"
       - "\U0001F1F3\U0001F1F1 VLESS Vision"
       - "\U0001F1F3\U0001F1F1 Trojan"
-      - "\U0001F1F3\U0001F1F1 AnyTLS"
       - "\U0001F1F3\U0001F1F1 VLESS gRPC"
-      - Особый
       - "\U0001F1FA\U0001F1F8 TUIC"
       - "\U0001F1FA\U0001F1F8 VLESS Vision"
     interval: 300
@@ -192,7 +139,6 @@ proxy-groups:
   - name: "\U0001F512 VLESS"
     type: select
     proxies:
-      - "\U0001F1F3\U0001F1F1 VLESS XHTTP"
       - "\U0001F1F3\U0001F1F1 VLESS Vision"
       - "\U0001F1F3\U0001F1F1 VLESS gRPC"
   - name: "\U0001F6AB Без VPN"

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -150,6 +151,15 @@ func TestCheckTemplate(t *testing.T) {
 	ok := "sub-rules:\n  udp: [MATCH,DIRECT]\nrules:\n  - SUB-RULE,(NETWORK,UDP),udp\n  - DOMAIN,x.com,REJECT-DROP\n  - MATCH,DIRECT\n"
 	if err := CheckTemplate(prof, ok); err != nil {
 		t.Fatal(err)
+	}
+	// A panel without inbounds has nothing to check the groups and rules with, as with
+	// xray: the template is read, and saved without the rest of the check.
+	if err := CheckTemplate(profile.Profile{}, "proxy-groups:\n  - {name: G, type: select, include-all-proxies: true}\n"); !errors.Is(err, model.ErrNoProxies) {
+		t.Fatalf("no proxies: %v, want ErrNoProxies", err)
+	}
+	var te *model.TemplateError
+	if err := CheckTemplate(profile.Profile{}, "proxy-groups: ["); !errors.As(err, &te) || te.Code != "template_yaml" {
+		t.Fatalf("no proxies, broken YAML: %v, want template_yaml", err)
 	}
 }
 

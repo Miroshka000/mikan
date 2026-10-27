@@ -20,6 +20,7 @@ import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -38,7 +39,7 @@ const (
 // admin wrote it, an own Clash one read as sing-box can, the panel's routing for none. A
 // template that does not render for p is a *model.TemplateError: the caller decides what
 // goes out in its place.
-func Render(ctx context.Context, p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
+func Render(ctx context.Context, p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
 	if t.Core == model.CoreSingBox {
 		return Template(p, t.Body)
 	}
@@ -78,7 +79,7 @@ type plan struct {
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
 // none (or of another core's).
-func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
+func planOf(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
 	g = g.WithDefaults(p.Lang)
 	if len(p.Proxies) == 0 {
 		return plan{}, model.ErrNoProxies
@@ -98,59 +99,23 @@ func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 
 // builtin is the plan of the panel's routing: the intent with the lists sing-box can read,
 // and the built-in groups over it.
-func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode) plan {
+func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	in := routing.NewIntent(m, p.Rules, p.Routes)
-	var routes []routing.Route
-	for _, r := range in.Routes {
-		// A list of a younger mihomo type or format (routing.Provider.Since) has no sing-box
-		// counterpart, and neither have the conditions that read it.
-		have := map[string]bool{}
-		var lists []routing.Provider
-		for _, pr := range r.Lists {
-			if !pr.Since.Known() {
-				have[pr.Name] = true
-				lists = append(lists, pr)
-			}
-		}
-		var rules []routing.Match
-		for _, x := range r.Rules {
-			if x.Type != "RULE-SET" || have[x.Value] {
-				rules = append(rules, x)
-			}
-		}
-		if len(rules) > 0 {
-			r.Rules, r.Lists = rules, lists
-			routes = append(routes, r)
-		}
-	}
+	// A list of a younger mihomo type or format (routing.Provider.Since) has no sing-box
+	// counterpart, and neither have the conditions that read it.
+	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return !pr.Since.Known() })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.SingBoxBalance(), routes, p.Lang)
 	pl := plan{groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
 	for _, x := range p.Proxies {
 		pl.proxies = append(pl.proxies, mihomo.Proxy(x))
 	}
-	to := func(t routing.Target, route int) routing.Target {
-		if name := gs.Of(t, route); name != "" {
-			return routing.Target{Kind: routing.ToGroup, Group: name}
-		}
-		return t
-	}
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
-		for _, r := range part {
-			pl.rules = append(pl.rules, routing.Rule{When: r.When, To: to(r.To, -1)})
-		}
-	}
-	for i, r := range routes {
+	for _, r := range routes {
 		for _, pr := range r.Lists {
 			pl.lists[pr.Name] = pr
 		}
-		for _, x := range r.Rules {
-			pl.rules = append(pl.rules, routing.Rule{When: []routing.Match{x}, To: to(r.To, i)})
-		}
 	}
-	for _, r := range in.Tail() {
-		pl.rules = append(pl.rules, routing.Rule{When: r.When, To: to(r.To, -1)})
-	}
-	pl.rules = append(pl.rules, routing.Rule{To: to(in.Final(), -1)})
+	pre, routed, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
+	pl.rules = append(append(append(pre, routed...), tail...), routing.Rule{To: final})
 	return pl
 }
 
