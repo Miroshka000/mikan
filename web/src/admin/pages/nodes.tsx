@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpCircle, ArrowUpDown, Check, Pencil, Plus } from "lucide-react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
@@ -23,6 +24,10 @@ export type Node = Schemas["NodeInfo"];
 
 export function NodesPage() {
   const nodes = useNodes();
+  // The palette opens a node's card or the new node's form by the address.
+  const search = useSearch({ from: "/_app/nodes" });
+  const navigate = useNavigate({ from: "/nodes" });
+  const clearSearch = () => void navigate({ search: {}, replace: true });
   const toUpdate = (nodes.data ?? []).filter(updatable);
   const qc = useQueryClient();
   const toast = useToast();
@@ -134,6 +139,14 @@ export function NodesPage() {
         }
       : {};
   const joinedNode = joined ? nodes.data?.find((x) => x.id === joined.id) : undefined;
+  // A node named in the address opens once its list is here, as it was then: the card's form
+  // is not filled again by every refresh of the list.
+  const [linked, setLinked] = useState<number | undefined>();
+  if (search.node !== linked && (!search.node || nodes.data)) {
+    setLinked(search.node);
+    const n = search.node ? nodes.data?.find((x) => x.id === search.node) : undefined;
+    if (n) setEditing(n);
+  }
 
   return (
     <>
@@ -199,14 +212,24 @@ export function NodesPage() {
         }
       </QueryBoundary>
       <AddNodeDrawer
-        open={adding}
-        onOpenChange={setAdding}
+        open={adding || !!search.add}
+        onOpenChange={(v) => {
+          setAdding(v);
+          if (!v && search.add) clearSearch();
+        }}
         onJoined={(j) => {
           setAdding(false);
+          if (search.add) clearSearch();
           setJoined(j);
         }}
       />
-      <EditNodeDrawer node={editing} onClose={() => setEditing(null)} />
+      <EditNodeDrawer
+        node={editing}
+        onClose={() => {
+          setEditing(null);
+          if (search.node) clearSearch();
+        }}
+      />
       <KeyDrawer joined={joined} onClose={() => setJoined(null)} actions={fixesFor(joinedNode, () => setJoined(null))} />
       <NodeCheckDrawer node={checkOf} onClose={() => setCheckOf(null)} actions={fixesFor(checkOf ?? undefined, () => setCheckOf(null))} />
       <WarpDrawer node={warpOf ? { id: warpOf.id, name: nodeLabel(warpOf) } : null} onClose={() => setWarpOf(null)} />

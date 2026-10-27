@@ -65,6 +65,29 @@
     "logout": "Выйти",
     "more": "Ещё"
   },
+  "palette": {
+    "open": "Поиск",
+    "title": "Палитра команд",
+    "placeholder": "Клиент по имени или id, нода, раздел…",
+    "placeholderNoPeople": "Клиент по id, нода, раздел…",
+    "group": {
+      "users": "Клиенты",
+      "nodes": "Ноды",
+      "actions": "Действия",
+      "sections": "Разделы"
+    },
+    "userById": "Клиент #{id}",
+    "newUser": "Новый клиент",
+    "addNode": "Добавить ноду",
+    "nothing": "Ничего не найдено",
+    "peopleHidden": "В этом доступе клиентов не ищут по имени: введите id клиента.",
+    "searchFailed": "Не удалось найти клиентов",
+    "searching": "Ищем…",
+    "count": "{n, plural, =0 {Ничего не найдено} one {# результат} few {# результата} many {# результатов} other {# результата}}",
+    "hintMove": "выбрать",
+    "hintOpen": "открыть",
+    "hintClose": "закрыть"
+  },
   "states": {
     "active": "активен",
     "expiring": "истекает",

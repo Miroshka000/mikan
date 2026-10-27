@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Activity, ArrowUpCircle, LayoutDashboard, LogOut, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen, Puzzle, Server, SlidersHorizontal, Tag, Users, Wallet } from "lucide-react";
+import { ArrowUpCircle, LogOut, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import { useState } from "react";
 import { api, ApiError, errorText, unwrap } from "../api/client";
 import { meQuery, useNode, useOverview, useUpdates } from "../api/hooks";
@@ -12,19 +12,9 @@ import { useToast } from "../components/toast";
 import { Avatar, Bar, Pill } from "../components/ui";
 import { t, useLocale } from "../i18n";
 import { num, uptime } from "../lib/format";
+import { NAV } from "./nav";
+import { CommandPalette, paletteKeyLabel, usePaletteKey } from "./palette";
 import { SupportBar } from "./support-bar";
-
-const NAV = [
-  { to: "/", key: "overview", icon: LayoutDashboard },
-  { to: "/users", key: "users", icon: Users },
-  { to: "/tariffs", key: "tariffs", icon: Tag },
-  { to: "/inbounds", key: "inbounds", icon: Server },
-  { to: "/nodes", key: "nodes", icon: Network },
-  { to: "/payments", key: "payments", icon: Wallet },
-  { to: "/addons", key: "addons", icon: Puzzle },
-  { to: "/diagnostics", key: "diagnostics", icon: Activity },
-  { to: "/settings", key: "settings", icon: SlidersHorizontal },
-] as const;
 
 // The sidebar folded to its icons on a wide screen, as the admin left it; per browser.
 const FOLD_KEY = "mikan.sidebar";
@@ -52,6 +42,9 @@ export function Shell() {
       return !f;
     });
   const foldLabel = folded ? t("shell.unfold") : t("shell.fold");
+  const [palette, setPalette] = useState(false);
+  usePaletteKey(() => setPalette((o) => !o));
+  const openPalette = () => setPalette(true);
   return (
     <>
       <SupportBar />
@@ -65,6 +58,11 @@ export function Shell() {
             </button>
           </div>
           <nav className="nav" aria-label={t("shell.sections")}>
+            <button type="button" className="nav-item" onClick={openPalette} aria-haspopup="dialog" aria-keyshortcuts={paletteKeyLabel().aria} title={`${t("palette.open")} (${paletteKeyLabel().text})`}>
+              <Search size={18} aria-hidden />
+              <span className="nav-label">{t("palette.open")}</span>
+              <kbd className="nav-count">{paletteKeyLabel().text}</kbd>
+            </button>
             {NAV.map((n) => (
               <Link key={n.to} to={n.to} className="nav-item" activeProps={{ className: "active", "aria-current": "page" }} activeOptions={{ exact: n.to === "/" }} title={t(`nav.${n.key}`)}>
                 <n.icon size={18} aria-hidden />
@@ -84,7 +82,8 @@ export function Shell() {
           <Outlet />
         </main>
       </div>
-      <MobileNav />
+      <MobileNav onSearch={openPalette} />
+      <CommandPalette open={palette} onOpenChange={setPalette} />
     </>
   );
 }
@@ -95,7 +94,7 @@ const MOBILE_MAIN = 4;
 // A section is current on its own page and on the pages below it (/addons/telegram).
 const isIn = (path: string, to: string) => path.endsWith(to) || path.includes(`${to}/`);
 
-function MobileNav() {
+function MobileNav({ onSearch }: { onSearch: () => void }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const more = NAV.slice(MOBILE_MAIN);
@@ -122,6 +121,11 @@ function MobileNav() {
                 <n.icon size={16} aria-hidden /> {t(`nav.${n.key}`)}
               </Menu.Item>
             ))}
+            <Menu.Separator className="menu-sep" />
+            {/* Opened once the menu has closed and given the focus back: the palette takes it then. */}
+            <Menu.Item className="menu-item" onSelect={() => window.setTimeout(onSearch)}>
+              <Search size={16} aria-hidden /> {t("palette.open")}
+            </Menu.Item>
           </Menu.Content>
         </Menu.Portal>
       </Menu.Root>
