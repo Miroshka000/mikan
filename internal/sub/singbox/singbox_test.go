@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
@@ -79,6 +78,11 @@ func outbound(c sbConfig, tag string) map[string]any {
 		}
 	}
 	return nil
+}
+
+func anyList(v any) []any {
+	l, _ := v.([]any)
+	return l
 }
 
 // The Clash profile as a sing-box config: the proxies sing-box can carry, the groups over
@@ -182,8 +186,8 @@ func TestSingBoxModes(t *testing.T) {
 // An idle gRPC connection is pinged after a while and given up when no answer comes, so
 // that the app does not stay on one a middlebox cut while it was silent.
 func TestGRPCKeepalive(t *testing.T) {
-	o, ok := singboxOutbound(mihomo.Proxy(model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
-		Transport: &model.Transport{Network: "grpc", Service: "api"}}))
+	o, ok := singboxOutbound(model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
+		Transport: &model.Transport{Network: "grpc", Service: "api"}})
 	if !ok {
 		t.Fatal("no outbound")
 	}

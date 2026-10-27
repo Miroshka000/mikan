@@ -40,6 +40,27 @@ func TestPreviewNotes(t *testing.T) {
 		t.Errorf("order: %+v", notes)
 	}
 
+	// A static proxy of the template the model cannot hold (a Shadowsocks plugin) is left out
+	// of sing-box's config, and the preview tells it after the note of sing-box's group.
+	const static = `proxies:
+  - {name: obfs-ss, type: ss, server: 203.0.113.8, port: 8388, cipher: aes-128-gcm, password: x, plugin: obfs, plugin-opts: {mode: http, host: bing.com}}
+proxy-groups:
+  - {name: Сеть, type: select, proxies: [obfs-ss, Баланс, DIRECT]}
+  - {name: Баланс, type: load-balance, include-all-proxies: true, strategy: round-robin}
+rules:
+  - MATCH,Сеть
+`
+	var sb []submodel.Note
+	for _, n := range previewNotes(prof, submodel.GroupNames{}, routing.All, subtest.Clash(static)) {
+		if n.Core == "singbox" {
+			sb = append(sb, n)
+		}
+	}
+	if len(sb) < 2 || sb[0] != (submodel.Note{Core: "singbox", Subject: "Баланс", Code: "balance_fastest"}) ||
+		!slices.Contains(sb[1:], submodel.Note{Core: "singbox", Subject: "obfs-ss", Code: "proxy_unsupported"}) {
+		t.Errorf("a static proxy: %+v", sb)
+	}
+
 	// The built-in profile tells what the cores leave out of the panel's routing too.
 	u.Routes, u.Rules = subtest.Routes(), subtest.Rules
 	prof.Routes, prof.Rules = u.Routes, u.Rules

@@ -6,8 +6,9 @@
 // forms that version brought in and 1.14 requires. Its rules, rule sets and DNS are the
 // panel's routing (routing.Intent) as sing-box writes it, so Settings → Routing reaches
 // it; an own Clash profile is read the same way (mihomo.TemplateParts), and an own sing-box
-// template is the config as the admin wrote it (Template). The proxies are mihomo's, whose
-// fields sing-box reads. What sing-box has no counterpart for is left out:
+// template is the config as the admin wrote it (Template). The proxies are the model's, an own
+// Clash profile's own read into it (mihomo.ReadProxy). What sing-box
+// has no counterpart for is left out:
 // XHTTP and the mihomo-only protocols (build.ForApp leaves them out already), a self-signed
 // certificate pinned by its hash (sing-box pins a public key, from 1.13 on), .mrs lists,
 // rule types of mihomo's own, logic rules but AND.
@@ -67,8 +68,10 @@ func Stub(name, main string) []byte {
 
 // plan is what a config is made of, whether of the panel's routing or of an own profile.
 type plan struct {
-	proxies []map[string]any // as mihomo writes them
-	groups  []model.Group
+	proxies []model.Proxy
+	// unread are an own Clash profile's proxies the model cannot hold (mihomo.ReadProxy).
+	unread []string
+	groups []model.Group
 	// rules are in order, each to a policy or a group (routing.ToGroup); a rule of no
 	// conditions (MATCH) ends them.
 	rules []routing.Rule
@@ -98,7 +101,7 @@ func planOf(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templ
 	if err != nil {
 		return plan{}, err
 	}
-	return plan{proxies: parts.Proxies, groups: parts.Groups, rules: parts.Rules, lists: parts.Lists, dns: parts.DNS, main: g.Main}, nil
+	return plan{proxies: parts.Proxies, unread: parts.Unread, groups: parts.Groups, rules: parts.Rules, lists: parts.Lists, dns: parts.DNS, main: g.Main}, nil
 }
 
 // builtin is the plan of the panel's routing: the intent with the lists sing-box can read,
@@ -109,12 +112,9 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	// counterpart, and neither have the conditions that read it.
 	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return !pr.Since.Known() })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.SingBoxBalance(), routes, p.Lang)
-	pl := plan{groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
+	pl := plan{proxies: p.Proxies, groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
 	// The panel's own nameservers only: one the admin gave without "#group" goes as given.
 	pl.tunnelDNS = pl.dns.FakeIP && len(in.DNS.Nameserver) == 0
-	for _, x := range p.Proxies {
-		pl.proxies = append(pl.proxies, mihomo.Proxy(x))
-	}
 	for _, r := range routes {
 		for _, pr := range r.Lists {
 			pl.lists[pr.Name] = pr
@@ -130,12 +130,15 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 func config(pl plan, sets *ruleSets) map[string]any {
 	var outbounds []map[string]any
 	tags := map[string]bool{"direct": true}
+	for _, name := range pl.unread {
+		sets.drop("proxy_unsupported", name)
+	}
 	for _, x := range pl.proxies {
 		if o, ok := singboxOutbound(x); ok {
 			outbounds = append(outbounds, o)
 			tags[str(o["tag"])] = true
 		} else {
-			sets.drop("proxy_unsupported", str(x["name"]))
+			sets.drop("proxy_unsupported", x.Name)
 		}
 	}
 	if len(outbounds) == 0 {

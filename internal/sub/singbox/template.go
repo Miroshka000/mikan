@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 
-	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
@@ -80,7 +79,7 @@ func templateConfig(p profile.Profile, src string) (map[string]any, error) {
 		if tags[x.Name] {
 			continue // the template's own outbound of that name stays
 		}
-		if o, ok := singboxOutbound(mihomo.Proxy(x)); ok {
+		if o, ok := singboxOutbound(x); ok {
 			servers = append(servers, o)
 			carried = append(carried, x)
 		}
