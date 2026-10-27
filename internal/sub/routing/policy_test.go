@@ -72,6 +72,8 @@ func TestPolicyKey(t *testing.T) {
 		// No name, or a dot at the end.
 		"+.", "*.", "x.", "a.com.", "geosite:", "rule-set:", "a.com,,b.com", "a.com,", ",a.com", "geosite:cn,", "geosite:cn,,ru",
 		"+.a.com,geosite:", "a.com,rule-set:",
+		// A category or a list inside a key is a name, not a domain.
+		"+.a.com,geosite:+.x", "a.com,rule-set:*.x",
 		// After a prefix with commas mihomo reads every name as of that kind, and cuts the list
 		// at its second ":".
 		"geosite:cn,+.a.com", "geosite:cn,*.a.com", "geosite:+.a.com", "rule-set:wl,+.a.com",

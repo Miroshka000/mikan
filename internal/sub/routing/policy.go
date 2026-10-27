@@ -57,8 +57,9 @@ func policyPrefix(s string, anyCase bool) (kind, rest string, ok bool) {
 // every Clash profile that has it. After a prefix ("geosite:", "rule-set:" in any case)
 // the key is names with commas, none empty: mihomo cuts a list at its second ":" and reads
 // a "+." or "*." name as a category or a list. Without one, each name is a domain mihomo
-// takes (validDomain), or a category or a list written with its prefix in lower case: a
-// prefix in another case is a domain to mihomo, which matches no site.
+// takes (validDomain), or a category or a list written with its prefix in lower case and a
+// name of the same kind after it: a prefix in another case is a domain to mihomo, which
+// matches no site.
 func policyKey(key string) bool {
 	if key == "" || strings.ContainsAny(key, " \t\r\n") {
 		return false
@@ -73,7 +74,7 @@ func policyKey(key string) bool {
 	}
 	for _, v := range strings.Split(key, ",") {
 		if _, rest, ok := policyPrefix(v, false); ok {
-			if rest == "" || strings.Contains(rest, ":") {
+			if rest == "" || strings.Contains(rest, ":") || strings.HasPrefix(rest, "+.") || strings.HasPrefix(rest, "*.") {
 				return false
 			}
 		} else if _, _, ok := policyPrefix(v, true); ok || !validDomain(v) {

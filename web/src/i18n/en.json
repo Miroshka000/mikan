@@ -378,7 +378,7 @@
       "routes_servers_singbox": "sing-box apps: the test interval is 30 seconds to a day, the tolerance up to 5000 ms",
       "routes_servers_xray": "Xray apps: the check address starts with http:// or https://, the interval is 30 seconds to a day, and the leastLoad fields go with leastLoad only",
       "routes_dns": "A DNS server does not fit: an IP (1.1.1.1 or 1.1.1.1:53) or an address like https://…, tls://…, quic://…",
-      "routes_dns_policy": "A DNS policy key the Clash apps would not start with: names separated by commas, none empty, with no dot at the end and no spaces: domains like +.cn, *.a.com or a.com, and geosite:… or rule-set:… in lower case. After geosite: or rule-set: at the start every name is a category or a list, with no +., *. or :",
+      "routes_dns_policy": "A DNS policy key that the Clash apps fail on or that matches no site: names separated by commas, none empty, with no dot at the end and no spaces: domains like +.cn, *.a.com or a.com, and inside a list geosite:… or rule-set:… in lower case. After geosite: or rule-set: at the start every name is a category or a list, with no +., *. or :",
       "no_proxies": "No protocol is enabled, so the profile has nothing to show",
       "template_yaml": "The YAML does not read: an error on line {value}",
       "template_empty": "The profile is empty",
