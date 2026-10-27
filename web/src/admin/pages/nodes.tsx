@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpCircle, ArrowUpDown, Check, Pencil, Plus } from "lucide-react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, ApiError, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk, useNodes } from "../../api/hooks";
 import { CertDrawer } from "../../components/cert-drawer";
@@ -140,13 +140,19 @@ export function NodesPage() {
       : {};
   const joinedNode = joined ? nodes.data?.find((x) => x.id === joined.id) : undefined;
   // A node named in the address opens once its list is here, as it was then: the card's form
-  // is not filled again by every refresh of the list.
+  // is not filled again by every refresh of the list. The address losing it (Back) closes the card.
   const [linked, setLinked] = useState<number | undefined>();
   if (search.node !== linked && (!search.node || nodes.data)) {
     setLinked(search.node);
     const n = search.node ? nodes.data?.find((x) => x.id === search.node) : undefined;
     if (n) setEditing(n);
+    else if (!search.node) setEditing(null);
   }
+  // A node that is not there (removed, or a hand-made link) leaves the address.
+  const missing = !!search.node && !!nodes.data && !nodes.data.some((x) => x.id === search.node);
+  useEffect(() => {
+    if (missing) void navigate({ search: {}, replace: true });
+  }, [missing, navigate]);
 
   return (
     <>

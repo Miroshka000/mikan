@@ -43,7 +43,7 @@ export function Shell() {
     });
   const foldLabel = folded ? t("shell.unfold") : t("shell.fold");
   const [palette, setPalette] = useState(false);
-  usePaletteKey(() => setPalette((o) => !o));
+  usePaletteKey(setPalette);
   const openPalette = () => setPalette(true);
   return (
     <>

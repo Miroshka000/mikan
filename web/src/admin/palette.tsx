@@ -170,35 +170,38 @@ function PaletteBody({ close }: { close: () => void }) {
           onKeyDown={onKeyDown}
         />
       </div>
-      <div className="palette-list" id={listId} role="listbox" aria-label={t("palette.title")}>
-        {GROUPS.map((g) => {
-          const of = items.map((it, i) => [it, i] as const).filter(([it]) => it.group === g);
-          if (!of.length) return null;
-          return (
-            <div key={g} role="group" aria-labelledby={`${listId}-${g}`}>
-              <div className="menu-label" id={`${listId}-${g}`}>
-                {t(`palette.group.${g}`)}
-              </div>
-              {of.map(([it, i]) => (
-                <div
-                  key={it.id}
-                  id={optionId(i)}
-                  role="option"
-                  aria-selected={i === cur}
-                  className="palette-item"
-                  // The focus stays in the field: the arrows and Enter go on working after a click.
-                  onMouseDown={(e) => e.preventDefault()}
-                  onMouseMove={() => i !== cur && setActive(i)}
-                  onClick={it.run}
-                >
-                  <it.icon size={16} aria-hidden className="shrink-0" />
-                  <span className="truncate">{it.label}</span>
-                  {it.hint ? <span className="palette-hint truncate">{it.hint}</span> : null}
+      <div className="palette-list">
+        <div id={listId} role="listbox" aria-label={t("palette.title")}>
+          {GROUPS.map((g) => {
+            const of = items.map((it, i) => [it, i] as const).filter(([it]) => it.group === g);
+            if (!of.length) return null;
+            return (
+              <div key={g} role="group" aria-labelledby={`${listId}-${g}`}>
+                <div className="menu-label" id={`${listId}-${g}`}>
+                  {t(`palette.group.${g}`)}
                 </div>
-              ))}
-            </div>
-          );
-        })}
+                {of.map(([it, i]) => (
+                  <div
+                    key={it.id}
+                    id={optionId(i)}
+                    role="option"
+                    aria-selected={i === cur}
+                    className="palette-item"
+                    // The focus stays in the field: the arrows and Enter go on working after a click.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onMouseMove={() => i !== cur && setActive(i)}
+                    onClick={it.run}
+                  >
+                    <it.icon size={16} aria-hidden className="shrink-0" />
+                    <span className="truncate">{it.label}</span>
+                    {it.hint ? <span className="palette-hint truncate">{it.hint}</span> : null}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+        {/* Outside the listbox: a listbox holds only options and their groups. */}
         {note ? <p className="palette-note">{t(note)}</p> : null}
         {!items.length && !note && !searching ? <p className="palette-note">{t("palette.nothing")}</p> : null}
       </div>
