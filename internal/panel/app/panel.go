@@ -53,11 +53,7 @@ import (
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
 	"mikan/internal/panel/webhooks"
-	"mikan/internal/release"
-	"mikan/internal/sub/apps"
 	submodel "mikan/internal/sub/model"
-	"mikan/internal/sub/routing"
-	"mikan/internal/sub/serve"
 )
 
 // Panel is the fully wired HTTP side of the panel, without the listener.
@@ -390,147 +386,14 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		p.subPage, subPageHandler = sp, sp
 	}
 	pages := subpage.NewService(st.Q)
-	buildSubCfg := func(ctx context.Context) (subsrc.Config, error) {
-		ep, err := set.Endpoint(ctx)
-		if err != nil {
-			return subsrc.Config{}, err
-		}
-		brand, _, err := settings.Get[string](ctx, set, settings.KeyBrand)
-		if err != nil {
-			return subsrc.Config{}, err
-		}
-		if brand == "" {
-			brand = "VPN"
-		}
-		support, _, err := settings.Get[string](ctx, set, settings.KeySupportURL)
-		if err != nil {
-			return subsrc.Config{}, err
-		}
-		lang, err := set.Lang(ctx)
-		if err != nil {
-			return subsrc.Config{}, err
-		}
-		var domainName, subDomain, publicHost, mode, fingerprint, rules string
-		var groups submodel.GroupNames
-		for key, dst := range map[string]*string{settings.KeyDomain: &domainName, settings.KeySubDomain: &subDomain, settings.KeyPublicHost: &publicHost, settings.KeyGroupMain: &groups.Main, settings.KeyGroupAuto: &groups.Auto,
-			settings.KeyRouting: &mode, settings.KeyFingerprint: &fingerprint, settings.KeyRules: &rules} {
-			if *dst, err = set.String(ctx, key); err != nil {
-				return subsrc.Config{}, err
-			}
-		}
-		cfg := subsrc.Config{Config: serve.Config{Brand: brand, SupportURL: support, Groups: groups, Mode: routing.ParseMode(mode), Fingerprint: fingerprint,
-			Direct: []string{publicHost, domainName, subDomain}, Lang: lang, Rules: routing.ServedRules(rules, groups.WithDefaults(lang))}}
-		if cfg.Routes, _, err = settings.Get[routing.Routes](ctx, set, settings.KeyRoutes); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.Templates, err = subsrc.LoadTemplates(ctx, st.Q); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.Binding, err = set.On(ctx, settings.DeviceBinding); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.RequireHWID, err = set.On(ctx, settings.RequireHWID); err != nil {
-			return subsrc.Config{}, err
-		}
-		cfg.SubBase = subBase(ctx)
-		var legacyKind string
-		if legacyKind, err = set.String(ctx, settings.KeyLegacySubKind); err != nil {
-			return subsrc.Config{}, err
-		}
-		cfg.Legacy.Kind = panelimport.Kind(legacyKind)
-		if cfg.Legacy.Secret, err = set.String(ctx, settings.KeyLegacySubSecret); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.App.Enabled, err = set.On(ctx, settings.AppBranding); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.Happ.HideSettings, err = set.On(ctx, settings.HappHide); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.InactiveServer, err = set.On(ctx, settings.InactiveServer); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.XrayJSON, err = set.On(ctx, settings.XrayJSON); err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.InactiveText, err = set.String(ctx, settings.KeyInactiveText); err != nil {
-			return subsrc.Config{}, err
-		}
-		policy, err := subsrc.LoadPolicy(ctx, st.Q, set, o.Log)
-		if err != nil {
-			return subsrc.Config{}, err
-		}
-		if cfg.Responses, err = apps.NewResponder(policy); err != nil {
-			return subsrc.Config{}, err
-		}
-		cfg.LogDays = subsrc.LogDays(ctx, set)
-		tariffs, err := st.Q.ListTariffs(ctx)
-		if err != nil {
-			return subsrc.Config{}, err
-		}
-		cfg.Tariffs = make(map[int64]string, len(tariffs))
-		for _, t := range tariffs {
-			cfg.Tariffs[t.ID] = t.Name
-		}
-		for key, dst := range map[string]*string{settings.KeySubTitle: &cfg.Title, settings.KeyAnnounce: &cfg.Announce, settings.KeyAnnounceURL: &cfg.AnnounceURL,
-			settings.KeyBrandAccent: &cfg.App.Accent, settings.KeyBrandLogo: &cfg.App.LogoURL,
-			settings.KeyHappRouting: &cfg.Happ.Routing, settings.KeyHappProvider: &cfg.Happ.ProviderID, settings.KeyHappCrypt: &cfg.HappCrypt} {
-			if *dst, err = set.String(ctx, key); err != nil {
-				return subsrc.Config{}, err
-			}
-		}
-		// The apps take the logo uploaded for the page when no link of its own is given.
-		if cfg.App.Enabled && cfg.App.LogoURL == "" && cfg.SubBase != "" {
-			assets, err := pages.Assets(ctx)
-			if err != nil {
-				return subsrc.Config{}, err
-			}
-			if a, ok := assets[subpage.AssetLogo]; ok {
-				cfg.App.LogoURL = cfg.SubBase + "/" + subpage.AssetPath(subpage.AssetLogo, a.Hash)
-			}
-		}
-		nodes, err := st.Q.ListNodes(ctx)
-		if err != nil {
-			return subsrc.Config{}, err
-		}
-		for _, n := range nodes {
-			if n.Enabled == 0 {
-				continue
-			}
-			sn := submodel.Node{ID: n.ID, Name: n.Name, Endpoint: submodel.Endpoint{Host: ep.Host, SNI: domainName}}
-			if n.Address != "" {
-				sn.Endpoint = submodel.Endpoint{Host: domain.NodeHost(n), SNI: n.Domain}
-				cfg.Direct = append(cfg.Direct, n.PublicHost, n.Domain)
-			}
-			sn.Endpoint.SNIRouter = n.SniRouter != 0
-			var hv nodesync.HealthView
-			known := false
-			if p.Nodes != nil && n.Address != "" {
-				hv, known = p.Nodes.Health(n.ID)
-			}
-			// A node older than the Shadowsocks-2022 key per user runs one key for everyone: its
-			// links carry that one until it is updated. A version that is not a release (a
-			// build of the source) is taken as new.
-			if known && release.Valid(hv.Health.Version) && release.Newer(ssUsersSince, hv.Health.Version) {
-				sn.SSOneKey = true
-			}
-			sn.NoAuto = outOfAuto(n.NoAuto, hv, known, o.Now())
-			if o.TLS != nil {
-				if c, err := o.TLS.Pick(n); err == nil {
-					sn.Endpoint.PinSHA256 = c.Pin
-				}
-				// What the node serves, as of the last state it took: a certificate picked now
-				// reaches it with the next state, and the links follow once it has.
-				if p.Nodes != nil {
-					if pin, ok := p.Nodes.ServedPin(n.ID); ok {
-						sn.Endpoint.PinSHA256 = pin
-					}
-				}
-			}
-			cfg.Nodes = append(cfg.Nodes, sn)
-		}
-		return cfg, nil
+	cfgDeps := subsrc.ConfigDeps{Settings: set, Q: st.Q, Pages: pages, Log: o.Log, Now: o.Now, SubBase: subBase}
+	if p.Nodes != nil {
+		cfgDeps.Nodes = subNodes{p.Nodes}
 	}
+	if o.TLS != nil {
+		cfgDeps.TLS = tlsPins{o.TLS}
+	}
+	buildSubCfg := func(ctx context.Context) (subsrc.Config, error) { return subsrc.LoadConfig(ctx, cfgDeps) }
 	// A subscription is fetched by every app of every user every hour or so, and building
 	// its config reads some twenty settings and every node and takes a node's certificate
 	// from disk. It is kept for a few seconds, and dropped at once when this process changes
@@ -686,21 +549,6 @@ func runAll(ctx context.Context, workers ...func(context.Context)) {
 
 // configCacheTTL: the longest a changed setting is not seen, when the change was made by
 // another process (the server CLI); this process's own changes drop the cache at once.
-// ssUsersSince is the first release whose nodes run Shadowsocks-2022 with a key per user.
-const ssUsersSince = "0.5.1.1-rc.11"
-
-// nodeDownForAuto is how long a node may not answer the panel before its servers leave the
-// subscriptions' automatic choice: a restart or a short outage does not move them.
-const nodeDownForAuto = 5 * time.Minute
-
-// outOfAuto says whether a node's servers stay out of the subscriptions' automatic choice:
-// the admin's word (noAuto), or the panel's last check (hv, when known) has found the node
-// silent for nodeDownForAuto. The apps fetch the subscription only now and then, so a node
-// that is back returns with the next fetch.
-func outOfAuto(noAuto int64, hv nodesync.HealthView, known bool, now time.Time) bool {
-	return noAuto != 0 || known && !hv.OK && !hv.Since.IsZero() && now.Sub(hv.Since) >= nodeDownForAuto
-}
-
 const configCacheTTL = 10 * time.Second
 
 // configCache keeps the subscription's config between requests. Errors are not kept.
@@ -728,6 +576,24 @@ func (c *configCache) get(ctx context.Context, build func(context.Context) (subs
 	}
 	c.cfg, c.g, c.at, c.ok = cfg, g, now, true
 	return cfg, nil
+}
+
+// subNodes is the node syncers' word on the nodes as the subscriptions read it.
+type subNodes struct{ m *nodesync.Manager }
+
+func (s subNodes) Health(id int64) (subsrc.NodeHealth, bool) {
+	hv, ok := s.m.Health(id)
+	return subsrc.NodeHealth{OK: hv.OK, Since: hv.Since, Version: hv.Health.Version}, ok
+}
+
+func (s subNodes) ServedPin(id int64) (string, bool) { return s.m.ServedPin(id) }
+
+// tlsPins is the pin of the certificate NodeTLS picks for a node.
+type tlsPins struct{ x *NodeTLS }
+
+func (t tlsPins) Pick(n db.Node) (string, error) {
+	c, err := t.x.Pick(n)
+	return c.Pin, err
 }
 
 // forgetNodeFiles removes what the panel keeps on disk for a node id: its own certificate
