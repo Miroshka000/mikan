@@ -143,8 +143,8 @@ func Alternatives(blocked map[string]bool, n int) []string {
 	return out
 }
 
-// HWID are the apps that send a device ID, by id, in the order the stub of an app that
-// does not names them.
+// HWID are the apps that send a device ID, by id, in the order the no-device-ID stub
+// names them.
 var HWID = []string{"happ", "koala", "incy"}
 
 // XrayJSON are the apps that get whole xray configs (the xray JSON profile) in place of
