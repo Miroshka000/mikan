@@ -214,6 +214,3 @@ func parseList(raw []byte) []string {
 	}
 	return out
 }
-
-// singboxDNS is the Clash profile's DNS as sing-box servers: the first nameserver for
-// everything, a plain one for the proxies' own names (the default resolver), and the
