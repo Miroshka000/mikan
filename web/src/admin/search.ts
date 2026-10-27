@@ -22,6 +22,9 @@ export type UsersSearch = {
   hidden?: Exclude<(typeof USER_HIDDEN)[number], "hide">;
 };
 
+/** A node's card open by its id, or the form of a new one: the command palette's way in. */
+export type NodesSearch = { node?: number; add?: true };
+
 export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "security", "support", "system", "import"] as const;
 /** The parts of the sections that have them: the subscription (its settings, its apps, how it answers requests, its templates), the subscription page's editor and the routing. */
 export const SETTINGS_PARTS = {

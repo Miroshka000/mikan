@@ -65,6 +65,29 @@
     "logout": "Sign out",
     "more": "More"
   },
+  "palette": {
+    "open": "Search",
+    "title": "Command palette",
+    "placeholder": "A client by name or id, a node, a section…",
+    "placeholderNoPeople": "A client by id, a node, a section…",
+    "group": {
+      "users": "Clients",
+      "nodes": "Nodes",
+      "actions": "Actions",
+      "sections": "Sections"
+    },
+    "userById": "Client #{id}",
+    "newUser": "New client",
+    "addNode": "Add node",
+    "nothing": "Nothing found",
+    "peopleHidden": "This access does not search clients by name: type the client's id.",
+    "searchFailed": "Could not search the clients",
+    "searching": "Searching…",
+    "count": "{n, plural, =0 {Nothing found} one {# result} other {# results}}",
+    "hintMove": "move",
+    "hintOpen": "open",
+    "hintClose": "close"
+  },
   "states": {
     "active": "active",
     "expiring": "expiring",
