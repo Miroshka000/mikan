@@ -39,3 +39,22 @@ func TestEntries(t *testing.T) {
 		}
 	}
 }
+
+// The core knows five types of group; mihomo's relay is gone from it, and Clash's spelling
+// url_test is not mihomo's.
+func TestGroupTypeKnown(t *testing.T) {
+	for typ, want := range map[GroupType][2]bool{ // Known, Tests
+		Select:      {true, false},
+		URLTest:     {true, true},
+		Fallback:    {true, true},
+		LoadBalance: {true, true},
+		Chain:       {true, false},
+		"relay":     {false, false},
+		"url_test":  {false, false},
+		"":          {false, false},
+	} {
+		if got := [2]bool{typ.Known(), typ.Tests()}; got != want {
+			t.Errorf("%q: Known, Tests = %v, want %v", typ, got, want)
+		}
+	}
+}

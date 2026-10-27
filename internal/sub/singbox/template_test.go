@@ -148,9 +148,15 @@ func TestCheckOwnTemplate(t *testing.T) {
 	if err := CheckTemplate(prof, subtest.OwnSingBoxTemplate); err != nil {
 		t.Fatal(err)
 	}
+	// A panel without inbounds has nothing to check the outbounds and rules with, as with
+	// mihomo and xray: the template is read, and saved without the rest of the check.
 	prof.Proxies = nil
 	if err := CheckTemplate(prof, subtest.OwnSingBoxTemplate); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("no servers: %v", err)
+	}
+	var te *model.TemplateError
+	if err := CheckTemplate(prof, "{\n\"outbounds\": [}"); !errors.As(err, &te) || te.Code != "template_json" {
+		t.Fatalf("no servers, broken JSON: %v, want template_json", err)
 	}
 }
 
