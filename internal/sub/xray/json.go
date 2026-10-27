@@ -344,6 +344,10 @@ func (pl plan) config(name string, choice Ref, b Balancing) map[string]any {
 			outbounds = append(outbounds, dialed(o, b))
 		}
 	}
+	outbounds = append(outbounds,
+		map[string]any{"tag": directTag, "protocol": "freedom"},
+		map[string]any{"tag": blockTag, "protocol": "blackhole"},
+		map[string]any{"tag": dnsOutTag, "protocol": "dns"})
 	strategy := "AsIs"
 	if pl.resolve {
 		strategy = "IPIfNonMatch"
@@ -352,30 +356,20 @@ func (pl plan) config(name string, choice Ref, b Balancing) map[string]any {
 	if len(balancers) > 0 {
 		rt["balancers"] = balancers
 	}
-	out := skeleton(dns, outbounds, rt)
-	out["remarks"] = name
-	observe(out, balancers, b)
-	return out
-}
-
-// skeleton is the config every one of the panel's is built on, the built-in ones and the
-// Example alike: the local proxies the apps send to, sniffing, warnings in the log, and
-// after the outbounds the ones that go direct, block and answer DNS.
-func skeleton(dns any, outbounds []map[string]any, rt map[string]any) map[string]any {
 	sniff := map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}}
-	return map[string]any{
-		"log": map[string]any{"loglevel": "warning"},
-		"dns": dns,
+	out := map[string]any{
+		"remarks": name,
+		"log":     map[string]any{"loglevel": "warning"},
+		"dns":     dns,
 		"inbounds": []map[string]any{
 			{"tag": "socks", "protocol": "socks", "listen": "127.0.0.1", "port": socksPort, "settings": map[string]any{"auth": "noauth", "udp": true}, "sniffing": sniff},
 			{"tag": "http", "protocol": "http", "listen": "127.0.0.1", "port": httpPort, "sniffing": sniff},
 		},
-		"outbounds": append(outbounds,
-			map[string]any{"tag": directTag, "protocol": "freedom"},
-			map[string]any{"tag": blockTag, "protocol": "blackhole"},
-			map[string]any{"tag": dnsOutTag, "protocol": "dns"}),
-		"routing": rt,
+		"outbounds": outbounds,
+		"routing":   rt,
 	}
+	observe(out, balancers, b)
+	return out
 }
 
 // dnsOutTag is the outbound that answers the apps' queries with xray's DNS.

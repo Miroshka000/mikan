@@ -182,8 +182,8 @@ func TestExample(t *testing.T) {
 	}
 	t.Run("sing-box", func(t *testing.T) { corecheck.SingBox(t, raw) })
 
-	// The example stands on the built-in config's skeleton: what an app needs of it is the
-	// same in both.
+	// The example is written apart from the built-in config, but the skeleton an app needs
+	// is the same in both.
 	lists(t)
 	builtin, err := Render(context.Background(), profileOf(subtest.TwoNodes()), g, routing.All, model.Template{})
 	if err != nil {

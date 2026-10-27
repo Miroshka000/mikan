@@ -312,20 +312,33 @@ func words(v any) ([]string, bool) {
 // it heads the list, then a config per server; DNS goes through the tunnel and the local
 // networks direct. It takes the place of the panel's routing, so it has none of it.
 func Example(g model.GroupNames) []byte {
-	cfg := skeleton(map[string]any{"tag": dnsTag, "servers": []string{"https://1.1.1.1/dns-query"}, "queryStrategy": "UseIPv4"}, nil,
-		map[string]any{
-			"domainStrategy": "AsIs",
-			"rules": []map[string]any{
-				{"port": "53", "outboundTag": dnsOutTag},
-				{"ip": []string{"geoip:private"}, "outboundTag": directTag},
-				{"network": "tcp,udp", "outboundTag": proxyTag},
-			},
-			"balancers": []map[string]any{
-				{"tag": g.Auto, "mikan": map[string]any{"choice": true}, "strategy": map[string]any{"type": "leastPing"}},
-			},
-		})
-	cfg["observatory"] = map[string]any{"subjectSelector": []string{proxyTag}, "probeUrl": "https://www.gstatic.com/generate_204",
-		"probeInterval": "5m", "enableConcurrency": true}
-	out, _ := json.MarshalIndent(cfg, "", "  ")
-	return append(out, '\n')
+	auto, _ := json.Marshal(g.Auto)
+	return fmt.Appendf(nil, `{
+  "log": {"loglevel": "warning"},
+  "dns": {"tag": "dns", "servers": ["https://1.1.1.1/dns-query"], "queryStrategy": "UseIPv4"},
+  "inbounds": [
+    {"tag": "socks", "protocol": "socks", "listen": "127.0.0.1", "port": %[2]d, "settings": {"auth": "noauth", "udp": true},
+     "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"]}},
+    {"tag": "http", "protocol": "http", "listen": "127.0.0.1", "port": %[3]d,
+     "sniffing": {"enabled": true, "destOverride": ["http", "tls", "quic"]}}
+  ],
+  "outbounds": [
+    {"tag": "direct", "protocol": "freedom"},
+    {"tag": "block", "protocol": "blackhole"},
+    {"tag": "dns-out", "protocol": "dns"}
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": [
+      {"port": "53", "outboundTag": "dns-out"},
+      {"ip": ["geoip:private"], "outboundTag": "direct"},
+      {"network": "tcp,udp", "outboundTag": "proxy"}
+    ],
+    "balancers": [
+      {"tag": %[1]s, "mikan": {"choice": true}, "strategy": {"type": "leastPing"}}
+    ]
+  },
+  "observatory": {"subjectSelector": ["proxy"], "probeUrl": "https://www.gstatic.com/generate_204", "probeInterval": "5m", "enableConcurrency": true}
+}
+`, auto, socksPort, httpPort)
 }

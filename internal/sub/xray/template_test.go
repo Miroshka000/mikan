@@ -139,8 +139,9 @@ func TestXrayExample(t *testing.T) {
 		t.Fatalf("%s", raw)
 	}
 
-	// The example stands on the built-in configs' skeleton: what an app needs of it is the
-	// same in both, the local proxies and the outbounds that go direct, block and answer DNS.
+	// The example is written apart from the built-in configs, but the skeleton an app needs
+	// is the same in both: the local proxies and the outbounds that go direct, block and
+	// answer DNS.
 	builtin, err := Render(profileOf(subtest.Multi()), g, routing.All, model.Template{})
 	if err != nil {
 		t.Fatal(err)
