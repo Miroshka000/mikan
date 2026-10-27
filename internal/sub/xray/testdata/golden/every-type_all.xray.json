@@ -1,0 +1,611 @@
+[
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://dns.google/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "observatory": {
+      "subjectSelector": [
+        "proxy-1",
+        "proxy-2",
+        "proxy-3"
+      ],
+      "probeUrl": "https://www.gstatic.com/generate_204",
+      "probeInterval": "300s",
+      "enableConcurrency": true
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "vpn.example.com",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "security": "tls",
+          "tlsSettings": {
+            "fingerprint": "chrome",
+            "serverName": "vpn.example.com"
+          }
+        },
+        "tag": "proxy-1"
+      },
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "vpn.example.com",
+              "port": 2053,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "ws",
+          "security": "tls",
+          "tlsSettings": {
+            "fingerprint": "chrome",
+            "serverName": "vpn.example.com"
+          },
+          "wsSettings": {
+            "path": "/golden-ws"
+          }
+        },
+        "tag": "proxy-2"
+      },
+      {
+        "protocol": "shadowsocks",
+        "settings": {
+          "servers": [
+            {
+              "UoTVersion": 2,
+              "address": "vpn.example.com",
+              "method": "2022-blake3-aes-128-gcm",
+              "password": "AAECAwQFBgcICQoLDA0ODw==:rkvHPGi04pBDvWELP95stw==",
+              "port": 8388,
+              "uot": true
+            }
+          ]
+        },
+        "tag": "proxy-3"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "Авто",
+    "routing": {
+      "balancers": [
+        {
+          "tag": "Авто",
+          "selector": [
+            "proxy-1",
+            "proxy-2",
+            "proxy-3"
+          ],
+          "strategy": {
+            "type": "leastPing"
+          }
+        }
+      ],
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:dns.google"
+          ],
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "balancerTag": "Авто",
+          "inboundTag": [
+            "dns"
+          ]
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "balancerTag": "Авто",
+          "network": "tcp,udp"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://dns.google/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "vpn.example.com",
+              "port": 443,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "tcp",
+          "security": "tls",
+          "tlsSettings": {
+            "fingerprint": "chrome",
+            "serverName": "vpn.example.com"
+          }
+        },
+        "tag": "proxy-1"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "VLESS TLS",
+    "routing": {
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:dns.google"
+          ],
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-1"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy-1"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://dns.google/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "vless",
+        "settings": {
+          "vnext": [
+            {
+              "address": "vpn.example.com",
+              "port": 2053,
+              "users": [
+                {
+                  "encryption": "none",
+                  "id": "0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1"
+                }
+              ]
+            }
+          ]
+        },
+        "streamSettings": {
+          "network": "ws",
+          "security": "tls",
+          "tlsSettings": {
+            "fingerprint": "chrome",
+            "serverName": "vpn.example.com"
+          },
+          "wsSettings": {
+            "path": "/golden-ws"
+          }
+        },
+        "tag": "proxy-2"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "VLESS WS",
+    "routing": {
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:dns.google"
+          ],
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-2"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy-2"
+        }
+      ]
+    }
+  },
+  {
+    "dns": {
+      "queryStrategy": "UseIPv4",
+      "servers": [
+        "https://1.1.1.1/dns-query",
+        "https://dns.google/dns-query"
+      ],
+      "tag": "dns"
+    },
+    "inbounds": [
+      {
+        "listen": "127.0.0.1",
+        "port": 10808,
+        "protocol": "socks",
+        "settings": {
+          "auth": "noauth",
+          "udp": true
+        },
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "socks"
+      },
+      {
+        "listen": "127.0.0.1",
+        "port": 10809,
+        "protocol": "http",
+        "sniffing": {
+          "destOverride": [
+            "http",
+            "tls",
+            "quic"
+          ],
+          "enabled": true
+        },
+        "tag": "http"
+      }
+    ],
+    "log": {
+      "loglevel": "warning"
+    },
+    "outbounds": [
+      {
+        "protocol": "shadowsocks",
+        "settings": {
+          "servers": [
+            {
+              "UoTVersion": 2,
+              "address": "vpn.example.com",
+              "method": "2022-blake3-aes-128-gcm",
+              "password": "AAECAwQFBgcICQoLDA0ODw==:rkvHPGi04pBDvWELP95stw==",
+              "port": 8388,
+              "uot": true
+            }
+          ]
+        },
+        "tag": "proxy-3"
+      },
+      {
+        "protocol": "freedom",
+        "tag": "direct"
+      },
+      {
+        "protocol": "blackhole",
+        "tag": "block"
+      },
+      {
+        "protocol": "dns",
+        "tag": "dns-out"
+      }
+    ],
+    "remarks": "Shadowsocks 2022",
+    "routing": {
+      "domainStrategy": "AsIs",
+      "rules": [
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "ip": [
+            "1.1.1.1"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "domain": [
+            "full:dns.google"
+          ],
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "inboundTag": [
+            "dns"
+          ],
+          "outboundTag": "proxy-3"
+        },
+        {
+          "outboundTag": "dns-out",
+          "port": "53"
+        },
+        {
+          "domain": [
+            "full:vpn.example.com"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "ip": [
+            "geoip:private"
+          ],
+          "outboundTag": "direct"
+        },
+        {
+          "network": "tcp,udp",
+          "outboundTag": "proxy-3"
+        }
+      ]
+    }
+  }
+]
