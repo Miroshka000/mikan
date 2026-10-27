@@ -1,0 +1,59 @@
+---
+title: Moving to mikan
+description: 'The order of a move from Marzban, PasarGuard, Remnawave or 3x-ui: where to install, when to switch the domain, what to check. And moving mikan to another server.'
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+A move from another panel is an installation, an import of the users and a switch of the old domain. Each step has its own page; this one is about their order and what goes between them.
+
+## Where to install
+
+- **On a new server.** The old panel keeps working until you have checked everything, and clients notice nothing until the domain is switched.
+- **On the old panel's server.** The installer does not stop on busy ports: the protocols on them get other free ports, see [Installation](/mikan/en/start/install/#what-the-installer-asks). The mikan panel runs in the server's own network, so the import reaches the old panel at `http://127.0.0.1:PORT` (3x-ui's with its secret path): plain `http://` is allowed only to this server and the local network.
+
+The old panel's node servers become mikan nodes like any other: the command with a key from the **Nodes** page, see [Nodes](/mikan/en/nodes/nodes/).
+
+## The order
+
+<Steps>
+
+1. [Install mikan](/mikan/en/start/install/) and go through the [first steps](/mikan/en/start/first-steps/).
+
+2. Connect the nodes and set up the [plan](/mikan/en/billing/plans/) the users will come to: the import does not start without a plan, and the users get its protocols, traffic reset and server groups.
+
+3. [Move the users](/mikan/en/operations/import/#move-users): "Check", then "Import".
+
+4. Set up the [old subscription links](/mikan/en/operations/import/#old-subscription-links): the path, for Marzban and PasarGuard also the signing secret, and the subscription port if the old panel gave subscriptions on another port.
+
+5. Point the domain the old panel gave subscriptions on at the mikan server. mikan needs a certificate for that name: make the domain the panel's domain (**Settings → General → Server**, see [Change the domain or address](/mikan/en/start/domain/#change-the-domain-or-address)) or the [subscription domain](/mikan/en/subscriptions/domain/). Until there is a certificate, apps may complain about the name.
+
+6. Try a couple of old links: the user's card shows their old link (Remnawave, 3x-ui) or that it works. Links revoked in the old panel open again in mikan: reissue them.
+
+7. Once the old links open in mikan, the old panel can be turned off.
+
+</Steps>
+
+:::caution[An import is a snapshot]
+The import moves users as they were when it started. What changes in the old panel after it (renewals, traffic used, new users) does not come over by itself. Running the import again takes only new names: those already in mikan are skipped. So switch the domain soon after the import.
+:::
+
+## Moving mikan to another server
+
+A mikan backup goes onto a freshly installed server, see [Restore](/mikan/en/operations/backups/#restore).
+
+<Steps>
+
+1. On the old server: `mikan backup`, then copy the archive from `/opt/mikan/backups` to the new server. `mikan url` shows the panel port.
+
+2. On the new server, install mikan with the same panel port: `--port PORT`, see [the flags](/mikan/en/start/install/#unattended-for-scripts). The panel port is kept in the database and comes with the backup, while the installer opens in ufw only the port it set up itself.
+
+3. Restore the backup: `mikan restore /path/to/mikan-….tar.gz`.
+
+4. If the server has another IP, change "Server address" in **Settings → General → Server**, and point the domain's A record at the new server. Subscription links are built from this address, see [Change the domain or address](/mikan/en/start/domain/#change-the-domain-or-address). With a [subscription domain](/mikan/en/subscriptions/domain/), clients' links do not change in a move.
+
+5. The nodes connect by themselves. If "Node API from the panel's IP only" is on for them, the rule lifts itself after 15 minutes and comes back with the new address, see [Hardening a node](/mikan/en/nodes/hardening/#node-api-from-the-panels-ip-only).
+
+</Steps>
+
+Your own site in `/opt/mikan/data/panel/www` is not in the backup, move it separately.
