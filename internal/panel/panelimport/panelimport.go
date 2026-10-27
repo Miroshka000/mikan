@@ -1,6 +1,6 @@
 // Package panelimport brings users over from another panel through its API: Marzban,
-// PasarGuard and Remnawave. Each becomes a mikan user on a plan the admin picks, with
-// the old panel's limit, traffic used, term and device limit kept.
+// PasarGuard, Remnawave and 3x-ui. Each becomes a mikan user on a plan the admin picks,
+// with the old panel's limit, traffic used, term and device limit kept.
 //
 // What does not come over: the old panel's traffic reset strategy, groups and inbounds
 // (users get the plan's), and an on-hold term, which starts at the import.
@@ -9,6 +9,7 @@
 // to sign in too, both through Verifier.User):
 //
 //   - Remnawave's link is the user's short UUID, the same every time: it is kept as is.
+//     So is 3x-ui's subId.
 //   - Marzban and PasarGuard sign a new token for every request, so the tokens people
 //     hold were never seen by the API. They are checked as the old panel checked them,
 //     with its secret (Verifier); without the secret those links are not taken over,
@@ -44,16 +45,18 @@ const (
 	Marzban    Kind = "marzban"
 	PasarGuard Kind = "pasarguard"
 	Remnawave  Kind = "remnawave"
+	XUI        Kind = "3xui" // 3x-ui (MHSanaei/3x-ui)
 )
 
 // Source is how to reach the old panel. Marzban and PasarGuard take an admin's username
-// and password (PasarGuard an API key instead); Remnawave an API token.
+// and password (PasarGuard an API key instead); Remnawave an API token; 3x-ui a username
+// and password or an API token.
 type Source struct {
 	Kind     Kind
-	URL      string // the panel's address, https://panel.example.com
+	URL      string // the panel's address, https://panel.example.com; 3x-ui's with its base path
 	Username string
 	Password string
-	Token    string // Remnawave API token, or PasarGuard API key
+	Token    string // Remnawave or 3x-ui API token, or PasarGuard API key
 }
 
 // Status of a user in the old panel, in mikan's words.
@@ -82,7 +85,8 @@ type User struct {
 	OnHold time.Duration
 	// DeviceLimit; 0: the plan's.
 	DeviceLimit int64
-	// Token is a subscription token that is the same every time (Remnawave's short UUID).
+	// Token is a subscription token that is the same every time (Remnawave's short UUID,
+	// 3x-ui's subId).
 	Token string
 	// WeakToken: the old panel's token is too short or odd to be a secret; the user comes
 	// over without the old link.
@@ -90,6 +94,9 @@ type User struct {
 	// Created is when the old panel made the user: its signed tokens from before are not
 	// the user's (a name used again).
 	Created time.Time
+	// Skip is why the user does not come over though the old panel has it (3x-ui: a client
+	// only on inbounds of protocols mikan has not); Normalize refuses it with this.
+	Skip string
 }
 
 // Errors the admin sees.
@@ -197,6 +204,9 @@ func Fetch(ctx context.Context, hc *http.Client, src Source) ([]User, error) {
 		return fetchMarzban(ctx, hc, src)
 	case Remnawave:
 		return fetchRemnawave(ctx, hc, src)
+	case XUI:
+		list, err := fetchXUI(ctx, hc, src)
+		return list, hidePath(err, src.URL)
 	}
 	return nil, fmt.Errorf("unknown panel %q", src.Kind)
 }
@@ -227,9 +237,14 @@ func plainOnly(hc *http.Client) *http.Client {
 
 // getJSON does a request and decodes a JSON answer into out.
 func getJSON(ctx context.Context, hc *http.Client, req *http.Request, out any) error {
+	return getJSONLimit(ctx, hc, req, maxPageBytes, out)
+}
+
+// getJSONLimit is getJSON for an answer of up to limit bytes.
+func getJSONLimit(ctx context.Context, hc *http.Client, req *http.Request, limit int64, out any) error {
 	req = req.WithContext(ctx)
 	req.Header.Set("Accept", "application/json")
-	err := httpjson.Do(hc, req, maxPageBytes, out)
+	err := httpjson.Do(hc, req, limit, out)
 	var se *httpjson.StatusError
 	switch {
 	case err == nil:
