@@ -12,6 +12,7 @@ import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/build"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -303,7 +304,7 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 			nodes = append(nodes, model.Node{ID: id, Name: names[id], Endpoint: model.Endpoint{Host: "203.0.113.7"}})
 			wantGroups = append(wantGroups, names[id])
 		}
-		p := Profile{Proxies: build.Proxies(build.Profile{Keys: subtest.Keys, Inbounds: ins, Nodes: nodes}), Nodes: nodes}
+		p := profile.Profile{Proxies: build.Proxies(build.Profile{Keys: subtest.Keys, Inbounds: ins, Nodes: nodes}), Nodes: nodes}
 		raw, err := Render(p, model.GroupNames{}, routing.All)
 		if err != nil {
 			t.Fatal(err)
@@ -332,10 +333,10 @@ func TestNodeOrderFollowsTheProfile(t *testing.T) {
 }
 
 func TestNothingToServeIsAnError(t *testing.T) {
-	if _, err := Render(Profile{}, model.GroupNames{}, routing.All); !errors.Is(err, model.ErrNoProxies) {
+	if _, err := Render(profile.Profile{}, model.GroupNames{}, routing.All); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("a profile with empty groups is not served: %v", err)
 	}
-	if _, _, err := Template(Profile{}, "rules: [MATCH,DIRECT]\n"); !errors.Is(err, model.ErrNoProxies) {
+	if _, _, err := Template(profile.Profile{}, "rules: [MATCH,DIRECT]\n"); !errors.Is(err, model.ErrNoProxies) {
 		t.Fatalf("an own profile with no proxies: %v", err)
 	}
 }
@@ -400,13 +401,13 @@ func TestGRPCKeepalive(t *testing.T) {
 		t.Fatalf("grpc-opts: %v", o)
 	}
 	for _, app := range []apps.App{{Family: apps.FamilyMihomo}, {Family: apps.FamilyStash}} {
-		p := Profile{Proxies: []model.Proxy{grpc}, App: app}
+		p := profile.Profile{Proxies: []model.Proxy{grpc}, App: app}
 		built, err := renderConfig(p, model.GroupNames{}, routing.DefaultMode)
 		if err != nil {
 			t.Fatal(err)
 		}
 		cfgs := map[string]map[string]any{"built-in": built}
-		if p.Routable() { // Stash gets no own profile
+		if p.App.TakesOwnProfile() { // Stash gets no own profile
 			own, _, err := templateConfig(p, subtest.OwnTemplate)
 			if err != nil {
 				t.Fatal(err)

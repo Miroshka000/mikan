@@ -9,6 +9,7 @@ import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -34,7 +35,7 @@ const (
 // fetch, a 90 MB download that may break off), and an app may cut its files down.
 // model.ErrNoProxies when xray carries none of p's proxies; a template that does not render
 // for p is a *model.TemplateError, and the caller decides what goes out in its place.
-func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
+func Render(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
 	if t.Core == model.CoreXray {
 		return Template(p, t.Body)
 	}
@@ -49,7 +50,7 @@ func Render(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 // (Balance), for the admin panel's preview: of the own Clash profile t, or of the built-in
 // groups. The main group is no select in xray: its choices are the app's list of configs.
 // An own xray template has its balancers as the admin wrote them: no notes.
-func Notes(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
+func Notes(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
 	if t.Core == model.CoreXray {
 		return nil
 	}
@@ -98,7 +99,7 @@ type rule struct {
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
 // none (or of another core's).
-func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
+func planOf(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
 	g = g.WithDefaults(p.Lang)
 	outs, carried := outboundsOf(p.Proxies)
 	if len(outs) == 0 {
@@ -134,7 +135,7 @@ func outboundsOf(ps []model.Proxy) (outs []tagged, carried []model.Proxy) {
 
 // builtin is the plan of the panel's routing: the intent with what xray can match of it,
 // and the built-in groups over it.
-func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode, outs []tagged) plan {
+func builtin(p profile.Profile, g model.GroupNames, m routing.Mode, outs []tagged) plan {
 	// The blocked mode is made of runetfreedom's lists of what is blocked, which the usual
 	// geodata lacks: the configs get RU direct, as the apps that take no rule lists do
 	// (Intent.Plain).

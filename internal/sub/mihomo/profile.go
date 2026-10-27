@@ -1,28 +1,13 @@
 package mihomo
 
 import (
-	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
-// Profile is what a mihomo profile is made of.
-type Profile struct {
-	Proxies []model.Proxy // the user's (build.Proxies)
-	Nodes   []model.Node  // enabled nodes in display order
-	Direct  []string      // hosts that bypass the tunnel: the panel and every node
-	// Rules are the admin's own rules (routing.ServedRules) that the app's core parses
-	// (RulesFor), before the built-in routing.
-	Rules []routing.Rule
-	// Routes go after the admin's rules, for the apps that take rule lists (App); Lang
-	// names the groups they add.
-	Routes routing.Routes
-	App    apps.App
-	Lang   string
-}
-
 // Render is a complete client profile.
-func Render(p Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
+func Render(p profile.Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
 	cfg, err := renderConfig(p, g, m)
 	if err != nil {
 		return nil, err
@@ -32,21 +17,21 @@ func Render(p Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
 
 // renderConfig is the profile Render writes: the intent of the settings as the app takes
 // it (routing.Intent), written the Clash way.
-func renderConfig(p Profile, g model.GroupNames, m routing.Mode) (map[string]any, error) {
+func renderConfig(p profile.Profile, g model.GroupNames, m routing.Mode) (map[string]any, error) {
 	if len(p.Proxies) == 0 {
 		// Groups with no proxies in them are a profile mihomo may refuse whole.
 		return nil, model.ErrNoProxies
 	}
 	g = g.WithDefaults("")
 	in := routing.NewIntent(m, p.Rules, p.Routes)
-	if !p.Routable() {
+	if !p.App.TakesOwnProfile() {
 		in = in.Plain()
 	}
-	routes := p.taken(in.Routes)
+	routes := taken(p, in.Routes)
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.MihomoBalance(), routes, p.Lang)
 	proxies := make([]map[string]any, len(p.Proxies))
 	for i, x := range p.Proxies {
-		proxies[i] = p.proxy(x)
+		proxies[i] = proxy(p, x)
 	}
 	groups := make([]map[string]any, len(gs.List))
 	for i, gr := range gs.List {

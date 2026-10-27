@@ -20,6 +20,7 @@ import (
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -38,7 +39,7 @@ const (
 // admin wrote it, an own Clash one read as sing-box can, the panel's routing for none. A
 // template that does not render for p is a *model.TemplateError: the caller decides what
 // goes out in its place.
-func Render(ctx context.Context, p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
+func Render(ctx context.Context, p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) ([]byte, error) {
 	if t.Core == model.CoreSingBox {
 		return Template(p, t.Body)
 	}
@@ -78,7 +79,7 @@ type plan struct {
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
 // none (or of another core's).
-func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
+func planOf(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) (plan, error) {
 	g = g.WithDefaults(p.Lang)
 	if len(p.Proxies) == 0 {
 		return plan{}, model.ErrNoProxies
@@ -98,7 +99,7 @@ func planOf(p mihomo.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 
 // builtin is the plan of the panel's routing: the intent with the lists sing-box can read,
 // and the built-in groups over it.
-func builtin(p mihomo.Profile, g model.GroupNames, m routing.Mode) plan {
+func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	in := routing.NewIntent(m, p.Rules, p.Routes)
 	var routes []routing.Route
 	for _, r := range in.Routes {

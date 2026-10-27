@@ -7,6 +7,7 @@ import (
 
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -22,7 +23,7 @@ type routedProfile struct {
 	GeoxURL   map[string]string         `json:"geox-url"`
 }
 
-func renderRouted(t *testing.T, prof Profile, m routing.Mode) (routedProfile, []byte) {
+func renderRouted(t *testing.T, prof profile.Profile, m routing.Mode) (routedProfile, []byte) {
 	t.Helper()
 	raw, err := Render(prof, model.GroupNames{}, m)
 	if err != nil {
