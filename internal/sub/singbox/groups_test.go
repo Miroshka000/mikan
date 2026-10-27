@@ -65,6 +65,15 @@ func TestConvertGroups(t *testing.T) {
 	if two.detours["a"] != "entry" || len(two.notes) != 1 || two.notes[0].Code != "chain_dialer_taken" {
 		t.Fatalf("a taken dialer: %v %+v", two.detours, two.notes)
 	}
+
+	// A chain as a hop is entered by its first hop: entry, a, then b.
+	nested := convertGroups([]model.Group{
+		{Name: "inner", Type: model.Chain, Members: []string{"a", "b"}},
+		{Name: "outer", Type: model.Chain, Members: []string{"entry", "inner"}},
+	}, tags)
+	if nested.detours["a"] != "entry" || nested.detours["b"] != "a" || len(nested.detours) != 2 || len(nested.notes) != 0 {
+		t.Fatalf("a nested chain: %v %+v", nested.detours, nested.notes)
+	}
 }
 
 // A chain of an own profile reaches the config: the exit's servers dial through the entry.
