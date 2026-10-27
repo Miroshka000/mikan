@@ -197,6 +197,14 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 	if len(info.Blocked) != 1 || info.Blocked[0] != "incy" {
 		t.Errorf("/info: %v", info.Blocked)
 	}
+	// The tester shows the format the answer goes out in: the links of a stub in place of
+	// INCY's xray configs, the page for a messenger's preview.
+	if test = probe(map[string]any{"user_agent": "INCY/2.1.0", "headers": []apps.Header{}}); test.Respond != "stub" || test.Format != "uri" {
+		t.Errorf("a blocked app of xray configs: %+v", test)
+	}
+	if test = probe(map[string]any{"user_agent": "TelegramBot (like TwitterBot)", "headers": []apps.Header{}}); test.Respond != "serve" || test.Format != "html" {
+		t.Errorf("a messenger's preview: %+v", test)
+	}
 
 	// The log: newest first, what asked and what it came to, and no token.
 	var log struct {
@@ -224,7 +232,7 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 		t.Fatalf("%d days, %d entries: %+v", log.Days, len(log.Items), log.Items)
 	}
 	first, oldest := log.Items[0], log.Items[len(log.Items)-1]
-	if first.App != "incy" || first.AppName != "INCY" || first.Rule != "apps" || first.Format != "xray" || first.Outcome != "stub" || first.IP == "" {
+	if first.App != "incy" || first.AppName != "INCY" || first.Rule != "apps" || first.Format != "uri" || first.Outcome != "stub" || first.IP == "" {
 		t.Errorf("the newest: %+v", first)
 	}
 	if oldest.App != "happ" || oldest.Rule != "" || oldest.Format != "xray" || oldest.Outcome != "served" {

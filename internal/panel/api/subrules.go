@@ -301,10 +301,14 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 		out.Body.Status = http.StatusOK
 	case apps.RespondStub:
 		out.Body.Status, out.Body.Text = http.StatusOK, serve.StubText(lang, d)
-		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
+		out.Body.Format = serve.StubFormat(serve.Resolve(req, "", d, xrayJSON))
 	default:
 		out.Body.Status = http.StatusOK
 		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
+		// A messenger building a link's preview gets the panel's subscription page.
+		if serve.LinkPreview(req.Get("User-Agent")) {
+			out.Body.Format = serve.FormatHTML
+		}
 		if out.Body.Template, err = h.testedTemplate(ctx, out.Body.Format, req.Get("User-Agent"), d.Action.Template); err != nil {
 			return nil, err
 		}

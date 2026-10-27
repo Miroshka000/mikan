@@ -404,6 +404,62 @@ func TestPageIsLogged(t *testing.T) {
 	if e := oneEntry(t, sub); e.Outcome != OutcomeServed || e.Format != FormatHTML || e.App != "" {
 		t.Errorf("%+v", e)
 	}
+	// A messenger's preview gets the page, and the log says so, not the links Resolve picks.
+	for _, c := range []struct{ target, body, format string }{
+		{"/" + testToken, "page", FormatHTML},
+		{"/" + testToken + "?format=uri", "", FormatURI},
+	} {
+		sub.log = nil
+		r = httptest.NewRequest(http.MethodGet, c.target, nil)
+		r.Header.Set("User-Agent", "TelegramBot (like TwitterBot)")
+		w = httptest.NewRecorder()
+		h.Serve(w, r, testToken)
+		if c.body != "" && w.Body.String() != c.body || c.body == "" && w.Body.String() == "page" {
+			t.Errorf("%s: %q", c.target, w.Body)
+		}
+		if e := oneEntry(t, sub); e.Outcome != OutcomeServed || e.Format != c.format {
+			t.Errorf("%s: %+v", c.target, e)
+		}
+	}
+	// With no page to send, a browser gets the links, and the log says so.
+	sub.log = nil
+	w = fetch(t, sub, "Mozilla/5.0", "Accept", "text/html")
+	if !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") || len(stubName(t, w)) == 0 {
+		t.Errorf("no page: %v\n%.200s", w.Header(), w.Body)
+	}
+	if e := oneEntry(t, sub); e.Outcome != OutcomeServed || e.Format != FormatURI {
+		t.Errorf("no page: %+v", e)
+	}
+}
+
+// A stub in place of an xray JSON answer is a link, and the log has the format it went out
+// in; its body is the one of the stub with the xray JSON switch off.
+func TestStubFormatIsLogged(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		blocked []string
+		keysErr error
+	}{
+		{"turned away", []string{"happ"}, nil},
+		{"device limit", nil, ErrDeviceLimit},
+	} {
+		var bodies []string
+		for _, on := range []bool{false, true} {
+			sub := newSub(t, apps.Policy{NoBuiltin: true, Blocked: c.blocked})
+			sub.cfg.XrayJSON, sub.keysErr = on, c.keysErr
+			w := fetch(t, sub, "Happ/3.4.1", "X-Hwid", "abc")
+			if !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
+				t.Errorf("%s, xray JSON %v: %v", c.name, on, w.Header())
+			}
+			if e := oneEntry(t, sub); e.Outcome != OutcomeStub || e.Format != FormatURI {
+				t.Errorf("%s, xray JSON %v: %+v", c.name, on, e)
+			}
+			bodies = append(bodies, w.Body.String())
+		}
+		if bodies[0] != bodies[1] {
+			t.Errorf("%s: the stub changed with the switch:\n%s\n%s", c.name, bodies[0], bodies[1])
+		}
+	}
 }
 
 func TestResolve(t *testing.T) {
@@ -431,6 +487,16 @@ func TestResolve(t *testing.T) {
 	}
 	if got := Resolve(h, "clash", apps.Decision{Action: apps.Action{Format: FormatSingBox}}, true); got != FormatSingBox {
 		t.Errorf("a rule's format: %s", got)
+	}
+	// A stub of Happ's xray JSON answer goes out as links; a stub of the other formats as
+	// the format itself.
+	if got := StubFormat(Resolve(h, "", apps.Decision{}, true)); got != FormatURI {
+		t.Errorf("Happ's stub: %s", got)
+	}
+	for _, f := range []string{FormatClash, FormatSingBox, FormatURI} {
+		if got := StubFormat(f); got != f {
+			t.Errorf("StubFormat(%s) = %s", f, got)
+		}
 	}
 }
 
@@ -653,11 +719,11 @@ func TestPanelFailuresAre500(t *testing.T) {
 	// connect to is a stub instead.
 	sub = newSub(t, apps.Policy{NoBuiltin: true})
 	w = httptest.NewRecorder()
-	if out := handlerOf(sub).profileFailed(w, sub.cfg, FormatSingBox, errors.New("marshal")); out != "" || w.Code != 500 || w.Body.String() != "internal error\n" {
+	if out := handlerOf(sub).profileFailed(w, sub.cfg, &exchange{format: FormatSingBox}, errors.New("marshal")); out != "" || w.Code != 500 || w.Body.String() != "internal error\n" {
 		t.Errorf("render: %q %d %q", out, w.Code, w.Body)
 	}
 	w = httptest.NewRecorder()
-	if out := handlerOf(sub).profileFailed(w, sub.cfg, FormatURI, model.ErrNoProxies); out != OutcomeStub ||
+	if out := handlerOf(sub).profileFailed(w, sub.cfg, &exchange{format: FormatURI}, model.ErrNoProxies); out != OutcomeStub ||
 		stubName(t, w) != "⛔ There are no servers this app can use — open the subscription link in a browser" {
 		t.Errorf("no proxies: %q %q", out, stubName(t, w))
 	}

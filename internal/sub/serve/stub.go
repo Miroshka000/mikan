@@ -47,15 +47,22 @@ func listed(names []string, or string) string {
 	return strings.Join(names[:len(names)-1], ", ") + " " + or + " " + names[len(names)-1]
 }
 
+// StubFormat is the format a stub in place of an answer in format f goes out in: the stub of
+// an xray JSON answer is a link all the same, the app reads either, and one placeholder
+// server needs no routing. The admin panel's tester shows it too.
+func StubFormat(f string) string {
+	if f == FormatXray {
+		return FormatURI
+	}
+	return f
+}
+
 // stub answers a device that gets no keys or a profile with nothing in it: one placeholder
 // server named after the reason, so the app shows it where the servers would be, and the
-// headers Happ-like apps read.
-func (h *Handler) stub(w http.ResponseWriter, cfg Config, format string, reason error) {
-	// The stub of an xray JSON answer is a link all the same: the app reads either, and one
-	// placeholder server needs no routing.
-	if format == FormatXray {
-		format = FormatURI
-	}
+// headers Happ-like apps read. The request log gets the format the stub goes out in.
+func (h *Handler) stub(w http.ResponseWriter, cfg Config, ex *exchange, reason error) {
+	ex.format = StubFormat(ex.format)
+	format := ex.format
 	en := textutil.Lang(cfg.Lang).En()
 	name := "⛔ Все места для устройств заняты — откройте ссылку подписки в браузере"
 	if en {
