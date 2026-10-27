@@ -119,6 +119,10 @@ func (m *Monitor) round(ctx context.Context) {
 		m.logError("infrastructure alerts: load state", err)
 		return
 	}
+	queued := make(map[string]bool, len(st.Pending))
+	for _, d := range st.Pending {
+		queued[d.Key] = true
+	}
 	cfg := m.config(ctx)
 	lang := "ru"
 	if m.bot != nil {
@@ -218,12 +222,15 @@ func (m *Monitor) round(ctx context.Context) {
 	m.publicStatus(ctx, &st, cfg, nodes, byNode, lang)
 	forgetRemoved(&st, nodes, byNode)
 	enabled := m.bot != nil && m.bot.PolledInfrastructure(ctx) // read once per round
+	// What this round queued for the admin goes to the group and Discord too; without the bot
+	// only Discord's copy stays.
+	st.Pending = copyOut(st.Pending, func(k string) bool { return !queued[k] }, cfg, enabled && cfg.GroupChat != "", m.discordHook(ctx) != "")
 	if !enabled {
-		st.Pending = nil
+		dropPending(&st, telegramTargets...)
 	}
 	if err := m.save(ctx, st); err != nil {
 		m.logError("infrastructure alerts: save state", err)
-	} else if enabled && len(st.Pending) > 0 {
+	} else if len(st.Pending) > 0 {
 		dispatch = true
 	}
 }

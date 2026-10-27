@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
@@ -51,6 +50,8 @@ func lists(t *testing.T) {
 			return []string{"DOMAIN-SUFFIX,instagram.com", "IP-CIDR,149.154.160.0/20,no-resolve"}, nil
 		case strings.HasSuffix(src, "/ru.yaml"):
 			return []string{"+.gosuslugi.ru", "ya.ru", "*.wildcard.ru"}, nil
+		case strings.HasSuffix(src, "/ipcidr.yaml"), strings.HasSuffix(src, "/ipcidr-domain.yaml"):
+			return []string{"104.16.0.0/14", "2606:4700::/32", "not an address"}, nil
 		case strings.HasSuffix(src, "/ru.txt"):
 			return []string{"5.8.0.0/16", "not an address"}, nil
 		}
@@ -79,6 +80,11 @@ func outbound(c sbConfig, tag string) map[string]any {
 		}
 	}
 	return nil
+}
+
+func anyList(v any) []any {
+	l, _ := v.([]any)
+	return l
 }
 
 // The Clash profile as a sing-box config: the proxies sing-box can carry, the groups over
@@ -182,8 +188,8 @@ func TestSingBoxModes(t *testing.T) {
 // An idle gRPC connection is pinged after a while and given up when no answer comes, so
 // that the app does not stay on one a middlebox cut while it was silent.
 func TestGRPCKeepalive(t *testing.T) {
-	o, ok := singboxOutbound(mihomo.Proxy(model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
-		Transport: &model.Transport{Network: "grpc", Service: "api"}}))
+	o, ok := singboxOutbound(model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
+		Transport: &model.Transport{Network: "grpc", Service: "api"}})
 	if !ok {
 		t.Fatal("no outbound")
 	}

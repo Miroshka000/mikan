@@ -324,13 +324,19 @@ func (t *Tuner) load(ctx context.Context) (*world, error) {
 		}
 	}
 	// Bound devices use keys of their own: the same profile as their user's, fetched on
-	// their own schedule.
+	// their own schedule. A device is seen as it asks for its keys, before the profile is
+	// made: one turned away with a notice, or left without a profile by an error, took
+	// nothing. Its last visit counts only if the profile went out to its address then.
 	devices, err := q.ListDeviceSlots(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, d := range devices {
-		w.users[d.SlotName] = User{Inbounds: allowed[d.UserID], Fetched: d.LastSeen}
+		u := User{Inbounds: allowed[d.UserID]}
+		if fetched[d.UserID][d.LastIp] >= d.LastSeen {
+			u.Fetched = d.LastSeen
+		}
+		w.users[d.SlotName] = u
 	}
 	reach, err := q.ListInboundReachSince(ctx, w.now.Add(-reachKeep).Unix())
 	if err != nil {

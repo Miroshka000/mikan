@@ -53,6 +53,7 @@ export const qk = {
   subRules: ["sub-rules"] as const,
   subTemplates: ["sub-templates"] as const,
   subTemplate: (id: number) => ["sub-templates", "one", id] as const,
+  readySubTemplates: ["sub-templates-ready"] as const,
   userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
   lifecycle: ["lifecycle"] as const,
@@ -513,6 +514,11 @@ export function useSubTemplate(id: number | undefined) {
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/{id}", { params: { path: { id: id! } }, signal })),
     enabled: id !== undefined,
   });
+}
+
+/** The catalog of ready subscription templates: mikan's own and the community's, without their texts. */
+export function useReadySubTemplates() {
+  return useQuery({ queryKey: qk.readySubTemplates, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/ready", { signal })), staleTime: Infinity });
 }
 
 /** The latest requests of a user's subscription, newest first. */

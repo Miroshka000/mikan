@@ -13,7 +13,7 @@ import { onFormError } from "../../../lib/fields";
 import { ago } from "../../../lib/format";
 import { safeHref } from "../../../lib/url";
 import { ClosedForSupport } from "../../support-closed";
-import type { View } from "./shared";
+import { usePatchTelegram, type View } from "./shared";
 import { Select } from "../../../components/select";
 
 export function InfrastructureCard({ v, draft, setDraft, error }: { v: View; draft: Schemas["AlertsConfig"]; setDraft: Dispatch<SetStateAction<Schemas["AlertsConfig"]>>; error: string }) {
@@ -67,6 +67,34 @@ export function InfrastructureCard({ v, draft, setDraft, error }: { v: View; dra
             </a>
           </div>
         ) : null}
+        <div className="grid gap-x-3 pt-4 sm:grid-cols-[1fr_160px]">
+          <Field label={t("telegram.infra.group")} htmlFor="infra-group" hint={t("telegram.infra.groupHint")}>
+            <input
+              id="infra-group"
+              className="input mono"
+              value={draft.group_chat ?? ""}
+              // A topic is of a group: without the group it goes too.
+              onChange={(e) => setDraft((d) => ({ ...d, group_chat: e.target.value, ...(e.target.value.trim() ? {} : { group_thread: 0 }) }))}
+              placeholder="-1001234567890"
+              maxLength={40}
+              autoComplete="off"
+            />
+          </Field>
+          <Field label={t("telegram.infra.groupThread")} htmlFor="infra-thread" hint={t("telegram.infra.groupThreadHint")}>
+            <input
+              id="infra-thread"
+              className="input mono"
+              inputMode="numeric"
+              value={draft.group_thread ? String(draft.group_thread) : ""}
+              // 0, not left out: the PATCH keeps a field it is not sent.
+              onChange={(e) => setDraft((d) => ({ ...d, group_thread: Number(e.target.value.replace(/\D/g, "").slice(0, 15)) }))}
+              disabled={!draft.group_chat?.trim()}
+              placeholder="42"
+              autoComplete="off"
+            />
+          </Field>
+        </div>
+        <DiscordRow v={v} />
         <SwitchRow label={t("telegram.infra.public")} sub={t("telegram.infra.publicHint")} checked={draft.public_enabled} onChange={(on) => change("public_enabled", on)} />
         <div className="pt-4">
           <Field label={t("telegram.infra.channel")} htmlFor="infra-channel" hint={t("telegram.infra.channelHint")} error={error}>
@@ -99,6 +127,65 @@ export function InfrastructureCard({ v, draft, setDraft, error }: { v: View; dra
         ))}
       </div>
     </section>
+  );
+}
+
+// The Discord webhook the admin's alerts go to as well. Its address is the secret of the
+// channel: saved on its own (the server checks it with Discord), never shown back, only
+// whether one is set and its name.
+function DiscordRow({ v }: { v: View }) {
+  const patch = usePatchTelegram();
+  const toast = useToast();
+  const [hook, setHook] = useState("");
+  const [error, setError] = useState("");
+  const save = (discord_webhook: string, done: string) =>
+    patch.mutate(
+      { infrastructure: { discord_webhook } },
+      {
+        onSuccess: () => {
+          setHook("");
+          setError("");
+          toast.ok(done);
+        },
+        onError: (e) => onFormError(e, toast, (fields) => setError(Object.values(fields)[0] ?? "")),
+      },
+    );
+  return (
+    <div className="py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="switch-row-title">{t("telegram.infra.discord")}</div>
+          <div className="switch-row-sub">
+            {v.discord_set ? (v.discord_name ? t("telegram.infra.discordSet", { name: v.discord_name }) : t("telegram.infra.discordSetNoName")) : t("telegram.infra.discordNotSet")}
+          </div>
+        </div>
+        {v.discord_set ? (
+          <Button size="sm" variant="ghost" loading={patch.isPending && !hook} onClick={() => save("", t("telegram.infra.discordRemoved"))}>
+            {t("telegram.infra.discordRemove")}
+          </Button>
+        ) : null}
+      </div>
+      <div className="pt-3">
+        <Field label={t("telegram.infra.discordURL")} htmlFor="infra-discord" hint={v.discord_set ? t("telegram.infra.discordReplace") : t("telegram.infra.discordHint")} error={error}>
+          <div className="flex gap-2">
+            <input
+              id="infra-discord"
+              className="input mono"
+              type="password"
+              value={hook}
+              onChange={(e) => setHook(e.target.value)}
+              placeholder="https://discord.com/api/webhooks/…"
+              maxLength={300}
+              autoComplete="off"
+              aria-invalid={!!error}
+            />
+            <Button type="button" loading={patch.isPending && !!hook} disabled={!hook.trim()} onClick={() => save(hook.trim(), t("telegram.infra.discordSaved"))}>
+              {t("common.save")}
+            </Button>
+          </div>
+        </Field>
+      </div>
+    </div>
   );
 }
 

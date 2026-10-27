@@ -54,8 +54,9 @@ func TestRoutesOverHTTP(t *testing.T) {
 	}
 
 	for body, code := range map[string]string{
-		`{"sub_routes":{"services":{"youtube":"node:99"}}}`: "routes_target",
-		`{"sub_routes":{"dns":{"nameserver":["ftp://x"]}}}`: "routes_dns",
+		`{"sub_routes":{"services":{"youtube":"node:99"}}}`:                                        "routes_target",
+		`{"sub_routes":{"dns":{"nameserver":["ftp://x"]}}}`:                                        "routes_dns",
+		`{"sub_routes":{"dns":{"policy":[{"match":"geosite:cn,+.a.com","servers":["8.8.8.8"]}]}}}`: "routes_dns_policy",
 	} {
 		var b map[string]any
 		_ = json.Unmarshal([]byte(body), &b)
