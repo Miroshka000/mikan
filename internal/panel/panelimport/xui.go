@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -18,7 +19,8 @@ import (
 
 // 3x-ui (MHSanaei/3x-ui) keeps its clients inside the inbounds: GET
 // <base>/panel/api/inbounds/list gives every inbound, its clients in settings (a JSON
-// string) and their traffic in clientStats, in {"success", "msg", "obj"}. The base is the
+// object in 3.x, a string with the JSON in 2.x) and their traffic in clientStats, in
+// {"success", "msg", "obj"}. The base is the
 // panel's address with its secret web path. Access is an API token (newer versions) or a
 // session: POST <base>/login with a form, after GET <base>/csrf-token where the panel
 // has one (its token goes in X-CSRF-Token). 3.x also lists the clients themselves
@@ -29,7 +31,11 @@ import (
 // are one mikan user, named after the first of them, and the subId is the old link's
 // token, as Remnawave's short UUID is. A client without a subId is a user of its own.
 // Limits are per client (per email) there: the user gets their sum, used traffic summed
-// too; no limit, no term or no device limit on any of them is none for the user.
+// too; no limit, no term or no device limit on any of them is none for the user. A
+// client only on inbounds of protocols mikan has not adds nothing to the user.
+//
+// The base path is the panel's secret, so the errors of a 3x-ui import, which go to the
+// log, do not carry it (hidePath).
 
 // xuiListBytes bounds the inbounds' list, which comes in one answer.
 const xuiListBytes = 128 << 20
@@ -51,7 +57,7 @@ type xuiInbound struct {
 	ID          int64            `json:"id"`
 	Remark      string           `json:"remark"`
 	Protocol    string           `json:"protocol"`
-	Settings    string           `json:"settings"`
+	Settings    json.RawMessage  `json:"settings"` // an object (3.x) or a string with it (2.x)
 	ClientStats []xuiClientStats `json:"clientStats"`
 }
 
@@ -145,11 +151,11 @@ func fetchXUI(ctx context.Context, hc *http.Client, src Source) ([]User, error) 
 	if err := get("/panel/api/inbounds/list", xuiListBytes, &inbounds); err != nil {
 		return nil, err
 	}
-	// The device limits, where the panel lists its clients (3.x); without the list the
-	// limit of addresses stands in.
+	// The device limits, where the panel lists its clients (3.x); a version without the
+	// list has only the limit of addresses, which stands in.
 	hwid := map[string]int64{}
 	var clients []xuiClient
-	if err := get("/panel/api/clients/list", xuiListBytes, &clients); err != nil && !errors.Is(err, ErrAnswer) {
+	if err := get("/panel/api/clients/list", maxPageBytes, &clients); err != nil && !errors.Is(err, errNotFound) {
 		return nil, err
 	}
 	for _, c := range clients {
@@ -207,8 +213,34 @@ func xuiLogin(ctx context.Context, hc *http.Client, src Source) (*http.Client, e
 
 // xuiPerson is the clients of one subscription.
 type xuiPerson struct {
-	clients   []xuiClient
+	clients   []xuiEntry
 	protocols []string
+}
+
+// xuiEntry is a client on one inbound; ok: the inbound's protocol is one mikan has.
+type xuiEntry struct {
+	xuiClient
+	ok bool
+}
+
+// xuiSettings reads an inbound's clients from its settings, an object or a string with it.
+func xuiSettings(raw json.RawMessage) ([]xuiClient, error) {
+	b := bytes.TrimSpace(raw)
+	if len(b) > 0 && b[0] == '"' {
+		var str string
+		if err := json.Unmarshal(b, &str); err != nil {
+			return nil, err
+		}
+		b = bytes.TrimSpace([]byte(str))
+	}
+	if len(b) == 0 || string(b) == "null" {
+		return nil, nil
+	}
+	var settings struct {
+		Clients []xuiClient `json:"clients"`
+	}
+	err := json.Unmarshal(b, &settings)
+	return settings.Clients, err
 }
 
 // xuiUsers makes the users out of the inbounds' clients, in the order they come.
@@ -228,16 +260,12 @@ func xuiUsers(inbounds []xuiInbound, hwid map[string]int64, now time.Time) ([]Us
 	var order []string
 	clients := 0
 	for _, in := range inbounds {
-		var settings struct {
-			Clients []xuiClient `json:"clients"`
-		}
-		if strings.TrimSpace(in.Settings) != "" {
-			if err := json.Unmarshal([]byte(in.Settings), &settings); err != nil {
-				return nil, fmt.Errorf("%w: inbound %q: settings: %v", ErrAnswer, cut(in.Remark, 100), err)
-			}
+		list, err := xuiSettings(in.Settings)
+		if err != nil {
+			return nil, fmt.Errorf("%w: inbound %q: settings: %v", ErrAnswer, cut(in.Remark, 100), err)
 		}
 		proto := strings.ToLower(strings.TrimSpace(in.Protocol))
-		for _, c := range settings.Clients {
+		for _, c := range list {
 			if clients++; clients > 4*maxUsers {
 				return nil, fmt.Errorf("%w: more than %d clients", ErrAnswer, 4*maxUsers)
 			}
@@ -252,7 +280,7 @@ func xuiUsers(inbounds []xuiInbound, hwid map[string]int64, now time.Time) ([]Us
 				people[key] = p
 				order = append(order, key)
 			}
-			p.clients = append(p.clients, c)
+			p.clients = append(p.clients, xuiEntry{c, slices.Contains(xuiProtocols, proto)})
 			if !slices.Contains(p.protocols, proto) {
 				p.protocols = append(p.protocols, proto)
 			}
@@ -269,9 +297,21 @@ func xuiUsers(inbounds []xuiInbound, hwid map[string]int64, now time.Time) ([]Us
 }
 
 func (p *xuiPerson) user(stats map[string]xuiClientStats, hwid map[string]int64, now time.Time) User {
-	first := p.clients[0]
+	// Only the clients mikan can serve make the user: an email on an inbound of a protocol
+	// mikan has (3.x: on any of the inbounds it is on). With none, the user is left out.
+	served := map[string]bool{}
+	for _, c := range p.clients {
+		if c.ok {
+			served[strings.ToLower(c.Email)] = true
+		}
+	}
+	clients := p.clients
+	if len(served) > 0 {
+		clients = slices.DeleteFunc(slices.Clone(clients), func(c xuiEntry) bool { return !served[strings.ToLower(c.Email)] })
+	}
+	first := clients[0]
 	u := User{Name: cut(first.Email, maxNameBytes), Status: StatusDisabled}
-	if !slices.ContainsFunc(p.protocols, func(s string) bool { return slices.Contains(xuiProtocols, s) }) {
+	if len(served) == 0 {
 		u.Skip = "only on " + strings.Join(p.protocols, ", ") + " inbounds, which mikan has not"
 	}
 	if first.SubID != "" {
@@ -287,15 +327,12 @@ func (p *xuiPerson) user(stats map[string]xuiClientStats, hwid map[string]int64,
 	var expires time.Time
 	var onHold time.Duration
 	var notes []string
-	for _, c := range p.clients {
+	for _, c := range clients {
 		email := strings.ToLower(c.Email)
 		if seen[email] {
 			continue
 		}
 		seen[email] = true
-		if c.Enable == nil || bool(*c.Enable) {
-			u.Status = StatusActive
-		}
 		s := stats[email]
 		used := max(0, int64(s.Up)) + max(0, int64(s.Down))
 		u.Used += used
@@ -305,7 +342,14 @@ func (p *xuiPerson) user(stats map[string]xuiClientStats, hwid map[string]int64,
 		} else {
 			unlimited = true
 		}
-		switch e := int64(c.ExpiryTime); {
+		e := int64(c.ExpiryTime)
+		// 3x-ui turns a client off by itself once its term or traffic is over: that one is
+		// expired or limited here, so a renewal in mikan brings it back; off by hand is off.
+		over := (e > 0 && !time.UnixMilli(e).After(now)) || (c.TotalGB > 0 && used >= int64(c.TotalGB))
+		if c.Enable == nil || bool(*c.Enable) || over {
+			u.Status = StatusActive
+		}
+		switch {
 		case e > 0:
 			if t := time.UnixMilli(e).UTC(); t.After(expires) {
 				expires = t
@@ -364,3 +408,27 @@ func (p *xuiPerson) user(stats map[string]xuiClientStats, hwid map[string]int64,
 	}
 	return u
 }
+
+// hidePath is err with the secret base path of a 3x-ui address cut out of its text; what
+// it wraps stays the same for errors.Is.
+func hidePath(err error, base string) error {
+	u, perr := url.Parse(strings.TrimSpace(base))
+	if err == nil || perr != nil || strings.Trim(u.Path, "/") == "" {
+		return err
+	}
+	// Whole segments only: a short path ("/p") is not cut out of "/panel".
+	msg := err.Error()
+	for _, p := range []string{u.EscapedPath(), u.Path} {
+		re := regexp.MustCompile(regexp.QuoteMeta(strings.TrimRight(p, "/")) + `(/|"|\s|$)`)
+		msg = re.ReplaceAllString(msg, "/…$1")
+	}
+	return hiddenPath{err, msg}
+}
+
+type hiddenPath struct {
+	err error
+	msg string
+}
+
+func (h hiddenPath) Error() string { return h.msg }
+func (h hiddenPath) Unwrap() error { return h.err }

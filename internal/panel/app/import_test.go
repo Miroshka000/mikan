@@ -338,7 +338,7 @@ func TestImportFrom3xUIKeepsSubIDLinks(t *testing.T) {
 			anna = u
 		}
 	}
-	if !anna.TrafficLimit.Valid || anna.TrafficLimit.Int64 != 20<<30 || anna.UsedDown != 2000 || !anna.DeviceLimit.Valid || anna.DeviceLimit.Int64 != 2 || anna.Contact != "tg:777" {
+	if !anna.TrafficLimit.Valid || anna.TrafficLimit.Int64 != 10<<30 || anna.UsedDown != 1000 || !anna.DeviceLimit.Valid || anna.DeviceLimit.Int64 != 2 || anna.Contact != "tg:777" {
 		t.Fatalf("anna: %+v", anna)
 	}
 	if resp, body := h.do(http.MethodPatch, api+"/import/legacy", map[string]any{"path": "xui/sub"}, csrf); resp.StatusCode != http.StatusOK {

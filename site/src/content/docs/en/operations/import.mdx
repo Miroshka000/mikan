@@ -17,7 +17,7 @@ import { Steps } from '@astrojs/starlight/components';
    - **Marzban**: the administrator's username and password;
    - **PasarGuard**: a username and password, or an API key with the `users:read` permission;
    - **Remnawave**: an API token with permission to read users;
-   - **3x-ui**: the administrator's username and password, or an API token (Settings → API tokens, in newer versions). If the administrator signs in with a two-factor code, a token is needed.
+   - **3x-ui**: the administrator's username and password, or an API token (Settings → API tokens, in newer versions). If the administrator signs in with a two-factor code, a token is needed. In 3x-ui 3.11 the username and password are random at install (3x-ui's log shows them on the first start), `admin`/`admin` does not work. The import does not take a self-signed certificate: if the panel has no real certificate, give an `http://` address, which works only to this server or within the local network.
 
 3. Pick a **Plan**: users get its protocols, traffic reset rule and server groups.
 
@@ -38,9 +38,9 @@ In 3x-ui clients live inside the inbounds, so the import gathers them into users
 - the device limit is `limitHwid` of 3x-ui 3.x, and in the versions without it the limit of addresses at once (`limitIp`), the largest of the clients';
 - a term "from the first use" (a negative `expiryTime`) starts at the import, as "on hold" does from the other panels;
 - a client without a `subId` comes over as a user of its own, without an old link;
-- a client that is only on inbounds of protocols mikan has not (VMess, WireGuard, MTProto and others) does not come over: "Check" lists it among those mikan will not take, with the reason. mikan's protocols are VLESS, Trojan, Shadowsocks, Hysteria2 and TUIC.
+- a client that is only on inbounds of protocols mikan has not (VMess, WireGuard, MTProto and others) does not come over: "Check" lists it among those mikan will not take, with the reason. If the same `subId` has clients on mikan's protocols, the user comes over with them, and such a client's limits, term and traffic are not added in. mikan's protocols are VLESS, Trojan, Shadowsocks, Hysteria2 and TUIC.
 
-A disabled client comes over disabled. The limits and terms of the inbounds themselves are not carried over.
+A user is disabled only if every client of its `subId` is. A client 3x-ui turned off by itself when its term or traffic ran out comes over expired or over its limit, not disabled, so it works again after a renewal. The limits and terms of the inbounds themselves are not carried over.
 
 :::caution
 Links that were revoked in the old panel work again after the import. If that matters, reissue them.

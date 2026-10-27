@@ -205,7 +205,8 @@ func Fetch(ctx context.Context, hc *http.Client, src Source) ([]User, error) {
 	case Remnawave:
 		return fetchRemnawave(ctx, hc, src)
 	case XUI:
-		return fetchXUI(ctx, hc, src)
+		list, err := fetchXUI(ctx, hc, src)
+		return list, hidePath(err, src.URL)
 	}
 	return nil, fmt.Errorf("unknown panel %q", src.Kind)
 }

@@ -2,6 +2,7 @@ package panelimport
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -85,10 +86,12 @@ func byName(list []User) map[string]User {
 }
 
 // The clients of one subscription are one user: anna is on two vless inbounds (3.x
-// repeats her) and has a second client on vmess under the same subId. Her limits are
-// summed, the latest term and the largest device limit (3.x's limitHwid before limitIp)
-// win; numbers written as strings are read; a client only on vmess is left out with the
-// reason; a client without a subId comes over without a link, a short subId with no link.
+// repeats her) and has a second client on vmess under the same subId, which adds nothing
+// (mikan has no vmess); 3.x's limitHwid stands before limitIp. Settings come as objects
+// (3.x) and as a string (the trojan inbound, 2.x); numbers written as strings are read; a
+// client only on vmess is left out with the reason; a client 3x-ui turned off at the end
+// of its term or traffic is expired or limited, not disabled; a client without a subId
+// comes over without a link, a short subId with no link.
 func TestFetchXUI(t *testing.T) {
 	defer func(f func() time.Time) { xuiNow = f }(xuiNow)
 	xuiNow = func() time.Time { return time.Date(2026, 10, 27, 0, 0, 0, 0, time.UTC) }
@@ -106,8 +109,8 @@ func TestFetchXUI(t *testing.T) {
 	}
 	m := byName(got)
 	anna := m["anna"]
-	if anna.Status != StatusActive || anna.TrafficLimit != 20<<30 || anna.Used != 2000 || anna.Lifetime != 2000 ||
-		!anna.Expires.Equal(time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC)) || anna.DeviceLimit != 5 ||
+	if anna.Status != StatusActive || anna.TrafficLimit != 10<<30 || anna.Used != 1000 || anna.Lifetime != 1000 ||
+		!anna.Expires.Equal(time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)) || anna.DeviceLimit != 5 ||
 		anna.Contact != "tg:777" || anna.Note != "friend" || anna.Token != "anna0sub0long0id" || anna.Skip != "" {
 		t.Errorf("anna %+v", anna)
 	}
@@ -159,13 +162,27 @@ func TestFetchXUIAccess(t *testing.T) {
 	}
 }
 
+// The base path is the panel's secret: an error, which goes to the log, does not carry it.
+func TestFetchXUIHidesThePath(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusBadGateway) })
+	_, err := Fetch(context.Background(), Client(), Source{Kind: XUI, URL: srv.URL + "/s3cretPath", Username: "admin", Password: "pw"})
+	if !errors.Is(err, ErrAnswer) || strings.Contains(err.Error(), "s3cretPath") || !strings.Contains(err.Error(), "/…/login") {
+		t.Fatalf("%v", err)
+	}
+	if got := hidePath(errors.New("GET /p/panel/api and /p"), "http://h/p").Error(); got != "GET /…/panel/api and /…" {
+		t.Fatalf("whole segments: %q", got)
+	}
+}
+
 // Broken settings of an inbound fail the read instead of leaving its clients out unseen;
 // a huge negative term is refused, not wrapped into a short one.
 func TestFetchXUIBroken(t *testing.T) {
-	if _, err := xuiUsers([]xuiInbound{{ID: 1, Protocol: "vless", Settings: "{"}}, nil, time.Now()); !errors.Is(err, ErrAnswer) {
-		t.Fatalf("broken settings: %v", err)
+	for _, raw := range []string{`"{"`, `{"clients": 1}`} {
+		if _, err := xuiUsers([]xuiInbound{{ID: 1, Protocol: "vless", Settings: json.RawMessage(raw)}}, nil, time.Now()); !errors.Is(err, ErrAnswer) {
+			t.Fatalf("broken settings %s: %v", raw, err)
+		}
 	}
-	list, err := xuiUsers([]xuiInbound{{ID: 1, Protocol: "vless", Settings: `{"clients":[{"email":"x","expiryTime":-9000000000000000000}]}`}}, nil, time.Now())
+	list, err := xuiUsers([]xuiInbound{{ID: 1, Protocol: "vless", Settings: json.RawMessage(`{"clients":[{"email":"x","expiryTime":-9000000000000000000}]}`)}}, nil, time.Now())
 	if err != nil || len(list) != 1 {
 		t.Fatal(list, err)
 	}
