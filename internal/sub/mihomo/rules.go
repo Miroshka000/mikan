@@ -49,11 +49,16 @@ func TemplateRules(p Profile, src string) ([]routing.Rule, bool) {
 		return nil, false
 	}
 	raw, _ := t["rules"].([]any)
-	out := []routing.Rule{}
+	return readRules(raw), true
+}
+
+// readRules are the rules of a filled template that routing.ReadRule reads, in order.
+func readRules(raw []any) []routing.Rule {
+	var out []routing.Rule
 	for _, x := range raw {
 		if r, ok := routing.ReadRule(str(x)); ok {
 			out = append(out, r)
 		}
 	}
-	return out, true
+	return out
 }

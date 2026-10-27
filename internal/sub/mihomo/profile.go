@@ -23,25 +23,20 @@ type Profile struct {
 
 // Render is a complete client profile.
 func Render(p Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
-	cfg, err := Config(p, g, m)
+	cfg, err := renderConfig(p, g, m)
 	if err != nil {
 		return nil, err
 	}
 	return marshalYAML(cfg)
 }
 
-// Config is the profile Render writes.
-func Config(p Profile, g model.GroupNames, m routing.Mode) (map[string]any, error) {
+// renderConfig is the profile Render writes: the intent of the settings as the app takes
+// it (routing.Intent), written the Clash way.
+func renderConfig(p Profile, g model.GroupNames, m routing.Mode) (map[string]any, error) {
 	if len(p.Proxies) == 0 {
 		// Groups with no proxies in them are a profile mihomo may refuse whole.
 		return nil, model.ErrNoProxies
 	}
-	return configOf(p, g, m), nil
-}
-
-// configOf is the profile of p.Proxies, whatever they are: the intent of the settings as
-// the app takes it (routing.Intent), written the Clash way.
-func configOf(p Profile, g model.GroupNames, m routing.Mode) map[string]any {
 	g = g.WithDefaults("")
 	in := routing.NewIntent(m, p.Rules, p.Routes)
 	if !p.Routable() {
@@ -98,7 +93,7 @@ func configOf(p Profile, g model.GroupNames, m routing.Mode) map[string]any {
 		last = []string{"MATCH," + targetName(gs, final, -1), "MATCH,REJECT"}
 	}
 	cfg["rules"] = append(rules, last...)
-	return cfg
+	return cfg, nil
 }
 
 // groupOf is gr as a Clash proxy group.
