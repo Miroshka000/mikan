@@ -205,6 +205,19 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 	if test = probe(map[string]any{"user_agent": "TelegramBot (like TwitterBot)", "headers": []apps.Header{}}); test.Respond != "serve" || test.Format != "html" {
 		t.Errorf("a messenger's preview: %+v", test)
 	}
+	// The page goes out before a rule's stub, to a messenger's preview and to a browser alike.
+	stubAll := []apps.Rule{{Name: "stub all", Enabled: true, When: cond("/"), Do: apps.Action{Respond: apps.RespondStub}}}
+	for _, hd := range []map[string]any{
+		{"user_agent": "TelegramBot/1.0 (like TwitterBot)", "headers": []apps.Header{}, "rules": stubAll},
+		{"user_agent": "Mozilla/5.0", "headers": []apps.Header{{Name: "Accept", Value: "text/html"}}, "rules": stubAll},
+	} {
+		if test = probe(hd); test.Rule != "stub all" || test.Status != 200 || test.Format != "html" || test.Text != "" {
+			t.Errorf("%s under a stub rule: %+v", hd["user_agent"], test)
+		}
+	}
+	if test = probe(map[string]any{"user_agent": "v2rayNG/1.10.20", "headers": []apps.Header{}, "rules": stubAll}); test.Format != "uri" || test.Text == "" {
+		t.Errorf("an app under a stub rule: %+v", test)
+	}
 
 	// The log: newest first, what asked and what it came to, and no token.
 	var log struct {
