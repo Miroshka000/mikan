@@ -6,6 +6,7 @@ package apps
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -90,35 +91,33 @@ func koalaCore(app Version) Version {
 	return Version{}
 }
 
-// DetectApp reads the app from its User-Agent. sing-box apps come first: Hiddify says
-// "like ClashMeta" to get Clash profiles from other panels.
+// DetectApp reads the app from its User-Agent by the words of the Catalog, a family at a
+// time: Stash, sing-box, mihomo, xray. sing-box apps come before mihomo: Hiddify says "like
+// ClashMeta" to get Clash profiles from other panels.
 func DetectApp(userAgent string) App {
 	ua := strings.ToLower(userAgent)
-	has := func(words ...string) bool {
-		for _, w := range words {
-			if strings.Contains(ua, w) {
-				return true
-			}
-		}
-		return false
-	}
 	switch {
-	case strings.HasPrefix(ua, "stash"):
+	case names(FamilyStash, ua, ""):
 		return App{Family: FamilyStash}
-	case has("hiddify"):
-		// Hiddify 4 (2026) runs a sing-box 1.13 fork; the 2.x of 2024 had no AnyTLS. One
-		// that does not say its version is taken for the old one.
-		m := hiddifyVersion.FindStringSubmatch(ua)
-		return App{Family: FamilySingBox, Legacy: m == nil || versionOf(m)[0] < 4}
-	case has("karing", "sing-box", "singbox", "nekobox", "nekoray", "husi", "throne", "deskbox", "inhive") ||
-		strings.HasPrefix(ua, "sfa") || strings.HasPrefix(ua, "sfi") || strings.HasPrefix(ua, "sfm") || strings.HasPrefix(ua, "sft"):
-		// "SFA (sing-box 1.14.2; language en_US)"
-		a := App{Family: FamilySingBox, Whole: strings.HasPrefix(ua, "sfa") || strings.HasPrefix(ua, "sfi") || strings.HasPrefix(ua, "sfm") || strings.HasPrefix(ua, "sft")}
+	case names(FamilySingBox, ua, ""):
+		if byID["hiddify"].matches(ua) {
+			// Hiddify 4 (2026) runs a sing-box 1.13 fork; the 2.x of 2024 had no AnyTLS. One
+			// that does not say its version is taken for the old one.
+			m := hiddifyVersion.FindStringSubmatch(ua)
+			return App{Family: FamilySingBox, Legacy: m == nil || versionOf(m)[0] < 4}
+		}
+		// "SFA (sing-box 1.14.2; language en_US)": the official apps are the prefixes of the
+		// generic sing-box entry.
+		a := App{Family: FamilySingBox, Whole: slices.ContainsFunc(byID["singbox"].Prefixes, func(p string) bool {
+			return strings.HasPrefix(ua, p)
+		})}
 		if m := singboxVersion.FindStringSubmatch(ua); m != nil {
 			a.Core = versionOf(m)
 		}
 		return a
-	case has("mihomo", "clash", "koala", "kabosu", "verge", "prizrak", "flowvy", "murge", "rabbit"):
+	// The Mikan app asks for a subscription as "mihomo[/core] Mikan/x"; a bare "Mikan/x" stays
+	// an app we do not know, as before the Catalog had Mikan.
+	case names(FamilyMihomo, ua, "mikan"):
 		a := App{Family: FamilyMihomo}
 		if m := mihomoVersion.FindStringSubmatch(ua); m != nil {
 			a.Core = versionOf(m)
@@ -126,19 +125,31 @@ func DetectApp(userAgent string) App {
 			a.Core = koalaCore(versionOf(m))
 		}
 		return a
-	case has("happ", "v2raytun", "incy", "v2rayng", "v2rayn", "onexray", "v2box", "simplexray", "renoarx"):
+	case names(FamilyXray, ua, ""):
 		return App{Family: FamilyXray}
 	}
 	return App{Family: FamilyOther}
 }
 
 // mihomoSince is the first mihomo release with a proxy type. The ones not in the core
-// of 2024 go only to a core known to have them: an unknown type fails the profile.
-var mihomoSince = map[string]Version{
-	"anytls": {1, 19, 3}, "mieru": {1, 19, 0}, "sudoku": {1, 19, 17}, "trusttunnel": {1, 19, 21}, "shadowquic": {1, 19, 29},
+// of 2024 (needKnown) go only to a core known to have them: an unknown type fails the
+// profile.
+var mihomoSince = map[string]struct {
+	since     Version
+	needKnown bool
+}{
+	"anytls":      {Version{1, 19, 3}, false},
+	"mieru":       {Version{1, 19, 0}, true},
+	"sudoku":      {Version{1, 19, 17}, true},
+	"trusttunnel": {Version{1, 19, 21}, true},
+	"shadowquic":  {Version{1, 19, 29}, true},
 }
 
-var mihomoNewTypes = map[string]bool{"mieru": true, "sudoku": true, "trusttunnel": true, "shadowquic": true}
+// xhttpSince is the first mihomo with the XHTTP transport.
+var xhttpSince = Version{1, 19, 22}
+
+// encryptionSince is the first mihomo with VLESS Encryption.
+var encryptionSince = Version{1, 19, 13}
 
 // geckoSince is the first mihomo with Hysteria2's Gecko obfuscation. Xray and sing-box
 // got it later than the apps on them can be told apart, so only mihomo apps that name
@@ -153,13 +164,10 @@ func (a App) Supports(n proto.Needs) bool {
 	switch a.Family {
 	case FamilyMihomo:
 		known := a.Core.Known()
-		if mihomoNewTypes[n.Type] && !known {
+		if t, ok := mihomoSince[n.Type]; ok && (known && !a.Core.AtLeast(t.since) || !known && t.needKnown) {
 			return false
 		}
-		if since, ok := mihomoSince[n.Type]; ok && known && !a.Core.AtLeast(since) {
-			return false
-		}
-		if known && (n.Transport == "xhttp" && !a.Core.AtLeast(Version{1, 19, 22}) || n.Encryption && !a.Core.AtLeast(Version{1, 19, 13})) {
+		if known && (n.Transport == "xhttp" && !a.Core.AtLeast(xhttpSince) || n.Encryption && !a.Core.AtLeast(encryptionSince)) {
 			return false
 		}
 		// An older core fails the whole profile on an obfs it does not know.
@@ -221,9 +229,3 @@ func For(n proto.Needs) []Family {
 	}
 	return out
 }
-
-// IsHapp tells Happ by its User-Agent ("Happ/3.6.0/…").
-func IsHapp(ua string) bool { return strings.Contains(strings.ToLower(ua), "happ") }
-
-// IsINCY tells INCY by its User-Agent.
-func IsINCY(ua string) bool { return strings.Contains(strings.ToLower(ua), "incy") }

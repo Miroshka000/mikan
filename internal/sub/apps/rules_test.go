@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -64,6 +65,30 @@ func TestCatalogIdentifiesAndAgreesWithDetectApp(t *testing.T) {
 	for _, ua := range []string{"", "curl/8.9", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)", "okhttp/4.12.0"} {
 		if k, ok := Identify(ua); ok {
 			t.Errorf("%q is %s: a browser or a tool is no app of the list", ua, k.ID)
+		}
+	}
+}
+
+// DetectApp reads the catalog's words, so every word and prefix of an entry, on its own,
+// is that entry for Identify and its family for DetectApp. A bare Mikan is the one left an
+// unknown app (see pinnedUAs).
+func TestEveryWordAgreesWithDetectApp(t *testing.T) {
+	for _, k := range Catalog {
+		for _, w := range slices.Concat(k.Words, k.Prefixes) {
+			ua := w + "/1.0"
+			if got, _ := Identify(ua); got.ID != k.ID {
+				t.Errorf("Identify(%q) = %q, want %s", ua, got.ID, k.ID)
+			}
+			want := k.Family
+			if k.ID == "mikan" {
+				want = FamilyOther
+			}
+			if f := DetectApp(ua).Family; f != want {
+				t.Errorf("DetectApp(%q) = %s, want %s", ua, f, want)
+			}
+			if !Named(k.ID, ua) || !FamilyNamed(k.Family, ua) {
+				t.Errorf("%q: Named %v, FamilyNamed %v", ua, Named(k.ID, ua), FamilyNamed(k.Family, ua))
+			}
 		}
 	}
 }
