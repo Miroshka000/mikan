@@ -38,7 +38,7 @@ func TestGoldenOwnXrayTemplate(t *testing.T) {
 func TestOwnXrayTemplate(t *testing.T) {
 	p := profileOf(subtest.Multi())
 	cs := render(t, p, routing.Blocked, own(subtest.OwnXrayTemplate))
-	outs := outboundsOf(p.Proxies)
+	outs, _ := outboundsOf(p.Proxies)
 	if len(cs) != 1+len(outs) || cs[0].Remarks != "⚡ Авто" || cs[1].Remarks != outs[0].name {
 		t.Fatalf("the list: %d configs, %q %q", len(cs), cs[0].Remarks, cs[1].Remarks)
 	}
