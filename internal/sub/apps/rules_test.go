@@ -502,6 +502,26 @@ func TestCheckRules(t *testing.T) {
 			t.Errorf("%q: %v", name, err)
 		}
 	}
+	// Nor is a cache header a rule's header, in any case and whatever the rule answers: every
+	// answer stays no-store. A rule saved with one before still loads, and a drop, which
+	// sends no headers, keeps none of them (Clean).
+	for _, name := range []string{"cache-control", "CDN-Cache-Control", "Cloudflare-CDN-Cache-Control", "surrogate-control"} {
+		for _, respond := range []string{"", RespondStub, Respond403, Respond404, RespondHTML} {
+			r := okRule()
+			r.Do = Action{Respond: respond, HTML: "<p>x</p>", Headers: []Header{{Name: "X-A", Value: "1"}, {Name: name, Value: "public, max-age=3600"}}}
+			if err := CheckRules([]Rule{r}, CheckOpts{}); !errors.As(err, &ce) || ce.Path != "rules.0.do.headers.1.name" || ce.Code != "resp_header_cache" {
+				t.Errorf("%s %q: %v", name, respond, err)
+			}
+			if err := r.Check("rule", CheckOpts{}); err != nil {
+				t.Errorf("%s %q: Check %v", name, respond, err)
+			}
+		}
+	}
+	r := okRule()
+	r.Do = Action{Respond: RespondDrop, Headers: []Header{{Name: "Cache-Control", Value: "public"}}}
+	if err := CheckRules([]Rule{r}, CheckOpts{}); err != nil {
+		t.Errorf("drop: %v", err)
+	}
 }
 
 // The apps that get the xray JSON profile are the ones of the list, by the app and not by

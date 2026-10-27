@@ -39,13 +39,15 @@ var builtin = []struct {
 		When: Group{Op: Or, Conds: []Cond{{Header: "User-Agent", Op: OpRegex, Value: `(?i)shadowsocksr|^ssrr?([/ ]|$)`}}},
 		Do:   Action{Respond: RespondStub}}},
 	// ClashX before its Meta fork: both are "ClashX", the fork is a current core. ClashX is a
-	// word of its own, so FlClashX, a current mihomo app, is not taken for it.
+	// word of its own, so FlClashX, a current mihomo app, is not taken for it. The names are
+	// read with the separators the catalog knows them by (none, a space, a hyphen, a dot or
+	// an escaped space), so the rule turns away what the catalog names cfw, cfa and clashx.
 	{RuleOld, Rule{Name: "Discontinued Clash apps", Enabled: true,
 		When: Group{Op: Or,
-			Conds: []Cond{{Header: "User-Agent", Op: OpRegex, Value: `(?i)clash ?for ?windows|clashforandroid`}},
+			Conds: []Cond{{Header: "User-Agent", Op: OpRegex, Value: `(?i)clash(for| for |-for-|\.for\.|%20for%20)(windows|android)`}},
 			Groups: []Inner{{Op: And, Conds: []Cond{
 				{Header: "User-Agent", Op: OpRegex, Value: `(?i)(^|[^a-z])clashx`},
-				{Header: "User-Agent", Op: OpContains, Value: "meta", Not: true},
+				{Header: "User-Agent", Op: OpRegex, Value: `(?i)clashx( |-|\.|%20)?meta`, Not: true},
 			}}}},
 		Do: Action{Respond: RespondStub}}},
 }

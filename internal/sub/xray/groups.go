@@ -140,7 +140,7 @@ type dial struct {
 
 func (c *converter) note(g model.Group, code string) {
 	if !g.Hidden {
-		c.out.Notes = append(c.out.Notes, model.Note{Core: core, Group: g.Name, Code: code})
+		c.out.Notes = append(c.out.Notes, model.Note{Core: core, Subject: g.Name, Code: code})
 	}
 }
 

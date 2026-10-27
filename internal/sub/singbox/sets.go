@@ -6,12 +6,14 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"go.yaml.in/yaml/v3"
 
+	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 )
 
@@ -23,6 +25,17 @@ type ruleSets struct {
 	lists  map[string]routing.Provider
 	used   map[string]map[string]any
 	order  []string
+	// preview is the admin panel's (Dropped): no list is downloaded, one sing-box can read is
+	// taken as read, and dropped tells what is left out.
+	preview bool
+	dropped []model.Note
+}
+
+// drop tells the preview what sing-box leaves out, once.
+func (s *ruleSets) drop(code, subject string) {
+	if n := note(subject, code); s.preview && !slices.Contains(s.dropped, n) {
+		s.dropped = append(s.dropped, n)
+	}
 }
 
 func (s *ruleSets) geo(kind, name string) string {
@@ -59,6 +72,9 @@ func (s *ruleSets) list(name string) (string, bool) {
 	p, ok := s.lists[name]
 	if !ok || p.Format == "mrs" || p.URL == "" {
 		return "", false
+	}
+	if s.preview {
+		return tag, true
 	}
 	payload, err := singboxList(s.ctx, p.URL)
 	if err != nil {
@@ -226,13 +242,17 @@ func fetchList(ctx context.Context, src string) ([]string, error) {
 	return parseList(raw), nil
 }
 
-// parseList reads a Clash rule list: YAML with a payload, or a line per entry.
+// parseList reads a Clash rule list: YAML with a payload, or a line per entry. A payload of
+// nothing (`payload: []`, `payload:`) is an empty list, not a line "payload: []".
 func parseList(raw []byte) []string {
 	var doc struct {
-		Payload []string `yaml:"payload"`
+		Payload yaml.Node `yaml:"payload"`
 	}
-	if yaml.Unmarshal(raw, &doc) == nil && len(doc.Payload) > 0 {
-		return doc.Payload
+	if yaml.Unmarshal(raw, &doc) == nil && doc.Payload.Kind != 0 {
+		var payload []string
+		if doc.Payload.Decode(&payload) == nil {
+			return payload
+		}
 	}
 	var out []string
 	for _, l := range strings.Split(string(raw), "\n") {

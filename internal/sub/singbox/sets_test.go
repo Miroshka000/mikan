@@ -10,7 +10,7 @@ import (
 )
 
 // A Clash rule list is YAML with a payload or a line per entry, comments and blank lines
-// left out; a YAML of no payload is read as lines.
+// left out; a YAML of no payload is read as lines, and an empty payload is an empty list.
 func TestParseList(t *testing.T) {
 	for _, c := range []struct {
 		name string
@@ -20,7 +20,8 @@ func TestParseList(t *testing.T) {
 		{"payload", "payload:\n  - DOMAIN-SUFFIX,example.com\n  - '+.example.org'\n", []string{"DOMAIN-SUFFIX,example.com", "+.example.org"}},
 		{"lines", "# a list\n\nexample.com\r\n  # indented\n  10.0.0.0/8  \n\n", []string{"example.com", "10.0.0.0/8"}},
 		{"empty", "", nil},
-		{"empty payload", "payload: []\n", []string{"payload: []"}},
+		{"empty payload", "payload: []\n", nil},
+		{"null payload", "# nothing yet\npayload:\n", nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := parseList([]byte(c.raw)); !slices.Equal(got, c.want) {
