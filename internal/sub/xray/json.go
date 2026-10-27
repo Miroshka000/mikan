@@ -160,26 +160,13 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode, outs []tagge
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.XrayBalance(), routes, p.Lang)
 	pl := plan{outbounds: outs, groups: gs.List, dns: in.Resolvers(), servers: in.Servers,
 		choice: map[string]bool{g.Main: true, model.AliasGroup: true}}
-	to := func(t routing.Target, route int) routing.Target {
-		if name := gs.Of(t, route); name != "" {
-			return routing.Target{Kind: routing.ToGroup, Group: name}
-		}
-		return t
-	}
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
+	pre, routed, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
+	for _, part := range [][]routing.Rule{pre, routed, tail} {
 		for _, r := range part {
-			pl.add(r.When, to(r.To, -1))
+			pl.add(r.When, r.To)
 		}
 	}
-	for i, r := range routes {
-		for _, x := range r.Rules {
-			pl.add([]routing.Match{x}, to(r.To, i))
-		}
-	}
-	for _, r := range in.Tail() {
-		pl.add(r.When, to(r.To, -1))
-	}
-	pl.final = to(in.Final(), -1)
+	pl.final = final
 	pl.picks = gs.List[0].Members
 	return pl
 }

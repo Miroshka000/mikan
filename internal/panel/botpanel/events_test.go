@@ -42,6 +42,28 @@ func (e *env) said(ev events.Event, chat int64, want string) call {
 	return got
 }
 
+// tells handles an event and reports whether it said what has want in it to the chat. A
+// refund of a subscription that is gone follows it: the outbox sends a chat's notices in
+// order, so what the event queued is out before that refund is, with no guess at how long
+// to wait, and the fresh menu an earlier payment message left in the queue is not mistaken
+// for it.
+func (e *env) tells(ev events.Event, chat int64, want string) bool {
+	e.t.Helper()
+	n := e.tg.count()
+	if err := e.bot.HandleEvent(e.ctx, ev); err != nil {
+		e.t.Fatalf("%s: %v", ev.Type, err)
+	}
+	e.said(event(e.t, events.PaymentRefunded, 0, chat, paymentEvent("new")), chat, "возвращён.")
+	e.tg.mu.Lock()
+	defer e.tg.mu.Unlock()
+	for _, c := range e.tg.calls[n:] {
+		if c.method == "sendMessage" && c.body["chat_id"] == float64(chat) && strings.Contains(text(c), want) {
+			return true
+		}
+	}
+	return false
+}
+
 // paymentEvent is a payment's event as billing writes it.
 func paymentEvent(kind string) events.Payment {
 	return events.Payment{PaymentID: 7, Kind: kind, Provider: "stars", Amount: 100, Currency: "RUB", TariffID: 1, TariffName: "Месяц", TermDays: 30}
@@ -96,12 +118,7 @@ func TestHandleEventPaymentMessages(t *testing.T) {
 	if !strings.Contains(text(msg), "Платёж за «Месяц» возвращён.") {
 		t.Fatalf("refunded, subscription deleted: %q", text(msg))
 	}
-	n := e.tg.count()
-	if err := e.bot.HandleEvent(e.ctx, event(t, events.PaymentPaid, 999999, buyer, paymentEvent("new"))); err != nil {
-		t.Fatalf("paid, subscription deleted: %v", err)
-	}
-	time.Sleep(100 * time.Millisecond)
-	if e.tg.count() != n {
+	if e.tells(event(t, events.PaymentPaid, 999999, buyer, paymentEvent("new")), buyer, "Оплата получена") {
 		t.Fatal("a payment of a deleted subscription was thanked")
 	}
 
@@ -112,13 +129,8 @@ func TestHandleEventPaymentMessages(t *testing.T) {
 		t.Fatalf("trial not given: %q %v", text(msg), buttons(msg))
 	}
 	// One that went back by itself is told by its payment.refunded alone.
-	n = e.tg.count()
 	by.Refund = events.RefundedAuto
-	if err := e.bot.HandleEvent(e.ctx, event(t, events.TrialNotGiven, 0, buyer, by)); err != nil {
-		t.Fatal(err)
-	}
-	time.Sleep(100 * time.Millisecond)
-	if e.tg.count() != n {
+	if e.tells(event(t, events.TrialNotGiven, 0, buyer, by), buyer, "не засчитан") {
 		t.Fatal("a trial that was refunded by itself was told twice")
 	}
 
