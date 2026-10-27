@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
 
@@ -34,6 +35,18 @@ func TestGoldenClash(t *testing.T) {
 			})
 		}
 	}
+}
+
+// The profile of a user with an inbound of each kind the default presets leave out, in the
+// mode All alone: what it carries does not change with the mode.
+func TestGoldenEveryType(t *testing.T) {
+	v := subtest.EveryTypeVariant
+	raw, err := Render(goldenProfile(v), v.Groups.WithDefaults("en"), routing.All)
+	if err != nil {
+		t.Fatal(err)
+	}
+	coreAccepts(t, raw)
+	subtest.Golden(t, v.Name+"_"+string(routing.All)+".clash.yaml", raw)
 }
 
 // The admin's own Clash profile on the two-node user, and the starter the admin edits from.

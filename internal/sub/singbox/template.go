@@ -122,7 +122,7 @@ func templateConfig(p mihomo.Profile, src string) (map[string]any, error) {
 		outs = append(outs, map[string]any{"type": "socks", "tag": rejectTag, "server": "127.0.0.1", "server_port": 1})
 	}
 	if direct == "" {
-		direct = freeTag("direct", tags)
+		direct = model.FreeTag("direct", tags)
 		outs = append(outs, map[string]any{"type": "direct", "tag": direct})
 	}
 	cfg["outbounds"] = outs
@@ -133,15 +133,6 @@ func templateConfig(p mihomo.Profile, src string) (map[string]any, error) {
 	}
 	hostsDirect(cfg, p.Direct, direct)
 	return cfg, nil
-}
-
-// freeTag is base, or base with a number when the template took it.
-func freeTag(base string, tags map[string]bool) string {
-	tag := base
-	for i := 2; tags[tag]; i++ {
-		tag = base + "-" + strconv.Itoa(i)
-	}
-	return tag
 }
 
 // hostsDirect sends the panel's and the nodes' hosts to the outbound direct, ahead of the

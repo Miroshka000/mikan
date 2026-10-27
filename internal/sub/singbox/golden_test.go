@@ -37,6 +37,19 @@ func TestGoldenSingBox(t *testing.T) {
 	}
 }
 
+// The sing-box config of a user with an inbound of each kind the default presets leave out,
+// in the mode All alone: the protocols sing-box has no word for are not in it.
+func TestGoldenEveryType(t *testing.T) {
+	lists(t)
+	v := subtest.EveryTypeVariant
+	raw, err := Render(context.Background(), goldenProfile(v), v.Groups, routing.All, model.Template{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	subtest.Golden(t, v.Name+"_"+string(routing.All)+".singbox.json", raw)
+	t.Run("sing-box", func(t *testing.T) { corecheck.SingBox(t, raw) })
+}
+
 // The sing-box config made of the admin's own Clash profile on the two-node user.
 func TestGoldenTemplate(t *testing.T) {
 	lists(t)

@@ -18,12 +18,6 @@ const (
 	CoreXray    Core = "xray"    // the list of xray configs, JSON (xray.Template)
 )
 
-// Cores are the cores a template is written for, in the order the admin panel lists them.
-var Cores = []Core{CoreMihomo, CoreSingBox, CoreXray}
-
-// Known says whether c is one of Cores.
-func (c Core) Known() bool { return c == CoreMihomo || c == CoreSingBox || c == CoreXray }
-
 // Template is an admin's own profile for one core, a subscription template: the core's
 // config without the servers, which the panel puts the user's servers into. The zero
 // Template is none: the built-in profile.
@@ -140,6 +134,15 @@ func words(v any) ([]string, bool) {
 		return out, true
 	}
 	return nil, false
+}
+
+// FreeTag is base, or base with a number when the template took it (taken): base-2, base-3…
+func FreeTag(base string, taken map[string]bool) string {
+	tag := base
+	for i := 2; taken[tag]; i++ {
+		tag = base + "-" + strconv.Itoa(i)
+	}
+	return tag
 }
 
 // ParseJSONTemplate reads a JSON template: one object, its numbers as they are written

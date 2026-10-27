@@ -119,7 +119,8 @@ func (g Geodata) Names(kind string) []string {
 }
 
 // runetfreedomLists are the categories nearest to the panel's rule lists (Services,
-// DirectSets, BlockedLists): sites, then IPs. Lists of apps have none.
+// DirectSets, BlockedLists): sites, then IPs. Lists of apps have none, nor the IPs of
+// Discord's voice servers (mikan-discord-voice).
 var runetfreedomLists = map[string][2][]string{
 	"mikan-blocked":     {{"geosite:ru-blocked"}, {"geoip:ru-blocked"}},
 	"mikan-ru-sites":    {{"geosite:category-ru", "geosite:ru-available-only-inside"}, nil},

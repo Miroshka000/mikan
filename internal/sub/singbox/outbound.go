@@ -114,8 +114,6 @@ func singboxTLS(m map[string]any) (map[string]any, bool) {
 	return t, true
 }
 
-// singboxGroups are the Clash groups as selectors and url tests. A member sing-box has no
-
 func anyList(v any) []any {
 	switch x := v.(type) {
 	case []any:
