@@ -68,7 +68,7 @@ The subscription page also goes to messengers that build a preview of a pasted l
 
 The administrator's rules (**Settings → Subscription → Response rules**) look at the request for an existing subscription before any profile is made. A rule tests the request's headers, any of them by name (`User-Agent`, `X-Device-Os`, one of the administrator's own): equal to a value, containing it or matching a regular expression. The tests are joined with "and" and "or". The rules are checked from the top down, and the first that matches decides. A rule cannot be named `apps` or start with `builtin:`: these are what the tester and the log call the panel's own decisions. What it can do:
 
-- serve the profile as usual, with what the rule changes: the format (see [Answer format](#answer-format)), the template the profile is made from, headers added to the answer, and keys for a device that sends no ID, whatever the panel asks of devices;
+- serve the profile as usual, with what the rule changes: the format (see [Answer format](#answer-format)), the template the profile is made from, headers added to the answer (any but the cache headers `Cache-Control`, `CDN-Cache-Control`, `Cloudflare-CDN-Cache-Control` and `Surrogate-Control`: the answer keeps `no-store`), and keys for a device that sends no ID, whatever the panel asks of devices;
 - answer with a notice in place of the servers, see [A notice in place of the servers](#a-notice-in-place-of-the-servers);
 - answer `403` or `404`, show a page of the administrator's own (`text/html`, with a policy that forbids scripts on it) or close the connection with no answer at all.
 
