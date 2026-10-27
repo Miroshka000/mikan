@@ -284,19 +284,32 @@ func dnsOf(r routing.Resolvers, geo routing.Geodata, via func(group string) (Ref
 // policyDomains are the names a DNS policy's key covers (mihomo's nameserver-policy) as
 // xray's DNS reads them (routing.PolicyNames): categories, the panel's lists as their
 // nearest categories, and domains ("+." with every subdomain, "*." one label deep); none
-// for what xray has no form of, or a category geo lacks.
+// for what xray has no form of, a category geo lacks, or a prefix with no name after it.
+// A prefix counts in any case ("GEOSITE:cn", as mihomo reads it), and each name is read on
+// its own: one with a prefix of its own is of that kind ("+.a.com,geosite:cn", as mihomo
+// reads it too), and a "+." or "*." name is a domain after a prefix ("geosite:cn,+.a.com").
 func policyDomains(key string, geo routing.Geodata) []string {
+	if p, rest, ok := policyPrefix(key); ok {
+		key = p + ":" + rest
+	}
 	var out []string
 	kind, names := routing.PolicyNames(key)
 	for _, v := range names {
+		k := kind
+		if p, rest, ok := policyPrefix(v); ok {
+			k, v = p, strings.TrimSpace(rest)
+		} else if strings.HasPrefix(v, "+.") || strings.HasPrefix(v, "*.") {
+			k = ""
+		}
 		switch {
-		case kind == "geosite":
-			if geo.Has("geosite", v) {
+		case k == "geosite":
+			if v = strings.ToLower(v); v != "" && geo.Has("geosite", v) {
 				out = append(out, "geosite:"+v)
 			}
-		case kind == "rule-set":
+		case k == "rule-set":
 			sites, _ := geo.List(v)
 			out = append(out, sites...)
+		case v == "+." || v == "*.":
 		case strings.HasPrefix(v, "+."):
 			out = append(out, "domain:"+v[2:])
 		case strings.HasPrefix(v, "*."):
@@ -306,6 +319,15 @@ func policyDomains(key string, geo routing.Geodata) []string {
 		}
 	}
 	return out
+}
+
+// policyPrefix is the kind s starts with, "geosite" or "rule-set" in any case, and the rest.
+func policyPrefix(s string) (kind, rest string, ok bool) {
+	p, rest, ok := strings.Cut(s, ":")
+	if p = strings.ToLower(p); ok && (p == "geosite" || p == "rule-set") {
+		return p, rest, true
+	}
+	return "", "", false
 }
 
 // withRef is a rule of the fields f that sends to r: an outbound, or a balancer.

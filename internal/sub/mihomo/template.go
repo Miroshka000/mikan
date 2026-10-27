@@ -70,6 +70,11 @@ func templateConfig(p profile.Profile, src string) (map[string]any, []model.Prox
 	if err != nil {
 		return nil, nil, err
 	}
+	return filledConfig(cfg, p)
+}
+
+// filledConfig is the template cfg with p's proxies in it, checked for p.
+func filledConfig(cfg map[string]any, p profile.Profile) (map[string]any, []model.Proxy, error) {
 	if len(p.Proxies) == 0 {
 		return nil, nil, model.ErrNoProxies
 	}
@@ -255,9 +260,32 @@ var policies = []string{"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 // group that does not exist or uses a rule list that is not there. When p has no proxies
 // to check the groups and rules with, src is only read, and model.ErrNoProxies is what
 // is left, as with xray.
+//
+// A group of a type the core does not know (relay, url_test, a fork's smart) is refused
+// here, on saving, and not with each profile: a template saved before keeps being served,
+// and the app's core tells of the group itself.
 func CheckTemplate(p profile.Profile, src string) error {
-	_, _, err := templateConfig(p, src)
+	cfg, err := parseProfileTemplate(src)
+	if err != nil {
+		return err
+	}
+	if err := checkGroupTypes(cfg); err != nil {
+		return err
+	}
+	_, _, err = filledConfig(cfg, p)
 	return err
+}
+
+// checkGroupTypes refuses a group of a type the core does not know. A group that is not
+// one, or has no name, is left to checkFilled.
+func checkGroupTypes(cfg map[string]any) error {
+	groups, _ := cfg["proxy-groups"].([]any)
+	for _, x := range groups {
+		if m, ok := x.(map[string]any); ok && str(m["name"]) != "" && !model.GroupType(str(m["type"])).Known() {
+			return templateErr("template_group_type", str(m["name"]))
+		}
+	}
+	return nil
 }
 
 // checkFilled checks a template with the user's proxies in it: on saving, against a user
