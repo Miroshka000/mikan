@@ -16,10 +16,6 @@ const (
 	FormatHTML    = "html"    // the subscription page
 )
 
-// Apps that take share links and that apps.DetectApp does not tell apart (it is about what
-// the app's core can run, not about the format).
-var linkApps = []string{"streisand", "shadowrocket", "foxray"}
-
 // Format picks the response format: explicit ?format= wins, then the client's User-Agent,
 // by the family apps.DetectApp makes of it, so the two never disagree about an app.
 func Format(userAgent, accept, query string) string {
@@ -36,11 +32,10 @@ func Format(userAgent, accept, query string) string {
 	case apps.FamilyXray, apps.FamilySingBox:
 		return FormatURI
 	}
-	ua := strings.ToLower(userAgent)
-	for _, a := range linkApps {
-		if strings.Contains(ua, a) {
-			return FormatURI
-		}
+	// The catalog's apps of no core family (Shadowrocket, Streisand…) take share links
+	// whatever they accept: DetectApp is about what an app's core can run, not the format.
+	if apps.FamilyNamed(apps.FamilyOther, userAgent) {
+		return FormatURI
 	}
 	if strings.Contains(accept, "text/html") {
 		return FormatHTML
