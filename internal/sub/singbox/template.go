@@ -45,12 +45,12 @@ func CheckTemplate(p profile.Profile, src string) error {
 
 // templateConfig is the config src makes for p, checked.
 func templateConfig(p profile.Profile, src string) (map[string]any, error) {
-	if len(p.Proxies) == 0 {
-		return nil, model.ErrNoProxies
-	}
 	cfg, err := model.ParseJSONTemplate(src)
 	if err != nil {
 		return nil, err
+	}
+	if len(p.Proxies) == 0 {
+		return nil, model.ErrNoProxies
 	}
 	raw, ok := cfg["outbounds"].([]any)
 	if !ok && cfg["outbounds"] != nil {
