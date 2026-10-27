@@ -414,3 +414,91 @@ func TestXrayAutoLeavesNodesOut(t *testing.T) {
 		}
 	}
 }
+
+// An own Clash profile with a chain: the entry, then the exits a url-test picks of (an XHTTP
+// and a Hysteria2 hop), with a fallback and a load-balance beside it. A rule to the chain
+// goes in every config to the exits' balancer, each of its outbounds dialing through the
+// entry, which the config carries.
+func TestJSONTemplateChain(t *testing.T) {
+	src := `mode: rule
+proxy-groups:
+  - {name: Прокси, type: select, include-all-proxies: true}
+  - {name: Каскад, type: chain, proxies: [🇳🇱 VLESS Vision, Выходы]}
+  - {name: Выходы, type: url-test, proxies: [🇺🇸 VLESS XHTTP, 🇳🇱 Hysteria2]}
+  - {name: Запас, type: fallback, proxies: [🇳🇱 VLESS XHTTP, 🇺🇸 VLESS XHTTP]}
+  - {name: Баланс, type: load-balance, strategy: round-robin, proxies: [🇳🇱 VLESS XHTTP, 🇳🇱 Hysteria2]}
+rules:
+  - DOMAIN-SUFFIX,example.com,Каскад
+  - DOMAIN-SUFFIX,example.org,Запас
+  - DOMAIN-SUFFIX,example.net,Баланс
+  - MATCH,Прокси
+`
+	p, tpl := profileOf(subtest.TwoNodes()), subtest.Clash(src)
+	cs := render(t, p, routing.All, tpl)
+	var names []string
+	for _, c := range cs {
+		names = append(names, c.Remarks)
+	}
+	// The main group is a select: a config per server.
+	if !slices.Equal(names, []string{"🇳🇱 VLESS XHTTP", "🇳🇱 Hysteria2", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP"}) {
+		t.Fatalf("configs: %q", names)
+	}
+	// The entry is the outbound of its own config, by what it dials rather than its tag.
+	entry, _ := json.Marshal(cs[2].Outbounds[0]["settings"])
+	for _, c := range cs {
+		byTag := map[string]Balancer{}
+		for _, x := range c.Routing.Balancers {
+			byTag[x.Tag] = x
+		}
+		if f := byTag["Запас"]; f.Strategy.Type != "leastPing" || len(f.Selector) != 2 || f.FallbackTag != f.Selector[0] {
+			t.Errorf("%s: fallback %+v", c.Remarks, f)
+		}
+		if l := byTag["Баланс"]; l.Strategy.Type != "roundRobin" || len(l.Selector) != 2 {
+			t.Errorf("%s: load-balance %+v", c.Remarks, l)
+		}
+		var chain map[string]any
+		for _, r := range c.Routing.Rules {
+			if d, _ := json.Marshal(r["domain"]); string(d) == `["domain:example.com"]` {
+				chain = r
+			}
+		}
+		tag, _ := chain["balancerTag"].(string)
+		exits := byTag[tag].Selector
+		if len(exits) != 2 {
+			t.Fatalf("%s: the chain's rule %v goes to the exits' balancer, of %v", c.Remarks, chain, c.Routing.Balancers)
+		}
+		for _, exit := range exits {
+			o := c.outbound(t, exit)
+			d, _ := get(o, "streamSettings", "sockopt", "dialerProxy").(string)
+			if d == "" {
+				t.Fatalf("%s: the exit %s dials through nothing: %v", c.Remarks, exit, o)
+			}
+			in := c.outbound(t, d)
+			if got, _ := json.Marshal(in["settings"]); string(got) != string(entry) || get(in, "streamSettings", "sockopt") != nil {
+				t.Errorf("%s: the exit %s dials through %v, not the entry", c.Remarks, exit, in)
+			}
+		}
+	}
+	// dialed gives the exit a copy: the proxy's own outbound, which every config shares, keeps
+	// its streamSettings.
+	const entryTag = "proxy-3" // 🇳🇱 VLESS Vision
+	pl, err := planOf(p, model.GroupNames{}, routing.All, tpl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := pl.balancing()
+	if b.Dialers["proxy-2"] != entryTag || b.Dialers["proxy-4"] != entryTag || len(b.Dialers) != 2 {
+		t.Fatalf("dialers: %v", b.Dialers)
+	}
+	for _, o := range pl.outbounds {
+		before, _ := json.Marshal(o.out)
+		d := dialed(o, b)
+		after, _ := json.Marshal(o.out)
+		if string(before) != string(after) || get(o.out, "streamSettings", "sockopt") != nil {
+			t.Errorf("%s: dialed changed the outbound:\n%s\n%s", o.tag, before, after)
+		}
+		if got, want := get(d, "streamSettings", "sockopt", "dialerProxy"), b.Dialers[o.tag]; want != "" && got != want || want == "" && got != nil {
+			t.Errorf("%s dials through %v, want %q", o.tag, got, want)
+		}
+	}
+}
