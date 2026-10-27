@@ -58,11 +58,16 @@ func singboxOutbound(m map[string]any) (map[string]any, bool) {
 			return nil, false
 		}
 		// A server that takes UDP over TCP alone listens on TCP: raw UDP would go nowhere.
-		// mihomo's version is 1 when none is given, sing-box's 2.
+		// mihomo's version is 1 when none is given (or 0), sing-box's 2. mihomo refuses a
+		// proxy of another version, and sing-box would refuse the whole config.
 		if m["udp-over-tcp"] == true {
-			v, err := strconv.Atoi(str(m["udp-over-tcp-version"]))
-			if err != nil || v <= 0 {
-				v = 1
+			v := 1
+			if s := str(m["udp-over-tcp-version"]); s != "" && s != "0" {
+				n, err := strconv.Atoi(s)
+				if err != nil || n != 1 && n != 2 {
+					return nil, false
+				}
+				v = n
 			}
 			o["udp_over_tcp"] = map[string]any{"enabled": true, "version": v}
 		}

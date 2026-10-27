@@ -18,7 +18,7 @@ import (
 
 // Shadowsocks wraps UDP in UDP over TCP when the server asks for it, of mihomo's version 1
 // when none is given; one of a plugin or smux is left out, as sing-box would dial a server
-// that does not answer.
+// that does not answer, and one of a version mihomo refuses too.
 func TestShadowsocks(t *testing.T) {
 	ss := func(extra map[string]any) map[string]any {
 		m := map[string]any{"name": "S", "type": "ss", "server": "203.0.113.7", "port": 8388, "cipher": "aes-128-gcm", "password": "x", "udp": true}
@@ -37,6 +37,9 @@ func TestShadowsocks(t *testing.T) {
 	}{
 		{"the panel's 2022", ss2022, true, map[string]any{"enabled": true, "version": 2}},
 		{"no version given", ss(map[string]any{"udp-over-tcp": true}), true, map[string]any{"enabled": true, "version": 1}},
+		{"version 0", ss(map[string]any{"udp-over-tcp": true, "udp-over-tcp-version": 0}), true, map[string]any{"enabled": true, "version": 1}},
+		{"version 3", ss(map[string]any{"udp-over-tcp": true, "udp-over-tcp-version": 3}), false, nil},
+		{"version of no number", ss(map[string]any{"udp-over-tcp": true, "udp-over-tcp-version": "two"}), false, nil},
 		{"plain", ss(nil), true, nil},
 		{"turned off", ss(map[string]any{"udp-over-tcp": false, "udp-over-tcp-version": 2}), true, nil},
 		{"obfs", ss(map[string]any{"plugin": "obfs", "plugin-opts": map[string]any{"mode": "tls", "host": "bing.com"}}), false, nil},
