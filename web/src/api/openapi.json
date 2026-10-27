@@ -5619,7 +5619,12 @@
               "balance_flat",
               "select_first",
               "chain_group_hop",
-              "chain_dialer_taken"
+              "chain_dialer_taken",
+              "proxy_unsupported",
+              "rule_unsupported",
+              "list_unsupported",
+              "dns_policy_unsupported",
+              "category_missing"
             ],
             "type": "string"
           },
@@ -5632,6 +5637,7 @@
             "type": "string"
           },
           "group": {
+            "description": "О чём заметка: группа, условие TYPE,VALUE, список, ключ политики DNS, сервер или geosite:NAME",
             "type": "string"
           }
         },
@@ -7589,7 +7595,7 @@
         "additionalProperties": false,
         "properties": {
           "notes": {
-            "description": "Что sing-box и Xray делают с группами шаблона Clash, которых у них нет как есть",
+            "description": "Что sing-box и Xray делают с шаблоном Clash, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают",
             "items": {
               "$ref": "#/components/schemas/Note"
             },
@@ -8899,7 +8905,7 @@
         "additionalProperties": false,
         "properties": {
           "notes": {
-            "description": "Что ядра sing-box и Xray делают с группами, которых у них нет как есть: ближайший вид",
+            "description": "Что ядра sing-box и Xray делают с профилем, которого не могут передать как есть: ближайший вид группы; сервер, правило, список, политика DNS или категория, которые они опускают",
             "items": {
               "$ref": "#/components/schemas/Note"
             },

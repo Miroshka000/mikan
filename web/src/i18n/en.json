@@ -1771,7 +1771,7 @@
     "routesPreview": "What the app gets",
     "routesPreviewSub": "The Clash profile of a client with every protocol and these settings, before they are saved. Its keys are placeholders.",
     "routesNotesTitle": "In other apps",
-    "routesNotesSub": "sing-box and Xray have no such group of their own, so they get the nearest one.",
+    "routesNotesSub": "What sing-box and Xray cannot carry as it is: a group gets the nearest kind, the rest is left out.",
     "routesNotes": {
       "fallback_fastest": "“{group}” keeps the fastest server that answers, not the first in order",
       "balance_fastest": "“{group}” keeps the fastest server instead of spreading the load",
@@ -1779,7 +1779,12 @@
       "balance_flat": "“{group}” tests the servers of the groups inside it as one list",
       "select_first": "“{group}” has no choice inside a config: its first member is used",
       "chain_group_hop": "“{group}”: a group before the next hop goes through its first server",
-      "chain_dialer_taken": "“{group}”: a server already goes through another chain and stays in it"
+      "chain_dialer_taken": "“{group}”: a server already goes through another chain and stays in it",
+      "proxy_unsupported": "Server “{group}” is left out: the app cannot connect to it",
+      "rule_unsupported": "Rule “{group}” is left out: the app has no such condition or group",
+      "list_unsupported": "List “{group}” is left out: the app cannot read it",
+      "dns_policy_unsupported": "DNS policy “{group}” is left out: the app cannot write it",
+      "category_missing": "Category “{group}” is left out: the app's usual geodata has no such category"
     },
     "routesPreviewShow": "Show the profile",
     "routesTemplateOn": "Clash apps get your own template",
