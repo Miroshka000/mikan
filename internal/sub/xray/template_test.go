@@ -15,8 +15,10 @@ import (
 // own is the own xray template src as the template it is.
 func own(src string) model.Template { return model.Template{Core: model.CoreXray, Body: src} }
 
-// The list made of the admin's own xray template on the two-node users, of all their
-// inbounds as the links are, each config checked by xray.
+// The list made of the admin's own xray template on the two-node users, each config
+// checked by xray. The base user is enough: the template takes none of the panel's rules,
+// routing or language, and all the inbounds go in, as in the links, since the variants'
+// apps are mihomo's.
 func TestGoldenOwnXrayTemplate(t *testing.T) {
 	for _, v := range subtest.CoreVariants {
 		if strings.HasPrefix(v.Name, "single") {
