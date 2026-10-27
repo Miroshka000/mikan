@@ -1,5 +1,6 @@
 # What every built-in Clash profile starts with: the panel adds the DNS servers, the
-# proxies, the groups and the rules. These keys come first in a profile, in this order.
+# proxies, the groups and the rules. These keys come first in a profile, in this order;
+# the keys under them come out in alphabetical order, as written here.
 mixed-port: 7890
 allow-lan: false
 mode: rule
@@ -14,10 +15,10 @@ tcp-concurrent: true
 # no geodata goes without these two.
 geodata-mode: false
 geox-url:
+  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
   geoip: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat
   geosite: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat
   mmdb: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip.metadb
-  asn: https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/GeoLite2-ASN.mmdb
 # The admin's "real IP" (routing.Tune.RealIP) turns fake-ip to redir-host, which has no range.
 dns:
   enable: true

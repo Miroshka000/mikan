@@ -14,7 +14,8 @@ import (
 // keyOrder is the order people read a profile in: in a proxy or a group its name and type
 // first; the general settings in the order of base.yaml, DNS the last of them; then the
 // proxies, groups and rules. mihomo does not care; keys not listed follow in alphabetical
-// order.
+// order. The one order is for the maps of every level, so moving a top-level key of
+// base.yaml moves that key in every map, the DNS's "ipv6" among them.
 var keyOrder = slices.Concat([]string{"name", "type", "server", "port", "enable"}, baseKeys, []string{"proxies", "proxy-groups", "rules"})
 
 // embeddedYAML reads a mapping of the panel's own, and its keys in the order of the file.
