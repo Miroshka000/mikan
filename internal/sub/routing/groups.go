@@ -100,6 +100,15 @@ func (gs Groups) Of(t Target, route int) string {
 	return ""
 }
 
+// Resolve is t, the target of route i of BuildGroups' (-1 for a rule of no route), as the
+// group it goes to (ToGroup); a policy (direct, reject, drop) stays as it is.
+func (gs Groups) Resolve(t Target, route int) Target {
+	if name := gs.Of(t, route); name != "" {
+		return Target{Kind: ToGroup, Group: name}
+	}
+	return t
+}
+
 // autoMembers are the names of ps the automatic choice takes: those not kept out of it, by
 // their inbound (model.Proxy.NoAuto) or their node (model.Node.NoAuto). An empty choice
 // breaks the profile, so with every server kept out it takes all of them, as before.

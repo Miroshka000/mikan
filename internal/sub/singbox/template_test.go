@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -174,5 +175,33 @@ func TestExample(t *testing.T) {
 		if s.Tag == "remote" && s.Detour != g.Main {
 			t.Fatalf("remote DNS detour %q, want %q", s.Detour, g.Main)
 		}
+	}
+	raw, err := Render(context.Background(), profileOf(subtest.TwoNodes()), g, routing.All, own(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("sing-box", func(t *testing.T) { corecheck.SingBox(t, raw) })
+
+	// The example is written apart from the built-in config, but the skeleton an app needs
+	// is the same in both.
+	lists(t)
+	builtin, err := Render(context.Background(), profileOf(subtest.TwoNodes()), g, routing.All, model.Template{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want, got map[string]any
+	if err := json.Unmarshal(builtin, &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(src), &got); err != nil {
+		t.Fatal(err)
+	}
+	shared := func(c map[string]any) map[string]any {
+		route := c["route"].(map[string]any)
+		return map[string]any{"log": c["log"], "inbounds": c["inbounds"], "experimental": c["experimental"],
+			"route.rules": route["rules"].([]any)[:2], "route.auto_detect_interface": route["auto_detect_interface"]}
+	}
+	if w, s := shared(want), shared(got); !reflect.DeepEqual(w, s) {
+		t.Fatalf("the example's skeleton:\n%v\nthe built-in config's:\n%v", s, w)
 	}
 }

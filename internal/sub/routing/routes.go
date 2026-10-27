@@ -117,6 +117,34 @@ type Provider struct {
 	Since apps.Version
 }
 
+// Narrow are the routes with what a core takes of them: a list it cannot read (list false)
+// goes, and so do the RULE-SET conditions that read it; a route left with no condition goes
+// too.
+func Narrow(routes []Route, list func(Provider) bool) []Route {
+	var out []Route
+	for _, r := range routes {
+		var lists []Provider
+		have := map[string]bool{}
+		for _, pr := range r.Lists {
+			if list(pr) {
+				lists = append(lists, pr)
+				have[pr.Name] = true
+			}
+		}
+		var rules []Match
+		for _, m := range r.Rules {
+			if m.Type != "RULE-SET" || have[m.Value] {
+				rules = append(rules, m)
+			}
+		}
+		if len(rules) > 0 {
+			r.Rules, r.Lists = rules, lists
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // Service is a kind of traffic the admin sends one way. The lists are mihomo's geodata
 // (MetaCubeX meta-rules-dat) and, where it has none, lists the apps download: their
 // sources are linked, not copied.

@@ -101,57 +101,21 @@ func planOf(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templ
 // and the built-in groups over it.
 func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	in := routing.NewIntent(m, p.Rules, p.Routes)
-	var routes []routing.Route
-	for _, r := range in.Routes {
-		// A list of a younger mihomo type or format (routing.Provider.Since) has no sing-box
-		// counterpart, and neither have the conditions that read it.
-		have := map[string]bool{}
-		var lists []routing.Provider
-		for _, pr := range r.Lists {
-			if !pr.Since.Known() {
-				have[pr.Name] = true
-				lists = append(lists, pr)
-			}
-		}
-		var rules []routing.Match
-		for _, x := range r.Rules {
-			if x.Type != "RULE-SET" || have[x.Value] {
-				rules = append(rules, x)
-			}
-		}
-		if len(rules) > 0 {
-			r.Rules, r.Lists = rules, lists
-			routes = append(routes, r)
-		}
-	}
+	// A list of a younger mihomo type or format (routing.Provider.Since) has no sing-box
+	// counterpart, and neither have the conditions that read it.
+	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return !pr.Since.Known() })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.SingBoxBalance(), routes, p.Lang)
 	pl := plan{groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
 	for _, x := range p.Proxies {
 		pl.proxies = append(pl.proxies, mihomo.Proxy(x))
 	}
-	to := func(t routing.Target, route int) routing.Target {
-		if name := gs.Of(t, route); name != "" {
-			return routing.Target{Kind: routing.ToGroup, Group: name}
-		}
-		return t
-	}
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
-		for _, r := range part {
-			pl.rules = append(pl.rules, routing.Rule{When: r.When, To: to(r.To, -1)})
-		}
-	}
-	for i, r := range routes {
+	for _, r := range routes {
 		for _, pr := range r.Lists {
 			pl.lists[pr.Name] = pr
 		}
-		for _, x := range r.Rules {
-			pl.rules = append(pl.rules, routing.Rule{When: []routing.Match{x}, To: to(r.To, i)})
-		}
 	}
-	for _, r := range in.Tail() {
-		pl.rules = append(pl.rules, routing.Rule{When: r.When, To: to(r.To, -1)})
-	}
-	pl.rules = append(pl.rules, routing.Rule{To: to(in.Final(), -1)})
+	pre, routed, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
+	pl.rules = append(append(append(pre, routed...), tail...), routing.Rule{To: final})
 	return pl
 }
 
