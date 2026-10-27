@@ -3,6 +3,8 @@ package routing
 import (
 	"slices"
 	"testing"
+
+	"mikan/internal/sub/model"
 )
 
 // The routes go in the order their rules apply: the services in the catalog's order, the
@@ -56,6 +58,62 @@ func TestIntentHead(t *testing.T) {
 	}
 }
 
+// The rules of a profile go in the order the doc of Intent gives, each target resolved by
+// the route it is of: a route sent to a node goes to its group, a rule of no route asks
+// with -1.
+func TestIntentSequence(t *testing.T) {
+	in := Intent{Mode: RUDirect, Own: []Rule{Direct(Match{Type: "DOMAIN", Value: "own.example"})}, Tune: Tune{BlockQUIC: true}}
+	routes := []Route{
+		{Icon: "🤖", Name: "ИИ", NameEN: "AI", Rules: []Match{{Type: "DOMAIN-SUFFIX", Value: "ai.example"}, {Type: "GEOSITE", Value: "openai"}}, To: Target{Kind: ToNode, Node: 2}},
+		{Rules: []Match{{Type: "GEOSITE", Value: "youtube"}}, To: Target{Kind: ToMain}},
+		{Rules: []Match{{Type: "DOMAIN-SUFFIX", Value: "ads.example"}}, To: Target{Kind: ToReject}},
+	}
+	gs := BuildGroups([]model.Proxy{{Name: "US", Node: 2}, {Name: "NL", Node: 1}}, nil, model.GroupNames{Main: "VPN", Auto: "Auto"},
+		Servers{}, Balance{Type: model.URLTest}, routes, "en")
+	var asked []int
+	to := func(t Target, route int) Target {
+		asked = append(asked, route)
+		return gs.Resolve(t, route)
+	}
+	clash := func(rules []Rule) []string {
+		var out []string
+		for _, r := range rules {
+			name := map[TargetKind]string{ToDirect: "DIRECT", ToReject: "REJECT", ToGroup: r.To.Group}[r.To.Kind]
+			out = append(out, r.Clash(name))
+		}
+		return out
+	}
+	pre, routed, tail, final := in.Sequence([]string{"panel.example"}, routes, to)
+	if got := clash(pre); !slices.Equal(got, []string{"DOMAIN,panel.example,DIRECT", "GEOIP,LAN,DIRECT,no-resolve",
+		"AND,((NETWORK,UDP),(DST-PORT,443)),REJECT", "DOMAIN,own.example,DIRECT"}) {
+		t.Fatalf("pre: %q", got)
+	}
+	if got := clash(routed); !slices.Equal(got, []string{"DOMAIN-SUFFIX,ai.example,🤖 AI", "GEOSITE,openai,🤖 AI", "GEOSITE,youtube,VPN", "DOMAIN-SUFFIX,ads.example,REJECT"}) {
+		t.Fatalf("routed: %q", got)
+	}
+	if got := clash(tail); !slices.Equal(got, []string{"GEOSITE,category-ru,DIRECT", "GEOIP,ru,DIRECT"}) {
+		t.Fatalf("tail: %q", got)
+	}
+	if final != (Target{Kind: ToGroup, Group: "VPN"}) {
+		t.Fatalf("final: %+v", final)
+	}
+	if !slices.Equal(asked, []int{-1, -1, -1, -1, 0, 0, 1, 2, -1, -1, -1}) {
+		t.Fatalf("routes asked: %v", asked)
+	}
+
+	// The blocked mode: the rest goes direct, and no tail.
+	pre, routed, tail, final = Intent{Mode: Blocked}.Sequence(nil, nil, gs.Resolve)
+	if len(pre) != 1 || routed != nil || tail != nil || final.Kind != ToDirect {
+		t.Fatalf("blocked: %+v %+v %+v %+v", pre, routed, tail, final)
+	}
+
+	// The targets as they are: a node stays a node.
+	_, routed, _, final = in.Sequence(nil, routes, func(t Target, _ int) Target { return t })
+	if routed[0].To != (Target{Kind: ToNode, Node: 2}) || routed[3].To.Kind != ToReject || final.Kind != ToMain {
+		t.Fatalf("as they are: %+v %+v", routed, final)
+	}
+}
+
 // The panel's resolvers by the mode, the admin's over them key by key.
 func TestResolvers(t *testing.T) {
 	all := Intent{Mode: All}.Resolvers()
@@ -80,12 +138,24 @@ func TestParseResolver(t *testing.T) {
 		"1.1.1.1:5353":                    {Scheme: "udp", Host: "1.1.1.1", Port: 5353},
 		"tls://dns.google":                {Scheme: "tls", Host: "dns.google"},
 		"system":                          {Scheme: "system"},
+		// A bare IPv6 address keeps its last group: as a URL it went to the port.
+		"2606:4700:4700::1111":             {Scheme: "udp", Host: "2606:4700:4700::1111"},
+		"[2606:4700:4700::1111]:53":        {Scheme: "udp", Host: "2606:4700:4700::1111", Port: 53},
+		"1.1.1.1:53":                       {Scheme: "udp", Host: "1.1.1.1", Port: 53},
+		"2606:4700:4700::1111#PROXY":       {Scheme: "udp", Host: "2606:4700:4700::1111", Via: "PROXY"},
+		"[2606:4700:4700::1111]":           {Scheme: "udp", Host: "2606:4700:4700::1111"},
+		"tls://[2606:4700:4700::1111]:853": {Scheme: "tls", Host: "2606:4700:4700::1111", Port: 853},
+		// An address keeps its spelling, with a port, in brackets or bare.
+		"2606:4700:4700:0:0:0:0:1111":      {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111"},
+		"[2606:4700:4700:0:0:0:0:1111]:53": {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111", Port: 53},
+		"[2606:4700:4700:0:0:0:0:1111]":    {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111"},
+		"[2606:4700:4700::AbCd]:53":        {Scheme: "udp", Host: "2606:4700:4700::AbCd", Port: 53},
 	} {
 		if got, ok := ParseResolver(in); !ok || got != want {
 			t.Errorf("%s: %+v %v", in, got, ok)
 		}
 	}
-	for _, bad := range []string{"dhcp://en0", "ftp://x", "https://", "1.1.1.1:99999"} {
+	for _, bad := range []string{"dhcp://en0", "ftp://x", "https://", "1.1.1.1:99999", "1.1.1.1:0", "[2606:4700:4700::1111]:0", "fe80::1%en0"} {
 		if _, ok := ParseResolver(bad); ok {
 			t.Errorf("%s read", bad)
 		}

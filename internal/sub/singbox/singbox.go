@@ -74,7 +74,11 @@ type plan struct {
 	rules []routing.Rule
 	lists map[string]routing.Provider
 	dns   routing.Resolvers
-	main  string
+	// tunnelDNS sends the first nameserver through the main group: mihomo leaves the names
+	// of a fake-ip profile to the tunnel, sing-box resolves them itself, and DoH straight
+	// from Russia stalls under TSPU throttling.
+	tunnelDNS bool
+	main      string
 }
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
@@ -101,57 +105,23 @@ func planOf(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templ
 // and the built-in groups over it.
 func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	in := routing.NewIntent(m, p.Rules, p.Routes)
-	var routes []routing.Route
-	for _, r := range in.Routes {
-		// A list of a younger mihomo type or format (routing.Provider.Since) has no sing-box
-		// counterpart, and neither have the conditions that read it.
-		have := map[string]bool{}
-		var lists []routing.Provider
-		for _, pr := range r.Lists {
-			if !pr.Since.Known() {
-				have[pr.Name] = true
-				lists = append(lists, pr)
-			}
-		}
-		var rules []routing.Match
-		for _, x := range r.Rules {
-			if x.Type != "RULE-SET" || have[x.Value] {
-				rules = append(rules, x)
-			}
-		}
-		if len(rules) > 0 {
-			r.Rules, r.Lists = rules, lists
-			routes = append(routes, r)
-		}
-	}
+	// A list of a younger mihomo type or format (routing.Provider.Since) has no sing-box
+	// counterpart, and neither have the conditions that read it.
+	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return !pr.Since.Known() })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.SingBoxBalance(), routes, p.Lang)
 	pl := plan{groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
+	// The panel's own nameservers only: one the admin gave without "#group" goes as given.
+	pl.tunnelDNS = pl.dns.FakeIP && len(in.DNS.Nameserver) == 0
 	for _, x := range p.Proxies {
 		pl.proxies = append(pl.proxies, mihomo.Proxy(x))
 	}
-	to := func(t routing.Target, route int) routing.Target {
-		if name := gs.Of(t, route); name != "" {
-			return routing.Target{Kind: routing.ToGroup, Group: name}
-		}
-		return t
-	}
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
-		for _, r := range part {
-			pl.rules = append(pl.rules, routing.Rule{When: r.When, To: to(r.To, -1)})
-		}
-	}
-	for i, r := range routes {
+	for _, r := range routes {
 		for _, pr := range r.Lists {
 			pl.lists[pr.Name] = pr
 		}
-		for _, x := range r.Rules {
-			pl.rules = append(pl.rules, routing.Rule{When: []routing.Match{x}, To: to(r.To, i)})
-		}
 	}
-	for _, r := range in.Tail() {
-		pl.rules = append(pl.rules, routing.Rule{When: r.When, To: to(r.To, -1)})
-	}
-	pl.rules = append(pl.rules, routing.Rule{To: to(in.Final(), -1)})
+	pre, routed, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
+	pl.rules = append(append(append(pre, routed...), tail...), routing.Rule{To: final})
 	return pl
 }
 
@@ -216,7 +186,14 @@ func config(ctx context.Context, pl plan) map[string]any {
 	if final == "" {
 		final = main
 	}
-	dns, resolver := dnsOf(pl.dns, tags, &sets)
+	via := ""
+	if pl.tunnelDNS {
+		via = model.AliasGroup // as the other modes' nameservers go
+		if !tags[via] {
+			via = main
+		}
+	}
+	dns, resolver := dnsOf(pl.dns, tags, &sets, via)
 	all := append(append([]map[string]any{}, gs.outbounds...), outbounds...)
 	all = append(all, map[string]any{"type": "direct", "tag": "direct"})
 	route := map[string]any{

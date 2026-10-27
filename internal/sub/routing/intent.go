@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -15,7 +16,7 @@ import (
 // writes what its apps take of it (mihomo, singbox, xray) and the nearest form of the rest.
 //
 // In a profile the rules go: the hosts of the panel and the nodes (HostRules), Head, Own,
-// the routes in order, Tail, and Final for what none of them takes.
+// the routes in order, Tail, and Final for what none of them takes (Sequence).
 type Intent struct {
 	Mode Mode
 	// Own are the admin's own rules (ServedRules).
@@ -112,6 +113,27 @@ func (in Intent) Final() Target {
 	return Target{Kind: ToMain}
 }
 
+// Sequence are the rules of a profile in their order: pre (HostRules of direct, Head, Own),
+// routed (a rule per condition of each of routes, those of the intent the core takes, in
+// order), tail (Tail), and final (Final) for what none of them takes. to is where a target
+// of route i of routes (-1: of no route) goes: Groups.Resolve, or the target as it is.
+func (in Intent) Sequence(direct []string, routes []Route, to func(t Target, route int) Target) (pre, routed, tail []Rule, final Target) {
+	for _, part := range [][]Rule{HostRules(direct), in.Head(), in.Own} {
+		for _, r := range part {
+			pre = append(pre, Rule{When: r.When, To: to(r.To, -1)})
+		}
+	}
+	for i, r := range routes {
+		for _, m := range r.Rules {
+			routed = append(routed, Rule{When: []Match{m}, To: to(r.To, i)})
+		}
+	}
+	for _, r := range in.Tail() {
+		tail = append(tail, Rule{When: r.When, To: to(r.To, -1)})
+	}
+	return pre, routed, tail, to(in.Final(), -1)
+}
+
 // Resolvers are the DNS servers of a profile, as mihomo writes them: an IP, a URL, "#<group>"
 // after one to go through a group (ParseResolver reads them). Policy resolves the names its
 // Match covers with other servers.
@@ -171,11 +193,25 @@ type Resolver struct {
 }
 
 // ParseResolver reads a server of Resolvers: "https://1.1.1.1/dns-query#VPN", "tls://dns.google",
-// "77.88.8.8", "system". False for one no core but mihomo reads (dhcp://).
+// "77.88.8.8", "2606:4700:4700::1111", "[2606:4700:4700::1111]:53", "system". False for one
+// no core but mihomo reads (dhcp://).
 func ParseResolver(s string) (Resolver, bool) {
 	s, via, _ := strings.Cut(s, "#")
 	if s == "system" || s == "system://" {
 		return Resolver{Scheme: "system"}, true
+	}
+	// A bare IP, with a port or not, is read as an address: as a URL an IPv6 one without
+	// brackets loses its last group to the port. The address keeps its spelling, as the
+	// URL way keeps that of one in brackets.
+	if a, err := netip.ParseAddr(s); err == nil && a.Zone() == "" {
+		return Resolver{Scheme: "udp", Host: s, Via: via}, true
+	}
+	if ap, err := netip.ParseAddrPort(s); err == nil && ap.Addr().Zone() == "" {
+		if ap.Port() == 0 {
+			return Resolver{}, false
+		}
+		host := strings.TrimSuffix(strings.TrimPrefix(s[:strings.LastIndexByte(s, ':')], "["), "]")
+		return Resolver{Scheme: "udp", Host: host, Port: int(ap.Port()), Via: via}, true
 	}
 	if !strings.Contains(s, "://") {
 		s = "udp://" + s

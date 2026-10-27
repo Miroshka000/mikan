@@ -26,19 +26,19 @@ func TestFormat(t *testing.T) {
 		"curl/8.9":                                    FormatURI,
 	}
 	for ua, want := range cases {
-		if got := Format(ua, "*/*", ""); got != want {
+		if got := uaFormat(ua, "*/*"); got != want {
 			t.Errorf("%q → %s, want %s", ua, got, want)
 		}
 	}
-	if Format("Mozilla/5.0 (iPhone)", "text/html,application/xhtml+xml", "") != FormatHTML {
+	if uaFormat("Mozilla/5.0 (iPhone)", "text/html,application/xhtml+xml") != FormatHTML {
 		t.Error("browser must get the page")
 	}
-	if Format("Happ/3", "", "clash") != FormatClash || Format("HiddifyNext/4.1.1", "", "singbox") != FormatSingBox {
+	if Resolve(http.Header{"User-Agent": {"Happ/3"}}, "clash", apps.Decision{}, false) != FormatClash || Resolve(http.Header{"User-Agent": {"HiddifyNext/4.1.1"}}, "singbox", apps.Decision{}, false) != FormatSingBox {
 		t.Error("?format= must override the User-Agent")
 	}
 }
 
-// Format and apps.DetectApp read the same User-Agent, and must agree about an app: Hiddify
+// uaFormat and apps.DetectApp read the same User-Agent, and must agree about an app: Hiddify
 // says "like ClashMeta" and used to be given a Clash profile; Prizrak and its kin are mihomo
 // apps that were given a link list.
 func TestFormatFollowsDetectApp(t *testing.T) {
@@ -68,24 +68,24 @@ func TestFormatFollowsDetectApp(t *testing.T) {
 		if got := apps.DetectApp(c.ua).Family; got != c.family {
 			t.Errorf("DetectApp(%q) = %s, want %s", c.ua, got, c.family)
 		}
-		if got := Format(c.ua, "*/*", ""); got != c.format {
-			t.Errorf("Format(%q) = %s, want %s", c.ua, got, c.format)
+		if got := uaFormat(c.ua, "*/*"); got != c.format {
+			t.Errorf("uaFormat(%q) = %s, want %s", c.ua, got, c.format)
 		}
 	}
 	// Whatever DetectApp says is a core's family decides: never Clash for an Xray or sing-box app.
 	for _, c := range cases {
 		switch apps.DetectApp(c.ua).Family {
 		case apps.FamilyXray, apps.FamilySingBox:
-			if Format(c.ua, "*/*", "") == FormatClash {
+			if uaFormat(c.ua, "*/*") == FormatClash {
 				t.Errorf("%q: a Clash profile for a %s app", c.ua, apps.DetectApp(c.ua).Family)
 			}
 		case apps.FamilyMihomo, apps.FamilyStash:
-			if Format(c.ua, "*/*", "") != FormatClash {
+			if uaFormat(c.ua, "*/*") != FormatClash {
 				t.Errorf("%q: no Clash profile for a mihomo app", c.ua)
 			}
 		}
 	}
-	if Format("Mozilla/5.0", "text/html", "") != FormatHTML || Format("Happ/3.4.1", "text/html", "") != FormatURI {
+	if uaFormat("Mozilla/5.0", "text/html") != FormatHTML || uaFormat("Happ/3.4.1", "text/html") != FormatURI {
 		t.Error("a browser gets the page, an app that names itself gets its format")
 	}
 }
@@ -98,7 +98,7 @@ func TestFormatFollowsDetectApp(t *testing.T) {
 // with another detector or with the app.
 var pinnedUAs = []struct {
 	ua            string
-	format, page  string // Format for "*/*" and for "text/html"
+	format, page  string // uaFormat for "*/*" and for "text/html"
 	resolved      string // Resolve with Config.XrayJSON on
 	routing       string // the routing header for Happ{Routing: "happ://routing/off"}
 	announceLines bool   // fillAppAnnounce keeps the lines
@@ -119,7 +119,7 @@ var pinnedUAs = []struct {
 	{"mihomo/1.19.32 Mikan/0.1.3", FormatClash, FormatClash, FormatClash, "", false},
 	{"mihomo Mikan/1.1.1", FormatClash, FormatClash, FormatClash, "", false},
 	// Looks wrong: the discontinued Clash apps get mihomo's profile; the built-in rule turns
-	// them away before Format is asked.
+	// them away before the format is asked.
 	{"ClashforWindows/0.20.39", FormatClash, FormatClash, FormatClash, "", false},
 	{"Clash for Windows/0.20.39", FormatClash, FormatClash, FormatClash, "", false},
 	{"ClashForAndroid/2.5.12", FormatClash, FormatClash, FormatClash, "", false},
@@ -209,11 +209,11 @@ func TestFormatIsPinned(t *testing.T) {
 	pinned := map[string]bool{}
 	for _, c := range pinnedUAs {
 		pinned[c.ua] = true
-		if got := Format(c.ua, "*/*", ""); got != c.format {
-			t.Errorf("Format(%q, */*) = %s, want %s", c.ua, got, c.format)
+		if got := uaFormat(c.ua, "*/*"); got != c.format {
+			t.Errorf("uaFormat(%q, */*) = %s, want %s", c.ua, got, c.format)
 		}
-		if got := Format(c.ua, "text/html,application/xhtml+xml", ""); got != c.page {
-			t.Errorf("Format(%q, text/html) = %s, want %s", c.ua, got, c.page)
+		if got := uaFormat(c.ua, "text/html,application/xhtml+xml"); got != c.page {
+			t.Errorf("uaFormat(%q, text/html) = %s, want %s", c.ua, got, c.page)
 		}
 		if got := Resolve(http.Header{"User-Agent": {c.ua}}, "", apps.Decision{}, true); got != c.resolved {
 			t.Errorf("Resolve(%q) = %s, want %s", c.ua, got, c.resolved)
