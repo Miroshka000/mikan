@@ -24,8 +24,8 @@ type Known struct {
 // Catalog lists the known apps in the order the admin panel shows them, a family at a time.
 // Identify tries the apps with an entry of their own before the generic ones, and within
 // each in this order: Hiddify says "like ClashMeta" and Koala Clash holds "clash" too, so
-// the app is told before the core it is built on, and DetectApp agrees with it on the
-// family (rules_test.go checks every entry).
+// the app is told before the core it is built on. DetectApp reads the same words for the
+// family (rules_test.go checks every word and prefix).
 var Catalog = []Known{
 	{ID: "mikan", Name: "Mikan", Family: FamilyMihomo, Words: []string{"mikan"}},
 	{ID: "kabosu", Name: "Kabosu", Family: FamilyMihomo, Words: []string{"kabosu"}},
@@ -98,6 +98,30 @@ func (k Known) matches(ua string) bool {
 		}
 	}
 	return false
+}
+
+// names says whether ua (lowercase) holds a word or prefix of an app of family f, the app
+// except left out.
+func names(f Family, ua, except string) bool {
+	for _, k := range Catalog {
+		if k.Family == f && k.ID != except && k.matches(ua) {
+			return true
+		}
+	}
+	return false
+}
+
+// FamilyNamed says whether the User-Agent holds a word or prefix of an app of family f.
+func FamilyNamed(f Family, userAgent string) bool {
+	return names(f, strings.ToLower(userAgent), "")
+}
+
+// Named says whether the User-Agent holds a word or prefix of the app id, whatever app
+// Identify takes it for: "INCY/2.1 Happ" names both INCY and Happ, and a caller that
+// treats the two apart says which one comes first.
+func Named(id, userAgent string) bool {
+	k, ok := byID[id]
+	return ok && k.matches(strings.ToLower(userAgent))
 }
 
 // Recommended are the apps a notice sends a visitor to, best first: the ones the panel

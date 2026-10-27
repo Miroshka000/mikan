@@ -117,6 +117,60 @@ func TestClientEndpoint(t *testing.T) {
 	}
 }
 
+// Input.Client replaces mikan.client field by field, and an empty field keeps the
+// template's: a caller that passes none (the relay of a node cascade) gets it whole.
+func TestInputClient(t *testing.T) {
+	in := build.Input{Name: "X", Host: "203.0.113.7", Port: 8444, SNI: "node.example.com", PinSHA256: "ab12", Keys: keys}
+	tpl := mustParse(t, "type: vless\nws-path: /ws\nmikan:\n  tls: node\n  client:\n    fingerprint: ios\n")
+	if err := proto.SetClientEndpoint(tpl, "vpn.example.com", 443, "tpl.example.com", "tpl-host.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	host := func(m map[string]any) string {
+		ws, _ := m["ws-opts"].(map[string]any)
+		h, _ := ws["headers"].(map[string]any)
+		s, _ := h["Host"].(string)
+		return s
+	}
+	m, _ := client(t, tpl, in)
+	if m["server"] != "vpn.example.com" || m["port"] != 443 || m["servername"] != "tpl.example.com" || host(m) != "tpl-host.example.com" || m["client-fingerprint"] != "ios" {
+		t.Fatalf("no Input.Client: %v", m)
+	}
+	in.Client = proto.ClientOverrides{Server: "edge.example.com", SNI: "sni.example.com", Host: "host.example.com"}
+	m, link := client(t, tpl, in)
+	if m["server"] != "edge.example.com" || m["port"] != 443 || m["servername"] != "sni.example.com" || host(m) != "host.example.com" || m["client-fingerprint"] != "ios" {
+		t.Fatalf("Input.Client: %v", m)
+	}
+	if !strings.Contains(link, "@edge.example.com:443") || !strings.Contains(link, "sni=sni.example.com") || !strings.Contains(link, "host=host.example.com") || !strings.Contains(link, "fp=ios") {
+		t.Fatalf("Input.Client link: %s", link)
+	}
+	// Not behind a CDN the pin stays, whoever moved the address.
+	if m["fingerprint"] != "ab12" {
+		t.Fatalf("pin dropped: %v", m)
+	}
+	// A fingerprint of its own replaces the template's; one of the wrong shape keeps it.
+	in.Client.Fingerprint = "firefox"
+	if m, _ := client(t, tpl, in); m["client-fingerprint"] != "firefox" {
+		t.Fatalf("Input.Client fingerprint: %v", m)
+	}
+	in.Client.Fingerprint = "Not A Profile!"
+	if m, _ := client(t, tpl, in); m["client-fingerprint"] != "ios" {
+		t.Fatalf("malformed Input.Client fingerprint: %v", m)
+	}
+
+	// The SNI of REALITY and ShadowQUIC, and a port that replaces hopping, come from it too.
+	priv, _ := realityKey(t)
+	c := proto.ClientOverrides{SNI: "sni.example.com"}
+	r, _ := client(t, mustParse(t, "type: vless\n"+reality(priv)), build.Input{Name: "X", Host: "203.0.113.7", Port: 443, Keys: keys, Client: c})
+	q, _ := client(t, mustParse(t, "type: shadowquic\njls-upstream: {addr: www.google.com:443, sni: www.google.com}\n"), build.Input{Name: "X", Host: "203.0.113.7", Port: 443, Keys: keys, Client: c})
+	if r["servername"] != "sni.example.com" || q["sni"] != "sni.example.com" {
+		t.Fatalf("sni: reality %v, shadowquic %v", r, q)
+	}
+	hy2 := build.Input{Name: "X", Host: "203.0.113.7", Port: 20000, PortSpec: "20000-20100", Keys: keys, Client: proto.ClientOverrides{Port: 443}}
+	if m, _ := client(t, mustParse(t, "type: hysteria2\n"), hy2); m["ports"] != nil || m["port"] != 443 {
+		t.Fatalf("hopping past an Input.Client port: %v", m)
+	}
+}
+
 // A port of the client side's own is the one clients dial: the node's hopping range would
 // point past the proxy.
 func TestClientPortDropsHopping(t *testing.T) {
