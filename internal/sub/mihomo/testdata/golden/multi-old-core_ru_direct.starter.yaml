@@ -32,37 +32,37 @@ proxy-groups:
     type: select
     proxies:
       - Auto
-      - "\U0001F1F3\U0001F1F1 Нидерланды"
-      - "\U0001F1FA\U0001F1F8 США"
+      - "🇳🇱 Нидерланды"
+      - "🇺🇸 США"
     include-all-proxies: true
   - name: Auto
     type: fallback
     include-all-proxies: true
     interval: 120
     url: https://www.gstatic.com/generate_204
-  - name: "\U0001F1F3\U0001F1F1 Нидерланды"
+  - name: "🇳🇱 Нидерланды"
     type: url-test
     interval: 120
     mikan:
       nodes:
-        - "\U0001F1F3\U0001F1F1 Нидерланды"
+        - "🇳🇱 Нидерланды"
     tolerance: 50
     url: https://www.gstatic.com/generate_204
-  - name: "\U0001F1FA\U0001F1F8 США"
+  - name: "🇺🇸 США"
     type: url-test
     interval: 120
     mikan:
       nodes:
-        - "\U0001F1FA\U0001F1F8 США"
+        - "🇺🇸 США"
     tolerance: 50
     url: https://www.gstatic.com/generate_204
-  - name: "\U0001F916 ChatGPT · Claude · Gemini"
+  - name: "🤖 ChatGPT · Claude · Gemini"
     type: select
     proxies:
       - VPN
     mikan:
       nodes:
-        - "\U0001F1FA\U0001F1F8 США"
+        - "🇺🇸 США"
   - name: PROXY
     type: select
     proxies:
@@ -78,9 +78,9 @@ rules:
   - GEOSITE,telegram,VPN
   - GEOIP,telegram,VPN,no-resolve
   - RULE-SET,mikan-telegram-ip,VPN,no-resolve
-  - "GEOSITE,category-ai-!cn,\U0001F916 ChatGPT · Claude · Gemini"
-  - "RULE-SET,mikan-ai,\U0001F916 ChatGPT · Claude · Gemini"
-  - "RULE-SET,mikan-gemini,\U0001F916 ChatGPT · Claude · Gemini"
+  - "GEOSITE,category-ai-!cn,🤖 ChatGPT · Claude · Gemini"
+  - "RULE-SET,mikan-ai,🤖 ChatGPT · Claude · Gemini"
+  - "RULE-SET,mikan-gemini,🤖 ChatGPT · Claude · Gemini"
   - RULE-SET,mikan-torrent-apps,DIRECT
   - GEOSITE,category-public-tracker,DIRECT
   - RULE-SET,own-wl,VPN

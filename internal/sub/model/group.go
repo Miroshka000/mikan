@@ -43,3 +43,32 @@ type Note struct {
 	Group string `json:"group"`
 	Code  string `json:"code" enum:"fallback_fastest,balance_fastest,balance_random,balance_flat,select_first,chain_group_hop,chain_dialer_taken"`
 }
+
+// Entries are the proxies a hop of a chain is entered by, which dial through the hop before
+// it: the proxy itself, the members of a group, the first hop of a chain. byName are the
+// groups by name; isProxy tells a proxy from the rest (a policy, a member of nothing).
+func Entries(hop string, byName map[string]Group, isProxy func(string) bool) []string {
+	return entries(hop, byName, isProxy, map[string]bool{})
+}
+
+func entries(hop string, byName map[string]Group, isProxy func(string) bool, seen map[string]bool) []string {
+	if isProxy(hop) {
+		return []string{hop}
+	}
+	g, ok := byName[hop]
+	if !ok || seen[hop] {
+		return nil
+	}
+	seen[hop] = true
+	if g.Type == Chain {
+		if len(g.Members) == 0 {
+			return nil
+		}
+		return entries(g.Members[0], byName, isProxy, seen)
+	}
+	var out []string
+	for _, m := range g.Members {
+		out = append(out, entries(m, byName, isProxy, seen)...)
+	}
+	return out
+}

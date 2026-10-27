@@ -1,17 +1,23 @@
 package subsrc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"mikan/internal/sub/serve"
 
 	"golang.org/x/crypto/chacha20poly1305"
 )
@@ -120,5 +126,48 @@ func TestHappLinks(t *testing.T) {
 	}
 	if _, err := l.Link(ctx, "", "https://vpn.example.com/sub/c"); !errors.Is(err, ErrHappLink) {
 		t.Fatal("no mode, no link")
+	}
+}
+
+// The page's Happ button and the admin's card give the same crypt link of the user's
+// subscription, and neither has one with the crypt link off or no address for subscriptions.
+func TestInfoHappLinkIsTheCardsLink(t *testing.T) {
+	st := openStore(t)
+	u := newUser(t, st, 1)
+	newUser(t, st, 2)
+	cfg := Config{Config: serve.Config{SubBase: "https://vpn.example.com/sub"}, HappCrypt: HappCryptLocal}
+	h := NewHandler(st, func(context.Context) (Config, error) { return cfg, nil }, nil, time.Now, nil, false)
+	info := func() string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/"+u.SubToken+"/info", nil))
+		var out Info
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &out) != nil {
+			t.Fatalf("%d %s", w.Code, w.Body)
+		}
+		return out.HappLink
+	}
+	ctx := context.Background()
+	page := info()
+	card, err := h.HappLink(ctx, u)
+	if err != nil || !strings.HasPrefix(card, "happ://crypt5/") || page != card {
+		t.Fatalf("the page's link %q, the card's %q %v", page, card, err)
+	}
+	// Off is not a fault: the page does not try and warn. A handler of its own for each case,
+	// since the warning is said once an hour.
+	for name, c := range map[string]Config{"crypt off": {Config: cfg.Config}, "no address": {HappCrypt: HappCryptLocal}} {
+		cfg = c
+		var log bytes.Buffer
+		h = NewHandler(st, func(context.Context) (Config, error) { return cfg, nil }, nil, time.Now, nil, false)
+		h.SetLogger(slog.New(slog.NewTextHandler(&log, nil)))
+		if page := info(); page != "" {
+			t.Errorf("%s: the page's link %q", name, page)
+		}
+		if strings.Contains(log.String(), "Happ crypt link") {
+			t.Errorf("%s: the page warned: %s", name, log.String())
+		}
+		if card, err := h.HappLink(ctx, u); err != nil || card != "" {
+			t.Errorf("%s: the card's link %q %v", name, card, err)
+		}
 	}
 }

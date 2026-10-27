@@ -160,26 +160,13 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode, outs []tagge
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.XrayBalance(), routes, p.Lang)
 	pl := plan{outbounds: outs, groups: gs.List, dns: in.Resolvers(), servers: in.Servers,
 		choice: map[string]bool{g.Main: true, model.AliasGroup: true}}
-	to := func(t routing.Target, route int) routing.Target {
-		if name := gs.Of(t, route); name != "" {
-			return routing.Target{Kind: routing.ToGroup, Group: name}
-		}
-		return t
-	}
-	for _, part := range [][]routing.Rule{routing.HostRules(p.Direct), in.Head(), in.Own} {
+	pre, routed, tail, final := in.Sequence(p.Direct, routes, gs.Resolve)
+	for _, part := range [][]routing.Rule{pre, routed, tail} {
 		for _, r := range part {
-			pl.add(r.When, to(r.To, -1))
+			pl.add(r.When, r.To)
 		}
 	}
-	for i, r := range routes {
-		for _, x := range r.Rules {
-			pl.add([]routing.Match{x}, to(r.To, i))
-		}
-	}
-	for _, r := range in.Tail() {
-		pl.add(r.When, to(r.To, -1))
-	}
-	pl.final = to(in.Final(), -1)
+	pl.final = final
 	pl.picks = gs.List[0].Members
 	return pl
 }
@@ -274,6 +261,10 @@ func (pl plan) balancing() Balancing {
 	for _, o := range pl.outbounds {
 		tag[o.name] = o.tag
 	}
+	// A copy is tagged by its outbound's tag, which no tag begins with.
+	for _, x := range b.Copies {
+		tag[x.Tag()] = x.Prefix + tag[x.Of]
+	}
 	retag := func(s string) string {
 		if t, ok := tag[s]; ok {
 			return t
@@ -296,11 +287,9 @@ func (pl plan) balancing() Balancing {
 			b.Refs[name] = Ref{Tag: retag(r.Tag)}
 		}
 	}
-	dialers := make(map[string]string, len(b.Dialers))
-	for o, d := range b.Dialers {
-		dialers[retag(o)] = retag(d)
+	for i, x := range b.Copies {
+		b.Copies[i] = Copy{Prefix: x.Prefix, Of: retag(x.Of), Dialer: retag(x.Dialer)}
 	}
-	b.Dialers = dialers
 	return b
 }
 
@@ -348,13 +337,18 @@ func (pl plan) config(name string, choice Ref, b Balancing) map[string]any {
 	if !choice.Balancer {
 		for _, o := range pl.outbounds {
 			if o.tag == choice.Tag {
-				outbounds = append(outbounds, dialed(o, b))
+				outbounds = append(outbounds, o.out)
 			}
 		}
 	}
 	for _, o := range pl.outbounds {
 		if used[o.tag] && o.tag != choice.Tag {
-			outbounds = append(outbounds, dialed(o, b))
+			outbounds = append(outbounds, o.out)
+		}
+	}
+	for _, x := range b.Copies {
+		if used[x.Tag()] {
+			outbounds = append(outbounds, pl.copied(x))
 		}
 	}
 	outbounds = append(outbounds,
@@ -409,8 +403,9 @@ func once(rules []map[string]any) []map[string]any {
 	return out
 }
 
-// uses are the outbounds the rules send to, the ones of the balancers they name and the
-// ones those dial through, and the balancers in the order Balance made them.
+// uses are the outbounds the rules send to, the ones of the balancers they name, the ones
+// the chains' copies among them dial through, and the balancers in the order Balance made
+// them.
 func uses(rules []map[string]any, b Balancing) (map[string]bool, []Balancer) {
 	used, named := map[string]bool{}, map[string]bool{}
 	for _, r := range rules {
@@ -430,31 +425,35 @@ func uses(rules []map[string]any, b Balancing) (map[string]bool, []Balancer) {
 			}
 		}
 	}
+	dialer := make(map[string]string, len(b.Copies))
+	for _, x := range b.Copies {
+		dialer[x.Tag()] = x.Dialer
+	}
 	for t := range used {
-		for d := b.Dialers[t]; d != "" && !used[d]; d = b.Dialers[d] {
+		for d := dialer[t]; d != "" && !used[d]; d = dialer[d] {
 			used[d] = true
 		}
 	}
 	return used, balancers
 }
 
-// dialed is o's outbound, dialing through the hop before it in a chain.
-func dialed(o tagged, b Balancing) map[string]any {
-	d, ok := b.Dialers[o.tag]
-	if !ok {
-		return o.out
-	}
-	out := make(map[string]any, len(o.out))
-	for k, v := range o.out {
+// copied is the outbound of the copy x: its proxy's, tagged its own, dialing through the hop
+// before it in a chain.
+func (pl plan) copied(x Copy) map[string]any {
+	i := slices.IndexFunc(pl.outbounds, func(o tagged) bool { return o.tag == x.Of })
+	o := pl.outbounds[i].out
+	out := make(map[string]any, len(o))
+	for k, v := range o {
 		out[k] = v
 	}
+	out["tag"] = x.Tag()
 	ss := map[string]any{}
-	if old, ok := o.out["streamSettings"].(map[string]any); ok {
+	if old, ok := o["streamSettings"].(map[string]any); ok {
 		for k, v := range old {
 			ss[k] = v
 		}
 	}
-	ss["sockopt"] = map[string]any{"dialerProxy": d}
+	ss["sockopt"] = map[string]any{"dialerProxy": x.Dialer}
 	out["streamSettings"] = ss
 	return out
 }

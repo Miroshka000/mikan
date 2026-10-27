@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,7 +20,9 @@ import (
 	"mikan/internal/proto"
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
+	"mikan/internal/sub/xray"
 )
 
 const testToken = "0123456789abcdefghijklmn"
@@ -33,13 +37,15 @@ type fakeSub struct {
 	keysErr     error
 	keys        []Device
 	inboundsErr error
+	pool        int64 // the group of the first inbound; 0: the main traffic
 	bound       int64
 	boundErr    error
 	boundCalls  int
 	groups      AppGroups
 	groupsErr   error
-	groupsOf    [][]model.Proxy // the proxies each call of Groups was given
+	groupsCalls int
 	fetched     int
+	fetchedErrs []error // the error of the context of each call of Fetched
 	log         []LogEntry
 }
 
@@ -58,11 +64,16 @@ func (f *fakeSub) Inbounds(context.Context) ([]model.Inbound, error) {
 	if f.inboundsErr != nil {
 		return nil, f.inboundsErr
 	}
-	return subtest.Defaults("").Build.Inbounds, nil
+	ins := subtest.Defaults("").Build.Inbounds
+	ins[0].Pool = f.pool
+	return ins, nil
 }
-func (f *fakeSub) Fetched(context.Context, string) { f.fetched++ }
-func (f *fakeSub) Groups(_ context.Context, ps []model.Proxy) (AppGroups, error) {
-	f.groupsOf = append(f.groupsOf, ps)
+func (f *fakeSub) Fetched(ctx context.Context, _ string) {
+	f.fetched++
+	f.fetchedErrs = append(f.fetchedErrs, ctx.Err())
+}
+func (f *fakeSub) Groups(context.Context) (AppGroups, error) {
+	f.groupsCalls++
 	return f.groups, f.groupsErr
 }
 func (f *fakeSub) Record(_ context.Context, e LogEntry) { f.log = append(f.log, e) }
@@ -239,6 +250,37 @@ func TestRulePage(t *testing.T) {
 	}
 }
 
+// No answer to a subscription is kept by a cache: not the profile, its HEAD, a stub, nor
+// what a rule answers in its place.
+func TestAnswersAreNotStored(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true, Blocked: []string{"shadowrocket"}, Rules: []apps.Rule{
+		rule("no curl", "curl", apps.Action{Respond: apps.Respond403}),
+		rule("no wget", "wget", apps.Action{Respond: apps.Respond404}),
+		rule("page", "mozilla", apps.Action{Respond: apps.RespondHTML, HTML: "<h1>Use Happ</h1>"}),
+	}})
+	for _, c := range []struct {
+		name, method, ua string
+		code             int
+		outcome          Outcome
+	}{
+		{"GET", http.MethodGet, "Happ/3.4.1", 200, OutcomeServed},
+		{"HEAD", http.MethodHead, "Happ/3.4.1", 200, ""},
+		{"stub", http.MethodGet, "Shadowrocket/2592 CFNetwork/1568", 200, OutcomeStub},
+		{"403", http.MethodGet, "curl/8.9", 403, OutcomeBlocked},
+		{"404", http.MethodGet, "Wget/1.21", 404, OutcomeBlocked},
+		{"page", http.MethodGet, "Mozilla/5.0", 200, OutcomeBlocked},
+	} {
+		sub.log = nil
+		w := fetchAs(t, sub, c.method, "/"+testToken, c.ua)
+		if w.Code != c.code || w.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s: %d %v", c.name, w.Code, w.Header())
+		}
+		if c.outcome != "" && oneEntry(t, sub).Outcome != c.outcome {
+			t.Errorf("%s: %+v", c.name, sub.log)
+		}
+	}
+}
+
 // A real server lets the handler take the connection: the client gets nothing.
 func TestRuleDropsTheConnection(t *testing.T) {
 	sub := newSub(t, apps.Policy{NoBuiltin: true, Rules: []apps.Rule{rule("drop", "badbot", apps.Action{Respond: apps.RespondDrop})}})
@@ -400,25 +442,60 @@ func TestPageIsLogged(t *testing.T) {
 	if e := oneEntry(t, sub); e.Outcome != OutcomeServed || e.Format != FormatHTML || e.App != "" {
 		t.Errorf("%+v", e)
 	}
+	// A messenger's preview gets the page, and the log says so, not the links Resolve picks.
+	for _, c := range []struct{ target, body, format string }{
+		{"/" + testToken, "page", FormatHTML},
+		{"/" + testToken + "?format=uri", "", FormatURI},
+	} {
+		sub.log = nil
+		r = httptest.NewRequest(http.MethodGet, c.target, nil)
+		r.Header.Set("User-Agent", "TelegramBot (like TwitterBot)")
+		w = httptest.NewRecorder()
+		h.Serve(w, r, testToken)
+		if c.body != "" && w.Body.String() != c.body || c.body == "" && w.Body.String() == "page" {
+			t.Errorf("%s: %q", c.target, w.Body)
+		}
+		if e := oneEntry(t, sub); e.Outcome != OutcomeServed || e.Format != c.format {
+			t.Errorf("%s: %+v", c.target, e)
+		}
+	}
+	// With no page to send, a browser gets the links, and the log says so.
+	sub.log = nil
+	w = fetch(t, sub, "Mozilla/5.0", "Accept", "text/html")
+	if !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") || len(stubName(t, w)) == 0 {
+		t.Errorf("no page: %v\n%.200s", w.Header(), w.Body)
+	}
+	if e := oneEntry(t, sub); e.Outcome != OutcomeServed || e.Format != FormatURI {
+		t.Errorf("no page: %+v", e)
+	}
 }
 
-func TestStubText(t *testing.T) {
-	d := apps.Decision{Install: []string{"Happ", "INCY", "Koala Clash"}}
+// A stub in place of an xray JSON answer is a link, and the log has the format it went out
+// in; its body is the one of the stub with the xray JSON switch off.
+func TestStubFormatIsLogged(t *testing.T) {
 	for _, c := range []struct {
-		lang string
-		d    apps.Decision
-		want string
+		name    string
+		blocked []string
+		keysErr error
 	}{
-		{"en", d, "⛔ This app is not supported — install Happ, INCY or Koala Clash"},
-		{"ru", d, "⛔ Это приложение не поддерживается — установите Happ, INCY или Koala Clash"},
-		{"en", apps.Decision{Install: []string{"Happ", "INCY"}}, "⛔ This app is not supported — install Happ or INCY"},
-		{"en", apps.Decision{Install: []string{"Happ"}}, "⛔ This app is not supported — install Happ"},
-		{"en", apps.Decision{}, "⛔ This app is not supported — open the subscription link in a browser"},
-		{"ru", apps.Decision{}, "⛔ Это приложение не поддерживается — откройте ссылку подписки в браузере"},
-		{"en", apps.Decision{Action: apps.Action{Text: " Use Happ,\r\nit is free "}, Install: d.Install}, "Use Happ,  it is free"},
+		{"turned away", []string{"happ"}, nil},
+		{"device limit", nil, ErrDeviceLimit},
 	} {
-		if got := StubText(c.lang, c.d); got != c.want {
-			t.Errorf("%s: %q, want %q", c.lang, got, c.want)
+		var bodies []string
+		for _, on := range []bool{false, true} {
+			sub := newSub(t, apps.Policy{NoBuiltin: true, Blocked: c.blocked})
+			sub.cfg.XrayJSON, sub.keysErr = on, c.keysErr
+			w := fetch(t, sub, "Happ/3.4.1", "X-Hwid", "abc")
+			if !strings.HasPrefix(w.Header().Get("Content-Type"), "text/plain") {
+				t.Errorf("%s, xray JSON %v: %v", c.name, on, w.Header())
+			}
+			if e := oneEntry(t, sub); e.Outcome != OutcomeStub || e.Format != FormatURI {
+				t.Errorf("%s, xray JSON %v: %+v", c.name, on, e)
+			}
+			bodies = append(bodies, w.Body.String())
+		}
+		if bodies[0] != bodies[1] {
+			t.Errorf("%s: the stub changed with the switch:\n%s\n%s", c.name, bodies[0], bodies[1])
 		}
 	}
 }
@@ -448,6 +525,16 @@ func TestResolve(t *testing.T) {
 	}
 	if got := Resolve(h, "clash", apps.Decision{Action: apps.Action{Format: FormatSingBox}}, true); got != FormatSingBox {
 		t.Errorf("a rule's format: %s", got)
+	}
+	// A stub of Happ's xray JSON answer goes out as links; a stub of the other formats as
+	// the format itself.
+	if got := StubFormat(Resolve(h, "", apps.Decision{}, true)); got != FormatURI {
+		t.Errorf("Happ's stub: %s", got)
+	}
+	for _, f := range []string{FormatClash, FormatSingBox, FormatURI} {
+		if got := StubFormat(f); got != f {
+			t.Errorf("StubFormat(%s) = %s", f, got)
+		}
 	}
 }
 
@@ -580,22 +667,24 @@ func testGroups() AppGroups {
 	return AppGroups{V: 1, Groups: []AppGroup{{ID: 7, Name: "Video", Mode: GroupOwn, Limit: ptr(10 << 30), Left: ptr(3 << 30), State: "active", Proxies: []string{"NL"}}}}
 }
 
-// The Mikan app that asks for the groups gets X-Mikan-Groups beside the profile, of the
-// proxies that profile has; any other request goes without it, and without asking.
+// The Mikan app that asks for the groups gets X-Mikan-Groups beside the profile, the
+// servers of each named as that profile has them; any other request goes without it, and
+// without asking.
 func TestGroupsHeader(t *testing.T) {
 	for _, target := range []string{"/" + testToken, "/" + testToken + "?format=clash"} {
 		sub := newSub(t, apps.Policy{NoBuiltin: true})
-		sub.groups = testGroups()
+		sub.groups, sub.pool = testGroups(), 7
 		w := fetchAs(t, sub, http.MethodGet, target, "MikanApp/1.0", FeaturesHeader, "routes, groups")
-		if want := testGroups().header(); w.Code != 200 || w.Header().Get(GroupsHeader) != want {
-			t.Errorf("%s: %d %q, want %q", target, w.Code, w.Header().Get(GroupsHeader), want)
+		if w.Code != 200 || w.Header().Get(GroupsHeader) == "" || sub.groupsCalls != 1 {
+			t.Fatalf("%s: %d %v, %d calls", target, w.Code, w.Header(), sub.groupsCalls)
 		}
-		if len(sub.groupsOf) != 1 || len(sub.groupsOf[0]) == 0 {
-			t.Errorf("%s: Groups asked of %v", target, sub.groupsOf)
+		// The source's "NL" is no server of the profile: the group has the one in it alone.
+		if g := decodeGroups(t, w.Header().Get(GroupsHeader)).Groups; len(g) != 1 || !slices.Equal(g[0].Proxies, []string{"VLESS XHTTP"}) {
+			t.Errorf("%s: groups %+v", target, g)
 		}
 		w = fetchAs(t, sub, http.MethodGet, target, "MikanApp/1.0")
-		if _, ok := w.Header()[GroupsHeader]; ok || len(sub.groupsOf) != 1 {
-			t.Errorf("%s: groups sent unasked: %v, %d calls", target, w.Header(), len(sub.groupsOf))
+		if _, ok := w.Header()[GroupsHeader]; ok || sub.groupsCalls != 1 {
+			t.Errorf("%s: groups sent unasked: %v, %d calls", target, w.Header(), sub.groupsCalls)
 		}
 	}
 }
@@ -670,34 +759,70 @@ func TestPanelFailuresAre500(t *testing.T) {
 	// connect to is a stub instead.
 	sub = newSub(t, apps.Policy{NoBuiltin: true})
 	w = httptest.NewRecorder()
-	if out := handlerOf(sub).profileFailed(w, sub.cfg, FormatSingBox, errors.New("marshal")); out != "" || w.Code != 500 || w.Body.String() != "internal error\n" {
+	if out := handlerOf(sub).profileFailed(w, sub.cfg, &exchange{format: FormatSingBox}, errors.New("marshal")); out != "" || w.Code != 500 || w.Body.String() != "internal error\n" {
 		t.Errorf("render: %q %d %q", out, w.Code, w.Body)
 	}
 	w = httptest.NewRecorder()
-	if out := handlerOf(sub).profileFailed(w, sub.cfg, FormatURI, model.ErrNoProxies); out != OutcomeStub ||
+	if out := handlerOf(sub).profileFailed(w, sub.cfg, &exchange{format: FormatURI}, model.ErrNoProxies); out != OutcomeStub ||
 		stubName(t, w) != "⛔ There are no servers this app can use — open the subscription link in a browser" {
 		t.Errorf("no proxies: %q %q", out, stubName(t, w))
 	}
 }
 
-// Fetched is recorded once the inbounds are read, before the profile is made: a profile
-// that turns out to have nothing in it counts all the same.
-func TestFetchedBeforeTheProfile(t *testing.T) {
+// Fetched is recorded once a profile went out, and only then: the block detector must not
+// trust a device that got a stub or nothing, whatever the request asked for.
+func TestFetchedOnceTheProfileWentOut(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		method  string
+		target  string
+		ua      string
+		set     func(*fakeSub)
+		fetched int
+	}{
+		{"clash", http.MethodGet, "/" + testToken + "?format=clash", "Happ/3.4.1", nil, 1},
+		{"links", http.MethodGet, "/" + testToken, "Happ/3.4.1", nil, 1},
+		{"HEAD", http.MethodHead, "/" + testToken, "Happ/3.4.1", nil, 0},
+		{"a rule's stub", http.MethodGet, "/" + testToken, "Happ/3.4.1", func(s *fakeSub) {
+			s.cfg.Responses, _ = apps.NewResponder(apps.Policy{NoBuiltin: true, Blocked: []string{"happ"}})
+		}, 0},
+		{"device limit", http.MethodGet, "/" + testToken, "Happ/3.4.1", func(s *fakeSub) { s.keysErr = ErrDeviceLimit }, 0},
+		{"nothing to connect to", http.MethodGet, "/" + testToken, "Happ/3.4.1", func(s *fakeSub) { s.cfg.Nodes = nil }, 0},
+	} {
+		sub := newSub(t, apps.Policy{NoBuiltin: true})
+		if c.set != nil {
+			c.set(sub)
+		}
+		w := fetchAs(t, sub, c.method, c.target, c.ua)
+		if w.Code != 200 || sub.fetched != c.fetched {
+			t.Errorf("%s: %d, Fetched %d times, want %d", c.name, w.Code, sub.fetched, c.fetched)
+		}
+	}
+}
+
+// A client that hangs up as the profile is written still took it: the record does not go
+// with the request's context.
+func TestFetchedOutlivesTheClient(t *testing.T) {
 	sub := newSub(t, apps.Policy{NoBuiltin: true})
-	fetch(t, sub, "Happ/3.4.1")
-	if sub.fetched != 1 {
-		t.Errorf("served: Fetched %d times", sub.fetched)
+	ctx, cancel := context.WithCancel(context.Background())
+	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/"+testToken, nil)
+	r.Header.Set("User-Agent", "Happ/3.4.1")
+	w := httptest.NewRecorder()
+	handlerOf(sub).Serve(&hangUp{ResponseRecorder: w, cancel: cancel}, r, testToken)
+	if w.Code != 200 || len(sub.fetchedErrs) != 1 || sub.fetchedErrs[0] != nil {
+		t.Errorf("%d, Fetched with %v", w.Code, sub.fetchedErrs)
 	}
-	fetchAs(t, sub, http.MethodHead, "/"+testToken, "Happ/3.4.1")
-	if sub.fetched != 1 {
-		t.Errorf("HEAD: Fetched %d times", sub.fetched)
-	}
-	sub = newSub(t, apps.Policy{NoBuiltin: true})
-	sub.cfg.Nodes = nil
-	fetch(t, sub, "Happ/3.4.1")
-	if e := oneEntry(t, sub); e.Outcome != OutcomeStub || sub.fetched != 1 {
-		t.Errorf("nothing to connect to: %+v, Fetched %d times", e, sub.fetched)
-	}
+}
+
+// hangUp is a client that hangs up as soon as the body is written.
+type hangUp struct {
+	*httptest.ResponseRecorder
+	cancel context.CancelFunc
+}
+
+func (h *hangUp) Write(b []byte) (int, error) {
+	defer h.cancel()
+	return h.ResponseRecorder.Write(b)
 }
 
 // {devices} counts the bound devices only with binding on and a text that uses it.
@@ -747,8 +872,8 @@ func TestFetchShowsBoundDevices(t *testing.T) {
 			t.Errorf("%s: %q, want %q", k, got, v)
 		}
 	}
-	// Once for the title, once for the branding.
-	if sub.boundCalls != 2 {
+	// Once for the title and the branding both.
+	if sub.boundCalls != 1 {
 		t.Errorf("counted %d times", sub.boundCalls)
 	}
 	// Devices that cannot be counted leave the count out, the limit in.
@@ -756,5 +881,51 @@ func TestFetchShowsBoundDevices(t *testing.T) {
 	w = fetch(t, sub, "Happ/3.4.1", "X-Hwid", "abc")
 	if _, ok := w.Header()["X-Brand-Current-Devices"]; ok || w.Header().Get("X-Brand-Max-Devices") != "3" {
 		t.Errorf("not counted: %v", w.Header())
+	}
+}
+
+// ownClash is an admin's own Clash profile with a rule of its own to tell it by.
+const ownClash = "proxy-groups:\n  - {name: Net, type: select, include-all-proxies: true}\nrules:\n  - DOMAIN-SUFFIX,mine.example,DIRECT\n  - MATCH,Net\n"
+
+// Stash takes no own profile: with a Clash template of the admin's it gets the built-in
+// profile, the same as without one.
+func TestStashGetsTheBuiltInProfile(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true})
+	const stash = "Stash/3.1.1 Clash/1.9.0"
+	builtIn := fetch(t, sub, stash).Body.String()
+	sub.cfg.Templates = []model.Template{{ID: 1, Core: model.CoreMihomo, Default: true, Body: ownClash}}
+	if w := fetch(t, sub, "mihomo/1.19.31"); !strings.Contains(w.Body.String(), "mine.example") {
+		t.Fatalf("a mihomo app gets the template:\n%s", w.Body)
+	}
+	if w := fetch(t, sub, stash); w.Code != http.StatusOK || w.Body.String() != builtIn {
+		t.Fatalf("Stash: %d\n%s", w.Code, w.Body)
+	}
+}
+
+// Happ and INCY, which take no Clash profile, read their routing of the Clash template all
+// the same: the one the Clash profile of the request would be made of.
+func TestHappRoutingOfTheClashTemplate(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true})
+	sub.cfg.Happ.Routing = xray.HappRoutingAuto
+	sub.cfg.Templates = []model.Template{{ID: 1, Core: model.CoreMihomo, Default: true, Body: ownClash}}
+	w := fetch(t, sub, "Happ/3.4.1")
+	if p := decodeHapp(t, w.Header().Get("routing")); !slices.Contains(p.DirectSites, "domain:mine.example") {
+		t.Fatalf("Happ: %+v", p)
+	}
+	if w := fetch(t, sub, "INCY/2.1.0"); w.Header().Get("routing") != incyAutoRouting(sub.cfg, ownClash) || w.Header().Get("routing") == incyAutoRouting(sub.cfg, "") {
+		t.Fatalf("INCY: %q", w.Header().Get("routing"))
+	}
+}
+
+// Config.Profile hands the renderers every setting of the profile; only the app is the
+// Clash profile's to set.
+func TestConfigProfile(t *testing.T) {
+	cfg := Config{Nodes: []model.Node{{ID: 1}}, Direct: []string{"203.0.113.7"}, Rules: []routing.Rule{{}},
+		Routes: routing.Routes{Services: map[string]string{"youtube": routing.TargetVPN}}, Lang: "ru"}
+	p := reflect.ValueOf(cfg.Profile([]model.Proxy{{Name: "NL"}}))
+	for i := range p.NumField() {
+		if name := p.Type().Field(i).Name; name != "App" && p.Field(i).IsZero() {
+			t.Errorf("%s is not set", name)
+		}
 	}
 }

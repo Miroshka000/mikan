@@ -23,6 +23,10 @@ import (
 //   - mikan: {nodes: [...], types: [...]} takes the proxies of those nodes (by the name the
 //     panel shows, or the id) and of those types (vless, hysteria2…).
 //
+// Next to proxy-providers, include-all in a group the panel fills leaves mihomo only the
+// providers (include-all-providers), and a group that keeps providers (that or use) keeps
+// filter, exclude-filter and exclude-type for their proxies.
+//
 // The panel lists the proxies in the group itself, so every core gets the same groups, and
 // a group left with none for an app gets REJECT: closed, not open. The panel's and the
 // nodes' hosts go direct ahead of the admin's rules, whatever they say.
@@ -101,7 +105,8 @@ func fillTemplate(cfg map[string]any, p profile.Profile) ([]model.Proxy, error) 
 		names = append(names, x)
 	}
 	cfg["proxies"] = proxies
-	_, providers := cfg["proxy-providers"]
+	pp, _ := cfg["proxy-providers"].(map[string]any)
+	providers := len(pp) > 0
 	groups, _ := cfg["proxy-groups"].([]any)
 	for _, g := range groups {
 		if m, ok := g.(map[string]any); ok {
@@ -182,16 +187,29 @@ func fillGroup(g map[string]any, nodes []model.Node, ps []model.Proxy, providers
 		}
 		list = append(list, x.Name)
 	}
-	if len(list) == 0 && g["use"] == nil {
-		list = []any{"REJECT"}
+	delete(g, "mikan")
+	delete(g, "include-all-proxies")
+	switch {
+	case !providers:
+		delete(g, "include-all")
+	case g["include-all"] == true:
+		// include-all would also take every proxy of the user, past the panel's choice:
+		// mihomo is left only the providers.
+		delete(g, "include-all")
+		g["include-all-providers"] = true
+	}
+	// A group that keeps providers keeps its filters: mihomo applies them to the providers'
+	// proxies, and those the panel listed pass them already. Nor is it left empty: REJECT
+	// would only become what it picks first.
+	if g["use"] == nil && (!providers || g["include-all-providers"] != true) {
+		for _, k := range []string{"filter", "exclude-filter", "exclude-type"} {
+			delete(g, k)
+		}
+		if len(list) == 0 {
+			list = []any{"REJECT"}
+		}
 	}
 	g["proxies"] = list
-	for _, k := range []string{"mikan", "include-all-proxies", "filter", "exclude-filter", "exclude-type"} {
-		delete(g, k)
-	}
-	if !providers {
-		delete(g, "include-all")
-	}
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"mikan/internal/proto"
 	"mikan/internal/sub/apps"
@@ -56,7 +57,10 @@ func Proxies(p Profile) []model.Proxy {
 			if n.Endpoint.SNIRouter && proto.SNI443(t) {
 				port, spec = 443, "443"
 			}
-			base := in.Name
+			base := shownName(in.Name)
+			if base == "" {
+				base = shownName(in.Label) // nothing was left of it
+			}
 			// A name the admin typed is used as is; preset names get the node's flag.
 			if prefix := NodePrefix(n.Name); multi && !in.Named && prefix != "" {
 				base = prefix + " " + base
@@ -88,6 +92,19 @@ func NodePrefix(name string) string {
 		return string(rs[:2])
 	}
 	return string(rs)
+}
+
+// shownName is a proxy name without control characters and the spaces around it. The
+// panel never saves them, but a name written to the database past it must not fail the
+// profile: the YAML encoder cannot write a name that starts with a line break. Only proxy
+// names are cleaned here, not the group names.
+func shownName(s string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, s))
 }
 
 func isRegional(r rune) bool { return r >= 0x1F1E6 && r <= 0x1F1FF }

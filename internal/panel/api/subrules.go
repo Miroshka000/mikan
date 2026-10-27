@@ -299,14 +299,21 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 	case apps.RespondDrop:
 	case apps.RespondHTML:
 		out.Body.Status = http.StatusOK
-	case apps.RespondStub:
-		out.Body.Status, out.Body.Text = http.StatusOK, serve.StubText(lang, d)
-		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
 	default:
 		out.Body.Status = http.StatusOK
-		out.Body.Format = serve.Resolve(req, "", d, xrayJSON)
-		if out.Body.Template, err = h.testedTemplate(ctx, out.Body.Format, req.Get("User-Agent"), d.Action.Template); err != nil {
-			return nil, err
+		f := serve.Resolve(req, "", d, xrayJSON)
+		switch {
+		case f == serve.FormatHTML || serve.LinkPreview(req.Get("User-Agent")):
+			// A browser and a messenger building a link's preview get the panel's
+			// subscription page, before a stub or a profile, as Serve sends it.
+			out.Body.Format = serve.FormatHTML
+		case d.Responds() == apps.RespondStub:
+			out.Body.Text, out.Body.Format = serve.StubText(lang, d), serve.StubFormat(f)
+		default:
+			out.Body.Format = f
+			if out.Body.Template, err = h.testedTemplate(ctx, f, req.Get("User-Agent"), d.Action.Template); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return out, nil
@@ -314,12 +321,8 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 
 // testedTemplate is the saved template a profile in format is made of for the app of the
 // User-Agent ua when the deciding rule names the template named, as Serve picks it
-// (serve.Template); 0 for the built-in profile, which a Clash app that takes no own profile
-// gets too (apps.App.TakesOwnProfile: Stash, an app of another core).
+// (serve.ProfileTemplate); 0 for the built-in profile.
 func (h *handlers) testedTemplate(ctx context.Context, format, ua string, named int64) (int64, error) {
-	if format == serve.FormatClash && !apps.DetectApp(ua).TakesOwnProfile() {
-		return 0, nil
-	}
 	rows, err := h.d.Store.Q.ListSubTemplateHeads(ctx)
 	if err != nil {
 		return 0, err
@@ -328,7 +331,7 @@ func (h *handlers) testedTemplate(ctx context.Context, format, ua string, named 
 	for _, r := range rows {
 		ts = append(ts, submodel.Template{ID: r.ID, Core: submodel.Core(r.Core), Default: r.IsDefault})
 	}
-	return serve.Template(ts, format, named).ID, nil
+	return serve.ProfileTemplate(ts, format, named, apps.DetectApp(ua)).ID, nil
 }
 
 func (h *handlers) userSubLog(ctx context.Context, in *userSubLogInput) (*userSubLogOutput, error) {

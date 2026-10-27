@@ -272,7 +272,7 @@ pub fn backups() -> Vec<PathBuf> {
 }
 
 /// Whether an archive path is one a restore takes: relative, without "..", and one of the
-/// settings files or inside the panel's or the node's data.
+/// settings files, a secret's file in secrets/, or inside the panel's or the node's data.
 fn allowed_name(name: &str) -> bool {
     let n = name.strip_prefix("./").unwrap_or(name).trim_end_matches('/');
     if n.is_empty() || n.split('/').any(|c| c.is_empty() || c == ".." || c == ".") {
@@ -282,6 +282,9 @@ fn allowed_name(name: &str) -> bool {
         || ["data", "data/panel", "data/node", "addons", "addons/state.json"].contains(&n)
         || n.starts_with("data/panel/")
         || n.starts_with("data/node/")
+        || n.strip_prefix(config::SECRETS)
+            .and_then(|f| f.strip_prefix('/'))
+            .is_some_and(|f| config::SECRET_KEYS.iter().any(|s| s.file == f))
 }
 
 /// Judges the two listings of an archive (`tar -tzf`, names; `tar -tvzf`, with types).
@@ -797,6 +800,31 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    // Since 0.5.2.0 the settings are config.json and secrets/: the archive a backup makes of
+    // them is one a restore takes, secrets and all. It was refused for secrets/postgres_password.
+    #[test]
+    fn a_backup_with_secrets_is_one_a_restore_takes() {
+        let root = tmpdir("secrets");
+        let mut c = Config::new(&root);
+        c.set("MIKAN_POSTGRES_PASSWORD", "pw").unwrap();
+        c.set("MIKAN_DATABASE_URL", "postgresql://mikan:pw@localhost/mikan?host=/run/postgresql").unwrap();
+        c.save().unwrap();
+        file(&root, "compose.yaml", "name: mikan\n");
+        file(&root, DUMP, "PGDMP");
+        let mut members: Vec<String> = TOP.iter().filter(|m| exists(&root, m)).map(|s| (*s).to_owned()).collect();
+        members.push(DUMP.into());
+        let a = pack(&root, &backups_dir(&root).unwrap(), "mikan", &members, Squeeze::Normal).unwrap();
+        check_archive(&a).unwrap();
+        let stage = Stage::new(&root).unwrap();
+        extract(&a, &stage.0).unwrap();
+        verify_tree(&stage.0, 0).unwrap();
+        let to: Vec<&str> = plan(&stage.0).unwrap().iter().map(|(_, r)| *r).collect();
+        assert!(to.contains(&config::SECRETS) && to.contains(&RESTORE_DUMP), "{to:?}");
+        assert_eq!(Config::load(&stage.0).unwrap().get("MIKAN_POSTGRES_PASSWORD"), Some("pw"));
+        drop(stage);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     // The node's talk with the updater is no part of a backup: the pre-update backup is made
     // while its status says "running", and a restore must not bring that back.
     #[test]
@@ -945,6 +973,9 @@ mod tests {
             check_listing(&names, &verbose)
         };
         assert!(with("data/panel/ok", "-").is_ok());
+        for n in ["secrets/", "secrets/postgres_password", "secrets/database_url", "secrets/node_join"] {
+            assert!(with(n, if n.ends_with('/') { "d" } else { "-" }).is_ok(), "{n}");
+        }
         for (n, why) in [
             ("/etc/passwd", "absolute"),
             ("../etc/passwd", "outside"),
@@ -953,6 +984,10 @@ mod tests {
             ("data/unknown/state.json", "unknown data"),
             ("data/panel/../../x", "nested dots"),
             ("evil", "a stranger"),
+            ("secrets/evil", "a file no secret is kept in"),
+            ("secrets/postgres_password/x", "below a secret"),
+            ("secrets/../etc/passwd", "a way out of secrets"),
+            ("secretsx/postgres_password", "a lookalike of secrets"),
         ] {
             assert!(with(n, "-").is_err(), "{why}: {n}");
         }

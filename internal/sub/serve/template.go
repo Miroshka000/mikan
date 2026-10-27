@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strconv"
 
+	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
 )
 
@@ -12,8 +13,9 @@ import (
 // format's core, else the core's default. sing-box and xray with none of their own are made
 // of the Clash template picked the same way, read as they can (mihomo.TemplateParts), as
 // they were before they had templates of their own. The zero Template is the built-in
-// profile, and so it is for the formats of no core (the links, the page). Which template a
-// request gets is decided here and nowhere else.
+// profile, and so it is for the formats of no core (the links, the page). Happ and INCY
+// read their routing of the Clash one (appHeaders) whatever app asks; the profile itself is
+// made of ProfileTemplate.
 func Template(ts []model.Template, format string, named int64) model.Template {
 	var c model.Core
 	switch format {
@@ -31,6 +33,17 @@ func Template(ts []model.Template, format string, named int64) model.Template {
 	}
 	t, _ := pickTemplate(ts, model.CoreMihomo, named)
 	return t
+}
+
+// ProfileTemplate is the own template the profile in format is made of for app: Template,
+// but the zero one, the built-in profile, for a Clash app that takes no own profile
+// (apps.App.TakesOwnProfile: Stash, an app of another core). Which template a profile is
+// made of is decided here, for Serve and the rule tester alike, and nowhere else.
+func ProfileTemplate(ts []model.Template, format string, named int64, app apps.App) model.Template {
+	if format == FormatClash && !app.TakesOwnProfile() {
+		return model.Template{}
+	}
+	return Template(ts, format, named)
 }
 
 // pickTemplate is the template of core c the rule named, else c's default; false for none.

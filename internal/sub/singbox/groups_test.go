@@ -65,6 +65,15 @@ func TestConvertGroups(t *testing.T) {
 	if two.detours["a"] != "entry" || len(two.notes) != 1 || two.notes[0].Code != "chain_dialer_taken" {
 		t.Fatalf("a taken dialer: %v %+v", two.detours, two.notes)
 	}
+
+	// A chain as a hop is entered by its first hop: entry, a, then b.
+	nested := convertGroups([]model.Group{
+		{Name: "inner", Type: model.Chain, Members: []string{"a", "b"}},
+		{Name: "outer", Type: model.Chain, Members: []string{"entry", "inner"}},
+	}, tags)
+	if nested.detours["a"] != "entry" || nested.detours["b"] != "a" || len(nested.detours) != 2 || len(nested.notes) != 0 {
+		t.Fatalf("a nested chain: %v %+v", nested.detours, nested.notes)
+	}
 }
 
 // A chain of an own profile reaches the config: the exit's servers dial through the entry.
@@ -117,13 +126,13 @@ func TestConditions(t *testing.T) {
 func TestDomainResolver(t *testing.T) {
 	sets := ruleSets{used: map[string]map[string]any{}}
 	dns, local := dnsOf(routing.Resolvers{Nameserver: []string{"tls://dns.google#VPN"}, Default: []string{"dhcp://en0", "9.9.9.9"}, ProxyServer: []string{"1.1.1.1"}},
-		map[string]bool{"VPN": true}, &sets)
+		map[string]bool{"VPN": true}, &sets, "")
 	raw, _ := json.Marshal(dns["servers"])
 	if local != "local" || !strings.Contains(string(raw), `{"detour":"VPN","domain_resolver":"bootstrap","server":"dns.google","tag":"remote","type":"tls"}`) ||
 		!strings.Contains(string(raw), `{"server":"9.9.9.9","tag":"bootstrap","type":"udp"}`) {
 		t.Fatalf("servers: %s", raw)
 	}
-	plain, _ := dnsOf(routing.Resolvers{Nameserver: []string{"1.1.1.1"}}, nil, &sets)
+	plain, _ := dnsOf(routing.Resolvers{Nameserver: []string{"1.1.1.1"}}, nil, &sets, "")
 	if raw, _ := json.Marshal(plain["servers"]); strings.Contains(string(raw), "bootstrap") {
 		t.Fatalf("no domain, no bootstrap: %s", raw)
 	}

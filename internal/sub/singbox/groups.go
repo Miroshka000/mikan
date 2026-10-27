@@ -123,14 +123,16 @@ func convertGroups(groups []model.Group, tags map[string]bool) converted {
 }
 
 // chain makes every hop of g after the first dial through the hop before it: the detour of
-// the proxies the hop is made of. A proxy that dials through another hop already keeps it.
+// the proxies the hop is entered by (model.Entries). A proxy that dials through another hop
+// already keeps it.
 func (c *converted) chain(g model.Group, byName map[string]model.Group, tags map[string]bool) {
+	isProxy := func(s string) bool { return tags[s] }
 	for i := 1; i < len(g.Members); i++ {
 		prev := g.Members[i-1]
 		if prev == "DIRECT" {
 			continue // the first hop past the tunnel is no detour at all
 		}
-		for _, p := range proxiesOf(g.Members[i], byName, tags, map[string]bool{}) {
+		for _, p := range model.Entries(g.Members[i], byName, isProxy) {
 			if d, ok := c.detours[p]; ok && d != prev {
 				c.notes = append(c.notes, note(g.Name, "chain_dialer_taken"))
 				continue
@@ -138,30 +140,6 @@ func (c *converted) chain(g model.Group, byName map[string]model.Group, tags map
 			c.detours[p] = prev
 		}
 	}
-}
-
-// proxiesOf are the proxies a hop is made of: the proxy, the members of a group, the first
-// hop of a chain.
-func proxiesOf(hop string, byName map[string]model.Group, tags map[string]bool, seen map[string]bool) []string {
-	if tags[hop] {
-		return []string{hop}
-	}
-	g, ok := byName[hop]
-	if !ok || seen[hop] {
-		return nil
-	}
-	seen[hop] = true
-	if g.Type == model.Chain {
-		if len(g.Members) == 0 {
-			return nil
-		}
-		return proxiesOf(g.Members[0], byName, tags, seen)
-	}
-	var out []string
-	for _, m := range g.Members {
-		out = append(out, proxiesOf(m, byName, tags, seen)...)
-	}
-	return out
 }
 
 // Notes are what sing-box makes of the groups of p's profile it cannot write as they are

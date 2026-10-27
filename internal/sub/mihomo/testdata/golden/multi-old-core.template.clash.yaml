@@ -3,7 +3,7 @@ dns:
   enable: true
   enhanced-mode: fake-ip
 proxies:
-  - name: "\U0001F1F3\U0001F1F1 Hysteria2"
+  - name: "🇳🇱 Hysteria2"
     type: hysteria2
     server: 203.0.113.7
     port: 443
@@ -14,7 +14,7 @@ proxies:
     obfs-password: golden-obfs-password
     password: S3cr3t+/=
     skip-cert-verify: false
-  - name: "\U0001F1F3\U0001F1F1 TUIC"
+  - name: "🇳🇱 TUIC"
     type: tuic
     server: 203.0.113.7
     port: 8443
@@ -26,7 +26,7 @@ proxies:
     skip-cert-verify: false
     udp-relay-mode: native
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: "\U0001F1F3\U0001F1F1 VLESS Vision"
+  - name: "🇳🇱 VLESS Vision"
     type: vless
     server: 203.0.113.7
     port: 8443
@@ -40,7 +40,7 @@ proxies:
     tls: true
     udp: true
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: "\U0001F1F3\U0001F1F1 Trojan"
+  - name: "🇳🇱 Trojan"
     type: trojan
     server: 203.0.113.7
     port: 2087
@@ -53,7 +53,7 @@ proxies:
     sni: www.example.com
     tls: true
     udp: true
-  - name: "\U0001F1F3\U0001F1F1 VLESS gRPC"
+  - name: "🇳🇱 VLESS gRPC"
     type: vless
     server: 203.0.113.7
     port: 2053
@@ -69,7 +69,7 @@ proxies:
     tls: true
     udp: true
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: "\U0001F1FA\U0001F1F8 Hysteria2"
+  - name: "🇺🇸 Hysteria2"
     type: hysteria2
     server: usa.example.com
     port: 443
@@ -81,7 +81,7 @@ proxies:
     password: S3cr3t+/=
     skip-cert-verify: false
     sni: usa.example.com
-  - name: "\U0001F1FA\U0001F1F8 TUIC"
+  - name: "🇺🇸 TUIC"
     type: tuic
     server: usa.example.com
     port: 8443
@@ -94,7 +94,7 @@ proxies:
     sni: usa.example.com
     udp-relay-mode: native
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
-  - name: "\U0001F1FA\U0001F1F8 VLESS Vision"
+  - name: "🇺🇸 VLESS Vision"
     type: vless
     server: usa.example.com
     port: 8443
@@ -109,39 +109,39 @@ proxies:
     udp: true
     uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
 proxy-groups:
-  - name: "\U0001F30D Сеть"
+  - name: "🌍 Сеть"
     type: select
     proxies:
       - ⚡ Авто
-      - "\U0001F1FA\U0001F1F8 США"
-      - "\U0001F6AB Без VPN"
+      - "🇺🇸 США"
+      - "🚫 Без VPN"
   - name: ⚡ Авто
     type: url-test
     proxies:
-      - "\U0001F1F3\U0001F1F1 TUIC"
-      - "\U0001F1F3\U0001F1F1 VLESS Vision"
-      - "\U0001F1F3\U0001F1F1 Trojan"
-      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
-      - "\U0001F1FA\U0001F1F8 TUIC"
-      - "\U0001F1FA\U0001F1F8 VLESS Vision"
+      - "🇳🇱 TUIC"
+      - "🇳🇱 VLESS Vision"
+      - "🇳🇱 Trojan"
+      - "🇳🇱 VLESS gRPC"
+      - "🇺🇸 TUIC"
+      - "🇺🇸 VLESS Vision"
     interval: 300
     url: https://www.gstatic.com/generate_204
-  - name: "\U0001F1FA\U0001F1F8 США"
+  - name: "🇺🇸 США"
     type: select
     proxies:
-      - "\U0001F1FA\U0001F1F8 Hysteria2"
-      - "\U0001F1FA\U0001F1F8 TUIC"
-      - "\U0001F1FA\U0001F1F8 VLESS Vision"
-  - name: "\U0001F1EF\U0001F1F5 Япония"
+      - "🇺🇸 Hysteria2"
+      - "🇺🇸 TUIC"
+      - "🇺🇸 VLESS Vision"
+  - name: "🇯🇵 Япония"
     type: select
     proxies:
       - REJECT
-  - name: "\U0001F512 VLESS"
+  - name: "🔒 VLESS"
     type: select
     proxies:
-      - "\U0001F1F3\U0001F1F1 VLESS Vision"
-      - "\U0001F1F3\U0001F1F1 VLESS gRPC"
-  - name: "\U0001F6AB Без VPN"
+      - "🇳🇱 VLESS Vision"
+      - "🇳🇱 VLESS gRPC"
+  - name: "🚫 Без VPN"
     type: select
     proxies:
       - DIRECT
@@ -151,7 +151,7 @@ rules:
   - DOMAIN,vpn.example.com,DIRECT
   - RULE-SET,ru,DIRECT
   - AND,((NETWORK,UDP),(DST-PORT,443)),REJECT
-  - "MATCH,\U0001F30D Сеть"
+  - "MATCH,🌍 Сеть"
   - MATCH,REJECT
 rule-providers:
   ru:
