@@ -83,6 +83,12 @@ func profileHeaders(hd http.Header, format, title string) {
 	}
 }
 
+// noStore keeps an answer out of caches: it is the subscriber's own, with their keys and
+// traffic, and changes with them.
+func noStore(hd http.Header) {
+	hd.Set("Cache-Control", "no-store")
+}
+
 // stubHeaders are what the apps that read the device binding's headers show for reason.
 func stubHeaders(hd http.Header, reason error) {
 	switch {
@@ -247,10 +253,10 @@ func ValidHappProviderID(s string) bool { return happProvider.MatchString(s) }
 
 // appHeaders are what Happ and INCY take beside the profile: the routing profile, of the
 // own Clash profile clash when there is one, and Happ's provider headers. Other apps never
-// get them.
+// get them. INCY is asked first: a User-Agent that names both is INCY's.
 func appHeaders(hd http.Header, ua string, cfg Config, clash string) {
 	switch {
-	case apps.IsINCY(ua):
+	case apps.Named("incy", ua):
 		// INCY reads Happ's routing profile from the same header (docs.incy.cc/en/routing),
 		// and none of Happ's provider headers. The panel's own keeps the geodata whole.
 		if routing := cfg.Happ.Routing; routing == xray.HappRoutingAuto {
@@ -258,7 +264,7 @@ func appHeaders(hd http.Header, ua string, cfg Config, clash string) {
 		} else if routing != "" {
 			hd.Set("routing", xray.IncyLink(routing))
 		}
-	case apps.IsHapp(ua):
+	case apps.Named("happ", ua):
 		happ := cfg.Happ
 		if happ.Routing == xray.HappRoutingAuto {
 			happ.Routing = happAutoRouting(cfg, clash)
@@ -340,6 +346,14 @@ func (g AppGroups) header() string {
 		return ""
 	}
 	return v
+}
+
+// groupsHeaders put X-Mikan-Groups, the groups g of the subscription, on the answer to a
+// Mikan app; nothing without groups.
+func groupsHeaders(hd http.Header, g AppGroups) {
+	if v := g.header(); v != "" {
+		hd.Set(GroupsHeader, v)
+	}
 }
 
 // ruleHeaders are the headers a response rule adds, over the panel's own: the admin may

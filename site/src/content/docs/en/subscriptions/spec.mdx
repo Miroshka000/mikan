@@ -74,7 +74,7 @@ The administrator's rules (**Settings → Subscription → Response rules**) loo
 
 The built-in protection comes after the administrator's rules: ShadowsocksR clients and discontinued Clash apps (Clash for Windows, Clash for Android, ClashX other than its Meta fork) get the notice, because no profile of the panel suits their cores. It can be turned off in the same window. The apps the administrator blocked in **Settings → Subscription → Apps** get the same notice last. A request that no rule matches is served as usual, and a token that is not among the subscriptions gets the `404` described below whatever the rules say.
 
-Every fetch of a profile goes into a log: the time, the address, `User-Agent`, the app, the rule that decided, the format and the outcome, with no token and no key. How long it is kept is set in **Settings → Subscription → General → Request log**, and the log itself is in the user's card.
+Every fetch of a profile goes into a log: the time, the address, `User-Agent`, the app, the rule that decided, the format and the outcome, with no token and no key. The logged format is the one the answer went out in: `html` for the subscription page, a messenger's preview included, and `uri` for a notice sent in place of Xray configs. The response rules tester shows the format the same way. How long it is kept is set in **Settings → Subscription → General → Request log**, and the log itself is in the user's card.
 
 ### Device
 

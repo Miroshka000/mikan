@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -68,6 +69,30 @@ func TestCatalogIdentifiesAndAgreesWithDetectApp(t *testing.T) {
 	}
 }
 
+// DetectApp reads the catalog's words, so every word and prefix of an entry, on its own,
+// is that entry for Identify and its family for DetectApp. A bare Mikan is the one left an
+// unknown app (see pinnedUAs).
+func TestEveryWordAgreesWithDetectApp(t *testing.T) {
+	for _, k := range Catalog {
+		for _, w := range slices.Concat(k.Words, k.Prefixes) {
+			ua := w + "/1.0"
+			if got, _ := Identify(ua); got.ID != k.ID {
+				t.Errorf("Identify(%q) = %q, want %s", ua, got.ID, k.ID)
+			}
+			want := k.Family
+			if k.ID == "mikan" {
+				want = FamilyOther
+			}
+			if f := DetectApp(ua).Family; f != want {
+				t.Errorf("DetectApp(%q) = %s, want %s", ua, f, want)
+			}
+			if !Named(k.ID, ua) || !FamilyNamed(k.Family, ua) {
+				t.Errorf("%q: Named %v, FamilyNamed %v", ua, Named(k.ID, ua), FamilyNamed(k.Family, ua))
+			}
+		}
+	}
+}
+
 func TestIdentifyTellsTheAppBeforeItsCore(t *testing.T) {
 	for ua, want := range map[string]string{
 		"mihomo/1.19.32 ClashFest/1.2.0":                            "clashfest",
@@ -98,6 +123,27 @@ func TestAlternativesSkipBlockedApps(t *testing.T) {
 	}
 	if got := Alternatives(all, 3); len(got) != 0 {
 		t.Errorf("%v: nothing is left to recommend", got)
+	}
+}
+
+// The stub of an app that sends no device ID names the HWID apps in their order, without
+// the blocked ones: by the catalog's names, so an id off the catalog would show as "".
+func TestHWIDApps(t *testing.T) {
+	for _, c := range []struct {
+		blocked []string
+		want    []string
+	}{
+		{nil, []string{"Happ", "Koala Clash", "INCY"}},
+		{[]string{"koala", "v2rayng"}, []string{"Happ", "INCY"}},
+		{[]string{"happ", "koala"}, []string{"INCY"}},
+		{[]string{"incy", "happ", "koala"}, nil},
+	} {
+		if got := responder(t, Policy{Blocked: c.blocked}).HWIDApps(); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%v blocked: %q, want %q", c.blocked, got, c.want)
+		}
+	}
+	if got := (*Responder)(nil).HWIDApps(); !reflect.DeepEqual(got, []string{"Happ", "Koala Clash", "INCY"}) {
+		t.Errorf("no responder: %q", got)
 	}
 }
 

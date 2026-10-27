@@ -3,6 +3,7 @@ package xray
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -15,16 +16,18 @@ import (
 // own is the own xray template src as the template it is.
 func own(src string) model.Template { return model.Template{Core: model.CoreXray, Body: src} }
 
-// The list made of the admin's own xray template on the two-node users, each config checked
-// by xray.
+// The list made of the admin's own xray template on the two-node users, each config
+// checked by xray. The base user is enough: the template takes none of the panel's rules,
+// routing or language, and all the inbounds go in, as in the links, since the variants'
+// apps are mihomo's.
 func TestGoldenOwnXrayTemplate(t *testing.T) {
-	for _, v := range subtest.Variants {
+	for _, v := range subtest.CoreVariants {
 		if strings.HasPrefix(v.Name, "single") {
 			continue // the template names the second node's group
 		}
 		t.Run(v.Name, func(t *testing.T) {
 			t.Parallel()
-			goldenXray(t, v, routing.All, own(subtest.OwnXrayTemplate), v.Name+".own.xray.json")
+			goldenXray(t, v.Base(), v.Groups, routing.All, own(subtest.OwnXrayTemplate), v.Name+".own.xray.json")
 		})
 	}
 }
@@ -134,5 +137,29 @@ func TestXrayExample(t *testing.T) {
 	if cs[0].Remarks != g.Auto || cs[0].Observatory == nil {
 		raw, _ := json.Marshal(cs[0])
 		t.Fatalf("%s", raw)
+	}
+
+	// The example is written apart from the built-in configs, but the skeleton an app needs
+	// is the same in both: the local proxies and the outbounds that go direct, block and
+	// answer DNS.
+	builtin, err := Render(profileOf(subtest.Multi()), g, routing.All, model.Template{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []map[string]any
+	var got map[string]any
+	if err := json.Unmarshal(builtin, &want); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(Example(g), &got); err != nil {
+		t.Fatal(err)
+	}
+	shared := func(c map[string]any) map[string]any {
+		outs := c["outbounds"].([]any)
+		return map[string]any{"log": c["log"], "inbounds": c["inbounds"], "outbounds": outs[len(outs)-3:],
+			"dns.tag": c["dns"].(map[string]any)["tag"]}
+	}
+	if w, s := shared(want[0]), shared(got); !reflect.DeepEqual(w, s) {
+		t.Fatalf("the example's skeleton:\n%v\nthe built-in config's:\n%v", s, w)
 	}
 }

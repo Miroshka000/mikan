@@ -79,6 +79,26 @@ func TestProxyNames(t *testing.T) {
 	}
 }
 
+// A name with control characters, written to the database past the panel, loses them: the
+// YAML encoder fails on a name that starts with a line break, and so would the profile.
+// One with nothing else in it goes by the inbound's name in the panel.
+func TestProxyNamesDropControlCharacters(t *testing.T) {
+	nodes := []model.Node{{ID: 1, Name: "🇳🇱 Нидерланды", Endpoint: model.Endpoint{Host: "nl.example.com"}}}
+	tuic := proto.Marshal(proto.Template{"type": "tuic", "alpn": []any{"h3"}})
+	ins := []model.Inbound{
+		{ID: 1, Node: 1, Name: "\nА", Named: true, Port: 443, PortSpec: "443", Config: tuic},
+		{ID: 2, Node: 1, Name: "Б\r\n\tВ\u0085", Named: true, Port: 8443, PortSpec: "8443", Config: tuic},
+		{ID: 3, Node: 1, Label: "tuic-2", Name: "\n\t", Named: true, Port: 9443, PortSpec: "9443", Config: tuic},
+	}
+	var got []string
+	for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: ins, Nodes: nodes}) {
+		got = append(got, p.Name)
+	}
+	if want := []string{"А", "БВ", "tuic-2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("names %q, want %q", got, want)
+	}
+}
+
 // One inbound that cannot be rendered is left out and reported, not the end of everyone's
 // subscription.
 func TestBadInboundIsSkippedAndReported(t *testing.T) {

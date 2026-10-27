@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
@@ -120,7 +120,7 @@ func TestHappRoutingOf(t *testing.T) {
 // profile's, decoded (subtest has the golden files' story): the panel makes one for all of
 // its users.
 func TestGoldenHappRouting(t *testing.T) {
-	for _, v := range subtest.Variants {
+	for _, v := range subtest.CoreVariants {
 		for _, mode := range subtest.Modes {
 			t.Run(v.Name+"/"+string(mode), func(t *testing.T) {
 				goldenHapp(t, v.Name+"_"+string(mode)+".happ.json", happRouting(v, mode, ""))
@@ -139,9 +139,9 @@ func happRouting(v subtest.Variant, m routing.Mode, src string) string {
 	return HappRoutingOf("VPN", variantProfile(v), m, src)
 }
 
-func variantProfile(v subtest.Variant) mihomo.Profile {
+func variantProfile(v subtest.Variant) profile.Profile {
 	u := v.User()
-	return mihomo.Profile{Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
+	return profile.Profile{Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
 }
 
 // Both apps keep the geo files whole and take the profile again for a later stamp; INCY

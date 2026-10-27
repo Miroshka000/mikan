@@ -10,6 +10,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
@@ -21,6 +22,10 @@ import (
 //     exclude-filter and exclude-type narrow them, as mihomo itself does;
 //   - mikan: {nodes: [...], types: [...]} takes the proxies of those nodes (by the name the
 //     panel shows, or the id) and of those types (vless, hysteria2…).
+//
+// Next to proxy-providers, include-all in a group the panel fills leaves mihomo only the
+// providers (include-all-providers), and a group that keeps providers (that or use) keeps
+// filter, exclude-filter and exclude-type for their proxies.
 //
 // The panel lists the proxies in the group itself, so every core gets the same groups, and
 // a group left with none for an app gets REJECT: closed, not open. The panel's and the
@@ -50,8 +55,8 @@ func yamlLine(err error) string {
 }
 
 // Template renders the admin's template for p, and the panel's proxies in it.
-func Template(p Profile, src string) ([]byte, []model.Proxy, error) {
-	cfg, in, err := TemplateConfig(p, src)
+func Template(p profile.Profile, src string) ([]byte, []model.Proxy, error) {
+	cfg, in, err := templateConfig(p, src)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -59,14 +64,14 @@ func Template(p Profile, src string) ([]byte, []model.Proxy, error) {
 	return body, in, err
 }
 
-// TemplateConfig is the profile Template renders, and the panel's proxies in it.
-func TemplateConfig(p Profile, src string) (map[string]any, []model.Proxy, error) {
-	if len(p.Proxies) == 0 {
-		return nil, nil, model.ErrNoProxies
-	}
+// templateConfig is the profile Template renders, and the panel's proxies in it.
+func templateConfig(p profile.Profile, src string) (map[string]any, []model.Proxy, error) {
 	cfg, err := parseProfileTemplate(src)
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(p.Proxies) == 0 {
+		return nil, nil, model.ErrNoProxies
 	}
 	// Checked again for this user: their inbounds and app may leave a group the template
 	// names a member of empty, and mihomo refuses a profile with a missing member.
@@ -82,7 +87,7 @@ func TemplateConfig(p Profile, src string) (map[string]any, []model.Proxy, error
 
 // fillTemplate puts p's proxies into the template cfg and returns those that went in: a
 // proxy of the template's own by the same name stays in its place.
-func fillTemplate(cfg map[string]any, p Profile) ([]model.Proxy, error) {
+func fillTemplate(cfg map[string]any, p profile.Profile) ([]model.Proxy, error) {
 	own, _ := cfg["proxies"].([]any)
 	taken := map[string]bool{}
 	for _, x := range own {
@@ -96,11 +101,12 @@ func fillTemplate(cfg map[string]any, p Profile) ([]model.Proxy, error) {
 		if taken[x.Name] {
 			continue // the template's own proxy of that name stays
 		}
-		proxies = append(proxies, p.proxy(x))
+		proxies = append(proxies, proxy(p, x))
 		names = append(names, x)
 	}
 	cfg["proxies"] = proxies
-	_, providers := cfg["proxy-providers"]
+	pp, _ := cfg["proxy-providers"].(map[string]any)
+	providers := len(pp) > 0
 	groups, _ := cfg["proxy-groups"].([]any)
 	for _, g := range groups {
 		if m, ok := g.(map[string]any); ok {
@@ -181,16 +187,29 @@ func fillGroup(g map[string]any, nodes []model.Node, ps []model.Proxy, providers
 		}
 		list = append(list, x.Name)
 	}
-	if len(list) == 0 && g["use"] == nil {
-		list = []any{"REJECT"}
+	delete(g, "mikan")
+	delete(g, "include-all-proxies")
+	switch {
+	case !providers:
+		delete(g, "include-all")
+	case g["include-all"] == true:
+		// include-all would also take every proxy of the user, past the panel's choice:
+		// mihomo is left only the providers.
+		delete(g, "include-all")
+		g["include-all-providers"] = true
+	}
+	// A group that keeps providers keeps its filters: mihomo applies them to the providers'
+	// proxies, and those the panel listed pass them already. Nor is it left empty: REJECT
+	// would only become what it picks first.
+	if g["use"] == nil && (!providers || g["include-all-providers"] != true) {
+		for _, k := range []string{"filter", "exclude-filter", "exclude-type"} {
+			delete(g, k)
+		}
+		if len(list) == 0 {
+			list = []any{"REJECT"}
+		}
 	}
 	g["proxies"] = list
-	for _, k := range []string{"mikan", "include-all-proxies", "filter", "exclude-filter", "exclude-type"} {
-		delete(g, k)
-	}
-	if !providers {
-		delete(g, "include-all")
-	}
 	return nil
 }
 
@@ -233,21 +252,17 @@ var policies = []string{"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 
 // CheckTemplate finds what would break the profiles made of src for p: YAML that does
 // not parse, a group that lists a member nobody defines, a rule that sends traffic to a
-// group that does not exist or uses a rule list that is not there.
-func CheckTemplate(p Profile, src string) error {
-	cfg, err := parseProfileTemplate(src)
-	if err != nil {
-		return err
-	}
-	if _, err := fillTemplate(cfg, p); err != nil {
-		return err
-	}
-	return checkFilled(cfg, p)
+// group that does not exist or uses a rule list that is not there. When p has no proxies
+// to check the groups and rules with, src is only read, and model.ErrNoProxies is what
+// is left, as with xray.
+func CheckTemplate(p profile.Profile, src string) error {
+	_, _, err := templateConfig(p, src)
+	return err
 }
 
 // checkFilled checks a template with the user's proxies in it: on saving, against a user
 // given every inbound; on every profile, against the user it is for.
-func checkFilled(cfg map[string]any, p Profile) error {
+func checkFilled(cfg map[string]any, p profile.Profile) error {
 	known := map[string]bool{}
 	for _, x := range policies {
 		known[x] = true
@@ -310,8 +325,8 @@ func checkFilled(cfg map[string]any, p Profile) error {
 // Starter is the template of the profile Render makes for p with g and m: the start of an
 // admin's own. The proxies go, and the groups ask for them: every proxy of the user
 // (include-all-proxies), or those of some nodes (mikan: nodes).
-func Starter(p Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
-	cfg, err := Config(p, g.WithDefaults(p.Lang), m)
+func Starter(p profile.Profile, g model.GroupNames, m routing.Mode) ([]byte, error) {
+	cfg, err := renderConfig(p, g.WithDefaults(p.Lang), m)
 	if err != nil {
 		return nil, err
 	}

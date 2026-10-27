@@ -17,11 +17,22 @@ import (
 	"mikan/internal/sub/serve"
 )
 
+// The X-Mikan-Groups of TestMikanGroupsHeader with the group active and exhausted, taken
+// from the panel before Source.Groups stopped taking the profile's proxies: the one group
+// "Премиум +" (own, 15 GiB) with 3 GiB used and its server "VLESS XHTTP", then all used and
+// "proxies":[].
+const (
+	activeHeader    = "base64:eyJ2IjoxLCJyZXNldHNfYXQiOjE3OTU1MjE2MDAsImdyb3VwcyI6W3siaWQiOjEsIm5hbWUiOiLQn9GA0LXQvNC40YPQvCArIiwibW9kZSI6Im93biIsInVzZWQiOjMyMjEyMjU0NzIsImxpbWl0IjoxNjEwNjEyNzM2MCwibGVmdCI6MTI4ODQ5MDE4ODgsInN0YXRlIjoiYWN0aXZlIiwicHJveGllcyI6WyJWTEVTUyBYSFRUUCJdfV19"
+	exhaustedHeader = "base64:eyJ2IjoxLCJyZXNldHNfYXQiOjE3OTU1MjE2MDAsImdyb3VwcyI6W3siaWQiOjEsIm5hbWUiOiLQn9GA0LXQvNC40YPQvCArIiwibW9kZSI6Im93biIsInVzZWQiOjE2MTA2MTI3MzYwLCJsaW1pdCI6MTYxMDYxMjczNjAsImxlZnQiOjAsInN0YXRlIjoiZXhoYXVzdGVkIiwicHJveGllcyI6W119XX0="
+)
+
 // The Mikan app's server groups (X-Mikan-Groups): only the app that asks gets them, with the
 // group's servers named as they are in the very profile it got; every other app gets the
 // same subscription as before, and a group that ran out says so with its servers gone.
 func TestMikanGroupsHeader(t *testing.T) {
 	h := newHarness(t)
+	// A fixed clock: the header's resets_at is of it, and the header is checked byte for byte.
+	h.now = time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	ctx := context.Background()
 	if err := domain.Seed(ctx, h.st, h.now); err != nil {
 		t.Fatal(err)
@@ -113,6 +124,10 @@ func TestMikanGroupsHeader(t *testing.T) {
 	if !bytes.Equal(plain, body) {
 		t.Fatal("the profile differs for the app that asks for the groups")
 	}
+	// The header byte for byte as the panel sent it before the source stopped naming servers.
+	if v := hd.Get(serve.GroupsHeader); v != activeHeader {
+		t.Fatalf("X-Mikan-Groups:\n got %s\nwant %s", v, activeHeader)
+	}
 	g := groups(hd)
 	if g.V != 1 || len(g.Groups) != 1 {
 		t.Fatalf("groups: %+v", g)
@@ -141,6 +156,9 @@ func TestMikanGroupsHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	hd, body = fetch("groups")
+	if v := hd.Get(serve.GroupsHeader); v != exhaustedHeader {
+		t.Fatalf("X-Mikan-Groups of the exhausted group:\n got %s\nwant %s", v, exhaustedHeader)
+	}
 	got = groups(hd).Groups[0]
 	if got.State != "exhausted" || got.Left == nil || *got.Left != 0 || got.Proxies == nil || len(got.Proxies) != 0 {
 		t.Fatalf("exhausted group: %+v", got)

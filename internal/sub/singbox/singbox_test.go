@@ -9,13 +9,14 @@ import (
 
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 )
 
 // profileOf is the Clash profile of a test user the config is made of.
-func profileOf(u subtest.User) mihomo.Profile {
-	return mihomo.Profile{Proxies: u.Proxies(), Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
+func profileOf(u subtest.User) profile.Profile {
+	return profile.Profile{Proxies: u.Proxies(), Nodes: u.Build.Nodes, Direct: u.Direct, Rules: u.Rules, Routes: u.Routes, Lang: u.Lang}
 }
 
 type sbConfig struct {
@@ -58,7 +59,7 @@ func lists(t *testing.T) {
 	t.Cleanup(func() { singboxList = old })
 }
 
-func renderSingBox(t *testing.T, prof mihomo.Profile, m routing.Mode, tpl model.Template) sbConfig {
+func renderSingBox(t *testing.T, prof profile.Profile, m routing.Mode, tpl model.Template) sbConfig {
 	t.Helper()
 	raw, err := Render(context.Background(), prof, model.GroupNames{}, m, tpl)
 	if err != nil {

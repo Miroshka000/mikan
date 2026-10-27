@@ -1,7 +1,7 @@
 package serve
 
 import (
-	"mikan/internal/sub/mihomo"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/xray"
 )
 
@@ -20,10 +20,10 @@ func incyAutoRouting(cfg Config, clash string) string {
 }
 
 // autoRouting is the name and the settings of the profile the panel makes.
-func autoRouting(cfg Config) (string, mihomo.Profile) {
+func autoRouting(cfg Config) (string, profile.Profile) {
 	name := cfg.Brand
 	if name == "" {
 		name = "VPN"
 	}
-	return name, mihomo.Profile{Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang}
+	return name, cfg.Profile(nil)
 }
