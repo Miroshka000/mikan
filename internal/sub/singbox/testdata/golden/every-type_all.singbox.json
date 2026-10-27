@@ -3,6 +3,7 @@
     "final": "remote",
     "servers": [
       {
+        "detour": "PROXY",
         "server": "1.1.1.1",
         "tag": "remote",
         "type": "https"
