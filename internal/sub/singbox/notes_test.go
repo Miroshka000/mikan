@@ -69,3 +69,27 @@ func TestDropped(t *testing.T) {
 		t.Fatalf("an own sing-box template: %+v", n)
 	}
 }
+
+// Of the panel's routing, the admin's own lists are not downloaded for the preview either,
+// and the ones sing-box can read are not told; DOMAIN-WILDCARD, which it has none of, is.
+func TestDroppedBuiltin(t *testing.T) {
+	singboxList = func(context.Context, string) ([]string, error) {
+		t.Error("the preview downloads a list")
+		return nil, nil
+	}
+	t.Cleanup(func() { singboxList = cachedList })
+	u := subtest.Multi()
+	u.Routes, u.Rules = subtest.Routes(), subtest.Rules
+	for _, m := range subtest.Modes {
+		var rest []model.Note
+		for _, n := range Dropped(profileOf(u), model.GroupNames{}, m, model.Template{}) {
+			if n.Code != "proxy_unsupported" {
+				rest = append(rest, n)
+			}
+		}
+		want := []model.Note{{Core: "singbox", Subject: "DOMAIN-WILDCARD,*.tinkoff.ru", Code: "rule_unsupported"}}
+		if !slices.Equal(rest, want) {
+			t.Errorf("%v: %+v", m, rest)
+		}
+	}
+}

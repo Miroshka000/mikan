@@ -50,8 +50,12 @@ func TestDroppedBuiltin(t *testing.T) {
 			t.Errorf("%s is not told: %+v", name, rest)
 		}
 	}
-	if len(slices.Compact(slices.Clone(rest))) != len(rest) {
-		t.Errorf("a note twice: %+v", rest)
+	seen := map[model.Note]bool{}
+	for _, n := range rest {
+		if seen[n] {
+			t.Errorf("a note twice: %+v", n)
+		}
+		seen[n] = true
 	}
 	// DOMAIN-WILDCARD and the DNS policy of +.cn xray has a form of.
 	for _, n := range rest {

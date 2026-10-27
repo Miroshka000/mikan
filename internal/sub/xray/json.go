@@ -72,7 +72,8 @@ func Notes(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 // preview: the proxies it cannot carry (proxy_unsupported), the conditions it has no form of
 // (rule_unsupported), the lists it has no categories for (list_unsupported), the categories
 // the usual geodata lacks (category_missing, routing.Common) and the DNS policies of no name
-// it can read (dns_policy_unsupported). An own xray template is as the admin wrote it: none.
+// it can read (dns_policy_unsupported). A policy's key that loses only some of its names is
+// not told. An own xray template is as the admin wrote it: none.
 func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Template) []model.Note {
 	if t.Core == model.CoreXray {
 		return nil
