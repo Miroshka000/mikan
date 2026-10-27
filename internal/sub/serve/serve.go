@@ -54,11 +54,15 @@ type Subscription interface {
 	// Inbounds are the inbounds the user may use now, in display order.
 	Inbounds(ctx context.Context) ([]model.Inbound, error)
 	// Fetched records that the device at ip took a profile: the block detector trusts a
-	// device only once it took a profile with an inbound's current port and target.
+	// device only once it took a profile with an inbound's current port and target. It is
+	// told once a profile went out, never of a stub, a HEAD or a failure.
 	Fetched(ctx context.Context, ip string)
-	// Groups are the server groups the Mikan app shows (X-Mikan-Groups), their servers
-	// named among ps, the proxies of the profile the app gets.
-	Groups(ctx context.Context, ps []model.Proxy) (AppGroups, error)
+	// Groups are the server groups of the Mikan app (X-Mikan-Groups): the ones the user
+	// reaches and is not shut out of, with the traffic each used and no Proxies. An own
+	// limit without a number is GroupUnlimited; a group on the main traffic or apart without
+	// a limit is there with no servers too. The handler names the servers of each in the
+	// profile and drops the groups left with nothing to show (AppGroups.named).
+	Groups(ctx context.Context) (AppGroups, error)
 	// Record writes one request in the subscription's request log. It is best effort: a
 	// log that cannot be written is the source's to report, and never fails the request.
 	Record(ctx context.Context, e LogEntry)
@@ -228,7 +232,7 @@ func internalError(w http.ResponseWriter) {
 // response rules go first (rules.go): they may answer for the profile, or name the format
 // and what the device is asked for. The order is fixed: the headers go before the keys are
 // handed out (a HEAD stops after them), the device gets its keys before the profile is made,
-// and the fetch is recorded once there is a profile to give.
+// and the fetch is recorded once the profile went out.
 func (h *Handler) Serve(w http.ResponseWriter, r *http.Request, token string) {
 	sub, err := h.src.Subscription(r.Context(), token)
 	switch {
@@ -281,21 +285,23 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		internalError(w)
 		return ""
 	}
+	// The devices are counted once for the texts and the branding, which both may show them.
+	count := sync.OnceValues(func() (int64, error) { return sub.Bound(ctx) })
 	// The values are worked out only when a title or an announcement can use them.
 	var vars map[string]string
 	if cfg.Title != "" || cfg.Announce != "" || cfg.InactiveServer && cfg.InactiveText != "" {
-		vars = Values(u, bound(ctx, sub, cfg), cfg, h.now())
+		vars = Values(u, bound(cfg, count), cfg, h.now())
 		if cfg.Announce != "" {
 			cfg.Announce = fillAppAnnounce(cfg.Announce, vars, ua)
 		}
 	}
 	hd := w.Header()
 	userInfoHeaders(hd, u, cfg, vars)
-	h.operatorHeaders(hd, r, sub, u, cfg)
+	h.operatorHeaders(hd, r, sub, u, cfg, count)
 	// Happ's routing profile is the one of the Clash profile the request would get.
 	appHeaders(hd, ua, cfg, Template(cfg.Templates, FormatClash, dec.Action.Template).Body)
 	ruleHeaders(hd, dec.Action.Headers)
-	hd.Set("Cache-Control", "no-store")
+	noStore(hd)
 	if r.Method == http.MethodHead {
 		return "" // apps peek at the traffic headers; the keys go only with a real fetch
 	}
@@ -326,7 +332,6 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	}
 	app := apps.DetectApp(ua)
 	ins = build.ForApp(ins, app, u.State.CanConnect())
-	sub.Fetched(ctx, h.ip(r))
 	proxies := build.Proxies(build.Profile{Keys: keys, Inbounds: ins, Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint,
 		Skip: func(in model.Inbound, err error) {
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
@@ -366,6 +371,9 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		profileHeaders(hd, format, "")
 		_, _ = w.Write(xray.Encode(links))
 	}
+	// The profile went out. A client that hung up as it was written does not take the
+	// record with it: the request's context may be cancelled by now.
+	sub.Fetched(context.WithoutCancel(ctx), h.ip(r))
 	return OutcomeServed
 }
 
@@ -402,16 +410,17 @@ func Announcement(ctx context.Context, sub Subscription, u User, cfg Config, now
 	if cfg.Announce == "" {
 		return ""
 	}
-	return FillAnnounce(cfg.Announce, Values(u, bound(ctx, sub, cfg), cfg, now))
+	return FillAnnounce(cfg.Announce, Values(u, bound(cfg, func() (int64, error) { return sub.Bound(ctx) }), cfg, now))
 }
 
-// bound counts the devices bound to the subscription for {devices}: -1 when the title and
-// the announcement do not use it or binding is off.
-func bound(ctx context.Context, sub Subscription, cfg Config) int64 {
+// bound is the count of the devices bound to the subscription for {devices}: -1 when the
+// title and the announcement do not use it or binding is off. count is the Subscription's
+// Bound.
+func bound(cfg Config, count func() (int64, error)) int64 {
 	if !cfg.Binding || !wantsDevices(cfg.Title, cfg.Announce) {
 		return -1
 	}
-	n, err := sub.Bound(ctx)
+	n, err := count()
 	if err != nil {
 		return -1
 	}
@@ -419,13 +428,14 @@ func bound(ctx context.Context, sub Subscription, cfg Config) int64 {
 }
 
 // operatorHeaders: the subscription page, the announcement and the app branding
-// (OperatorHeaders). Devices are counted only for branding, which shows them.
-func (h *Handler) operatorHeaders(hd http.Header, r *http.Request, sub Subscription, u User, cfg Config) {
+// (OperatorHeaders). Devices are counted (count, the Subscription's Bound) only for
+// branding, which shows them.
+func (h *Handler) operatorHeaders(hd http.Header, r *http.Request, sub Subscription, u User, cfg Config, count func() (int64, error)) {
 	devices := int64(-1)
 	var bot string
 	if cfg.App.Enabled {
 		if cfg.Binding && u.Devices != nil && u.Places {
-			if n, err := sub.Bound(r.Context()); err == nil {
+			if n, err := count(); err == nil {
 				devices = n
 			}
 		}
@@ -444,13 +454,11 @@ func (h *Handler) groupsHeader(ctx context.Context, hd http.Header, r *http.Requ
 	if !wantsFeature(r.Header, featureGroups) {
 		return
 	}
-	g, err := sub.Groups(ctx, ps)
+	g, err := sub.Groups(ctx)
 	if err != nil {
 		// The profile still goes out: the app shows the groups of its last fetch.
 		h.Warn("mikan_groups", "subscription: the server groups for the Mikan app are not read", "err", err)
 		return
 	}
-	if v := g.header(); v != "" {
-		hd.Set(GroupsHeader, v)
-	}
+	groupsHeaders(hd, g.named(ps))
 }

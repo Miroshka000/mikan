@@ -20,7 +20,7 @@ Every 5 minutes the panel looks at devices from the last 30 minutes. Only device
 
 A device is considered cut off from a connection if:
 
-- the connection is in its subscription, and the device refreshed the subscription after the connection last changed;
+- the connection is in its subscription, and the device refreshed the subscription after the connection last changed (a refresh counts only if the device got the profile, not a notice in place of the servers or an error);
 - it reaches the node's other connections, including ones on the same network type (TCP or UDP);
 - it reached this connection before;
 - nobody from the same subnet (/24 for IPv4, /64 for IPv6) can reach it right now.
