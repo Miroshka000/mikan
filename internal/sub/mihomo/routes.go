@@ -12,33 +12,6 @@ func takes(p profile.Profile, pr routing.Provider) bool {
 	return !pr.Since.Known() || p.App.Core.Known() && p.App.Core.AtLeast(pr.Since)
 }
 
-// taken are the routes with what the app's core takes of them: a list it cannot read goes,
-// and so do the conditions that read it; a route left with none goes too.
-func taken(p profile.Profile, routes []routing.Route) []routing.Route {
-	var out []routing.Route
-	for _, r := range routes {
-		var lists []routing.Provider
-		have := map[string]bool{}
-		for _, pr := range r.Lists {
-			if takes(p, pr) {
-				lists = append(lists, pr)
-				have[pr.Name] = true
-			}
-		}
-		var rules []routing.Match
-		for _, m := range r.Rules {
-			if m.Type != "RULE-SET" || have[m.Value] {
-				rules = append(rules, m)
-			}
-		}
-		if len(rules) > 0 {
-			r.Rules, r.Lists = rules, lists
-			out = append(out, r)
-		}
-	}
-	return out
-}
-
 // routed is what the routes add to a profile.
 type routed struct {
 	providers map[string]any
@@ -46,11 +19,12 @@ type routed struct {
 	geodata   bool // a GEOSITE or GEOIP rule: the app needs mihomo's geodata
 }
 
-// route writes the routes (taken) with the groups they go to; blocked is the mode of the
-// blocked lists.
-func route(routes []routing.Route, gs routing.Groups, blocked bool) routed {
+// route writes the routes (narrowed to the lists the app takes) and their rules (the
+// routed of routing.Intent.Sequence, to their groups); blocked is the mode of the blocked
+// lists.
+func route(routes []routing.Route, rules []routing.Rule, gs routing.Groups, blocked bool) routed {
 	out := routed{providers: map[string]any{}}
-	for i, r := range routes {
+	for _, r := range routes {
 		for _, pr := range r.Lists {
 			ext := pr.Format
 			if ext == "" {
@@ -60,11 +34,12 @@ func route(routes []routing.Route, gs routing.Groups, blocked bool) routed {
 			out.providers[pr.Name] = map[string]any{"type": "http", "behavior": pr.Behavior, "format": pr.Format, "url": pr.URL,
 				"path": "./ruleset/" + pr.Name + "." + ext, "interval": 86400, "proxy": gs.Main}
 		}
-		target := targetName(gs, r.To, i)
-		for _, m := range r.Rules {
+	}
+	for _, r := range rules {
+		for _, m := range r.When {
 			out.geodata = out.geodata || m.Type == "GEOSITE" || m.Type == "GEOIP"
-			out.rules = append(out.rules, m.Rule(target))
 		}
+		out.rules = append(out.rules, r.Clash(targetName(gs, r.To, -1)))
 	}
 	if blocked {
 		// The lists name sites by GEOSITE too.
