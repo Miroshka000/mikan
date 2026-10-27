@@ -367,7 +367,7 @@ func TestJSONNotes(t *testing.T) {
 		t.Fatalf("built-in: %+v", n)
 	}
 	p.Routes.Servers = routing.Servers{Auto: "fallback"}
-	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 1 || n[0].Group != "Авто" || n[0].Code != "fallback_fastest" {
+	if n := Notes(p, model.GroupNames{}, routing.All, model.Template{}); len(n) != 1 || n[0].Subject != "Авто" || n[0].Code != "fallback_fastest" {
 		t.Fatalf("fallback: %+v", n)
 	}
 }

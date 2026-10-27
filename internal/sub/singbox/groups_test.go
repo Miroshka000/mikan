@@ -52,7 +52,7 @@ func TestConvertGroups(t *testing.T) {
 	if c.detours["b"] != "entry" || c.detours["c"] != "entry" || len(c.detours) != 2 {
 		t.Fatalf("the exits dial through the entry: %v", c.detours)
 	}
-	want := []model.Note{{Core: "singbox", Group: "first", Code: "fallback_fastest"}, {Core: "singbox", Group: "spread", Code: "balance_fastest"}}
+	want := []model.Note{{Core: "singbox", Subject: "first", Code: "fallback_fastest"}, {Core: "singbox", Subject: "spread", Code: "balance_fastest"}}
 	if !slices.Equal(c.notes, want) {
 		t.Fatalf("notes: %+v", c.notes)
 	}
