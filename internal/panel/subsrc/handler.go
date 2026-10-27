@@ -31,6 +31,7 @@ import (
 	"mikan/internal/sub/build"
 	"mikan/internal/sub/mihomo"
 	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/serve"
 	"mikan/internal/sub/singbox"
@@ -556,18 +557,18 @@ func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 }
 
 // sample is the profile of a user given every inbound, with placeholder keys.
-func (h *Handler) sample(ctx context.Context) (mihomo.Profile, Config, error) {
+func (h *Handler) sample(ctx context.Context) (profile.Profile, Config, error) {
 	cfg, err := h.cfg(ctx)
 	if err != nil {
-		return mihomo.Profile{}, cfg, err
+		return profile.Profile{}, cfg, err
 	}
 	r, err := h.reach(ctx, db.User{}, cfg, domain.GrantsLeft{})
 	if err != nil {
-		return mihomo.Profile{}, cfg, err
+		return profile.Profile{}, cfg, err
 	}
 	keys := proto.Slot{Name: "preview", UUID: "00000000-0000-0000-0000-000000000000", Secret: "preview"}
 	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint})
-	return mihomo.Profile{Proxies: ps, Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang,
+	return profile.Profile{Proxies: ps, Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang,
 		// A current mihomo: the preview shows every list, and a template started from it keeps
 		// the ones a younger core reads (an app that does not name its core still gets none).
 		App: apps.App{Family: apps.FamilyMihomo, Core: previewCore}}, cfg, nil

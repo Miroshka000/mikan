@@ -19,6 +19,7 @@ import (
 	"mikan/internal/sub/build"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/singbox"
 	"mikan/internal/sub/xray"
@@ -319,7 +320,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		Skip: func(in model.Inbound, err error) {
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
 		}})
-	prof := mihomo.Profile{Proxies: proxies, Nodes: cfg.Nodes, Direct: cfg.Direct, Lang: cfg.Lang}
+	prof := profile.Profile{Proxies: proxies, Nodes: cfg.Nodes, Direct: cfg.Direct, Lang: cfg.Lang}
 	tpl := Template(cfg.Templates, format, dec.Action.Template)
 	switch format {
 	case FormatClash:
@@ -361,12 +362,12 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 
 // clashProfile is the Clash profile of prof: of the admin's own template t when the app can
 // take it, the built-in one otherwise; and the panel's proxies in it.
-func (h *Handler) clashProfile(prof mihomo.Profile, cfg Config, t model.Template) ([]byte, []model.Proxy, error) {
+func (h *Handler) clashProfile(prof profile.Profile, cfg Config, t model.Template) ([]byte, []model.Proxy, error) {
 	builtIn := func() ([]byte, []model.Proxy, error) {
 		body, err := mihomo.Render(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Mode)
 		return body, prof.Proxies, err
 	}
-	if t.Body == "" || !prof.Routable() {
+	if t.Body == "" || !prof.App.TakesOwnProfile() {
 		return builtIn()
 	}
 	body, ps, err := mihomo.Template(prof, t.Body)

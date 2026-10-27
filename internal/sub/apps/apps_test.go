@@ -94,6 +94,27 @@ func TestSupports(t *testing.T) {
 	}
 }
 
+// The admin's own Clash profile and the rule lists go to mihomo apps and to the panel's
+// preview (a zero App) only: Stash reads its own flavor, the rest are not Clash apps.
+func TestTakesOwnProfile(t *testing.T) {
+	for _, c := range []struct {
+		app  App
+		want bool
+	}{
+		{App{}, true},
+		{App{Family: FamilyMihomo}, true},
+		{App{Family: FamilyMihomo, Core: Version{1, 19, 12}}, true},
+		{App{Family: FamilyStash}, false},
+		{App{Family: FamilyXray}, false},
+		{App{Family: FamilySingBox}, false},
+		{App{Family: FamilyOther}, false},
+	} {
+		if got := c.app.TakesOwnProfile(); got != c.want {
+			t.Errorf("%+v: %v, want %v", c.app, got, c.want)
+		}
+	}
+}
+
 // Each mihomo gate holds from its first release on, and the types newer than the
 // core of 2024 stay off a core that does not name its version.
 func TestMihomoVersionGates(t *testing.T) {

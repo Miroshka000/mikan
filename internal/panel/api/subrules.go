@@ -16,7 +16,6 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subsrc"
 	"mikan/internal/sub/apps"
-	"mikan/internal/sub/mihomo"
 	submodel "mikan/internal/sub/model"
 	"mikan/internal/sub/serve"
 )
@@ -316,9 +315,9 @@ func (h *handlers) testSubRules(ctx context.Context, in *testSubRulesInput) (*te
 // testedTemplate is the saved template a profile in format is made of for the app of the
 // User-Agent ua when the deciding rule names the template named, as Serve picks it
 // (serve.Template); 0 for the built-in profile, which a Clash app that takes no own profile
-// gets too (mihomo.Profile.Routable: Stash, an app of another core).
+// gets too (apps.App.TakesOwnProfile: Stash, an app of another core).
 func (h *handlers) testedTemplate(ctx context.Context, format, ua string, named int64) (int64, error) {
-	if format == serve.FormatClash && !(mihomo.Profile{App: apps.DetectApp(ua)}).Routable() {
+	if format == serve.FormatClash && !apps.DetectApp(ua).TakesOwnProfile() {
 		return 0, nil
 	}
 	rows, err := h.d.Store.Q.ListSubTemplateHeads(ctx)

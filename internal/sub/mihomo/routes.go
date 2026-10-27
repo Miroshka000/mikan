@@ -3,31 +3,24 @@ package mihomo
 import (
 	"strings"
 
-	"mikan/internal/sub/apps"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 )
 
-// Routable: the app takes rule lists and the rules of routing.Services. Stash and apps we
-// do not know get the profile without them; a zero App (the admin panel's preview) is
-// mihomo.
-func (p Profile) Routable() bool {
-	return p.App.Family == "" || p.App.Family == apps.FamilyMihomo
-}
-
 // takes says whether the app's core reads a list.
-func (p Profile) takes(pr routing.Provider) bool {
+func takes(p profile.Profile, pr routing.Provider) bool {
 	return !pr.Since.Known() || p.App.Core.Known() && p.App.Core.AtLeast(pr.Since)
 }
 
 // taken are the routes with what the app's core takes of them: a list it cannot read goes,
 // and so do the conditions that read it; a route left with none goes too.
-func (p Profile) taken(routes []routing.Route) []routing.Route {
+func taken(p profile.Profile, routes []routing.Route) []routing.Route {
 	var out []routing.Route
 	for _, r := range routes {
 		var lists []routing.Provider
 		have := map[string]bool{}
 		for _, pr := range r.Lists {
-			if p.takes(pr) {
+			if takes(p, pr) {
 				lists = append(lists, pr)
 				have[pr.Name] = true
 			}
