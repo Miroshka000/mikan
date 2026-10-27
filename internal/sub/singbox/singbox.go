@@ -69,7 +69,9 @@ func Stub(name, main string) []byte {
 // plan is what a config is made of, whether of the panel's routing or of an own profile.
 type plan struct {
 	proxies []model.Proxy
-	groups  []model.Group
+	// unread are an own Clash profile's proxies the model cannot hold (mihomo.ReadProxy).
+	unread []string
+	groups []model.Group
 	// rules are in order, each to a policy or a group (routing.ToGroup); a rule of no
 	// conditions (MATCH) ends them.
 	rules []routing.Rule
@@ -99,7 +101,7 @@ func planOf(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templ
 	if err != nil {
 		return plan{}, err
 	}
-	return plan{proxies: parts.Proxies, groups: parts.Groups, rules: parts.Rules, lists: parts.Lists, dns: parts.DNS, main: g.Main}, nil
+	return plan{proxies: parts.Proxies, unread: parts.Unread, groups: parts.Groups, rules: parts.Rules, lists: parts.Lists, dns: parts.DNS, main: g.Main}, nil
 }
 
 // builtin is the plan of the panel's routing: the intent with the lists sing-box can read,

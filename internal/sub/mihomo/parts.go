@@ -15,7 +15,10 @@ type Parts struct {
 	// Proxies are the profile's in its order: the template's own the model holds
 	// (ReadProxy), then the panel's that went in.
 	Proxies []model.Proxy
-	Groups  []model.Group
+	// Unread are the names of the template's own proxies the model cannot hold (ReadProxy):
+	// left out, as a core leaves out a proxy it cannot carry.
+	Unread []string
+	Groups []model.Group
 	// Rules are in order; MATCH reads as a rule of no conditions. A rule ReadRule cannot read
 	// (OR, NOT) is left out.
 	Rules []routing.Rule
@@ -38,6 +41,8 @@ func TemplateParts(p profile.Profile, src string) (Parts, error) {
 		if m, ok := x.(map[string]any); ok {
 			if y, ok := ReadProxy(m); ok {
 				out.Proxies = append(out.Proxies, y)
+			} else {
+				out.Unread = append(out.Unread, str(m["name"]))
 			}
 		}
 	}

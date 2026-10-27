@@ -11,9 +11,11 @@ import (
 	"mikan/internal/proto"
 	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
+	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
 	"mikan/internal/sub/subtest/corecheck"
+	"mikan/internal/sub/xray"
 )
 
 // carried is a proxy of an own Clash profile as sing-box gets it: read into the model, then
@@ -198,6 +200,11 @@ rules:
 	if plain := outbound(c, "plain-ss"); outbound(c, "obfs-ss") != nil || plain == nil || !reflect.DeepEqual(plain["udp_over_tcp"], map[string]any{"enabled": true, "version": 1.0}) {
 		t.Fatalf("outbounds: %v", c.Outbounds)
 	}
+	// The preview tells it.
+	if !slices.Contains(Dropped(profileOf(subtest.TwoNodes()), model.GroupNames{}, routing.All, subtest.Clash(src)),
+		model.Note{Core: core, Subject: "obfs-ss", Code: "proxy_unsupported"}) {
+		t.Fatal("the preview does not tell the left out proxy")
+	}
 	for _, o := range c.Outbounds {
 		if members, _ := o["outbounds"].([]any); slices.Contains(members, any("obfs-ss")) {
 			t.Fatalf("a member sing-box has no outbound for: %v", o)
@@ -218,17 +225,45 @@ func TestRealityFingerprint(t *testing.T) {
 	}
 }
 
-// The gRPC keepalive is the one the Clash apps get: sing-box pings after as long an idle
-// time as mihomo waits between pings.
+// The gRPC keepalive is the one the Clash apps get: sing-box and xray ping after as long an
+// idle time as mihomo waits between pings, and give up on an unanswered ping after as long
+// as each other (mihomo has no such timeout to set).
 func TestGRPCKeepaliveAsMihomo(t *testing.T) {
-	m := mihomo.Proxy(model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
-		Transport: &model.Transport{Network: "grpc", Service: "api"}})
+	p := model.Proxy{Name: "G", Type: "vless", Server: "203.0.113.7", Port: 2053, UUID: subtest.Keys.UUID,
+		Transport: &model.Transport{Network: "grpc", Service: "api"}}
+	m := mihomo.Proxy(p)
 	o, ok := carried(m)
 	if !ok {
 		t.Fatal("no outbound")
 	}
 	ping := m["grpc-opts"].(map[string]any)["ping-interval"]
-	if idle := o["transport"].(map[string]any)["idle_timeout"]; idle != fmt.Sprintf("%vs", ping) {
+	sb := o["transport"].(map[string]any)
+	if idle := sb["idle_timeout"]; idle != fmt.Sprintf("%vs", ping) {
 		t.Fatalf("sing-box idles %v, mihomo pings every %vs", idle, ping)
+	}
+	raw, err := xray.Render(profile.Profile{Proxies: []model.Proxy{p}}, model.GroupNames{}, routing.All, model.Template{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cs []struct{ Outbounds []map[string]any }
+	if err := json.Unmarshal(raw, &cs); err != nil {
+		t.Fatal(err)
+	}
+	var x map[string]any
+	for _, c := range cs {
+		for _, ob := range c.Outbounds {
+			if g, ok := anyMap(ob["streamSettings"])["grpcSettings"].(map[string]any); ok {
+				x = g
+			}
+		}
+	}
+	if x == nil {
+		t.Fatalf("no gRPC outbound in the xray profile: %s", raw)
+	}
+	if idle := fmt.Sprint(x["idle_timeout"]); idle != fmt.Sprint(ping) {
+		t.Fatalf("xray idles %vs, mihomo pings every %vs", idle, ping)
+	}
+	if wait := fmt.Sprintf("%vs", x["health_check_timeout"]); wait != sb["ping_timeout"] {
+		t.Fatalf("xray waits %v for an answer, sing-box %v", wait, sb["ping_timeout"])
 	}
 }
