@@ -145,10 +145,19 @@ func NewHandler(st *store.Store, cfg func(ctx context.Context) (Config, error), 
 // the panel has no address for subscriptions yet.
 func (h *Handler) HappLink(ctx context.Context, u db.User) (string, error) {
 	cfg, err := h.cfg(ctx)
-	if err != nil || cfg.HappCrypt == "" || cfg.SubBase == "" {
+	if err != nil {
 		return "", err
 	}
-	return h.happ.Link(ctx, cfg.HappCrypt, cfg.SubBase+"/"+u.SubToken)
+	return h.happLink(ctx, cfg, u.SubToken)
+}
+
+// happLink is the Happ crypt link of the subscription token, as cfg makes it: "" when the
+// crypt link is off or there is no address for subscriptions yet.
+func (h *Handler) happLink(ctx context.Context, cfg Config, token string) (string, error) {
+	if cfg.HappCrypt == "" || cfg.SubBase == "" {
+		return "", nil
+	}
+	return h.happ.Link(ctx, cfg.HappCrypt, cfg.SubBase+"/"+token)
 }
 
 // clientIP is the device's address as the nodes see it too: clients reach the panel
@@ -323,18 +332,14 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, sub *subscrip
 	if u.TrafficLimit.Valid {
 		out.Extra = user.Grants
 	}
-	if h.tg != nil {
-		out.Telegram = h.tg.LinkURL(ctx, u.ID)
-	}
+	out.Telegram = sub.Bot(ctx)
 	if cfg.Announce != "" {
 		out.Announce, out.AnnounceURL = serve.Announcement(ctx, sub, user, cfg.Config, now), cfg.AnnounceURL
 	}
-	if cfg.HappCrypt != "" && cfg.SubBase != "" {
-		if link, err := h.happ.Link(ctx, cfg.HappCrypt, cfg.SubBase+"/"+u.SubToken); err == nil {
-			out.HappLink = link
-		} else {
-			h.warn("happ_link", "subscription: no Happ crypt link", "err", err)
-		}
+	if link, err := h.happLink(ctx, cfg, u.SubToken); err == nil {
+		out.HappLink = link
+	} else {
+		h.warn("happ_link", "subscription: no Happ crypt link", "err", err)
 	}
 	if cfg.Binding {
 		devs, err := h.st.Q.ListBoundDevices(ctx, u.ID)
