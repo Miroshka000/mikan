@@ -84,8 +84,12 @@ func profileHeaders(hd http.Header, format, title string) {
 }
 
 // noStore keeps an answer out of caches: it is the subscriber's own, with their keys and
-// traffic, and changes with them.
+// traffic, and changes with them. A CDN header that a rule saved before apps.CheckRules
+// refused one left goes: no-store does not overrule it.
 func noStore(hd http.Header) {
+	for _, name := range apps.CacheHeaders {
+		hd.Del(name)
+	}
 	hd.Set("Cache-Control", "no-store")
 }
 

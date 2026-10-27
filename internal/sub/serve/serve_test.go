@@ -281,10 +281,11 @@ func TestAnswersAreNotStored(t *testing.T) {
 	}
 }
 
-// A rule saved with a Cache-Control of its own, before apps.CheckRules refused one, does not
+// A rule saved with cache headers of its own, before apps.CheckRules refused them, does not
 // make an answer storable: a CDN that kept a refusal would refuse after the rule is gone.
 func TestRuleCacheControlIsNoStore(t *testing.T) {
-	own := []apps.Header{{Name: "Cache-Control", Value: "public, max-age=86400"}, {Name: "X-Own", Value: "1"}}
+	own := []apps.Header{{Name: "Cache-Control", Value: "public, max-age=86400"}, {Name: "CDN-Cache-Control", Value: "max-age=86400"},
+		{Name: "Cloudflare-CDN-Cache-Control", Value: "max-age=86400"}, {Name: "Surrogate-Control", Value: "max-age=86400"}, {Name: "X-Own", Value: "1"}}
 	sub := newSub(t, apps.Policy{NoBuiltin: true, Rules: []apps.Rule{
 		rule("serve", "happ", apps.Action{Headers: own}),
 		rule("stub", "incy", apps.Action{Respond: apps.RespondStub, Headers: own}),
@@ -296,6 +297,11 @@ func TestRuleCacheControlIsNoStore(t *testing.T) {
 		w := fetch(t, sub, ua)
 		if got := w.Header().Values("Cache-Control"); len(got) != 1 || got[0] != "no-store" || w.Header().Get("X-Own") != "1" {
 			t.Errorf("%s: %d %v", ua, w.Code, w.Header())
+		}
+		for _, name := range apps.CacheHeaders[1:] {
+			if v := w.Header().Values(name); len(v) != 0 {
+				t.Errorf("%s: %s %v", ua, name, v)
+			}
 		}
 	}
 }
