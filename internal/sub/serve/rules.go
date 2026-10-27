@@ -37,8 +37,10 @@ func (h *Handler) refuse(w http.ResponseWriter, r *http.Request, ex *exchange) O
 		return OutcomeDropped
 	}
 	hd := w.Header()
-	noStore(hd)
+	// A rule saved with a Cache-Control of its own (apps.CheckRules refuses one now) does not
+	// let a cache keep the refusal: it would be served from there after the rule is gone.
 	ruleHeaders(hd, a.Headers)
+	noStore(hd)
 	switch a.Respond {
 	case apps.Respond403:
 		http.Error(w, "403 Forbidden", http.StatusForbidden)
