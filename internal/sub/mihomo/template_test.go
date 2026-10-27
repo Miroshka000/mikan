@@ -138,10 +138,13 @@ func TestCheckTemplate(t *testing.T) {
 		"proxy-groups:\n  - type: select\n": "template_group_name",
 		"proxy-groups:\n  - {name: A, type: select, proxies: [B]}\n":                                                      "template_group_member",
 		"proxy-groups:\n  - {name: A, type: select, proxies: [DIRECT]}\n  - {name: A, type: select, proxies: [DIRECT]}\n": "template_group_dup",
-		"rules:\n  - MATCH,Nowhere\n":                  "template_rule_target",
-		"rules:\n  - RULE-SET,nope,DIRECT\n":           "template_rule_set",
-		"rules:\n  - DOMAIN-SUFFIX\n":                  "template_rule",
-		"rules:\n  - SUB-RULE,(NETWORK,UDP),missing\n": "template_rule_target",
+		"rules:\n  - MATCH,Nowhere\n":                                       "template_rule_target",
+		"rules:\n  - RULE-SET,nope,DIRECT\n":                                "template_rule_set",
+		"rules:\n  - DOMAIN-SUFFIX\n":                                       "template_rule",
+		"rules:\n  - SUB-RULE,(NETWORK,UDP),missing\n":                      "template_rule_target",
+		"proxy-groups:\n  - {name: A, type: relay, proxies: [DIRECT]}\n":    "template_group_type",
+		"proxy-groups:\n  - {name: A, type: url_test, proxies: [DIRECT]}\n": "template_group_type",
+		"proxy-groups:\n  - {name: A, proxies: [DIRECT]}\n":                 "template_group_type",
 	} {
 		err := CheckTemplate(prof, src)
 		var te *model.TemplateError
@@ -161,6 +164,27 @@ func TestCheckTemplate(t *testing.T) {
 	var te *model.TemplateError
 	if err := CheckTemplate(profile.Profile{}, "proxy-groups: ["); !errors.As(err, &te) || te.Code != "template_yaml" {
 		t.Fatalf("no proxies, broken YAML: %v, want template_yaml", err)
+	}
+	if err := CheckTemplate(profile.Profile{}, "proxy-groups:\n  - {name: R, type: relay, proxies: [DIRECT]}\n"); !errors.As(err, &te) || te.Code != "template_group_type" || te.Detail != "R" {
+		t.Fatalf("no proxies, a relay group: %v, want template_group_type of R", err)
+	}
+	chain := "proxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT]}\n  - {name: S, type: select, proxies: [C]}\nrules:\n  - MATCH,S\n"
+	if err := CheckTemplate(prof, chain); err != nil {
+		t.Fatalf("a chain: %v", err)
+	}
+}
+
+// A type of group the core does not know is refused only on saving: a template saved
+// before keeps rendering, as it is.
+func TestTemplateUnknownGroupTypeStillRenders(t *testing.T) {
+	prof := profileOf(subtest.Defaults(""))
+	src := "proxy-groups:\n  - {name: R, type: relay, include-all-proxies: true}\nrules:\n  - MATCH,R\n"
+	raw, _, err := Template(prof, src)
+	if err != nil {
+		t.Fatalf("a saved template with a relay group: %v", err)
+	}
+	if !strings.Contains(string(raw), "type: relay") {
+		t.Fatalf("the group's type is the admin's:\n%s", raw)
 	}
 }
 

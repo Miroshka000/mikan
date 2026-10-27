@@ -131,7 +131,7 @@ func (s Servers) check() error {
 	if s.Auto != "" && s.Auto != "fallback" || !interval(s.Interval) {
 		return errors.New("routes_servers")
 	}
-	if m := s.Mihomo; !slices.Contains([]string{"", string(model.URLTest), string(model.Fallback), string(model.LoadBalance)}, m.Type) ||
+	if m := s.Mihomo; m.Type != "" && !model.GroupType(m.Type).Tests() ||
 		!interval(m.Interval) || m.Tolerance < 0 || m.Tolerance > maxTolerance {
 		return errors.New("routes_servers_mihomo")
 	}
