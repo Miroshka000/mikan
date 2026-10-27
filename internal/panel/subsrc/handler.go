@@ -81,7 +81,7 @@ type Handler struct {
 	shop       *billing.Service // nil: nothing on sale
 	promos     *promo.Service
 	pages      *subpage.Service // nil: the page as built, nothing of the admin's
-	balance    *domain.Balancer // nil: every node shows
+	balance    balancer         // nil: every node shows
 	happ       *HappLinks       // Happ crypt links, kept per subscription
 	log        *slog.Logger
 	promoLimit promoLimiter
@@ -117,8 +117,17 @@ func (h *Handler) warn(key, msg string, args ...any) { h.profiles.Warn(key, msg,
 func (h *Handler) SetShop(s *billing.Service) { h.shop = s }
 func (h *Handler) SetPromo(s *promo.Service)  { h.promos = s }
 
+// balancer narrows the nodes a client's subscription shows (domain.Balancer.Nodes).
+type balancer interface {
+	Nodes(ctx context.Context, userID int64, on map[int64]bool) (map[int64]bool, error)
+}
+
 // SetBalancer keeps each client on one node of every balance group.
-func (h *Handler) SetBalancer(b *domain.Balancer) { h.balance = b }
+func (h *Handler) SetBalancer(b *domain.Balancer) {
+	if b != nil { // a nil *Balancer in the interface would not be a nil balancer
+		h.balance = b
+	}
+}
 
 // SetPages gives the page what the admin made of it: its look, blocks, instructions, images.
 func (h *Handler) SetPages(s *subpage.Service) { h.pages = s }
@@ -136,10 +145,19 @@ func NewHandler(st *store.Store, cfg func(ctx context.Context) (Config, error), 
 // the panel has no address for subscriptions yet.
 func (h *Handler) HappLink(ctx context.Context, u db.User) (string, error) {
 	cfg, err := h.cfg(ctx)
-	if err != nil || cfg.HappCrypt == "" || cfg.SubBase == "" {
+	if err != nil {
 		return "", err
 	}
-	return h.happ.Link(ctx, cfg.HappCrypt, cfg.SubBase+"/"+u.SubToken)
+	return h.happLink(ctx, cfg, u.SubToken)
+}
+
+// happLink is the Happ crypt link of the subscription token, as cfg makes it: "" when the
+// crypt link is off or there is no address for subscriptions yet.
+func (h *Handler) happLink(ctx context.Context, cfg Config, token string) (string, error) {
+	if cfg.HappCrypt == "" || cfg.SubBase == "" {
+		return "", nil
+	}
+	return h.happ.Link(ctx, cfg.HappCrypt, cfg.SubBase+"/"+token)
 }
 
 // clientIP is the device's address as the nodes see it too: clients reach the panel
@@ -314,18 +332,14 @@ func (h *Handler) info(ctx context.Context, w http.ResponseWriter, sub *subscrip
 	if u.TrafficLimit.Valid {
 		out.Extra = user.Grants
 	}
-	if h.tg != nil {
-		out.Telegram = h.tg.LinkURL(ctx, u.ID)
-	}
+	out.Telegram = sub.Bot(ctx)
 	if cfg.Announce != "" {
 		out.Announce, out.AnnounceURL = serve.Announcement(ctx, sub, user, cfg.Config, now), cfg.AnnounceURL
 	}
-	if cfg.HappCrypt != "" && cfg.SubBase != "" {
-		if link, err := h.happ.Link(ctx, cfg.HappCrypt, cfg.SubBase+"/"+u.SubToken); err == nil {
-			out.HappLink = link
-		} else {
-			h.warn("happ_link", "subscription: no Happ crypt link", "err", err)
-		}
+	if link, err := h.happLink(ctx, cfg, u.SubToken); err == nil {
+		out.HappLink = link
+	} else {
+		h.warn("happ_link", "subscription: no Happ crypt link", "err", err)
 	}
 	if cfg.Binding {
 		devs, err := h.st.Q.ListBoundDevices(ctx, u.ID)
@@ -559,10 +573,11 @@ func (h *Handler) sample(ctx context.Context) (profile.Profile, Config, error) {
 	}
 	keys := proto.Slot{Name: "preview", UUID: "00000000-0000-0000-0000-000000000000", Secret: "preview"}
 	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint})
-	return profile.Profile{Proxies: ps, Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang,
-		// A current mihomo: the preview shows every list, and a template started from it keeps
-		// the ones a younger core reads (an app that does not name its core still gets none).
-		App: apps.App{Family: apps.FamilyMihomo, Core: previewCore}}, cfg, nil
+	prof := cfg.Profile(ps)
+	// A current mihomo: the preview shows every list, and a template started from it keeps
+	// the ones a younger core reads (an app that does not name its core still gets none).
+	prof.App = apps.App{Family: apps.FamilyMihomo, Core: previewCore}
+	return prof, cfg, nil
 }
 
 // previewCore is the mihomo the nodes run (go.mod), the newest an app may have.

@@ -3,6 +3,7 @@
     "final": "remote",
     "servers": [
       {
+        "detour": "PROXY",
         "server": "1.1.1.1",
         "tag": "remote",
         "type": "https"
@@ -106,7 +107,11 @@
       "server": "vpn.example.com",
       "server_port": 8388,
       "tag": "Shadowsocks 2022",
-      "type": "shadowsocks"
+      "type": "shadowsocks",
+      "udp_over_tcp": {
+        "enabled": true,
+        "version": 2
+      }
     },
     {
       "tag": "direct",

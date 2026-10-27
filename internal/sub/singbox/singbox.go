@@ -74,7 +74,11 @@ type plan struct {
 	rules []routing.Rule
 	lists map[string]routing.Provider
 	dns   routing.Resolvers
-	main  string
+	// tunnelDNS sends the first nameserver through the main group: mihomo leaves the names
+	// of a fake-ip profile to the tunnel, sing-box resolves them itself, and DoH straight
+	// from Russia stalls under TSPU throttling.
+	tunnelDNS bool
+	main      string
 }
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
@@ -106,6 +110,8 @@ func builtin(p profile.Profile, g model.GroupNames, m routing.Mode) plan {
 	routes := routing.Narrow(in.Routes, func(pr routing.Provider) bool { return !pr.Since.Known() })
 	gs := routing.BuildGroups(p.Proxies, p.Nodes, g, in.Servers, in.Servers.SingBoxBalance(), routes, p.Lang)
 	pl := plan{groups: gs.List, lists: map[string]routing.Provider{}, dns: in.Resolvers(), main: g.Main}
+	// The panel's own nameservers only: one the admin gave without "#group" goes as given.
+	pl.tunnelDNS = pl.dns.FakeIP && len(in.DNS.Nameserver) == 0
 	for _, x := range p.Proxies {
 		pl.proxies = append(pl.proxies, mihomo.Proxy(x))
 	}
@@ -180,7 +186,14 @@ func config(ctx context.Context, pl plan) map[string]any {
 	if final == "" {
 		final = main
 	}
-	dns, resolver := dnsOf(pl.dns, tags, &sets)
+	via := ""
+	if pl.tunnelDNS {
+		via = model.AliasGroup // as the other modes' nameservers go
+		if !tags[via] {
+			via = main
+		}
+	}
+	dns, resolver := dnsOf(pl.dns, tags, &sets, via)
 	all := append(append([]map[string]any{}, gs.outbounds...), outbounds...)
 	all = append(all, map[string]any{"type": "direct", "tag": "direct"})
 	route := map[string]any{

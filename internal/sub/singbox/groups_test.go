@@ -126,13 +126,13 @@ func TestConditions(t *testing.T) {
 func TestDomainResolver(t *testing.T) {
 	sets := ruleSets{used: map[string]map[string]any{}}
 	dns, local := dnsOf(routing.Resolvers{Nameserver: []string{"tls://dns.google#VPN"}, Default: []string{"dhcp://en0", "9.9.9.9"}, ProxyServer: []string{"1.1.1.1"}},
-		map[string]bool{"VPN": true}, &sets)
+		map[string]bool{"VPN": true}, &sets, "")
 	raw, _ := json.Marshal(dns["servers"])
 	if local != "local" || !strings.Contains(string(raw), `{"detour":"VPN","domain_resolver":"bootstrap","server":"dns.google","tag":"remote","type":"tls"}`) ||
 		!strings.Contains(string(raw), `{"server":"9.9.9.9","tag":"bootstrap","type":"udp"}`) {
 		t.Fatalf("servers: %s", raw)
 	}
-	plain, _ := dnsOf(routing.Resolvers{Nameserver: []string{"1.1.1.1"}}, nil, &sets)
+	plain, _ := dnsOf(routing.Resolvers{Nameserver: []string{"1.1.1.1"}}, nil, &sets, "")
 	if raw, _ := json.Marshal(plain["servers"]); strings.Contains(string(raw), "bootstrap") {
 		t.Fatalf("no domain, no bootstrap: %s", raw)
 	}
