@@ -234,7 +234,7 @@ func (m *Monitor) checkBilling(ctx context.Context, st *persistentState, cfg Ale
 	t := textsFor(lang)
 	now := m.now()
 	today := domain.Day(now)
-	date := func(day int64) string { return time.Unix(day*86400, 0).UTC().Format("02.01.2006") }
+	date := func(day int64) string { return time.Unix(day*86400, 0).UTC().Format(t.dateLayout) }
 	for _, n := range nodes {
 		b := domain.BillingOf(n)
 		id := strconv.FormatInt(n.ID, 10)

@@ -45,10 +45,18 @@ func (b *NodeBilling) check() error {
 	switch {
 	case utf8.RuneCountInString(b.Provider) > BillingProviderMax || strings.ContainsFunc(b.Provider, func(r rune) bool { return r < ' ' }):
 		return fieldErr("billing.provider", "bad_billing")
-	case b.PayDay < 0 || b.PayMonths < 0 || b.PayMonths > BillingMonthsMax || b.RemindDays < 0 || b.RemindDays > BillingRemindMax:
+	case b.PayDay < 0:
 		return fieldErr("billing.pay_date", "bad_billing")
-	case b.TrafficLimit < 0 || b.ResetDay < 1 || b.ResetDay > 31 || b.TrafficAlert < 1 || b.TrafficAlert > 100:
+	case b.PayMonths < 0 || b.PayMonths > BillingMonthsMax:
+		return fieldErr("billing.pay_months", "bad_billing")
+	case b.RemindDays < 0 || b.RemindDays > BillingRemindMax:
+		return fieldErr("billing.remind_days", "bad_billing")
+	case b.TrafficLimit < 0:
 		return fieldErr("billing.traffic_limit", "bad_billing")
+	case b.ResetDay < 1 || b.ResetDay > 31:
+		return fieldErr("billing.reset_day", "bad_billing")
+	case b.TrafficAlert < 1 || b.TrafficAlert > 100:
+		return fieldErr("billing.traffic_alert", "bad_billing")
 	}
 	return nil
 }

@@ -60,7 +60,7 @@ func TestBillingIsToldOnce(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("told: %q", got)
 	}
-	contains(got[0], "Server payment due", "NL &amp; co (Hetzner &lt;cloud&gt;)", "02.11.2026")
+	contains(got[0], "Server payment due", "NL &amp; co (Hetzner &lt;cloud&gt;)", "2 Nov 2026")
 	// 700 GB of 1000 GB is under 80%; 100 GB more is not
 	carry(time.Date(2026, 10, 29, 0, 0, 0, 0, time.UTC), 100*gb)
 	got = told([]db.Node{n}, "ru")
@@ -81,8 +81,8 @@ func TestBillingIsToldOnce(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("told: %q", got)
 	}
-	contains(got[0], "02.12.2026")
-	contains(got[1], "850 GB of 1000 GB (85%)", "01.12.2026")
+	contains(got[0], "2 Dec 2026")
+	contains(got[1], "850 GB of 1000 GB (85%)", "1 Dec 2026")
 	// with the event off, the next payment is not told
 	now = time.Date(2026, 12, 30, 12, 0, 0, 0, time.UTC)
 	cfg.Events.Billing = false

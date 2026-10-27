@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -94,18 +95,22 @@ func TestNodeBillingCheck(t *testing.T) {
 	if err := ok.check(); err != nil || ok.Provider != "Hetzner" {
 		t.Fatalf("%v %q", err, ok.Provider)
 	}
-	for _, bad := range []NodeBilling{
-		{Provider: "a\nb", ResetDay: 1, TrafficAlert: 80},
-		{PayMonths: 37, ResetDay: 1, TrafficAlert: 80},
-		{RemindDays: 61, ResetDay: 1, TrafficAlert: 80},
-		{TrafficLimit: -1, ResetDay: 1, TrafficAlert: 80},
-		{ResetDay: 0, TrafficAlert: 80},
-		{ResetDay: 32, TrafficAlert: 80},
-		{ResetDay: 1, TrafficAlert: 0},
-		{ResetDay: 1, TrafficAlert: 101},
+	for field, bad := range map[string]NodeBilling{
+		"provider":      {Provider: "a\nb", ResetDay: 1, TrafficAlert: 80},
+		"pay_date":      {PayDay: -1, ResetDay: 1, TrafficAlert: 80},
+		"pay_months":    {PayMonths: 37, ResetDay: 1, TrafficAlert: 80},
+		"remind_days":   {RemindDays: 61, ResetDay: 1, TrafficAlert: 80},
+		"traffic_limit": {TrafficLimit: -1, ResetDay: 1, TrafficAlert: 80},
+		"reset_day":     {ResetDay: 32, TrafficAlert: 80},
+		"traffic_alert": {ResetDay: 1, TrafficAlert: 101},
 	} {
-		if err := bad.check(); err == nil {
-			t.Errorf("%+v passed", bad)
+		var fe *FieldError
+		if err := bad.check(); !errors.As(err, &fe) || fe.Field != "billing."+field {
+			t.Errorf("%+v: %v, want billing.%s", bad, err, field)
 		}
+	}
+	zero := NodeBilling{ResetDay: 0, TrafficAlert: 80}
+	if err := zero.check(); err == nil {
+		t.Error("reset day 0 passed")
 	}
 }
