@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"mikan/internal/proto"
 )
 
 // singboxOutbound is a mihomo proxy as a sing-box outbound; false for one sing-box cannot
@@ -50,6 +52,20 @@ func singboxOutbound(m map[string]any) (map[string]any, bool) {
 		o["type"], o["password"] = "anytls", str(m["password"])
 	case "ss":
 		o["type"], o["method"], o["password"] = "shadowsocks", str(m["cipher"]), str(m["password"])
+		// A plugin (obfs, v2ray-plugin, shadow-tls) wraps the stream the server expects, and
+		// smux multiplexes it: without them the app reaches a server that does not answer.
+		if str(m["plugin"]) != "" || anyMap(m["smux"])["enabled"] == true {
+			return nil, false
+		}
+		// A server that takes UDP over TCP alone listens on TCP: raw UDP would go nowhere.
+		// mihomo's version is 1 when none is given, sing-box's 2.
+		if m["udp-over-tcp"] == true {
+			v, err := strconv.Atoi(str(m["udp-over-tcp-version"]))
+			if err != nil || v <= 0 {
+				v = 1
+			}
+			o["udp_over_tcp"] = map[string]any{"enabled": true, "version": v}
+		}
 	default:
 		return nil, false
 	}
@@ -105,7 +121,7 @@ func singboxTLS(m map[string]any) (map[string]any, bool) {
 	if reality != nil {
 		t["reality"] = map[string]any{"enabled": true, "public_key": str(reality["public-key"]), "short_id": str(reality["short-id"])}
 		if fp == "" {
-			fp = "chrome" // REALITY needs uTLS in sing-box
+			fp = proto.DefaultFingerprint // REALITY needs uTLS in sing-box
 		}
 	}
 	if fp != "" && typ != "hysteria2" && typ != "tuic" {
