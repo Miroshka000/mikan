@@ -40,12 +40,14 @@ func TestPreviewNotes(t *testing.T) {
 		t.Errorf("order: %+v", notes)
 	}
 
-	// A static proxy of the template the model cannot hold (a Shadowsocks plugin) is left out
-	// of sing-box's config, and the preview tells it after the note of sing-box's group.
+	// The template's own proxies sing-box leaves out are told after the note of its group:
+	// one the model cannot hold (snell, mihomo's own; mihomo.ReadProxy) and one it holds but
+	// sing-box cannot dial (the shadow-tls plugin).
 	const static = `proxies:
-  - {name: obfs-ss, type: ss, server: 203.0.113.8, port: 8388, cipher: aes-128-gcm, password: x, plugin: obfs, plugin-opts: {mode: http, host: bing.com}}
+  - {name: snell-x, type: snell, server: 203.0.113.7, port: 8388, psk: x, version: 3}
+  - {name: tls-ss, type: ss, server: 203.0.113.8, port: 8388, cipher: aes-128-gcm, password: x, plugin: shadow-tls, plugin-opts: {host: cloud.tencent.com, password: p, version: 2}}
 proxy-groups:
-  - {name: Сеть, type: select, proxies: [obfs-ss, Баланс, DIRECT]}
+  - {name: Сеть, type: select, proxies: [snell-x, tls-ss, Баланс, DIRECT]}
   - {name: Баланс, type: load-balance, include-all-proxies: true, strategy: round-robin}
 rules:
   - MATCH,Сеть
@@ -56,9 +58,13 @@ rules:
 			sb = append(sb, n)
 		}
 	}
-	if len(sb) < 2 || sb[0] != (submodel.Note{Core: "singbox", Subject: "Баланс", Code: "balance_fastest"}) ||
-		!slices.Contains(sb[1:], submodel.Note{Core: "singbox", Subject: "obfs-ss", Code: "proxy_unsupported"}) {
-		t.Errorf("a static proxy: %+v", sb)
+	if len(sb) < 3 || sb[0] != (submodel.Note{Core: "singbox", Subject: "Баланс", Code: "balance_fastest"}) {
+		t.Errorf("a template's own proxies: %+v", sb)
+	}
+	for _, name := range []string{"snell-x", "tls-ss"} {
+		if !slices.Contains(sb[min(1, len(sb)):], submodel.Note{Core: "singbox", Subject: name, Code: "proxy_unsupported"}) {
+			t.Errorf("%s is not told: %+v", name, sb)
+		}
 	}
 
 	// The built-in profile tells what the cores leave out of the panel's routing too.
