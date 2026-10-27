@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -138,6 +139,12 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 		r.Body.Close()
 		t.Fatalf("an answer came to a dropped connection: %d", r.StatusCode)
 	}
+	// The connection is closed before the request is logged, and on a connection of its own
+	// nothing makes the next request wait for that: the log is read once the entry is in.
+	waitFor(t, func() bool {
+		rows, err := h.st.Q.ListSubLog(ctx, db.ListSubLogParams{UserID: u.ID, Limit: 10})
+		return err == nil && slices.ContainsFunc(rows, func(r db.SubLog) bool { return r.Outcome == "dropped" })
+	})
 
 	// The tester shows what would happen, for rules not yet saved too.
 	probe := func(body map[string]any) (test ruleTest) {
@@ -197,6 +204,27 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 	if len(info.Blocked) != 1 || info.Blocked[0] != "incy" {
 		t.Errorf("/info: %v", info.Blocked)
 	}
+	// The tester shows the format the answer goes out in: the links of a stub in place of
+	// INCY's xray configs, the page for a messenger's preview.
+	if test = probe(map[string]any{"user_agent": "INCY/2.1.0", "headers": []apps.Header{}}); test.Respond != "stub" || test.Format != "uri" {
+		t.Errorf("a blocked app of xray configs: %+v", test)
+	}
+	if test = probe(map[string]any{"user_agent": "TelegramBot (like TwitterBot)", "headers": []apps.Header{}}); test.Respond != "serve" || test.Format != "html" {
+		t.Errorf("a messenger's preview: %+v", test)
+	}
+	// The page goes out before a rule's stub, to a messenger's preview and to a browser alike.
+	stubAll := []apps.Rule{{Name: "stub all", Enabled: true, When: cond("/"), Do: apps.Action{Respond: apps.RespondStub}}}
+	for _, hd := range []map[string]any{
+		{"user_agent": "TelegramBot/1.0 (like TwitterBot)", "headers": []apps.Header{}, "rules": stubAll},
+		{"user_agent": "Mozilla/5.0", "headers": []apps.Header{{Name: "Accept", Value: "text/html"}}, "rules": stubAll},
+	} {
+		if test = probe(hd); test.Rule != "stub all" || test.Status != 200 || test.Format != "html" || test.Text != "" {
+			t.Errorf("%s under a stub rule: %+v", hd["user_agent"], test)
+		}
+	}
+	if test = probe(map[string]any{"user_agent": "v2rayNG/1.10.20", "headers": []apps.Header{}, "rules": stubAll}); test.Format != "uri" || test.Text == "" {
+		t.Errorf("an app under a stub rule: %+v", test)
+	}
 
 	// The log: newest first, what asked and what it came to, and no token.
 	var log struct {
@@ -224,7 +252,7 @@ func TestSubscriptionResponseRulesEndToEnd(t *testing.T) {
 		t.Fatalf("%d days, %d entries: %+v", log.Days, len(log.Items), log.Items)
 	}
 	first, oldest := log.Items[0], log.Items[len(log.Items)-1]
-	if first.App != "incy" || first.AppName != "INCY" || first.Rule != "apps" || first.Format != "xray" || first.Outcome != "stub" || first.IP == "" {
+	if first.App != "incy" || first.AppName != "INCY" || first.Rule != "apps" || first.Format != "uri" || first.Outcome != "stub" || first.IP == "" {
 		t.Errorf("the newest: %+v", first)
 	}
 	if oldest.App != "happ" || oldest.Rule != "" || oldest.Format != "xray" || oldest.Outcome != "served" {

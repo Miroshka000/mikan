@@ -28,6 +28,9 @@ type Input struct {
 	// SSOneKey: the node runs Shadowsocks-2022 with one key for everyone (older than the
 	// key per user): the app gets the server's key alone, as that node expects.
 	SSOneKey bool
+	// Client is what the apps get in place of the template's mikan.client: a field left
+	// empty keeps the template's.
+	Client proto.ClientOverrides
 }
 
 // Proxy is the client side of the template t for in: what the apps of the user dial.
@@ -38,27 +41,50 @@ func Proxy(t proto.Template, in Input) (model.Proxy, error) {
 		return model.Proxy{}, err
 	}
 	ext := t.Ext()
+	// From here on in.Client is the one the apps get; nothing else reads mikan.client.
+	in.Client = overrides(in.Client, ext.Client)
 	p := model.Proxy{Name: in.Name, Type: t.Type(), Server: in.Host, Port: in.Port}
-	if ext.Client.Server != "" {
-		p.Server = ext.Client.Server
+	if in.Client.Server != "" {
+		p.Server = in.Client.Server
 	}
-	if ext.Client.Port > 0 {
-		p.Port = ext.Client.Port
+	if in.Client.Port > 0 {
+		p.Port = in.Client.Port
 	}
 	if err := security(&p, t, ext, in); err != nil {
 		return model.Proxy{}, err
 	}
-	transport(&p, t, ext)
+	transport(&p, t, in)
 	if err := keys(&p, t, ext, in); err != nil {
 		return model.Proxy{}, err
 	}
 	return p, nil
 }
 
+// overrides is c with the empty fields taken from the template's own; a fingerprint of the
+// wrong shape counts as empty (fingerprint still guards the template's).
+func overrides(c, tpl proto.ClientOverrides) proto.ClientOverrides {
+	if c.Server == "" {
+		c.Server = tpl.Server
+	}
+	if c.Port <= 0 {
+		c.Port = tpl.Port
+	}
+	if c.SNI == "" {
+		c.SNI = tpl.SNI
+	}
+	if c.Host == "" {
+		c.Host = tpl.Host
+	}
+	if !proto.ValidFingerprint(c.Fingerprint) {
+		c.Fingerprint = tpl.Fingerprint
+	}
+	return c
+}
+
 // fingerprint: the inbound's own choice, then the panel's default. A malformed value saved
 // before the panel checked them falls through rather than reaching the apps.
-func fingerprint(ext proto.Ext, in Input) string {
-	for _, fp := range []string{ext.Client.Fingerprint, in.Fingerprint} {
+func fingerprint(in Input) string {
+	for _, fp := range []string{in.Client.Fingerprint, in.Fingerprint} {
 		if proto.ValidFingerprint(fp) {
 			return fp
 		}
@@ -74,25 +100,25 @@ func security(p *model.Proxy, t proto.Template, ext proto.Ext, in Input) error {
 		if err != nil {
 			return err
 		}
-		sni := ext.Client.SNI
+		sni := in.Client.SNI
 		if sni == "" {
 			sni = strs(r["server-names"])[0]
 		}
 		// A server that requires the post-quantum key exchange lets in only clients that
 		// offer it, and mihomo does only when told.
-		p.TLS = &model.TLS{SNI: sni, Fingerprint: fingerprint(ext, in),
+		p.TLS = &model.TLS{SNI: sni, Fingerprint: fingerprint(in),
 			Reality: &model.Reality{PublicKey: pbk, ShortID: strs(r["short-id"])[0], MLKEM: r["require-x25519mlkem768"] == true}}
 		return nil
 	}
 	if !t.NodeCert() {
 		return nil
 	}
-	tls := &model.TLS{SNI: ext.Client.SNI}
+	tls := &model.TLS{SNI: in.Client.SNI}
 	if tls.SNI == "" {
 		tls.SNI = in.SNI
 	}
 	if proto.UsesFingerprint(t) { // QUIC protocols have no uTLS
-		tls.Fingerprint = fingerprint(ext, in)
+		tls.Fingerprint = fingerprint(in)
 	}
 	// Through a CDN the apps see its certificate, never the node's.
 	if in.PinSHA256 != "" && ext.CDN == nil {
@@ -104,7 +130,7 @@ func security(p *model.Proxy, t proto.Template, ext proto.Ext, in Input) error {
 
 // transport is what VLESS and Trojan carry inside TLS. UDP goes over every one of them,
 // XHTTP too, to the Citrus server.
-func transport(p *model.Proxy, t proto.Template, ext proto.Ext) {
+func transport(p *model.Proxy, t proto.Template, in Input) {
 	if p.Type != "vless" && p.Type != "trojan" {
 		return
 	}
@@ -113,7 +139,7 @@ func transport(p *model.Proxy, t proto.Template, ext proto.Ext) {
 	case "xhttp":
 		x, _ := t["xhttp-config"].(map[string]any)
 		tr.Path, tr.Host = str(x["path"]), str(x["host"])
-		if h := ext.Client.Host; h != "" {
+		if h := in.Client.Host; h != "" {
 			tr.Host = h
 		}
 		settings, reuse := proto.XHTTPClient(t)
@@ -121,7 +147,7 @@ func transport(p *model.Proxy, t proto.Template, ext proto.Ext) {
 	case "grpc":
 		tr.Service = str(t["grpc-service-name"])
 	case "ws":
-		tr.Path, tr.Host = str(t["ws-path"]), ext.Client.Host
+		tr.Path, tr.Host = str(t["ws-path"]), in.Client.Host
 	}
 	p.Transport, p.UDP = tr, true
 }
@@ -179,7 +205,7 @@ func keys(p *model.Proxy, t proto.Template, ext proto.Ext, in Input) error {
 		p.Username, p.Password, p.UDP = s.Name, s.Secret, true
 	case "shadowquic":
 		up, _ := t["jls-upstream"].(map[string]any)
-		sni := ext.Client.SNI
+		sni := in.Client.SNI
 		if sni == "" {
 			sni = str(up["sni"])
 		}

@@ -138,12 +138,24 @@ func TestParseResolver(t *testing.T) {
 		"1.1.1.1:5353":                    {Scheme: "udp", Host: "1.1.1.1", Port: 5353},
 		"tls://dns.google":                {Scheme: "tls", Host: "dns.google"},
 		"system":                          {Scheme: "system"},
+		// A bare IPv6 address keeps its last group: as a URL it went to the port.
+		"2606:4700:4700::1111":             {Scheme: "udp", Host: "2606:4700:4700::1111"},
+		"[2606:4700:4700::1111]:53":        {Scheme: "udp", Host: "2606:4700:4700::1111", Port: 53},
+		"1.1.1.1:53":                       {Scheme: "udp", Host: "1.1.1.1", Port: 53},
+		"2606:4700:4700::1111#PROXY":       {Scheme: "udp", Host: "2606:4700:4700::1111", Via: "PROXY"},
+		"[2606:4700:4700::1111]":           {Scheme: "udp", Host: "2606:4700:4700::1111"},
+		"tls://[2606:4700:4700::1111]:853": {Scheme: "tls", Host: "2606:4700:4700::1111", Port: 853},
+		// An address keeps its spelling, with a port, in brackets or bare.
+		"2606:4700:4700:0:0:0:0:1111":      {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111"},
+		"[2606:4700:4700:0:0:0:0:1111]:53": {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111", Port: 53},
+		"[2606:4700:4700:0:0:0:0:1111]":    {Scheme: "udp", Host: "2606:4700:4700:0:0:0:0:1111"},
+		"[2606:4700:4700::AbCd]:53":        {Scheme: "udp", Host: "2606:4700:4700::AbCd", Port: 53},
 	} {
 		if got, ok := ParseResolver(in); !ok || got != want {
 			t.Errorf("%s: %+v %v", in, got, ok)
 		}
 	}
-	for _, bad := range []string{"dhcp://en0", "ftp://x", "https://", "1.1.1.1:99999"} {
+	for _, bad := range []string{"dhcp://en0", "ftp://x", "https://", "1.1.1.1:99999", "1.1.1.1:0", "[2606:4700:4700::1111]:0", "fe80::1%en0"} {
 		if _, ok := ParseResolver(bad); ok {
 			t.Errorf("%s read", bad)
 		}
