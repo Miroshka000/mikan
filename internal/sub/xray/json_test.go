@@ -3,10 +3,12 @@ package xray
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
 
+	"mikan/internal/sub/mihomo"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/profile"
 	"mikan/internal/sub/routing"
@@ -479,33 +481,44 @@ rules:
 			}
 		}
 	}
-	// The exits are copies, tagged chain<n>-hop<k>- plus the proxy's tag: the proxy's own
-	// outbound, which every config shares, keeps its streamSettings.
+	// As in Citrus, the exits' own outbounds dial through the entry, in the per-server configs
+	// too: the config of the US server goes out of it through the NL Vision one, which it
+	// carries. dialing leaves the outbound every config shares as it is.
 	const entryTag = "proxy-3" // 🇳🇱 VLESS Vision
+	for _, c := range cs {
+		if c.Remarks != "🇺🇸 VLESS XHTTP" {
+			continue
+		}
+		exit := c.outbound(t, c.last())
+		if exit["tag"] != "proxy-4" || get(exit, "streamSettings", "sockopt", "dialerProxy") != entryTag || get(c.outbound(t, entryTag), "streamSettings", "sockopt") != nil {
+			t.Errorf("the US server's own config goes out of %v", exit)
+		}
+	}
 	pl, err := planOf(p, model.GroupNames{}, routing.All, tpl)
 	if err != nil {
 		t.Fatal(err)
 	}
 	b := pl.balancing()
-	if !slices.Equal(b.Copies, []Copy{{"chain1-hop2-", "proxy-4", entryTag}, {"chain1-hop2-", "proxy-2", entryTag}}) {
-		t.Fatalf("copies: %v", b.Copies)
+	if want := map[string]string{"proxy-4": entryTag, "proxy-2": entryTag}; !maps.Equal(b.Dialers, want) {
+		t.Fatalf("dialers: %v, want %v", b.Dialers, want)
 	}
 	before, _ := json.Marshal(pl.outbounds[1].out)
-	cp := pl.copied(b.Copies[1])
+	d := dialing(pl.outbounds[1].out, entryTag)
 	if after, _ := json.Marshal(pl.outbounds[1].out); string(before) != string(after) || get(pl.outbounds[1].out, "streamSettings", "sockopt") != nil {
-		t.Errorf("copied changed the outbound:\n%s\n%s", before, after)
+		t.Errorf("dialing changed the outbound:\n%s\n%s", before, after)
 	}
-	if cp["tag"] != "chain1-hop2-proxy-2" || get(cp, "streamSettings", "sockopt", "dialerProxy") != entryTag || cp["protocol"] != pl.outbounds[1].out["protocol"] {
-		t.Errorf("the copy: %v", cp)
+	if d["tag"] != "proxy-2" || get(d, "streamSettings", "sockopt", "dialerProxy") != entryTag || d["protocol"] != pl.outbounds[1].out["protocol"] {
+		t.Errorf("the outbound dialing through the entry: %v", d)
 	}
 }
 
-// A chain's dialers stay inside it: the exit's own config and the balancers that select the
-// exit go straight to it, and a chain as a hop is entered by its first hop.
-func TestJSONChainStaysInChain(t *testing.T) {
+// A chain's dialers are the proxies' own, as in Citrus: the exit dials through the entry in
+// its own config and in the balancers that select it, and a chain as a hop is entered by its
+// first hop, which then dials through the hop before it everywhere too.
+func TestJSONChainDialsEverywhere(t *testing.T) {
 	const (
-		x, a, b = "🇳🇱 VLESS XHTTP", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP" // proxy-1, proxy-3, proxy-4
-		tx, ta  = "proxy-1", "proxy-3"
+		x, a, b    = "🇳🇱 VLESS XHTTP", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP" // proxy-1, proxy-3, proxy-4
+		tx, ta, tb = "proxy-1", "proxy-3", "proxy-4"
 	)
 	src := `mode: rule
 proxy-groups:
@@ -535,57 +548,39 @@ rules:
 	seen := map[string]bool{}
 	for _, c := range cs {
 		seen[c.Remarks] = true
-		// The proxies' outbounds dial through nothing, the copies are no proxies' to a selector.
+		// B through A through X, wherever they are: the outbounds are the proxies' own.
 		for _, o := range c.Outbounds {
-			tag := o["tag"].(string)
-			if strings.HasPrefix(tag, "proxy-") && get(o, "streamSettings", "sockopt") != nil {
-				t.Errorf("%s: %s dials through %v", c.Remarks, tag, dialer(o))
-			}
-			for _, x := range c.Routing.Balancers {
-				for _, s := range x.Selector {
-					if strings.HasPrefix(tag, s) && tag != s {
-						t.Errorf("%s: the balancer %s selects %s by %s", c.Remarks, x.Tag, tag, s)
-					}
-				}
+			want := map[string]string{tb: ta, ta: tx}[o["tag"].(string)]
+			if got := dialer(o); got != want {
+				t.Errorf("%s: %s dials through %q, want %q", c.Remarks, o["tag"], got, want)
 			}
 		}
-		if c.Observatory != nil {
-			for _, s := range c.Observatory.SubjectSelector {
-				if !strings.HasPrefix(s, "proxy-") {
-					t.Errorf("%s: the observatory tests %s", c.Remarks, s)
-				}
-			}
+		// Both chains go out of B, the longer one entered by X.
+		if to(c, "example.com") != tb || to(c, "example.org") != tb {
+			t.Errorf("%s: the chains go to %s and %s", c.Remarks, to(c, "example.com"), to(c, "example.org"))
 		}
-		// The chain goes out of B's copy through A.
-		exit := c.outbound(t, to(c, "example.com"))
-		if exit["tag"] != "chain1-hop2-proxy-4" || dialer(exit) != ta || dialer(c.outbound(t, ta)) != "" {
-			t.Errorf("%s: the chain goes to %v", c.Remarks, exit)
-		}
-		// The chain of it: B through A through X.
-		exit = c.outbound(t, to(c, "example.org"))
-		entry := c.outbound(t, dialer(exit))
-		if exit["tag"] != "chain2-hop3-proxy-4" || entry["tag"] != "chain2-hop2-proxy-3" || dialer(entry) != tx || dialer(c.outbound(t, tx)) != "" {
-			t.Errorf("%s: the long chain goes to %v through %v", c.Remarks, exit, entry)
-		}
+		c.outbound(t, ta)
+		c.outbound(t, tx)
 	}
 	if !seen["Авто"] || !seen[b] {
 		t.Fatalf("configs: %v", seen)
 	}
 }
 
-// A chain with DIRECT in the middle, a proxy twice and a chain after DIRECT that is declared
-// after it, end to end through xray: the proxy gets two copies, each dialing through its own
-// hop before. The per-chain hop counter itself is guarded by TestCascadeHopsPerChain: Balance
-// builds every hop before a cascade, so no profile reaches a chain made in the middle of one.
-func TestJSONChainHopsPerChain(t *testing.T) {
+// A proxy two chains need through different hops, of a template saved before the panel
+// refused it, keeps the first chain's, as model.Wire does, and the preview says so; past
+// DIRECT a hop dials through nothing.
+func TestJSONChainDialerTaken(t *testing.T) {
 	const a, b, c, d = "🇳🇱 VLESS XHTTP", "🇳🇱 Hysteria2", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP" // proxy-1 to proxy-4
 	src := `mode: rule
 proxy-groups:
   - {name: Прокси, type: select, proxies: [` + a + `, ` + b + `, ` + c + `, ` + d + `]}
-  - {name: Длинный, type: chain, proxies: [` + a + `, ` + b + `, ` + c + `, DIRECT, Короткий, ` + c + `]}
-  - {name: Короткий, type: chain, proxies: [` + d + `, ` + a + `]}
+  - {name: Первый, type: chain, proxies: [` + a + `, ` + c + `]}
+  - {name: Второй, type: chain, proxies: [` + b + `, ` + c + `]}
+  - {name: Прямо, type: chain, proxies: [DIRECT, ` + d + `]}
 rules:
-  - DOMAIN-SUFFIX,example.org,Длинный
+  - DOMAIN-SUFFIX,example.org,Второй
+  - DOMAIN-SUFFIX,example.net,Прямо
   - MATCH,Прокси
 `
 	p, tpl := profileOf(subtest.TwoNodes()), subtest.Clash(src)
@@ -593,31 +588,46 @@ rules:
 	if err != nil {
 		t.Fatal(err)
 	}
-	tags := map[string]bool{}
-	var through []string
-	for _, x := range pl.balancing().Copies {
-		if tags[x.Tag()] {
-			t.Errorf("two copies tagged %s", x.Tag())
-		}
-		tags[x.Tag()] = true
-		if x.Of == "proxy-3" {
-			through = append(through, x.Dialer)
-		}
+	if got := pl.balancing().Dialers; !maps.Equal(got, map[string]string{"proxy-3": "proxy-1"}) {
+		t.Fatalf("dialers: %v", got)
 	}
-	if !slices.Equal(through, []string{"chain2-hop2-proxy-2", "chain1-hop2-proxy-1"}) {
-		t.Fatalf("the copies of %s dial through %q", c, through)
+	var notes []string
+	for _, n := range Notes(p, model.GroupNames{}, routing.All, tpl) {
+		notes = append(notes, n.Subject+":"+n.Code)
+	}
+	if !slices.Contains(notes, "Второй:chain_dialer_taken") {
+		t.Fatalf("notes: %q", notes)
 	}
 	for _, cfg := range render(t, p, routing.All, tpl) {
-		var exit map[string]any
-		for _, r := range cfg.Routing.Rules {
-			if dom, _ := json.Marshal(r["domain"]); string(dom) == `["domain:example.org"]` {
-				exit = cfg.outbound(t, r["outboundTag"].(string))
+		for _, o := range cfg.Outbounds {
+			if dp := get(o, "streamSettings", "sockopt", "dialerProxy"); dp != nil && (o["tag"] != "proxy-3" || dp != "proxy-1") {
+				t.Errorf("%s: %s dials through %v", cfg.Remarks, o["tag"], dp)
 			}
 		}
-		d, _ := get(exit, "streamSettings", "sockopt", "dialerProxy").(string)
-		hop := cfg.outbound(t, d)
-		if hop["tag"] != "chain1-hop2-proxy-1" || get(hop, "streamSettings", "sockopt", "dialerProxy") != "proxy-4" {
-			t.Errorf("%s: the chain goes out of %v through %v", cfg.Remarks, exit["tag"], hop["tag"])
+	}
+}
+
+// The chains of each shape Citrus loads, as Citrus wires them: every server's own outbound
+// dials through the hop before it (a group's, its first server), of a chain as a hop its
+// first hop, of a group as a hop its members, and past DIRECT nothing. xray runs every
+// config.
+func TestJSONChainShapes(t *testing.T) {
+	// proxy-1 to proxy-4
+	src := subtest.Chains("🇳🇱 VLESS XHTTP", "🇳🇱 Hysteria2", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP")
+	p, tpl := profileOf(subtest.TwoNodes()), subtest.Clash(src)
+	if err := mihomo.CheckTemplate(p, src); err != nil {
+		t.Fatalf("the template is not saved: %v", err)
+	}
+	want := map[string]string{"proxy-2": "proxy-1", "proxy-1": "proxy-3", "proxy-4": "proxy-2"}
+	for _, c := range render(t, p, routing.All, tpl) {
+		for _, o := range c.Outbounds {
+			d, _ := get(o, "streamSettings", "sockopt", "dialerProxy").(string)
+			if tag := o["tag"].(string); d != want[tag] {
+				t.Errorf("%s: %s dials through %q, want %q", c.Remarks, tag, d, want[tag])
+			}
+			if d != "" {
+				c.outbound(t, d)
+			}
 		}
 	}
 }

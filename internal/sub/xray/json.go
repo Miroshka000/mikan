@@ -322,10 +322,6 @@ func (pl plan) balancing() Balancing {
 	for _, o := range pl.outbounds {
 		tag[o.name] = o.tag
 	}
-	// A copy is tagged by its outbound's tag, which no tag begins with.
-	for _, x := range b.Copies {
-		tag[x.Tag()] = x.Prefix + tag[x.Of]
-	}
 	retag := func(s string) string {
 		if t, ok := tag[s]; ok {
 			return t
@@ -348,9 +344,11 @@ func (pl plan) balancing() Balancing {
 			b.Refs[name] = Ref{Tag: retag(r.Tag)}
 		}
 	}
-	for i, x := range b.Copies {
-		b.Copies[i] = Copy{Prefix: x.Prefix, Of: retag(x.Of), Dialer: retag(x.Dialer)}
+	dialers := make(map[string]string, len(b.Dialers))
+	for p, d := range b.Dialers {
+		dialers[retag(p)] = retag(d)
 	}
+	b.Dialers = dialers
 	return b
 }
 
@@ -398,18 +396,13 @@ func (pl plan) config(name string, choice Ref, b Balancing) map[string]any {
 	if !choice.Balancer {
 		for _, o := range pl.outbounds {
 			if o.tag == choice.Tag {
-				outbounds = append(outbounds, o.out)
+				outbounds = append(outbounds, dialing(o.out, b.Dialers[o.tag]))
 			}
 		}
 	}
 	for _, o := range pl.outbounds {
 		if used[o.tag] && o.tag != choice.Tag {
-			outbounds = append(outbounds, o.out)
-		}
-	}
-	for _, x := range b.Copies {
-		if used[x.Tag()] {
-			outbounds = append(outbounds, pl.copied(x))
+			outbounds = append(outbounds, dialing(o.out, b.Dialers[o.tag]))
 		}
 	}
 	outbounds = append(outbounds,
@@ -465,7 +458,7 @@ func once(rules []map[string]any) []map[string]any {
 }
 
 // uses are the outbounds the rules send to, the ones of the balancers they name, the ones
-// the chains' copies among them dial through, and the balancers in the order Balance made
+// the chains' proxies among them dial through, and the balancers in the order Balance made
 // them.
 func uses(rules []map[string]any, b Balancing) (map[string]bool, []Balancer) {
 	used, named := map[string]bool{}, map[string]bool{}
@@ -486,35 +479,38 @@ func uses(rules []map[string]any, b Balancing) (map[string]bool, []Balancer) {
 			}
 		}
 	}
-	dialer := make(map[string]string, len(b.Copies))
-	for _, x := range b.Copies {
-		dialer[x.Tag()] = x.Dialer
-	}
 	for t := range used {
-		for d := dialer[t]; d != "" && !used[d]; d = dialer[d] {
+		for d := b.Dialers[t]; d != "" && !used[d]; d = b.Dialers[d] {
 			used[d] = true
 		}
 	}
 	return used, balancers
 }
 
-// copied is the outbound of the copy x: its proxy's, tagged its own, dialing through the hop
-// before it in a chain.
-func (pl plan) copied(x Copy) map[string]any {
-	i := slices.IndexFunc(pl.outbounds, func(o tagged) bool { return o.tag == x.Of })
-	o := pl.outbounds[i].out
+// dialing is the outbound o dialing through the outbound dialer, of the hop before it in a
+// chain: a copy, as every config shares o; o itself for no dialer.
+func dialing(o map[string]any, dialer string) map[string]any {
+	if dialer == "" {
+		return o
+	}
 	out := make(map[string]any, len(o))
 	for k, v := range o {
 		out[k] = v
 	}
-	out["tag"] = x.Tag()
 	ss := map[string]any{}
 	if old, ok := o["streamSettings"].(map[string]any); ok {
 		for k, v := range old {
 			ss[k] = v
 		}
 	}
-	ss["sockopt"] = map[string]any{"dialerProxy": x.Dialer}
+	sock := map[string]any{}
+	if old, ok := ss["sockopt"].(map[string]any); ok {
+		for k, v := range old {
+			sock[k] = v
+		}
+	}
+	sock["dialerProxy"] = dialer
+	ss["sockopt"] = sock
 	out["streamSettings"] = ss
 	return out
 }

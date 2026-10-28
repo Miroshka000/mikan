@@ -263,7 +263,8 @@ var policies = []string{"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE"}
 //
 // A group of a type the core does not know (relay, url_test, a fork's smart) is refused
 // here, on saving, and not with each profile: a template saved before keeps being served,
-// and the app's core tells of the group itself.
+// and the app's core tells of the group itself. So is a chain Citrus refuses on loading
+// (checkChains).
 func CheckTemplate(p profile.Profile, src string) error {
 	cfg, err := parseProfileTemplate(src)
 	if err != nil {
@@ -272,8 +273,11 @@ func CheckTemplate(p profile.Profile, src string) error {
 	if err := checkGroupTypes(cfg); err != nil {
 		return err
 	}
-	_, _, err = filledConfig(cfg, p)
-	return err
+	filled, _, err := filledConfig(cfg, p)
+	if err != nil {
+		return err
+	}
+	return checkChains(filled)
 }
 
 // checkGroupTypes refuses a group of a type the core does not know. A group that is not

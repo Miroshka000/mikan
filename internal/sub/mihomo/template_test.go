@@ -168,7 +168,7 @@ func TestCheckTemplate(t *testing.T) {
 	if err := CheckTemplate(profile.Profile{}, "proxy-groups:\n  - {name: R, type: relay, proxies: [DIRECT]}\n"); !errors.As(err, &te) || te.Code != "template_group_type" || te.Detail != "R" {
 		t.Fatalf("no proxies, a relay group: %v, want template_group_type of R", err)
 	}
-	chain := "proxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT]}\n  - {name: S, type: select, proxies: [C]}\nrules:\n  - MATCH,S\n"
+	chain := "proxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT], include-all-proxies: true}\n  - {name: S, type: select, proxies: [C]}\nrules:\n  - MATCH,S\n"
 	if err := CheckTemplate(prof, chain); err != nil {
 		t.Fatalf("a chain: %v", err)
 	}
