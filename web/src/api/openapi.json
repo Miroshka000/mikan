@@ -1334,6 +1334,58 @@
         ],
         "type": "object"
       },
+      "BulkFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "folder": {
+            "default": "all",
+            "description": "all — любая; none — вне папок; число — id папки",
+            "maxLength": 20,
+            "type": "string"
+          },
+          "hidden": {
+            "default": "show",
+            "description": "Как у списка: по умолчанию вместе со скрытыми",
+            "enum": [
+              "hide",
+              "show",
+              "only"
+            ],
+            "type": "string"
+          },
+          "q": {
+            "description": "Оператору поддержки без показа подписчиков закрыт: 403 support_denied",
+            "maxLength": 100,
+            "type": "string"
+          },
+          "source": {
+            "default": "all",
+            "enum": [
+              "all",
+              "admin",
+              "bot",
+              "trial",
+              "free",
+              "import"
+            ],
+            "type": "string"
+          },
+          "state": {
+            "default": "all",
+            "enum": [
+              "all",
+              "active",
+              "expiring",
+              "limited",
+              "expired",
+              "disabled",
+              "attention"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "BulkInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -1358,6 +1410,15 @@
             "minimum": 0,
             "type": "integer"
           },
+          "expect": {
+            "description": "Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его значение не проверяет",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/BulkFilter",
+            "description": "Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter"
+          },
           "folder_id": {
             "description": "Для move: папка; 0 или не задано — убрать из папок",
             "format": "int64",
@@ -1365,17 +1426,16 @@
             "type": "integer"
           },
           "ids": {
+            "description": "Пользователи по id; задаётся либо ids, либо filter",
             "items": {
               "format": "int64",
               "type": "integer"
             },
             "maxItems": 1000,
-            "minItems": 1,
             "type": "array"
           }
         },
         "required": [
-          "ids",
           "action"
         ],
         "type": "object"
@@ -1404,6 +1464,10 @@
             "description": "Скольких действие изменит",
             "format": "int64",
             "type": "integer"
+          },
+          "digest": {
+            "description": "Только с filter: SHA-256 (hex) списка id подходящих пользователей по возрастанию через запятую; его передают в действие как expect",
+            "type": "string"
           },
           "found": {
             "description": "Сколько из них есть: к ним действие и применится (affected)",

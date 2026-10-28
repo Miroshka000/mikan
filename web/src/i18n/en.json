@@ -354,6 +354,11 @@
       "node_in_use_telegram": "the bot's route to Telegram (the Telegram tab)",
       "bad_color": "That colour is not in the palette",
       "bad_folder": "The folder in the filter is not valid",
+      "ids_or_filter": "Name the clients or a filter, one of the two",
+      "filter_changed": "The clients matching the filter changed since they were counted: count again",
+      "expect_required": "An action by filter needs the preview's digest: preview it first",
+      "expect_with_ids": "The digest goes with a filter, not with chosen clients",
+      "too_many_users": "More than {value} clients match the filter: narrow it",
       "folder_limit": "There are too many folders already: delete the ones you do not use",
       "folder_name_taken": "A folder with this name already exists",
       "folder_not_found": "There is no such folder: reload the page",
@@ -874,6 +879,10 @@
     "loadingList": "Loading the list",
     "bulkLabel": "Actions with selected",
     "selected": "Selected {n}",
+    "allMatching": "All {n} matching",
+    "pageChosen": "{n, plural, one {The # client on the page is selected.} other {All # clients on the page are selected.}}",
+    "chooseAllMatching": "{n, plural, one {Select the # client matching the filter} other {Select all # clients matching the filter}}",
+    "allMatchingChosen": "{n, plural, one {The # client matching the filter is selected, loaded or not.} other {All # clients matching the filter are selected, loaded or not.}}",
     "resetTraffic": "Reset traffic",
     "extendPeriod": "+1 month",
     "extendPeriodHint": "To the next billing day where one is set, otherwise by 30 days",
@@ -889,20 +898,32 @@
       "title": {
         "extend": "{n, plural, one {Extend # client?} other {Extend # clients?}}",
         "reset": "{n, plural, one {Reset the traffic of # client?} other {Reset the traffic of # clients?}}",
-        "disable": "{n, plural, one {Disable # client?} other {Disable # clients?}}"
+        "disable": "{n, plural, one {Disable # client?} other {Disable # clients?}}",
+        "hide": "{n, plural, one {Hide # client from the list?} other {Hide # clients from the list?}}",
+        "unhide": "{n, plural, one {Bring # client back to the list?} other {Bring # clients back to the list?}}",
+        "move": "{n, plural, one {Move # client?} other {Move # clients?}}"
       },
       "text": {
         "extend": "Each by one period from their end date: to the next billing day, 30 days without one. Disabled clients are turned on.",
         "reset": "What was used in the period is zeroed and the period starts anew. Traffic packages that last for the period burn.",
-        "disable": "Their subscriptions stop working until they are turned on. Term and traffic are kept."
+        "disable": "Their subscriptions stop working until they are turned on. Term and traffic are kept.",
+        "hide": "They leave the list; their subscriptions keep working.",
+        "unhide": "They are shown in the list again.",
+        "move": "Their folder changes; their subscriptions do not."
       },
       "confirm": {
         "extend": "Extend",
         "reset": "Reset",
-        "disable": "Disable"
+        "disable": "Disable",
+        "hide": "Hide",
+        "unhide": "Bring back",
+        "move": "Move"
       },
       "nothing": "Nothing to change: all of the selected are that way already.",
       "alreadyOff": "Already disabled: {n}.",
+      "unchanged": "Already that way: {n}.",
+      "matching": "Everyone matching the filter right now: {n}, not only those loaded on the page.",
+      "typeCount": "To confirm, type the number of clients: {n}",
       "missing": "Already deleted: {n}.",
       "active": "{n, plural, one {# still works} other {# still work}}: connections will drop.",
       "withBalance": "With money on the linked account's balance: {n}. The balance stays with the account.",
