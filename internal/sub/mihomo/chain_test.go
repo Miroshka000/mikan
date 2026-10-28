@@ -20,6 +20,9 @@ const chainProxies = `proxies:
   - {name: other, type: socks5, server: 127.0.0.1, port: 1085}
 `
 
+// chainProvider is an inline provider of one proxy.
+const chainProvider = "proxy-providers:\n  subs: {type: inline, payload: [{name: sub-1, type: ss, server: 127.0.0.1, port: 1090, cipher: aes-128-gcm, password: pass}]}\n"
+
 // coreRefuses is the error of the core's parser on the profile, nil when it loads it.
 func coreRefuses(t *testing.T, raw []byte) error {
 	t.Helper()
@@ -41,11 +44,12 @@ func TestCheckTemplateChainsCitrusLoads(t *testing.T) {
 		"nested": "  - {name: tail, type: chain, proxies: [mid, exit-a]}\n  - {name: C, type: chain, proxies: [entry, tail]}",
 		"group hops": "  - {name: entries, type: fallback, proxies: [entry, other]}\n  - {name: exits, type: url-test, proxies: [exit-a, exit-b]}\n" +
 			"  - {name: C, type: chain, proxies: [entries, exits]}",
-		"direct first": `  - {name: C, type: chain, proxies: [DIRECT, exit-a]}`,
-		"same twice":   "  - {name: C, type: chain, proxies: [entry, exit-a]}\n  - {name: D, type: chain, proxies: [entry, exit-a]}",
-		"the user's":   "  - {name: mine, type: select, include-all-proxies: true}\n  - {name: C, type: chain, proxies: [entry, mine]}",
+		"direct first":              `  - {name: C, type: chain, proxies: [DIRECT, exit-a]}`,
+		"same twice":                "  - {name: C, type: chain, proxies: [entry, exit-a]}\n  - {name: D, type: chain, proxies: [entry, exit-a]}",
+		"the user's":                "  - {name: mine, type: select, include-all-proxies: true}\n  - {name: C, type: chain, proxies: [entry, mine]}",
+		"a group hop of a provider": "  - {name: exits, type: url-test, use: [subs], proxies: [exit-a]}\n  - {name: C, type: chain, proxies: [entry, exits]}",
 	} {
-		src := chainProxies + "proxy-groups:\n" + groups + "\nrules:\n  - MATCH,C\n"
+		src := chainProxies + chainProvider + "proxy-groups:\n" + groups + "\nrules:\n  - MATCH,C\n"
 		if err := CheckTemplate(prof, src); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -61,9 +65,14 @@ func TestCheckTemplateChainsCitrusLoads(t *testing.T) {
 
 // What Citrus refuses on loading is refused on saving, with a code of its own; Citrus does
 // refuse each of these profiles, which a template saved before still renders as they are.
+// A chain that asks for its hops is refused as written, though the panel's fill may leave
+// Citrus a chain it loads (filled).
 func TestCheckTemplateChainsCitrusRefuses(t *testing.T) {
 	prof := profileOf(subtest.Defaults(""))
-	for name, tc := range map[string]struct{ extra, groups, code, detail string }{
+	for name, tc := range map[string]struct {
+		extra, groups, code, detail string
+		filled                      bool
+	}{
 		"one hop":  {groups: `  - {name: C, type: chain, proxies: [entry]}`, code: "template_chain_hops", detail: "C"},
 		"self":     {groups: `  - {name: C, type: chain, proxies: [entry, C]}`, code: "template_chain_hops", detail: "C"},
 		"twice":    {groups: `  - {name: C, type: chain, proxies: [entry, mid, entry]}`, code: "template_chain_hops", detail: "C"},
@@ -88,6 +97,11 @@ func TestCheckTemplateChainsCitrusRefuses(t *testing.T) {
 			code: "template_chain_dialer", detail: "C2 → exit-a"},
 		"own dialer-proxy": {extra: "  - {name: pinned, type: ss, server: 127.0.0.1, port: 1086, cipher: aes-128-gcm, password: pass, dialer-proxy: other}\n",
 			groups: `  - {name: C, type: chain, proxies: [entry, pinned]}`, code: "template_chain_dialer", detail: "C → pinned"},
+		"provider's dialer-proxy": {extra: "proxy-providers:\n  subs: {type: inline, dialer-proxy: other, payload: [{name: sub-1, type: ss, server: 127.0.0.1, port: 1090, cipher: aes-128-gcm, password: pass}]}\n",
+			groups: "  - {name: exits, type: url-test, use: [subs]}\n  - {name: C, type: chain, proxies: [entry, exits]}", code: "template_chain_dialer", detail: "C → subs"},
+		"include-all chain": {extra: chainProvider, groups: `  - {name: C, type: chain, proxies: [entry, mid], include-all: true}`, code: "template_chain_keys", detail: "C"},
+		"filter chain":      {groups: `  - {name: C, type: chain, proxies: [entry, mid], filter: "^e"}`, code: "template_chain_keys", detail: "C"},
+		"mikan chain":       {groups: `  - {name: C, type: chain, proxies: [entry], mikan: {types: [vless]}}`, code: "template_chain_keys", detail: "C", filled: true},
 		"provider's override": {extra: "proxy-providers:\n  subs: {type: inline, override: {dialer-proxy: other}, payload: [{name: sub-1, type: ss, server: 127.0.0.1, port: 1090, cipher: aes-128-gcm, password: pass}]}\n",
 			groups: "  - {name: exits, type: url-test, use: [subs]}\n  - {name: C, type: chain, proxies: [entry, exits]}", code: "template_chain_dialer", detail: "C → subs"},
 		"loop through a group": {groups: "  - {name: g, type: select, proxies: [C, other]}\n  - {name: C, type: chain, proxies: [g, exit-a]}",
@@ -112,8 +126,8 @@ func TestCheckTemplateChainsCitrusRefuses(t *testing.T) {
 		if n := strings.Count(string(raw), "dialer-proxy"); n != strings.Count(tc.extra, "dialer-proxy") {
 			t.Errorf("%s: the profile has %d dialer-proxy:\n%s", name, n, raw)
 		}
-		if err := coreRefuses(t, raw); err == nil {
-			t.Errorf("%s: Citrus loads it", name)
+		if err := coreRefuses(t, raw); (err == nil) != tc.filled {
+			t.Errorf("%s: Citrus: %v", name, err)
 		}
 	}
 }

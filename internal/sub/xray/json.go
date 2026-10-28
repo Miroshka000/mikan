@@ -70,7 +70,7 @@ func Notes(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 
 // Dropped are what xray leaves out of p's profile as Render makes it, for the admin panel's
 // preview: the proxies it cannot carry (proxy_unsupported), the conditions it has no form of
-// (rule_unsupported), the lists it has no categories for (list_unsupported), the categories
+// or that go to a group it has none of (rule_unsupported), the lists it has no categories for (list_unsupported), the categories
 // the usual geodata lacks (category_missing, routing.Common) and the DNS policies of no name
 // it can read (dns_policy_unsupported). A policy's key that loses only some of its names is
 // not told. An own xray template is as the admin wrote it: none.
@@ -90,6 +90,15 @@ func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Temp
 		return out
 	}
 	out = append(out, pl.dropped...)
+	// A rule to a group xray has none of goes, as in sing-box (a chain through REJECT).
+	refs := Balance(pl.groups, pl.names(), pl.servers).Refs
+	for _, r := range pl.rules {
+		if _, ok := refs[r.to.Group]; r.to.Kind == routing.ToGroup && !ok && !pl.choice[r.to.Group] {
+			if n := note(routing.Rule{When: r.when}.Clash(r.to.Group), "rule_unsupported"); !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+	}
 	for _, x := range pl.dns.Policy {
 		if len(policyDomains(x.Match, routing.Common)) == 0 {
 			out = append(out, note(x.Match, "dns_policy_unsupported"))
@@ -152,6 +161,7 @@ type tagged struct {
 type rule struct {
 	fields []map[string]any
 	to     routing.Target
+	when   []routing.Match // the conditions, for the preview
 }
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
@@ -286,7 +296,7 @@ func (pl *plan) add(when []routing.Match, t routing.Target) {
 		pl.drop(when)
 		return
 	}
-	pl.rules = append(pl.rules, rule{fields: f, to: t})
+	pl.rules = append(pl.rules, rule{fields: f, to: t, when: when})
 	pl.resolve = pl.resolve || resolves(when, routing.Common)
 }
 

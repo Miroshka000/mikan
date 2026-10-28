@@ -569,7 +569,7 @@ rules:
 
 // A proxy two chains need through different hops, of a template saved before the panel
 // refused it, keeps the first chain's, as model.Wire does, and the preview says so; past
-// DIRECT a hop dials through nothing.
+// DIRECT a hop dials through nothing, and a chain through REJECT goes.
 func TestJSONChainDialerTaken(t *testing.T) {
 	const a, b, c, d = "🇳🇱 VLESS XHTTP", "🇳🇱 Hysteria2", "🇳🇱 VLESS Vision", "🇺🇸 VLESS XHTTP" // proxy-1 to proxy-4
 	src := `mode: rule
@@ -578,9 +578,11 @@ proxy-groups:
   - {name: Первый, type: chain, proxies: [` + a + `, ` + c + `]}
   - {name: Второй, type: chain, proxies: [` + b + `, ` + c + `]}
   - {name: Прямо, type: chain, proxies: [DIRECT, ` + d + `]}
+  - {name: Закрыто, type: chain, proxies: [REJECT, ` + b + `]}
 rules:
   - DOMAIN-SUFFIX,example.org,Второй
   - DOMAIN-SUFFIX,example.net,Прямо
+  - DOMAIN-SUFFIX,example.io,Закрыто
   - MATCH,Прокси
 `
 	p, tpl := profileOf(subtest.TwoNodes()), subtest.Clash(src)
@@ -598,7 +600,24 @@ rules:
 	if !slices.Contains(notes, "Второй:chain_dialer_taken") {
 		t.Fatalf("notes: %q", notes)
 	}
+	// A chain through REJECT goes, as in sing-box, and so does the rule to it, which the
+	// preview tells: its hop past REJECT goes nowhere instead of direct.
+	if _, ok := pl.balancing().Refs["Закрыто"]; ok {
+		t.Fatal("a chain through REJECT is kept")
+	}
+	var dropped []string
+	for _, n := range Dropped(p, model.GroupNames{}, routing.All, tpl) {
+		dropped = append(dropped, n.Subject+":"+n.Code)
+	}
+	if !slices.Contains(dropped, "DOMAIN-SUFFIX,example.io,Закрыто:rule_unsupported") {
+		t.Fatalf("dropped: %q", dropped)
+	}
 	for _, cfg := range render(t, p, routing.All, tpl) {
+		for _, r := range cfg.Routing.Rules {
+			if dom, _ := json.Marshal(r["domain"]); string(dom) == `["domain:example.io"]` {
+				t.Errorf("%s: the rule to the chain through REJECT goes to %v", cfg.Remarks, r)
+			}
+		}
 		for _, o := range cfg.Outbounds {
 			if dp := get(o, "streamSettings", "sockopt", "dialerProxy"); dp != nil && (o["tag"] != "proxy-3" || dp != "proxy-1") {
 				t.Errorf("%s: %s dials through %v", cfg.Remarks, o["tag"], dp)

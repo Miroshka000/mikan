@@ -16,7 +16,8 @@ import (
 //   - a chain of fewer than two hops, a hop twice, the chain as its own hop
 //     (template_chain_hops);
 //   - a chain that takes hops other than from proxies: use, include-all, filter and the
-//     like (template_chain_keys);
+//     like (template_chain_keys; checkChainKeys refuses them, and the panel's mikan ask, in
+//     the template as written, since the panel fills or drops some of them);
 //   - DIRECT, REJECT and the other built-ins past the first hop, or in a group past the
 //     first hop (template_chain_builtin);
 //   - a group with include-all past the first hop (template_chain_group), and one that
@@ -66,10 +67,8 @@ func checkChains(cfg map[string]any) error {
 		if len(hops) < 2 {
 			return templateErr("template_chain_hops", name)
 		}
-		for _, k := range []string{"use", "include-all", "include-all-proxies", "include-all-providers", "filter", "exclude-filter", "exclude-type"} {
-			if _, ok := c[k]; ok {
-				return templateErr("template_chain_keys", name)
-			}
+		if err := askedHops(c); err != nil {
+			return err
 		}
 		seen := map[string]bool{}
 		for _, hop := range hops {
@@ -96,6 +95,31 @@ func checkChains(cfg map[string]any) error {
 	for _, c := range chains {
 		if err := cg.loop(str(c["name"])); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// checkChainKeys refuses a chain of the template as written that asks for its hops: Citrus
+// takes them from proxies only, and the panel's fill (include-all-proxies, mikan, a filter
+// it drops) would make a chain of whatever proxies a user has, of one hop for some.
+func checkChainKeys(cfg map[string]any) error {
+	groups, _ := cfg["proxy-groups"].([]any)
+	for _, x := range groups {
+		if m, ok := x.(map[string]any); ok && str(m["type"]) == string(model.Chain) {
+			if err := askedHops(m); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// askedHops refuses the chain c when it asks for hops other than by proxies.
+func askedHops(c map[string]any) error {
+	for _, k := range []string{"use", "include-all", "include-all-proxies", "include-all-providers", "filter", "exclude-filter", "exclude-type", "mikan"} {
+		if _, ok := c[k]; ok {
+			return templateErr("template_chain_keys", str(c["name"]))
 		}
 	}
 	return nil

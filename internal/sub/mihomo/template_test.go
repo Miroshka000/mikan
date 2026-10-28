@@ -168,9 +168,17 @@ func TestCheckTemplate(t *testing.T) {
 	if err := CheckTemplate(profile.Profile{}, "proxy-groups:\n  - {name: R, type: relay, proxies: [DIRECT]}\n"); !errors.As(err, &te) || te.Code != "template_group_type" || te.Detail != "R" {
 		t.Fatalf("no proxies, a relay group: %v, want template_group_type of R", err)
 	}
-	chain := "proxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT], include-all-proxies: true}\n  - {name: S, type: select, proxies: [C]}\nrules:\n  - MATCH,S\n"
+	chain := "proxies:\n  - {name: own, type: socks5, server: 127.0.0.1, port: 1081}\nproxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT, own]}\n  - {name: S, type: select, proxies: [C]}\nrules:\n  - MATCH,S\n"
 	if err := CheckTemplate(prof, chain); err != nil {
 		t.Fatalf("a chain: %v", err)
+	}
+	// A chain lists its hops: one that asks for the user's proxies is refused, as written,
+	// with no proxies to fill it too.
+	asks := "proxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT], include-all-proxies: true}\n"
+	for _, p := range []profile.Profile{prof, {}} {
+		if err := CheckTemplate(p, asks); !errors.As(err, &te) || te.Code != "template_chain_keys" || te.Detail != "C" {
+			t.Fatalf("a chain that asks for its hops: %v, want template_chain_keys of C", err)
+		}
 	}
 }
 

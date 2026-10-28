@@ -273,6 +273,9 @@ func CheckTemplate(p profile.Profile, src string) error {
 	if err := checkGroupTypes(cfg); err != nil {
 		return err
 	}
+	if err := checkChainKeys(cfg); err != nil {
+		return err
+	}
 	filled, _, err := filledConfig(cfg, p)
 	if err != nil {
 		return err

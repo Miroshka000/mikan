@@ -266,8 +266,8 @@ func (c *converter) chain(g model.Group) (Ref, bool) {
 	var r Ref
 	for i, m := range g.Members {
 		var ok bool
-		if r, ok = c.ref(m); !ok {
-			return Ref{}, false // a hop xray lacks breaks the chain, as in Citrus
+		if r, ok = c.ref(m); !ok || strings.HasPrefix(m, "REJECT") {
+			return Ref{}, false // a hop xray lacks breaks the chain, as in Citrus; REJECT, as in sing-box
 		}
 		if r.Balancer && i < len(g.Members)-1 {
 			c.note(g, "chain_group_hop")
