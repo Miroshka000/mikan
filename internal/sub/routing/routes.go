@@ -113,6 +113,9 @@ func (m Match) Rule(target string) string {
 // Provider is a rule list the app downloads (a rule-provider), matched by RULE-SET.
 type Provider struct {
 	Name, Behavior, Format, URL string
+	// Interval is the seconds between downloads the profile asks for (a rule-provider's
+	// interval); zero: the renderer's own.
+	Interval int
 	// Since is the core the list needs (a rule type or format of its own); zero: any.
 	Since apps.Version
 }

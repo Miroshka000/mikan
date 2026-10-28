@@ -1,12 +1,16 @@
 package singbox
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"sync"
 	"testing"
 	"time"
+
+	"mikan/internal/sub/routing"
 )
 
 // A Clash rule list is YAML with a payload or a line per entry, comments and blank lines
@@ -106,7 +110,7 @@ func TestCachedList(t *testing.T) {
 	src, age := cachedSrc(t, l)
 	get := func(want string, fetches int) {
 		t.Helper()
-		got, err := cachedList(t.Context(), src)
+		got, err := cachedList(t.Context(), src, listTTL)
 		if err != nil || !slices.Equal(got, []string{want}) || l.count() != fetches {
 			t.Fatalf("got %q %v after %d fetches, want %q after %d", got, err, l.count(), want, fetches)
 		}
@@ -153,7 +157,7 @@ func TestCachedListFailureAfterFetch(t *testing.T) {
 		listCache.Unlock()
 	})
 
-	got, err := cachedList(t.Context(), src)
+	got, err := cachedList(t.Context(), src, listTTL)
 	listCache.Lock()
 	e := listCache.m[src]
 	listCache.Unlock()
@@ -168,13 +172,106 @@ func TestCachedListFailure(t *testing.T) {
 	src, age := cachedSrc(t, l)
 
 	for range 2 {
-		if got, err := cachedList(t.Context(), src); err == nil || l.count() != 1 {
+		if got, err := cachedList(t.Context(), src, listTTL); err == nil || l.count() != 1 {
 			t.Fatalf("got %q %v after %d fetches, want an error after 1", got, err, l.count())
 		}
 	}
 	l.set(http.StatusOK, "payload:\n  - ya.ru\n")
 	age(5 * time.Minute)
-	if got, err := cachedList(t.Context(), src); err != nil || !slices.Equal(got, []string{"ya.ru"}) || l.count() != 2 {
+	if got, err := cachedList(t.Context(), src, listTTL); err != nil || !slices.Equal(got, []string{"ya.ru"}) || l.count() != 2 {
 		t.Fatalf("got %q %v after %d fetches, want [ya.ru] after 2", got, err, l.count())
 	}
+}
+
+// A list lives as long as its rule-provider's interval, within an hour and a week, and a
+// day when it gives none; of providers of one address the shortest wins, and the others'
+// addresses do not count.
+func TestListTTLOf(t *testing.T) {
+	const src, other = "https://example.com/ru.yaml", "https://example.com/other.yaml"
+	for _, c := range []struct {
+		name      string
+		intervals []int // of the providers at src
+		want      time.Duration
+	}{
+		{"none", nil, listTTL},
+		{"unset", []int{0}, listTTL},
+		{"interval", []int{6 * 3600}, 6 * time.Hour},
+		{"below an hour", []int{60}, time.Hour},
+		{"above a week", []int{30 * 86400}, 7 * 24 * time.Hour},
+		{"negative", []int{-1}, listTTL},
+		{"shared, one unset", []int{0, 2 * 86400}, listTTL},
+		{"shared", []int{12 * 3600, 2 * 3600}, 2 * time.Hour},
+		{"shared, clamped", []int{60, 3 * 3600}, time.Hour},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			lists := map[string]routing.Provider{"other": {Name: "other", URL: other, Interval: 60}}
+			for i, n := range c.intervals {
+				name := fmt.Sprint("ru", i)
+				lists[name] = routing.Provider{Name: name, URL: src, Interval: n}
+			}
+			if got := listTTLOf(lists, src); got != c.want {
+				t.Fatalf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// The renderer asks for a list with the TTL of every provider of its address.
+func TestListAsksTTL(t *testing.T) {
+	var got []time.Duration
+	old := singboxList
+	singboxList = func(_ context.Context, _ string, ttl time.Duration) ([]string, error) {
+		got = append(got, ttl)
+		return []string{"ya.ru"}, nil
+	}
+	t.Cleanup(func() { singboxList = old })
+	const src = "https://example.com/ru.yaml"
+	s := &ruleSets{ctx: t.Context(), used: map[string]map[string]any{}, lists: map[string]routing.Provider{
+		"ru":   {Name: "ru", Behavior: "domain", URL: src, Interval: 3 * 3600},
+		"ru-2": {Name: "ru-2", Behavior: "domain", URL: src, Interval: 86400},
+		"day":  {Name: "day", Behavior: "domain", URL: "https://example.com/day.yaml"},
+	}}
+	for _, name := range []string{"ru-2", "day"} {
+		if _, ok := s.list(name); !ok {
+			t.Fatalf("%s: no rule set", name)
+		}
+	}
+	if want := []time.Duration{3 * time.Hour, listTTL}; !slices.Equal(got, want) {
+		t.Fatalf("TTLs %v, want %v", got, want)
+	}
+}
+
+// A list fetched with the TTL of its interval is fetched again when that runs out, not a
+// day later, and one of a week lives past a day; a failure is still tried again five
+// minutes later.
+func TestCachedListTTL(t *testing.T) {
+	l := &listServer{status: http.StatusOK, body: "payload:\n  - ya.ru\n"}
+	src, age := cachedSrc(t, l)
+	get := func(ttl time.Duration, want string, fetches int) {
+		t.Helper()
+		got, err := cachedList(t.Context(), src, ttl)
+		if err != nil || !slices.Equal(got, []string{want}) || l.count() != fetches {
+			t.Fatalf("got %q %v after %d fetches, want %q after %d", got, err, l.count(), want, fetches)
+		}
+	}
+
+	get(2*time.Hour, "ya.ru", 1)
+	l.set(http.StatusOK, "payload:\n  - vk.com\n")
+	age(time.Hour + 59*time.Minute)
+	get(2*time.Hour, "ya.ru", 1) // within its two hours: from the cache
+	age(time.Minute)
+	get(2*time.Hour, "vk.com", 2) // two hours old: fetched again
+
+	week := 7 * 24 * time.Hour
+	l.set(http.StatusOK, "payload:\n  - ok.ru\n")
+	age(6 * 24 * time.Hour)
+	get(week, "vk.com", 2) // six days old: a list of a week stays
+	age(24 * time.Hour)
+	get(week, "ok.ru", 3)
+
+	l.set(http.StatusBadGateway, "")
+	age(week)
+	get(week, "ok.ru", 4) // the fetch failed: the last payload stays
+	age(5 * time.Minute)
+	get(week, "ok.ru", 5) // and is tried again five minutes later, not a week
 }

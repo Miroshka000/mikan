@@ -76,7 +76,7 @@ func (s *ruleSets) list(name string) (string, bool) {
 	if s.preview {
 		return tag, true
 	}
-	payload, err := singboxList(s.ctx, p.URL)
+	payload, err := singboxList(s.ctx, p.URL, listTTLOf(s.lists, p.URL))
 	if err != nil {
 		return "", false
 	}
@@ -165,21 +165,47 @@ func anys(l []string) []any {
 	return out
 }
 
-// singboxList is the payload of a Clash rule list. A list is fetched again a day later: the
+// singboxList is the payload of a Clash rule list, fetched again ttl later (listTTLOf): the
 // panel's lists are pinned to a commit, but an own profile's list may follow a branch. A
 // failure is tried again a few minutes later, and meanwhile the payload fetched last stays.
 var singboxList = cachedList
 
 const (
-	listTTL   = 24 * time.Hour
-	listRetry = 5 * time.Minute
+	listTTL    = 24 * time.Hour // a list of no interval
+	listMinTTL = time.Hour
+	listMaxTTL = 7 * 24 * time.Hour
+	listRetry  = 5 * time.Minute
 )
 
-func cachedList(ctx context.Context, src string) ([]string, error) {
+// listTTLOf is how long the list at src lives: the interval its rule-provider gives, within
+// an hour and a week (a shorter one fetches for every profile; a longer one keeps a list
+// that follows a branch stale), and a day for one of none. Of providers that share the
+// address the shortest wins: each asks for the list to be that fresh.
+func listTTLOf(lists map[string]routing.Provider, src string) time.Duration {
+	ttl := time.Duration(0)
+	for _, p := range lists {
+		if p.URL != src {
+			continue
+		}
+		d := listTTL
+		if p.Interval > 0 {
+			d = min(max(time.Duration(p.Interval)*time.Second, listMinTTL), listMaxTTL)
+		}
+		if ttl == 0 || d < ttl {
+			ttl = d
+		}
+	}
+	if ttl == 0 {
+		return listTTL
+	}
+	return ttl
+}
+
+func cachedList(ctx context.Context, src string, ttl time.Duration) ([]string, error) {
 	listCache.Lock()
 	e, ok := listCache.m[src]
 	listCache.Unlock()
-	if !ok || time.Since(e.at) >= e.ttl() {
+	if !ok || time.Since(e.at) >= e.ttl(ttl) {
 		seen := e.at
 		payload, err := fetchList(ctx, src)
 		listCache.Lock()
@@ -208,11 +234,12 @@ type listEntry struct {
 	at      time.Time
 }
 
-func (e listEntry) ttl() time.Duration {
+// ttl is how long e lives: listRetry after a failure, else fresh.
+func (e listEntry) ttl(fresh time.Duration) time.Duration {
 	if e.err != nil {
 		return listRetry
 	}
-	return listTTL
+	return fresh
 }
 
 var listCache = struct {

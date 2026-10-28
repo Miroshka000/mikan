@@ -168,9 +168,17 @@ func TestCheckTemplate(t *testing.T) {
 	if err := CheckTemplate(profile.Profile{}, "proxy-groups:\n  - {name: R, type: relay, proxies: [DIRECT]}\n"); !errors.As(err, &te) || te.Code != "template_group_type" || te.Detail != "R" {
 		t.Fatalf("no proxies, a relay group: %v, want template_group_type of R", err)
 	}
-	chain := "proxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT]}\n  - {name: S, type: select, proxies: [C]}\nrules:\n  - MATCH,S\n"
+	chain := "proxies:\n  - {name: own, type: socks5, server: 127.0.0.1, port: 1081}\nproxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT, own]}\n  - {name: S, type: select, proxies: [C]}\nrules:\n  - MATCH,S\n"
 	if err := CheckTemplate(prof, chain); err != nil {
 		t.Fatalf("a chain: %v", err)
+	}
+	// A chain lists its hops: one that asks for the user's proxies is refused, as written,
+	// with no proxies to fill it too.
+	asks := "proxy-groups:\n  - {name: C, type: chain, proxies: [DIRECT], include-all-proxies: true}\n"
+	for _, p := range []profile.Profile{prof, {}} {
+		if err := CheckTemplate(p, asks); !errors.As(err, &te) || te.Code != "template_chain_keys" || te.Detail != "C" {
+			t.Fatalf("a chain that asks for its hops: %v, want template_chain_keys of C", err)
+		}
 	}
 }
 
@@ -288,5 +296,34 @@ func TestTemplateIncludeAllNextToProviders(t *testing.T) {
 				t.Errorf("group: %s, want %s\n%s", got, c.want, raw)
 			}
 		})
+	}
+}
+
+// The parts of a template keep each rule-provider's interval, written as a number or a
+// string; a provider of none has zero.
+func TestTemplatePartsListInterval(t *testing.T) {
+	src := strings.Replace(subtest.OwnTemplate, "    path: ./ru.yaml\n", `    path: ./ru.yaml
+    interval: 3600
+  ip:
+    type: http
+    behavior: ipcidr
+    url: https://example.com/ip.yaml
+    interval: "7200"
+  apps:
+    type: http
+    behavior: classical
+    url: https://example.com/apps.yaml
+`, 1)
+	if src == subtest.OwnTemplate {
+		t.Fatal("the lists are not in the template")
+	}
+	parts, err := TemplateParts(profileOf(subtest.TwoNodes()), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]int{"ru": 3600, "ip": 7200, "apps": 0} {
+		if got := parts.Lists[name].Interval; got != want {
+			t.Errorf("%s: interval %d, want %d", name, got, want)
+		}
 	}
 }

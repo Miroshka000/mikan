@@ -70,7 +70,7 @@ func Notes(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Templa
 
 // Dropped are what xray leaves out of p's profile as Render makes it, for the admin panel's
 // preview: the proxies it cannot carry (proxy_unsupported), the conditions it has no form of
-// (rule_unsupported), the lists it has no categories for (list_unsupported), the categories
+// or that go to a group it has none of (rule_unsupported), the lists it has no categories for (list_unsupported), the categories
 // the usual geodata lacks (category_missing, routing.Common) and the DNS policies of no name
 // it can read (dns_policy_unsupported). A policy's key that loses only some of its names is
 // not told. An own xray template is as the admin wrote it: none.
@@ -90,6 +90,15 @@ func Dropped(p profile.Profile, g model.GroupNames, m routing.Mode, t model.Temp
 		return out
 	}
 	out = append(out, pl.dropped...)
+	// A rule to a group xray has none of goes, as in sing-box (a chain through REJECT).
+	refs := Balance(pl.groups, pl.names(), pl.servers).Refs
+	for _, r := range pl.rules {
+		if _, ok := refs[r.to.Group]; r.to.Kind == routing.ToGroup && !ok && !pl.choice[r.to.Group] {
+			if n := note(routing.Rule{When: r.when}.Clash(r.to.Group), "rule_unsupported"); !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+	}
 	for _, x := range pl.dns.Policy {
 		if len(policyDomains(x.Match, routing.Common)) == 0 {
 			out = append(out, note(x.Match, "dns_policy_unsupported"))
@@ -152,6 +161,7 @@ type tagged struct {
 type rule struct {
 	fields []map[string]any
 	to     routing.Target
+	when   []routing.Match // the conditions, for the preview
 }
 
 // planOf is the plan of the own Clash profile t for p, or of the panel's routing when t is
@@ -286,7 +296,7 @@ func (pl *plan) add(when []routing.Match, t routing.Target) {
 		pl.drop(when)
 		return
 	}
-	pl.rules = append(pl.rules, rule{fields: f, to: t})
+	pl.rules = append(pl.rules, rule{fields: f, to: t, when: when})
 	pl.resolve = pl.resolve || resolves(when, routing.Common)
 }
 
@@ -322,10 +332,6 @@ func (pl plan) balancing() Balancing {
 	for _, o := range pl.outbounds {
 		tag[o.name] = o.tag
 	}
-	// A copy is tagged by its outbound's tag, which no tag begins with.
-	for _, x := range b.Copies {
-		tag[x.Tag()] = x.Prefix + tag[x.Of]
-	}
 	retag := func(s string) string {
 		if t, ok := tag[s]; ok {
 			return t
@@ -348,9 +354,11 @@ func (pl plan) balancing() Balancing {
 			b.Refs[name] = Ref{Tag: retag(r.Tag)}
 		}
 	}
-	for i, x := range b.Copies {
-		b.Copies[i] = Copy{Prefix: x.Prefix, Of: retag(x.Of), Dialer: retag(x.Dialer)}
+	dialers := make(map[string]string, len(b.Dialers))
+	for p, d := range b.Dialers {
+		dialers[retag(p)] = retag(d)
 	}
+	b.Dialers = dialers
 	return b
 }
 
@@ -398,18 +406,13 @@ func (pl plan) config(name string, choice Ref, b Balancing) map[string]any {
 	if !choice.Balancer {
 		for _, o := range pl.outbounds {
 			if o.tag == choice.Tag {
-				outbounds = append(outbounds, o.out)
+				outbounds = append(outbounds, dialing(o.out, b.Dialers[o.tag]))
 			}
 		}
 	}
 	for _, o := range pl.outbounds {
 		if used[o.tag] && o.tag != choice.Tag {
-			outbounds = append(outbounds, o.out)
-		}
-	}
-	for _, x := range b.Copies {
-		if used[x.Tag()] {
-			outbounds = append(outbounds, pl.copied(x))
+			outbounds = append(outbounds, dialing(o.out, b.Dialers[o.tag]))
 		}
 	}
 	outbounds = append(outbounds,
@@ -465,7 +468,7 @@ func once(rules []map[string]any) []map[string]any {
 }
 
 // uses are the outbounds the rules send to, the ones of the balancers they name, the ones
-// the chains' copies among them dial through, and the balancers in the order Balance made
+// the chains' proxies among them dial through, and the balancers in the order Balance made
 // them.
 func uses(rules []map[string]any, b Balancing) (map[string]bool, []Balancer) {
 	used, named := map[string]bool{}, map[string]bool{}
@@ -486,35 +489,38 @@ func uses(rules []map[string]any, b Balancing) (map[string]bool, []Balancer) {
 			}
 		}
 	}
-	dialer := make(map[string]string, len(b.Copies))
-	for _, x := range b.Copies {
-		dialer[x.Tag()] = x.Dialer
-	}
 	for t := range used {
-		for d := dialer[t]; d != "" && !used[d]; d = dialer[d] {
+		for d := b.Dialers[t]; d != "" && !used[d]; d = b.Dialers[d] {
 			used[d] = true
 		}
 	}
 	return used, balancers
 }
 
-// copied is the outbound of the copy x: its proxy's, tagged its own, dialing through the hop
-// before it in a chain.
-func (pl plan) copied(x Copy) map[string]any {
-	i := slices.IndexFunc(pl.outbounds, func(o tagged) bool { return o.tag == x.Of })
-	o := pl.outbounds[i].out
+// dialing is the outbound o dialing through the outbound dialer, of the hop before it in a
+// chain: a copy, as every config shares o; o itself for no dialer.
+func dialing(o map[string]any, dialer string) map[string]any {
+	if dialer == "" {
+		return o
+	}
 	out := make(map[string]any, len(o))
 	for k, v := range o {
 		out[k] = v
 	}
-	out["tag"] = x.Tag()
 	ss := map[string]any{}
 	if old, ok := o["streamSettings"].(map[string]any); ok {
 		for k, v := range old {
 			ss[k] = v
 		}
 	}
-	ss["sockopt"] = map[string]any{"dialerProxy": x.Dialer}
+	sock := map[string]any{}
+	if old, ok := ss["sockopt"].(map[string]any); ok {
+		for k, v := range old {
+			sock[k] = v
+		}
+	}
+	sock["dialerProxy"] = dialer
+	ss["sockopt"] = sock
 	out["streamSettings"] = ss
 	return out
 }

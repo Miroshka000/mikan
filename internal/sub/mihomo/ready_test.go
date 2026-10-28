@@ -43,6 +43,7 @@ func TestReadyTemplates(t *testing.T) {
 				if len(in) == 0 {
 					t.Fatal("no servers in the profile")
 				}
+				coreAccepts(t, raw)
 				v := readProfile(t, raw)
 				for _, g := range v.Groups {
 					if len(g.Proxies) == 0 || g.Proxies[0] == "REJECT" && len(g.Proxies) == 1 {

@@ -41,6 +41,7 @@ In the user card:
 - **More actions → Reissue the link**: the old link and all devices stop working immediately, along with any old links left after an import.
 - **Add traffic**: a package as a gift or as compensation.
 - **Telegram → Unlink**, a torrent ban and "Do not check for torrents".
+- **Nodes** (since 0.5.2.1): the nodes the client went through, the last time on each and the traffic there, and where the client is online now. Counted since 0.5.2.1; with no such traffic the block is not shown. In the API: `GET /api/v1/users/{id}/nodes`. The other way round, the clients of one node, see [Nodes](/mikan/en/nodes/nodes/).
 
 The list can be filtered by state: active, expiring, limit reached, expired, disabled. Search works on name, contact, tag and note. With rows selected, you can do "+1 month", reset traffic, disable and delete: before doing it the panel shows what will change and waits for a confirmation, see [Preview of bulk actions](/mikan/en/billing/lifecycle/#preview-of-bulk-actions). The same actions can go to every client the filter matches, not only the rows on the page, see [Everyone matching the filter](/mikan/en/billing/lifecycle/#everyone-matching-the-filter). The **Rules** button in the page header opens the general subscription rules: carrying leftover traffic over and removing inactive subscriptions, see [Subscription lifecycle](/mikan/en/billing/lifecycle/).
 
