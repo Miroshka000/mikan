@@ -365,6 +365,9 @@ export const userActions = {
     unwrap(api.PATCH("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } }, body: { name } })),
   banDevice: ({ id, device }: { id: number; device: number }) => unwrap(api.POST("/api/v1/users/{id}/bound-devices/{device}/ban", { params: { path: { id, device } } })),
   unbanDevice: ({ id, ban }: { id: number; ban: number }) => unwrap(api.DELETE("/api/v1/users/{id}/device-bans/{ban}", { params: { path: { id, ban } } })),
+  /** Close the user's open connections and keep the access: on every node, or one node's of one set of keys. */
+  resetConnections: ({ id, ...body }: { id: number } & Schemas["ResetConnectionsInputBody"]) =>
+    unwrap(api.POST("/api/v1/users/{id}/reset-connections", { params: { path: { id } }, body })),
 };
 
 /** One paid period: a month up to the billing day, or 30 days without one. */

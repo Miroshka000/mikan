@@ -2197,6 +2197,39 @@
         ],
         "type": "object"
       },
+      "ConnResetView": {
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "description": "Сколько соединений закрыла нода",
+            "format": "int64",
+            "type": "integer"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "node_name": {
+            "type": "string"
+          },
+          "status": {
+            "description": "ok — соединения закрыты; node_too_old — нода старее 0.5.2.1 и сбрасывать не умеет, её пропустили; node_unavailable — нода не ответила",
+            "enum": [
+              "ok",
+              "node_too_old",
+              "node_unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "node_name",
+          "status",
+          "closed"
+        ],
+        "type": "object"
+      },
       "CopyInboundInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -9030,6 +9063,46 @@
           "links",
           "no_link",
           "failed"
+        ],
+        "type": "object"
+      },
+      "ResetConnectionsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "device_id": {
+            "description": "Чьи ключи: не передано — все ключи пользователя; 0 — общие ключи пользователя; иначе привязанное устройство (device_id из списка онлайн)",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "node_id": {
+            "description": "Нода; 0 или не передано — все ноды",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ResetConnectionsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "description": "Сколько соединений закрыто на всех нодах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "nodes": {
+            "description": "Как прошло на каждой ноде; нода, которая сбрасывать не умеет или не ответила, не делает ошибкой весь запрос",
+            "items": {
+              "$ref": "#/components/schemas/ConnResetView"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "closed",
+          "nodes"
         ],
         "type": "object"
       },
@@ -23245,6 +23318,59 @@
           }
         },
         "summary": "Перевыпустить ссылку",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/reset-connections": {
+      "post": {
+        "operationId": "reset-user-connections",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetConnectionsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResetConnectionsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сбросить соединения: ноды закрывают открытые соединения, доступ остаётся, приложения подключаются заново",
         "tags": [
           "users"
         ]
