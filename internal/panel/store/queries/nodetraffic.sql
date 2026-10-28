@@ -36,6 +36,12 @@ SELECT hour, up, down, relay_up, relay_down FROM node_traffic_hourly WHERE node_
 -- name: NodeTrafficDaily :many
 SELECT day, up, down, relay_up, relay_down FROM node_traffic_daily WHERE node_id = $1 AND day >= $2 ORDER BY day;
 
+-- name: NodeTrafficSinceDay :one
+-- Everything a node carried since a day: its users' bytes and its relay's for the other
+-- nodes' cascades, both ways. It is the server's traffic its provider counts.
+SELECT CAST(COALESCE(sum(up + down + relay_up + relay_down), 0) AS BIGINT) FROM node_traffic_daily
+WHERE node_id = $1 AND day >= $2;
+
 -- name: SumNodesTrafficHourly :many
 -- What each node carried since an hour, for the nodes that carried anything: its users'
 -- bytes, and apart from them its relay's for the other nodes' cascades.

@@ -219,6 +219,10 @@ func (m *Monitor) round(ctx context.Context) {
 	m.checkCertificate(&st, cfg, lang)
 	m.checkUpdate(&st, cfg, lang)
 	m.checkNodeUpdates(ctx, &st, cfg, nodeByID, lang)
+	if now := m.now(); now.Sub(m.billingAt) >= billingEvery || now.Before(m.billingAt) {
+		m.billingAt = now
+		m.checkBilling(ctx, &st, cfg, nodes, lang)
+	}
 	m.publicStatus(ctx, &st, cfg, nodes, byNode, lang)
 	forgetRemoved(&st, nodes, byNode)
 	enabled := m.bot != nil && m.bot.PolledInfrastructure(ctx) // read once per round

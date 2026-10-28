@@ -87,7 +87,7 @@ func TestAPIKeys(t *testing.T) {
 			t.Fatalf("%q: %d", hdr["Authorization"][:min(20, len(hdr["Authorization"]))], resp.StatusCode)
 		}
 	}
-	h.now = h.now.Add(25 * time.Hour)
+	h.advance(25 * time.Hour)
 	if resp, _ := h.do(http.MethodGet, api+"/users", nil, bearer(short.Key)); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expired key: %d", resp.StatusCode)
 	}

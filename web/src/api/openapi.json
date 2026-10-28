@@ -2417,6 +2417,14 @@
               "custom"
             ],
             "type": "string"
+          },
+          "tags": {
+            "description": "Метки подключения, как у пользователя",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
           }
         },
         "required": [
@@ -2447,6 +2455,14 @@
           "name": {
             "maxLength": 200,
             "type": "string"
+          },
+          "tags": {
+            "description": "Метки ноды, как у пользователя",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
           }
         },
         "required": [
@@ -2918,6 +2934,9 @@
           "autotune_recovery": {
             "type": "boolean"
           },
+          "billing": {
+            "type": "boolean"
+          },
           "exit": {
             "type": "boolean"
           },
@@ -2949,7 +2968,8 @@
           "autotune_recovery",
           "tls",
           "update",
-          "torrent"
+          "torrent",
+          "billing"
         ],
         "type": "object"
       },
@@ -2960,6 +2980,9 @@
             "type": "boolean"
           },
           "autotune_recovery": {
+            "type": "boolean"
+          },
+          "billing": {
             "type": "boolean"
           },
           "exit": {
@@ -3994,6 +4017,13 @@
             "description": "Имя, которое увидит клиент",
             "type": "string"
           },
+          "tags": {
+            "description": "Метки подключения: свои слова админа, по ним фильтруют список; в подписку не попадают",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "title": {
             "type": "string"
           },
@@ -4037,7 +4067,8 @@
           "client_host",
           "cdn_possible",
           "sni443",
-          "sni443_possible"
+          "sni443_possible",
+          "tags"
         ],
         "type": "object"
       },
@@ -4994,6 +5025,65 @@
         ],
         "type": "object"
       },
+      "NodeBilling": {
+        "additionalProperties": false,
+        "properties": {
+          "pay_date": {
+            "description": "Дата оплаты, YYYY-MM-DD (UTC); пусто — не задана. С pay_months — любая оплата из череды, следующую считает панель",
+            "pattern": "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$",
+            "type": "string"
+          },
+          "pay_months": {
+            "description": "Оплата повторяется каждые столько месяцев; 0 — разовая",
+            "format": "int64",
+            "maximum": 36,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "provider": {
+            "description": "Хостер сервера, как его назвал админ",
+            "maxLength": 100,
+            "type": "string"
+          },
+          "remind_days": {
+            "description": "За сколько дней до оплаты напомнить админу в Telegram; 0 — не напоминать",
+            "format": "int64",
+            "maximum": 60,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reset_day": {
+            "description": "День месяца, с которого хостер считает трафик заново; в коротком месяце — его последний день",
+            "format": "int64",
+            "maximum": 31,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "traffic_alert": {
+            "description": "При скольких процентах лимита сказать админу; раз за период",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "traffic_limit": {
+            "description": "Трафик тарифа сервера за период, байты; 0 — без лимита",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider",
+          "pay_date",
+          "pay_months",
+          "remind_days",
+          "traffic_limit",
+          "reset_day",
+          "traffic_alert"
+        ],
+        "type": "object"
+      },
       "NodeCertInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -5119,6 +5209,9 @@
           "behind": {
             "description": "Нода старее панели",
             "type": "boolean"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/NodeBilling"
           },
           "can_update": {
             "description": "Панель может обновить ноду сама: удалённая, отвечает, версия 0.5.0.2 или новее; старую обновляют один раз вручную командой mikan update на её сервере",
@@ -5277,6 +5370,10 @@
             "description": "Группа в подписке, например «🇳🇱 Нидерланды»; её флаг — префикс имён подключений",
             "type": "string"
           },
+          "next_payment": {
+            "description": "Ближайшая оплата сегодня или позже, YYYY-MM-DD (UTC); нет — оплата не задана или разовая прошла",
+            "type": "string"
+          },
           "proc_cpu_percent": {
             "description": "Доля процессора самого процесса ноды (вся машина = 100); нет у нод до 0.5.0.4",
             "format": "double",
@@ -5310,6 +5407,13 @@
             ],
             "type": "string"
           },
+          "tags": {
+            "description": "Метки ноды: свои слова админа, по ним фильтруют список",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "tls": {
             "$ref": "#/components/schemas/NodeTLSView"
           },
@@ -5324,6 +5428,10 @@
           },
           "version": {
             "type": "string"
+          },
+          "vps_traffic": {
+            "$ref": "#/components/schemas/VPSTraffic",
+            "description": "Трафик тарифа сервера за текущий период; только с billing.traffic_limit"
           }
         },
         "required": [
@@ -5355,10 +5463,12 @@
           "sni_router",
           "front_page",
           "in_auto",
+          "billing",
           "api_lockdown",
           "api_allow",
           "capacity",
-          "channel_mbps"
+          "channel_mbps",
+          "tags"
         ],
         "type": "object"
       },
@@ -6421,6 +6531,117 @@
         ],
         "type": "object"
       },
+      "PasskeyAddInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "description": "Ответ navigator.credentials.create() в JSON (PublicKeyCredential.toJSON())"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "credential"
+        ],
+        "type": "object"
+      },
+      "PasskeyBeginInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "description": "Пароль: без него украденная сессия добавила бы свой вход",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "totp": {
+            "description": "Код из приложения, если включена 2FA",
+            "maxLength": 16,
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "type": "object"
+      },
+      "PasskeyLoginBeginOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "ceremony": {
+            "description": "Передаётся обратно в POST /auth/login/passkey",
+            "type": "string"
+          },
+          "options": {
+            "description": "Параметры WebAuthn для navigator.credentials.get() ({publicKey: …}, двоичные поля в base64url)"
+          }
+        },
+        "required": [
+          "ceremony",
+          "options"
+        ],
+        "type": "object"
+      },
+      "PasskeyLoginInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "ceremony": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "credential": {
+            "description": "Ответ navigator.credentials.get() в JSON (PublicKeyCredential.toJSON())"
+          }
+        },
+        "required": [
+          "ceremony",
+          "credential"
+        ],
+        "type": "object"
+      },
+      "PasskeyOptionsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "options": {
+            "description": "Параметры WebAuthn для navigator.credentials.create() ({publicKey: …}, двоичные поля в base64url)"
+          }
+        },
+        "required": [
+          "options"
+        ],
+        "type": "object"
+      },
+      "PasskeyView": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "PasswordInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -6436,7 +6657,7 @@
             "type": "string"
           },
           "revoke_keys": {
-            "description": "Отозвать и ключи API (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный из угнанной сессии, пережил бы это",
+            "description": "Отозвать и ключи API, и ключи доступа (passkey) (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный или добавленный из угнанной сессии, пережил бы это",
             "type": "boolean"
           }
         },
@@ -6626,6 +6847,14 @@
             "description": "Поставить за SNI-роутер ноды на 443 (true) или вернуть на свой порт (false)",
             "type": "boolean"
           },
+          "tags": {
+            "description": "Метки подключения целиком; пустой список снимает все",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
           "xhttp": {
             "$ref": "#/components/schemas/XHTTPTuning",
             "description": "Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию"
@@ -6672,6 +6901,10 @@
           "api_lockdown": {
             "description": "API ноды только с адресов панели; не для ноды панели",
             "type": "boolean"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/NodeBilling",
+            "description": "Учёт сервера у хостера, целиком"
           },
           "channel_mbps": {
             "description": "Ширина канала ноды, Мбит/с в каждую сторону",
@@ -6724,6 +6957,14 @@
           "sni_router": {
             "description": "SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним",
             "type": "boolean"
+          },
+          "tags": {
+            "description": "Метки ноды целиком; пустой список снимает все",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
           }
         },
         "type": "object"
@@ -12399,6 +12640,30 @@
         ],
         "type": "object"
       },
+      "VPSTraffic": {
+        "additionalProperties": false,
+        "properties": {
+          "resets": {
+            "description": "День, с которого начнётся следующий период, YYYY-MM-DD (UTC)",
+            "type": "string"
+          },
+          "since": {
+            "description": "Первый день периода, YYYY-MM-DD (UTC)",
+            "type": "string"
+          },
+          "used": {
+            "description": "Сколько нода унесла с начала периода: трафик пользователей и каскада других нод, вверх и вниз вместе, байты",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used",
+          "since",
+          "resets"
+        ],
+        "type": "object"
+      },
       "ValidateInboundInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -13861,6 +14126,91 @@
         ]
       }
     },
+    "/api/v1/auth/login/passkey": {
+      "post": {
+        "operationId": "passkey-login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyLoginInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeBody"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Вход по passkey",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login/passkey/begin": {
+      "post": {
+        "operationId": "passkey-login-begin",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyLoginBeginOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Начать вход по passkey",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/logout": {
       "post": {
         "operationId": "logout",
@@ -13918,6 +14268,156 @@
           }
         },
         "summary": "Текущий админ",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/passkeys": {
+      "get": {
+        "operationId": "list-passkeys",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PasskeyView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Ключи входа (passkey)",
+        "tags": [
+          "auth"
+        ]
+      },
+      "post": {
+        "operationId": "add-passkey",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyAddInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Добавить passkey",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/passkeys/begin": {
+      "post": {
+        "operationId": "passkey-begin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasskeyBeginInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasskeyOptionsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Начать добавление passkey",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/passkeys/{id}": {
+      "delete": {
+        "operationId": "delete-passkey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить passkey",
         "tags": [
           "auth"
         ]
@@ -15045,6 +15545,19 @@
     "/api/v1/inbounds": {
       "get": {
         "operationId": "list-inbounds",
+        "parameters": [
+          {
+            "description": "Только подключения с этой меткой (без учёта регистра)",
+            "explode": false,
+            "in": "query",
+            "name": "tag",
+            "schema": {
+              "description": "Только подключения с этой меткой (без учёта регистра)",
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15858,6 +16371,19 @@
     "/api/v1/nodes": {
       "get": {
         "operationId": "list-nodes",
+        "parameters": [
+          {
+            "description": "Только ноды с этой меткой (без учёта регистра)",
+            "explode": false,
+            "in": "query",
+            "name": "tag",
+            "schema": {
+              "description": "Только ноды с этой меткой (без учёта регистра)",
+              "maxLength": 100,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

@@ -71,7 +71,7 @@ func TestNodeOrder(t *testing.T) {
 	hosts := func() []string {
 		// The panel keeps the server list for a few seconds; a reorder drops it at once
 		// when nodes run, and here the clock moves on instead.
-		h.now = h.now.Add(time.Minute)
+		h.advance(time.Minute)
 		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken+"?format=uri", nil, map[string]string{"User-Agent": "Happ/3.4.1"})
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("subscription: %d", resp.StatusCode)
@@ -95,7 +95,7 @@ func TestNodeOrder(t *testing.T) {
 	// groups lists the country groups of the Clash profile in order (the panel's own node
 	// has no name, so no group).
 	groups := func() string {
-		h.now = h.now.Add(time.Minute)
+		h.advance(time.Minute)
 		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "clash.meta/1.19"})
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("clash profile: %d", resp.StatusCode)

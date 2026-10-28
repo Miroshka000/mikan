@@ -15,7 +15,7 @@ import (
 const createNode = `-- name: CreateNode :one
 INSERT INTO nodes (name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, sort)
 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, (SELECT COALESCE(MAX(sort), 0) + 1 FROM nodes))
-RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto
+RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto, billing_provider, pay_day, pay_months, remind_days, traffic_limit, reset_day, traffic_alert, tags
 `
 
 type CreateNodeParams struct {
@@ -64,6 +64,14 @@ func (q *Queries) CreateNode(ctx context.Context, arg CreateNodeParams) (Node, e
 		pq.Array(&i.ApiAllow),
 		&i.FrontPage,
 		&i.NoAuto,
+		&i.BillingProvider,
+		&i.PayDay,
+		&i.PayMonths,
+		&i.RemindDays,
+		&i.TrafficLimit,
+		&i.ResetDay,
+		&i.TrafficAlert,
+		&i.Tags,
 	)
 	return i, err
 }
@@ -78,7 +86,7 @@ func (q *Queries) DeleteNode(ctx context.Context, id int64) error {
 }
 
 const getNode = `-- name: GetNode :one
-SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto FROM nodes WHERE id = $1
+SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto, billing_provider, pay_day, pay_months, remind_days, traffic_limit, reset_day, traffic_alert, tags FROM nodes WHERE id = $1
 `
 
 func (q *Queries) GetNode(ctx context.Context, id int64) (Node, error) {
@@ -108,12 +116,20 @@ func (q *Queries) GetNode(ctx context.Context, id int64) (Node, error) {
 		pq.Array(&i.ApiAllow),
 		&i.FrontPage,
 		&i.NoAuto,
+		&i.BillingProvider,
+		&i.PayDay,
+		&i.PayMonths,
+		&i.RemindDays,
+		&i.TrafficLimit,
+		&i.ResetDay,
+		&i.TrafficAlert,
+		&i.Tags,
 	)
 	return i, err
 }
 
 const listNodes = `-- name: ListNodes :many
-SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto FROM nodes ORDER BY sort, id
+SELECT id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto, billing_provider, pay_day, pay_months, remind_days, traffic_limit, reset_day, traffic_alert, tags FROM nodes ORDER BY sort, id
 `
 
 func (q *Queries) ListNodes(ctx context.Context) ([]Node, error) {
@@ -149,6 +165,14 @@ func (q *Queries) ListNodes(ctx context.Context) ([]Node, error) {
 			pq.Array(&i.ApiAllow),
 			&i.FrontPage,
 			&i.NoAuto,
+			&i.BillingProvider,
+			&i.PayDay,
+			&i.PayMonths,
+			&i.RemindDays,
+			&i.TrafficLimit,
+			&i.ResetDay,
+			&i.TrafficAlert,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}
@@ -178,6 +202,38 @@ func (q *Queries) SetNodeAPILockdown(ctx context.Context, arg SetNodeAPILockdown
 	_, err := q.db.ExecContext(ctx, setNodeAPILockdown,
 		arg.ApiLockdown,
 		pq.Array(arg.ApiAllow),
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const setNodeBilling = `-- name: SetNodeBilling :exec
+UPDATE nodes SET billing_provider = $1, pay_day = $2, pay_months = $3, remind_days = $4,
+  traffic_limit = $5, reset_day = $6, traffic_alert = $7, updated_at = $8 WHERE id = $9
+`
+
+type SetNodeBillingParams struct {
+	BillingProvider string
+	PayDay          int64
+	PayMonths       int64
+	RemindDays      int64
+	TrafficLimit    int64
+	ResetDay        int64
+	TrafficAlert    int64
+	UpdatedAt       int64
+	ID              int64
+}
+
+func (q *Queries) SetNodeBilling(ctx context.Context, arg SetNodeBillingParams) error {
+	_, err := q.db.ExecContext(ctx, setNodeBilling,
+		arg.BillingProvider,
+		arg.PayDay,
+		arg.PayMonths,
+		arg.RemindDays,
+		arg.TrafficLimit,
+		arg.ResetDay,
+		arg.TrafficAlert,
 		arg.UpdatedAt,
 		arg.ID,
 	)
@@ -294,8 +350,22 @@ func (q *Queries) SetNodeSort(ctx context.Context, arg SetNodeSortParams) error 
 	return err
 }
 
+const setNodeTags = `-- name: SetNodeTags :exec
+UPDATE nodes SET tags = $1 WHERE id = $2
+`
+
+type SetNodeTagsParams struct {
+	Tags string
+	ID   int64
+}
+
+func (q *Queries) SetNodeTags(ctx context.Context, arg SetNodeTagsParams) error {
+	_, err := q.db.ExecContext(ctx, setNodeTags, arg.Tags, arg.ID)
+	return err
+}
+
 const updateNode = `-- name: UpdateNode :one
-UPDATE nodes SET name = $1, address = $2, public_host = $3, domain = $4, public_name = $5, enabled = $6, updated_at = $7 WHERE id = $8 RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto
+UPDATE nodes SET name = $1, address = $2, public_host = $3, domain = $4, public_name = $5, enabled = $6, updated_at = $7 WHERE id = $8 RETURNING id, name, address, public_host, domain, cert_sha256, enabled, created_at, updated_at, public_name, sort, total_up, total_down, fair_share, channel_mbps, capacity, balance_group, http_redirect, sni_router, api_lockdown, api_allow, front_page, no_auto, billing_provider, pay_day, pay_months, remind_days, traffic_limit, reset_day, traffic_alert, tags
 `
 
 type UpdateNodeParams struct {
@@ -345,6 +415,14 @@ func (q *Queries) UpdateNode(ctx context.Context, arg UpdateNodeParams) (Node, e
 		pq.Array(&i.ApiAllow),
 		&i.FrontPage,
 		&i.NoAuto,
+		&i.BillingProvider,
+		&i.PayDay,
+		&i.PayMonths,
+		&i.RemindDays,
+		&i.TrafficLimit,
+		&i.ResetDay,
+		&i.TrafficAlert,
+		&i.Tags,
 	)
 	return i, err
 }

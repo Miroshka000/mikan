@@ -62,6 +62,9 @@ type InboundView struct {
 
 	// XHTTP is the tuning the form shows; absent for other transports.
 	XHTTP *proto.XHTTPTuning `json:"xhttp,omitempty" doc:"Тонкая настройка XHTTP; у других транспортов поля нет"`
+
+	// Tags are the admin's labels of the inbound, as a user's; clients see none of them.
+	Tags []string `json:"tags" doc:"Метки подключения: свои слова админа, по ним фильтруют список; в подписку не попадают"`
 }
 
 // ClientEndpoint is where clients connect when a TCP proxy or a CDN stands in front of
@@ -106,11 +109,12 @@ type inboundOutput struct{ Body InboundView }
 
 type createInboundInput struct {
 	Body struct {
-		Preset string `json:"preset" enum:"vless_reality_xhttp,hysteria2,hysteria2_gecko,tuic_v5,vless_reality_vision,vless_reality_grpc,trojan_reality,vless_tls_xhttp,vless_tls_vision,vless_tls_ws,vless_cdn_xhttp,vless_cdn_xhttp_get,anytls,vless_reality_xhttp_pq,trusttunnel,shadowquic,mieru,shadowsocks_2022,sudoku,snell,custom"`
-		NodeID int64  `json:"node_id,omitempty" minimum:"1" doc:"Нода; по умолчанию — своя нода панели"`
-		Port   string `json:"port,omitempty" pattern:"^[0-9]{1,5}(-[0-9]{1,5})?$"`
-		Dest   string `json:"dest,omitempty" maxLength:"255" doc:"host:port для REALITY"`
-		Config string `json:"config,omitempty" maxLength:"65536" doc:"Шаблон листенера (YAML) для preset=custom"`
+		Preset string   `json:"preset" enum:"vless_reality_xhttp,hysteria2,hysteria2_gecko,tuic_v5,vless_reality_vision,vless_reality_grpc,trojan_reality,vless_tls_xhttp,vless_tls_vision,vless_tls_ws,vless_cdn_xhttp,vless_cdn_xhttp_get,anytls,vless_reality_xhttp_pq,trusttunnel,shadowquic,mieru,shadowsocks_2022,sudoku,snell,custom"`
+		NodeID int64    `json:"node_id,omitempty" minimum:"1" doc:"Нода; по умолчанию — своя нода панели"`
+		Port   string   `json:"port,omitempty" pattern:"^[0-9]{1,5}(-[0-9]{1,5})?$"`
+		Dest   string   `json:"dest,omitempty" maxLength:"255" doc:"host:port для REALITY"`
+		Config string   `json:"config,omitempty" maxLength:"65536" doc:"Шаблон листенера (YAML) для preset=custom"`
+		Tags   []string `json:"tags,omitempty" maxItems:"20" doc:"Метки подключения, как у пользователя"`
 	}
 }
 
@@ -136,7 +140,12 @@ type patchInboundInput struct {
 
 		XHTTP  *proto.XHTTPTuning `json:"xhttp,omitempty" doc:"Тонкая настройка XHTTP целиком: пустое поле — значение ядра по умолчанию"`
 		SNI443 *bool              `json:"sni443,omitempty" doc:"Поставить за SNI-роутер ноды на 443 (true) или вернуть на свой порт (false)"`
+		Tags   *[]string          `json:"tags,omitempty" maxItems:"20" doc:"Метки подключения целиком; пустой список снимает все"`
 	}
+}
+
+type listInboundsInput struct {
+	Tag string `query:"tag" maxLength:"100" doc:"Только подключения с этой меткой (без учёта регистра)"`
 }
 
 type validateInboundInput struct {
@@ -198,7 +207,7 @@ func (h *handlers) viewInbound(ctx context.Context, in db.Inbound, last map[int6
 		config = proto.Redact(config)
 	}
 	v := InboundView{ID: in.ID, NodeID: in.NodeID, Name: in.Name, Preset: in.Preset, Title: info.Title, Port: in.Port, Enabled: in.Enabled != 0,
-		DisplayName: in.DisplayName, SubName: domain.ProxyName(in), Config: config, Status: "unknown", UpdatedAt: store.Time(in.UpdatedAt),
+		DisplayName: in.DisplayName, SubName: domain.ProxyName(in), Config: config, Status: "unknown", UpdatedAt: store.Time(in.UpdatedAt), Tags: domain.DecodeTags(in.Tags),
 		AutoPort: in.AutoPort != 0, AutoSNI: in.AutoSni != 0, Outbound: in.Outbound, Listen: in.Listen, InAuto: in.NoAuto == 0}
 	if in.PoolID.Valid {
 		id := in.PoolID.Int64
@@ -269,7 +278,7 @@ func (h *handlers) viewInbound(ctx context.Context, in db.Inbound, last map[int6
 	return v
 }
 
-func (h *handlers) listInbounds(ctx context.Context, _ *struct{}) (*inboundsOutput, error) {
+func (h *handlers) listInbounds(ctx context.Context, in *listInboundsInput) (*inboundsOutput, error) {
 	rows, err := h.d.Store.Q.ListInbounds(ctx)
 	if err != nil {
 		return nil, err
@@ -279,8 +288,11 @@ func (h *handlers) listInbounds(ctx context.Context, _ *struct{}) (*inboundsOutp
 		return nil, err
 	}
 	out := &inboundsOutput{Body: make([]InboundView, 0, len(rows))}
-	for _, in := range rows {
-		out.Body = append(out.Body, h.viewInbound(ctx, in, last))
+	for _, row := range rows {
+		if in.Tag != "" && !domain.HasTag(row.Tags, in.Tag) {
+			continue
+		}
+		out.Body = append(out.Body, h.viewInbound(ctx, row, last))
 	}
 	return out, nil
 }
@@ -325,7 +337,7 @@ func (h *handlers) validateInbound(ctx context.Context, in *validateInboundInput
 
 func (h *handlers) createInbound(ctx context.Context, in *createInboundInput) (*inboundOutput, error) {
 	b := in.Body
-	row, err := h.d.Inbounds.Create(ctx, domain.NewInbound{NodeID: b.NodeID, Preset: b.Preset, Port: b.Port, Dest: b.Dest, Config: b.Config})
+	row, err := h.d.Inbounds.Create(ctx, domain.NewInbound{NodeID: b.NodeID, Preset: b.Preset, Port: b.Port, Dest: b.Dest, Config: b.Config, Tags: b.Tags})
 	if err != nil {
 		return nil, inboundError(err, false)
 	}
@@ -423,7 +435,7 @@ func (h *handlers) updateInbound(ctx context.Context, in *patchInboundInput) (*i
 	}
 	p := domain.InboundPatch{Port: b.Port, Enabled: b.Enabled, Config: b.Config, Dest: b.Dest, ServerName: b.ServerName, Fingerprint: b.Fingerprint, Obfs: b.Obfs, XHTTP: b.XHTTP,
 		DisplayName: b.DisplayName, Listen: b.Listen, AutoPort: b.AutoPort, AutoSNI: b.AutoSNI, Outbound: b.Outbound, ExitNodeID: b.ExitNodeID, PoolID: b.PoolID,
-		SNI443: b.SNI443, InAuto: b.InAuto}
+		SNI443: b.SNI443, InAuto: b.InAuto, Tags: b.Tags}
 	if c := b.Client; c != nil {
 		// The address clients connect to: like the panel's public host, not for a key.
 		if err := requireSession(ctx, "client"); err != nil {
@@ -442,6 +454,9 @@ func (h *handlers) updateInbound(ctx context.Context, in *patchInboundInput) (*i
 	if b.PoolID != nil {
 		h.d.Changes.PoliciesChanged()
 		h.audit(ctx, admin, "inbound.pool", "inbound", row.Name, map[string]any{"pool_id": row.PoolID.Int64})
+	}
+	if b.Tags != nil {
+		h.audit(ctx, admin, "inbound.tags", "inbound", row.Name, map[string]any{"tags": domain.DecodeTags(row.Tags)})
 	}
 	if b.Outbound != nil {
 		h.audit(ctx, admin, "inbound.outbound", "inbound", row.Name, map[string]any{"outbound": *b.Outbound, "exit_node_id": row.ExitNodeID.Int64})

@@ -91,7 +91,7 @@ func TestMaintainMovesTheLifecycleOn(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.now = h.now.Add(30*24*time.Hour - 5*time.Minute)
+	h.advance(30*24*time.Hour - 5*time.Minute)
 	h.p.maintain(ctx)
 	if u, _ := h.p.users.Get(ctx, waits.ID); u.ExpiresAt.Int64 != h.now.Add(30*24*time.Hour).Unix() {
 		t.Fatalf("the waiting term ends %v, want its whole term from now", u.ExpiresAt)

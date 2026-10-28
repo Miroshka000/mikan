@@ -163,6 +163,21 @@ In **Edit node** the **In auto select** switch, on by default. Turn it off for a
 
 A node that does not answer the panel for over 5 minutes leaves "Auto" by itself and comes back once it answers. The apps learn of it with their next subscription update.
 
+## Server billing
+
+In **Edit node** → **Server billing** you keep where the server is and how it is paid for: the provider, the payment date, how often it repeats (once, every 1, 3, 6 or 12 months), the plan's traffic, the day its counter resets and at what percent to tell you. The panel pays and limits nothing, it only reminds. Dates are UTC.
+
+- The **payment date** can be any payment of the series: the panel counts the next one and shows it on the node's card. When a month has no such day (the 31st in November), the payment falls on the month's last day. As many days before it as **Remind** says (3 by default, 0 for none), "Server payment due" comes in Telegram, once a payment.
+- The **plan traffic** is what the provider gives a period; empty for no limit. A period starts on the **reset day** of each month (the month's last day when it is shorter). The panel counts everything the node carried in the period: its users' traffic and the other nodes' cascades, up and down together, as on the node's traffic chart. The card shows a bar of how much of how much and the reset date. When the set percent is reached (80 by default), "Server traffic running out" comes in Telegram, once a period.
+
+A provider may count traffic its own way (outgoing only, or with its overhead), so keep the threshold with room to spare. The alerts are switched in **Telegram → Alerts to me** → **Server payment and traffic**, together with the other [admin alerts](/mikan/en/operations/alerts/).
+
+## Tags
+
+Since 0.5.2.1. In **Edit node** the **Tags** field: your own words split by commas, such as `germany, whitelist`, as a client's tags. The node's card shows them, and the row of tags above the list of nodes shows only the nodes with the tag you pick (while you order the nodes, all of them show). Clients do not see tags. Protocols have tags of their own, see [Protocol presets](/mikan/en/protocols/presets/#connection-settings).
+
+In the API a node has `tags` (up to 20, on create and change), and `GET /api/v1/nodes?tag=hetzner` lists only the nodes with that tag, in any letter case.
+
 ## Front page for strangers
 
 In **Edit node** → **Front page for strangers**: "Maintenance" or "Cats clicker", the same pages as the panel's first page. A stranger who opens the server in a browser sees it instead of a bare 404:

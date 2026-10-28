@@ -35,6 +35,8 @@ type NodeInput struct {
 	APIPort int    // 0 picks a free random port
 	// PanelURL is where the node says hello (nodetls.Key.PanelURL); "" leaves it out.
 	PanelURL string
+	// Tags are the admin's labels of the node, as a user's (encodeTags).
+	Tags []string
 	// Rules are what the name and the domain are checked against; the zero value asks
 	// nothing but that the name is not taken.
 	Rules NodeRules
@@ -84,6 +86,15 @@ func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeIn
 		}
 		if key, err = issueKey(ctx, q, panel, node, in.PanelURL, now); err != nil {
 			return err
+		}
+		if len(in.Tags) > 0 {
+			tags, err := encodeTags(in.Tags)
+			if err != nil {
+				return err
+			}
+			if err := q.SetNodeTags(ctx, db.SetNodeTagsParams{Tags: tags, ID: node.ID}); err != nil {
+				return err
+			}
 		}
 		for _, p := range presets.All {
 			if !p.Default {

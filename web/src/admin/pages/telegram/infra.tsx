@@ -118,6 +118,7 @@ export function InfrastructureCard({ v, draft, setDraft, error }: { v: View; dra
             ["tls", "eventTLS"],
             ["update", "eventUpdate"],
             ["torrent", "eventTorrent"],
+            ["billing", "eventBilling"],
           ] as const
         ).map(([key, label]) => (
           <div key={key} className="panel-soft flex items-center justify-between gap-3 p-3">
