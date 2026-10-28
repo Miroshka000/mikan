@@ -56,6 +56,24 @@ The import moves users as they were when it started. What changes in the old pan
 
 ## Moving mikan to another server
 
+On the old server, as root:
+
+```sh
+mikan move root@NEW_IP
+```
+
+The command does what the steps below describe: a backup, an install of mikan on the new server with the same panel port, a copy of the backup (its sha256 checked) and the restore. Then it opens in the new server's ufw the ports the old one let in for mikan: the subscription port, the ports of the protocols and of the cascade, whatever the panel and the node listen on. The installer itself opens the panel port, 80, 443 and the spare ports.
+
+- **SSH.** The system's `ssh` with your keys and ssh-agent: no password is asked for or kept. Check first that `ssh root@NEW_IP` logs in without a password and that the host key is accepted. A user other than root works too if it has `sudo` without a password. Another SSH port: `-p 2222`.
+- **The new server must be empty.** If mikan is already installed there, the command stops. `--force` replaces its data with this panel's, a copy of the old ones stays in its `/opt/mikan/backups`. A node of another panel does not do, even with `--force`.
+- **The version.** The new server gets the latest stable release. If the old one runs a newer (test) version, the command stops before the restore: a backup goes onto the same version or a newer one.
+- **The old panel keeps running** until you stop it. What changes in it after the backup does not reach the new server, so switch the domain right away. `--stop-old` stops it at the end of the move, `mikan restart` starts it again.
+- `--dry-run` prints the steps and does nothing.
+
+After the command, steps 4 and 5 below are left: the domain or the server address, and the nodes. The command prints them. If a step fails, it stops and prints what is left to do by hand, from that step on.
+
+### Step by step by hand
+
 A mikan backup goes onto a freshly installed server, see [Restore](/mikan/en/operations/backups/#restore).
 
 <Steps>
