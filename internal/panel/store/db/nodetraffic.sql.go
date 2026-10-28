@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/lib/pq"
 )
 
 const addNodeRelayTraffic = `-- name: AddNodeRelayTraffic :exec
@@ -81,6 +83,55 @@ func (q *Queries) AddNodeTraffic(ctx context.Context, arg AddNodeTrafficParams) 
 	return err
 }
 
+const addUserNodeTraffic = `-- name: AddUserNodeTraffic :exec
+INSERT INTO user_node_traffic (user_id, node_id, up, down, last_seen)
+SELECT v.user_id, n.id, v.up, v.down, $1::bigint
+FROM (SELECT unnest($2::bigint[]) AS user_id, unnest($3::bigint[]) AS up, unnest($4::bigint[]) AS down) AS v
+JOIN nodes n ON n.id = $5::bigint
+ORDER BY v.user_id
+ON CONFLICT (user_id, node_id) DO UPDATE SET up = user_node_traffic.up + excluded.up, down = user_node_traffic.down + excluded.down,
+  last_seen = GREATEST(user_node_traffic.last_seen, excluded.last_seen)
+`
+
+type AddUserNodeTrafficParams struct {
+	Now     int64
+	UserIds []int64
+	Up      []int64
+	Down    []int64
+	NodeID  int64
+}
+
+// What each user of a batch carried through its node, and that the user was seen there now.
+// The users are locked already (domain.CountTraffic) and the node is kept by AddNodeTraffic's
+// lock; a node gone already is skipped. In user order, so two batches of a node take turns.
+func (q *Queries) AddUserNodeTraffic(ctx context.Context, arg AddUserNodeTrafficParams) error {
+	_, err := q.db.ExecContext(ctx, addUserNodeTraffic,
+		arg.Now,
+		pq.Array(arg.UserIds),
+		pq.Array(arg.Up),
+		pq.Array(arg.Down),
+		arg.NodeID,
+	)
+	return err
+}
+
+const countNodeClients = `-- name: CountNodeClients :one
+SELECT count(*) FROM user_node_traffic t JOIN users u ON u.id = t.user_id
+WHERE t.node_id = $1 AND ($2::text = '' OR strpos(lower(u.name), lower($2::text)) > 0)
+`
+
+type CountNodeClientsParams struct {
+	NodeID int64
+	Q      string
+}
+
+func (q *Queries) CountNodeClients(ctx context.Context, arg CountNodeClientsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countNodeClients, arg.NodeID, arg.Q)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const firstNodeTrafficDay = `-- name: FirstNodeTrafficDay :one
 SELECT CAST(COALESCE(min(day), 0) AS BIGINT) FROM node_traffic_daily
 `
@@ -91,6 +142,149 @@ func (q *Queries) FirstNodeTrafficDay(ctx context.Context) (int64, error) {
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const listNodeClients = `-- name: ListNodeClients :many
+SELECT t.user_id, u.name, t.up, t.down, t.last_seen
+FROM user_node_traffic t JOIN users u ON u.id = t.user_id
+WHERE t.node_id = $1 AND ($2::text = '' OR strpos(lower(u.name), lower($2::text)) > 0)
+ORDER BY t.last_seen DESC, t.user_id
+LIMIT $4 OFFSET $3
+`
+
+type ListNodeClientsParams struct {
+	NodeID int64
+	Q      string
+	Off    int32
+	Lim    int32
+}
+
+type ListNodeClientsRow struct {
+	UserID   int64
+	Name     string
+	Up       int64
+	Down     int64
+	LastSeen int64
+}
+
+// The users who went through a node, the latest seen first, a page of them: those whose
+// name holds q (an empty q: all of them).
+func (q *Queries) ListNodeClients(ctx context.Context, arg ListNodeClientsParams) ([]ListNodeClientsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listNodeClients,
+		arg.NodeID,
+		arg.Q,
+		arg.Off,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListNodeClientsRow{}
+	for rows.Next() {
+		var i ListNodeClientsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Name,
+			&i.Up,
+			&i.Down,
+			&i.LastSeen,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserNodes = `-- name: ListUserNodes :many
+SELECT t.node_id, n.name, (n.address = '')::bool AS local, t.up, t.down, t.last_seen
+FROM user_node_traffic t JOIN nodes n ON n.id = t.node_id
+WHERE t.user_id = $1 ORDER BY t.last_seen DESC, t.node_id
+`
+
+type ListUserNodesRow struct {
+	NodeID   int64
+	Name     string
+	Local    bool
+	Up       int64
+	Down     int64
+	LastSeen int64
+}
+
+// The nodes a user went through, the latest seen first.
+func (q *Queries) ListUserNodes(ctx context.Context, userID int64) ([]ListUserNodesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserNodes, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserNodesRow{}
+	for rows.Next() {
+		var i ListUserNodesRow
+		if err := rows.Scan(
+			&i.NodeID,
+			&i.Name,
+			&i.Local,
+			&i.Up,
+			&i.Down,
+			&i.LastSeen,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUsersSlotDevices = `-- name: ListUsersSlotDevices :many
+SELECT u.id AS user_id, s.name AS slot_name, 0::bigint AS device_id FROM users u JOIN slots s ON s.id = u.slot_id
+WHERE u.id = ANY($1::bigint[])
+UNION ALL
+SELECT d.user_id, s.name, d.id FROM bound_devices d JOIN slots s ON s.id = d.slot_id
+WHERE d.user_id = ANY($1::bigint[])
+`
+
+type ListUsersSlotDevicesRow struct {
+	UserID   int64
+	SlotName string
+	DeviceID int64
+}
+
+// The slots of the users of ids: the own one (device 0) and those of bound devices (their id).
+func (q *Queries) ListUsersSlotDevices(ctx context.Context, ids []int64) ([]ListUsersSlotDevicesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsersSlotDevices, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersSlotDevicesRow{}
+	for rows.Next() {
+		var i ListUsersSlotDevicesRow
+		if err := rows.Scan(&i.UserID, &i.SlotName, &i.DeviceID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const nodeTrafficDaily = `-- name: NodeTrafficDaily :many
