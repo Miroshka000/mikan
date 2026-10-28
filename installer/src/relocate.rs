@@ -29,6 +29,13 @@ const REMOTE_BACKUPS: &str = "/opt/mikan/backups";
 /// The command mikan has on a server.
 const REMOTE_MIKAN: &str = "/usr/local/bin/mikan";
 
+/// The daily update: on a stopped panel it would start the containers again (`compose up`)
+/// with the node keys the new panel holds now.
+const UPDATE_TIMER: &str = "mikan-update.timer";
+
+/// The payment adapters' compose file (addon.rs).
+const ADDONS_COMPOSE: &str = "/opt/mikan/addons/compose.yml";
+
 #[derive(clap::Args, Debug, Clone)]
 pub struct MoveArgs {
     /// The new server as ssh takes it: user@host or a Host of ~/.ssh/config. The user is
@@ -115,16 +122,32 @@ fn as_root(sudo: bool, script: &str) -> String {
     if sudo { format!("sudo -n sh -c {}", quote(script)) } else { format!("sh -c {}", quote(script)) }
 }
 
-/// What the check reads on the new server: one word a line.
-const PROBE: &str = "if [ -e /opt/mikan/config.json ] || [ -e /opt/mikan/.env ]; then echo installed; fi; \
-if grep -qs '\"MIKAN_MODE\": *\"node\"' /opt/mikan/config.json || grep -qs '^MIKAN_MODE=node' /opt/mikan/.env; then echo node; fi; \
-command -v curl >/dev/null 2>&1 || echo no-curl";
+/// The release of the panel installed on the new server, as `version=X` (config.json, or
+/// the .env of an older one).
+const VERSION_PROBE: &str = "sed -n 's/^ *\"MIKAN_VERSION\": *\"\\([^\"]*\\)\".*/version=\\1/p' /opt/mikan/config.json 2>/dev/null; \
+sed -n 's/^MIKAN_VERSION=\\(.*\\)/version=\\1/p' /opt/mikan/.env 2>/dev/null; true";
 
-/// Takes the backup on stdin into the new server's backups, private and whole or not at
-/// all, and says its sha256.
-fn copy_script(name: &str) -> String {
-    let (dir, part) = (REMOTE_BACKUPS, format!("{REMOTE_BACKUPS}/.{name}.part"));
-    format!("umask 077 && mkdir -p {dir} && cat > {part} && mv -f {part} {dir}/{name} && sha256sum {dir}/{name}")
+/// What the check reads on the new server: one word a line, and its panel's release.
+fn probe_script() -> String {
+    format!(
+        "if [ -e /opt/mikan/config.json ] || [ -e /opt/mikan/.env ]; then echo installed; fi; \
+if grep -qs '\"MIKAN_MODE\": *\"node\"' /opt/mikan/config.json || grep -qs '^MIKAN_MODE=node' /opt/mikan/.env; then echo node; fi; \
+command -v curl >/dev/null 2>&1 || echo no-curl; {VERSION_PROBE}"
+    )
+}
+
+/// Takes the backup on stdin into the new server's backups, private: it is checked against
+/// want (its sha256 here) before it takes its name, and removed when it differs.
+fn copy_script(name: &str, want: &str) -> String {
+    copy_script_in(REMOTE_BACKUPS, name, want)
+}
+
+fn copy_script_in(dir: &str, name: &str, want: &str) -> String {
+    let part = format!("{dir}/.{name}.part");
+    format!(
+        "umask 077 && mkdir -p {dir} && {{ cat > {part} || {{ rm -f {part}; exit 1; }}; }} && \
+if [ \"$(sha256sum {part} | cut -d' ' -f1)\" = {want} ]; then mv -f {part} {dir}/{name} && echo copy-ok; else rm -f {part}; echo copy-damaged; fi"
+    )
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -132,11 +155,17 @@ struct Probe {
     installed: bool,
     node: bool,
     curl: bool,
+    /// The release of the mikan installed there.
+    version: Option<String>,
 }
 
 fn parse_probe(out: &str) -> Probe {
     let has = |w: &str| out.lines().any(|l| l.trim() == w);
-    Probe { installed: has("installed"), node: has("node"), curl: !has("no-curl") }
+    Probe { installed: has("installed"), node: has("node"), curl: !has("no-curl"), version: parse_version(out) }
+}
+
+fn parse_version(out: &str) -> Option<String> {
+    out.lines().find_map(|l| l.trim().strip_prefix("version=")).map(str::to_owned).filter(|v| !v.is_empty())
 }
 
 impl Plan {
@@ -163,7 +192,7 @@ impl Plan {
 
     pub fn steps(&self) -> Vec<Step> {
         let mut s = vec![Step::Check, Step::Backup, Step::Install, Step::Copy, Step::Restore];
-        if !self.rules.is_empty() {
+        if self.firewall {
             s.push(Step::Firewall);
         }
         if self.stop_old {
@@ -188,8 +217,16 @@ impl Plan {
         )
     }
 
+    /// What the new server's ufw opens: the panel's port always (an install over a mikan
+    /// that was there keeps its old port, and the restore brings this one), then the rest.
+    fn ufw_rules(&self) -> Vec<String> {
+        let panel = format!("{}/tcp", self.panel_port);
+        let rest = self.rules.iter().filter(|x| **x != panel).cloned();
+        std::iter::once(panel.clone()).chain(rest).collect()
+    }
+
     fn ufw_script(&self) -> String {
-        let allow: Vec<String> = self.rules.iter().map(|r| format!("ufw allow {r} >/dev/null")).collect();
+        let allow: Vec<String> = self.ufw_rules().iter().map(|r| format!("ufw allow {r} >/dev/null")).collect();
         format!("if ufw status 2>/dev/null | grep -q 'Status: active'; then {} && echo ufw-on; else echo ufw-off; fi", allow.join(" && "))
     }
 
@@ -205,29 +242,34 @@ impl Plan {
         let t = &self.target;
         let file = name.unwrap_or("<the backup>");
         match step {
-            Step::Check => {
-                format!("Check that {t} lets ssh in with your key, runs as root or sudo without a password and has no mikan yet")
-            }
+            Step::Check => format!(
+                "Check that {t} lets ssh in with your key, runs as root or sudo without a password, has no mikan yet, and gets a release no older than this panel's {}",
+                self.version
+            ),
             Step::Backup => "Back up this panel (mikan backup)".into(),
             Step::Install => {
                 format!("Install mikan on {t} with the panel port {} (install.sh {})", self.panel_port, self.install_flags())
             }
             Step::Copy => format!("Copy {file} to {t}:{REMOTE_BACKUPS} and compare its sha256"),
             Step::Restore => format!("Restore it there (mikan restore -y {REMOTE_BACKUPS}/{file})"),
-            Step::Firewall => format!("Open in the new server's ufw what this one lets in for mikan: {}", self.rules.join(" ")),
-            Step::StopOld => "Stop the panel here (mikan restart starts it again)".into(),
+            Step::Firewall => {
+                format!("Open in the new server's ufw the panel's port and what this one lets in for mikan: {}", self.ufw_rules().join(" "))
+            }
+            Step::StopOld => "Stop the panel here, its payment adapters and its daily update".into(),
         }
     }
 
-    /// The step as commands to run by hand; copied: the backup is on the new server already.
-    fn by_hand(&self, step: Step, name: Option<&str>, copied: bool) -> Vec<String> {
+    /// The step as commands to run by hand. sudo: the user there is not root; copied: the
+    /// backup is on the new server already.
+    fn by_hand(&self, step: Step, name: Option<&str>, sudo: bool, copied: bool) -> Vec<String> {
         let file = name.unwrap_or("<the backup>");
+        let su = if sudo { "sudo " } else { "" };
         let on_new = |c: &str| format!("on the new server ({}): {c}", self.ssh_hint());
         match step {
             Step::Check => vec![self.ssh_hint()],
             Step::Backup => vec!["mikan backup".into()],
             Step::Install => vec![on_new(&format!(
-                "curl -fsSL https://github.com/{REPO}/releases/latest/download/install.sh | sudo bash -s -- {}",
+                "curl -fsSL https://github.com/{REPO}/releases/latest/download/install.sh | {su}bash -s -- {}",
                 self.install_flags()
             ))],
             Step::Copy => {
@@ -240,10 +282,14 @@ impl Plan {
                 };
                 vec![format!("scp {port}{DIR}/backups/{file} {to}:")]
             }
-            Step::Restore if copied => vec![on_new(&format!("sudo mikan restore {REMOTE_BACKUPS}/{file}"))],
-            Step::Restore => vec![on_new(&format!("sudo mikan restore ~/{file}"))],
-            Step::Firewall => vec![on_new(&self.rules.iter().map(|r| format!("sudo ufw allow {r}")).collect::<Vec<_>>().join("; "))],
-            Step::StopOld => vec![format!("docker compose --project-directory {DIR} stop")],
+            Step::Restore if copied => vec![on_new(&format!("{su}mikan restore {REMOTE_BACKUPS}/{file}"))],
+            Step::Restore => vec![on_new(&format!("{su}mikan restore ~/{file}"))],
+            Step::Firewall => vec![on_new(&self.ufw_rules().iter().map(|r| format!("{su}ufw allow {r}")).collect::<Vec<_>>().join("; "))],
+            Step::StopOld => vec![
+                format!("[ -e {ADDONS_COMPOSE} ] && docker compose -p mikan-addons -f {ADDONS_COMPOSE} down"),
+                format!("docker compose --project-directory {DIR} stop"),
+                format!("systemctl disable --now {UPDATE_TIMER}"),
+            ],
         }
     }
 
@@ -259,7 +305,9 @@ impl Plan {
             "  2. The nodes reach the new panel by themselves. Those with \"API only from the panel\" let it in within 15 minutes.".into(),
         ];
         if self.stop_old {
-            l.push("  3. The panel here is stopped; mikan restart starts it again, mikan uninstall removes it.".into());
+            l.push(format!(
+                "  3. The panel here is stopped and its daily update is off, so nothing starts it again. mikan uninstall removes it for good (the data stay in {DIR}); systemctl enable --now {UPDATE_TIMER} and mikan restart bring it back."
+            ));
         } else {
             l.push("  3. The panel here still runs: what changes in it from now on does not come over. Once the new one works, stop it: mikan uninstall (the data stay in /opt/mikan).".into());
         }
@@ -274,6 +322,8 @@ pub trait Runner {
     fn remote(&mut self, command: &str, input: Option<&Path>, capture: bool) -> Result<String>;
     fn backup(&mut self) -> Result<PathBuf>;
     fn sha256(&mut self, file: &Path) -> Result<String>;
+    /// The newest stable release, the one install.sh puts on a fresh server.
+    fn latest_stable(&mut self) -> Result<String>;
     fn stop_old(&mut self) -> Result<()>;
     fn say(&mut self, line: &str);
 }
@@ -300,15 +350,23 @@ pub fn execute(plan: &Plan, r: &mut dyn Runner) -> Result<()> {
         r.say(&format!("▸ {}", plan.describe(step, st.name())));
         if let Err(e) = run(plan, step, &mut st, r) {
             r.say("");
-            if i == 0 {
-                r.say("Nothing is changed. The move by hand:");
+            // The check changes nothing and its refusal says what to do: no steps to follow.
+            if step == Step::Check {
+                r.say(&format!("Nothing is changed. The move step by step: {GUIDE}"));
+                return Err(e);
+            }
+            if step == Step::StopOld {
+                r.say("The move is done, but the panel here did not stop. By hand:");
             } else {
                 r.say("The panel here runs as before. The rest by hand:");
             }
             for &s in &steps[i..] {
-                for l in plan.by_hand(s, st.name(), st.copied) {
+                for l in plan.by_hand(s, st.name(), st.sudo, st.copied) {
                     r.say(&format!("  {l}"));
                 }
+            }
+            if !matches!(step, Step::Backup | Step::StopOld) {
+                r.say("The install there has begun: running mikan move again needs --force.");
             }
             r.say(&format!("All the steps: {GUIDE}"));
             return Err(e);
@@ -333,7 +391,7 @@ fn run(plan: &Plan, step: Step, st: &mut State, r: &mut dyn Runner) -> Result<()
             })?;
             st.sudo = id.trim() != "0";
             let out = r
-                .remote(&as_root(st.sudo, PROBE), None, true)
+                .remote(&as_root(st.sudo, &probe_script()), None, true)
                 .with_context(|| format!("{t} needs the user root, or sudo without a password"))?;
             let p = parse_probe(&out);
             if p.node {
@@ -346,6 +404,28 @@ fn run(plan: &Plan, step: Step, st: &mut State, r: &mut dyn Runner) -> Result<()
             }
             if !p.curl {
                 bail!("{t} has no curl: install it there (apt install curl) and run the move again");
+            }
+            let v = &plan.version;
+            if !release::valid_version(v) {
+                // A local build: no release can be told to be as new as it.
+                if !plan.force {
+                    bail!(
+                        "this panel runs {v:?}, not a release: the move cannot tell whether the new server's release takes its backup. --force moves it anyway"
+                    );
+                }
+                return Ok(());
+            }
+            // The install takes a fresh server to the newest stable release, and updates a
+            // mikan that is there no lower than that.
+            let latest = r.latest_stable().context("cannot read the newest stable release")?;
+            let after = match p.version.filter(|there| p.installed && release::newer(there, &latest)) {
+                Some(there) => there,
+                None => latest,
+            };
+            if release::newer(v, &after) {
+                bail!(
+                    "this panel runs mikan {v}, and {t} would get mikan {after}: a backup goes onto the same release or a newer one. Update the new server to {v} first, then run mikan move --force"
+                );
             }
         }
         Step::Backup => {
@@ -364,21 +444,28 @@ fn run(plan: &Plan, step: Step, st: &mut State, r: &mut dyn Runner) -> Result<()
             let file = st.backup.clone().context("no backup")?;
             let name = st.name().unwrap_or_default().to_owned();
             let want = r.sha256(&file)?;
-            let out = r
-                .remote(&as_root(st.sudo, &copy_script(&name)), Some(&file), true)
-                .with_context(|| format!("copying the backup to {t} failed"))?;
-            let got = out.split_whitespace().next().unwrap_or_default();
-            if got != want {
-                bail!("the backup on {t} differs from this one (sha256 {got:?}, here {want}): the copy was damaged on the way");
+            if !release::is_sha256_hex(&want) {
+                bail!("the sha256 of {} is {want:?}", file.display());
             }
-            st.copied = true;
+            let out = r
+                .remote(&as_root(st.sudo, &copy_script(&name, &want)), Some(&file), true)
+                .with_context(|| format!("copying the backup to {t} failed"))?;
+            match out.lines().map(str::trim).find(|l| l.starts_with("copy-")) {
+                Some("copy-ok") => st.copied = true,
+                Some("copy-damaged") => {
+                    bail!("the copy on {t} differs from this backup (sha256 {want}): it was damaged on the way and removed")
+                }
+                _ => bail!("copying the backup to {t} did not finish"),
+            }
         }
         Step::Restore => {
-            let out = r.remote(&as_root(st.sudo, &format!("{REMOTE_MIKAN} --version")), None, true)?;
-            let there = out.split_whitespace().nth(1).unwrap_or_default();
-            if release::newer(&plan.version, there) {
+            // What the install left there is the panel the backup goes onto.
+            let out = r.remote(&as_root(st.sudo, VERSION_PROBE), None, true)?;
+            let there = parse_version(&out).unwrap_or_default();
+            if release::valid_version(&plan.version) && release::newer(&plan.version, &there) {
                 bail!(
-                    "{t} got mikan {there}, older than this panel's {}: a backup goes onto the same release or a newer one",
+                    "{t} runs mikan {there:?}, older than this panel's {}: a backup goes onto the same release or a newer one. Update the new server to {} first",
+                    plan.version,
                     plan.version
                 );
             }
@@ -393,10 +480,10 @@ fn run(plan: &Plan, step: Step, st: &mut State, r: &mut dyn Runner) -> Result<()
             if out.lines().any(|l| l.trim() == "ufw-off") {
                 r.say(&format!(
                     "  ufw is off on {t}: nothing to open there. A firewall in the hoster's panel needs: {}",
-                    plan.rules.join(" ")
+                    plan.ufw_rules().join(" ")
                 ));
             } else {
-                r.say(&format!("  opened: {}", plan.rules.join(" ")));
+                r.say(&format!("  opened: {}", plan.ufw_rules().join(" ")));
             }
         }
         Step::StopOld => r.stop_old()?,
@@ -468,7 +555,14 @@ impl Runner for System {
         let _lock = lock::acquire(lock::Wait::Block, &mut crate::out)?;
         crate::addon::down();
         docker::compose_run(&["stop"])?;
+        if Path::new("/etc/systemd/system").join(UPDATE_TIMER).exists() {
+            system::run_quiet("systemctl", &["disable", "--now", UPDATE_TIMER]).context("turn the daily update off")?;
+        }
         Ok(())
+    }
+
+    fn latest_stable(&mut self) -> Result<String> {
+        Ok(release::find(None, release::Channel::Stable)?.manifest.version)
     }
 
     fn say(&mut self, line: &str) {
@@ -555,16 +649,21 @@ mod tests {
         assert_eq!(p.steps().last(), Some(&Step::StopOld));
         let mut p = plan(&["root@new"]);
         p.rules.clear();
-        assert!(!p.steps().contains(&Step::Firewall), "nothing to open, no step");
+        assert!(p.steps().contains(&Step::Firewall), "the panel's port is always opened");
+        assert_eq!(p.ufw_rules(), ["21355/tcp"]);
         assert!(p.install_script().contains("bash \"$f\" --yes --port 21355;"));
         assert!(p.install_script().contains(&format!("https://github.com/{REPO}/releases/latest/download/install.sh")));
         p.firewall = false;
         assert!(p.install_script().contains("--port 21355 --no-firewall"), "ufw left alone here, left alone there");
+        assert!(!p.steps().contains(&Step::Firewall));
         let p = plan(&["root@new"]);
         assert_eq!(
             p.ufw_script(),
-            "if ufw status 2>/dev/null | grep -q 'Status: active'; then ufw allow 2097/tcp >/dev/null && ufw allow 20000:20100/udp >/dev/null && echo ufw-on; else echo ufw-off; fi"
+            "if ufw status 2>/dev/null | grep -q 'Status: active'; then ufw allow 21355/tcp >/dev/null && ufw allow 2097/tcp >/dev/null && ufw allow 20000:20100/udp >/dev/null && echo ufw-on; else echo ufw-off; fi"
         );
+        let mut p = plan(&["root@new"]);
+        p.rules.insert(0, "21355/tcp".into());
+        assert_eq!(p.ufw_rules(), ["21355/tcp", "2097/tcp", "20000:20100/udp"], "the panel's port once");
         assert!(p.describe(Step::Install, None).contains("port 21355"));
     }
 
@@ -583,7 +682,7 @@ mod tests {
     #[test]
     fn the_scripts_parse_in_sh() {
         let p = plan(&["root@new"]);
-        for s in [PROBE.to_owned(), p.install_script(), p.ufw_script(), copy_script("mikan-1.tar.gz")] {
+        for s in [probe_script(), VERSION_PROBE.to_owned(), p.install_script(), p.ufw_script(), copy_script("mikan-1.tar.gz", SUM)] {
             let line = as_root(false, &s);
             for check in [&s, &line] {
                 let ok = Command::new("sh").args(["-n", "-c", check]).status().unwrap().success();
@@ -594,22 +693,83 @@ mod tests {
         assert_eq!(String::from_utf8_lossy(&out.stdout), "it's|$HOME|a b|");
     }
 
+    fn tmpdir(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("mikan-relocate-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    /// The version probe reads what a server's settings say, in either form.
+    #[test]
+    fn the_version_probe_reads_the_settings() {
+        let d = tmpdir("version");
+        let script = VERSION_PROBE.replace("/opt/mikan", d.to_str().unwrap());
+        let run = || String::from_utf8(Command::new("sh").args(["-c", &script]).output().unwrap().stdout).unwrap();
+        assert_eq!(parse_version(&run()), None);
+        std::fs::write(
+            d.join("config.json"),
+            "{\n  \"MIKAN_MODE\": \"panel\",\n  \"MIKAN_VERSION\": \"0.5.2.1-rc.2\",\n  \"PANEL_PORT\": \"1\"\n}\n",
+        )
+        .unwrap();
+        assert_eq!(parse_version(&run()).as_deref(), Some("0.5.2.1-rc.2"));
+        std::fs::remove_file(d.join("config.json")).unwrap();
+        std::fs::write(d.join(".env"), "PANEL_PORT=1\nMIKAN_VERSION=0.4.9\n").unwrap();
+        assert_eq!(parse_version(&run()).as_deref(), Some("0.4.9"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The copy takes its name only when its sha256 is the one sent along, and a damaged one
+    /// leaves nothing behind.
+    #[test]
+    fn the_copy_is_checked_before_it_takes_its_name() {
+        let d = tmpdir("copy");
+        let dir = d.join("backups");
+        let data = b"the archive";
+        let want = release::sha256_hex(data);
+        let copy = |want: &str| {
+            let mut c = Command::new("sh")
+                .args(["-c", &copy_script_in(dir.to_str().unwrap(), "mikan-1.tar.gz", want)])
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            std::io::Write::write_all(&mut c.stdin.take().unwrap(), data).unwrap();
+            String::from_utf8(c.wait_with_output().unwrap().stdout).unwrap()
+        };
+        let left = || std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect::<Vec<_>>();
+        assert_eq!(copy(&"0".repeat(64)).trim(), "copy-damaged");
+        assert!(left().is_empty(), "a damaged copy is removed: {:?}", left());
+        assert_eq!(copy(&want).trim(), "copy-ok");
+        assert_eq!(left(), ["mikan-1.tar.gz"]);
+        assert_eq!(std::fs::read(dir.join("mikan-1.tar.gz")).unwrap(), data);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn the_probe() {
-        assert_eq!(parse_probe(""), Probe { installed: false, node: false, curl: true });
-        assert_eq!(parse_probe("installed\nnode\nno-curl\n"), Probe { installed: true, node: true, curl: false });
+        assert_eq!(parse_probe(""), Probe { installed: false, node: false, curl: true, version: None });
+        assert_eq!(
+            parse_probe("installed\nnode\nno-curl\nversion=0.5.2.0\n"),
+            Probe { installed: true, node: true, curl: false, version: Some("0.5.2.0".into()) }
+        );
+        assert_eq!(parse_probe("version=\n").version, None);
     }
 
     /// The new server and this one as the test says they answer.
     struct Fake {
         uid: &'static str,
         probe: &'static str,
-        version: &'static str,
-        /// The sha256 the new server reports for the copy.
+        /// The newest stable release.
+        latest: &'static str,
+        /// The release the new server's settings name after the install.
+        there: &'static str,
+        /// The sha256 the new server finds for the copy.
         copy_sum: &'static str,
         ufw: &'static str,
         /// A remote command with this in it fails.
         fail: Option<&'static str>,
+        stop_fails: bool,
         calls: Vec<String>,
         said: Vec<String>,
     }
@@ -621,10 +781,12 @@ mod tests {
             Self {
                 uid: "0\n",
                 probe: "",
-                version: "mikan 0.5.2.1\n",
+                latest: "0.5.2.1",
+                there: "version=0.5.2.1\n",
                 copy_sum: SUM,
                 ufw: "ufw-on\n",
                 fail: None,
+                stop_fails: false,
                 calls: Vec::new(),
                 said: Vec::new(),
             }
@@ -642,10 +804,11 @@ mod tests {
                 self.uid.into()
             } else if command.contains("command -v curl") {
                 self.probe.into()
-            } else if command.contains("--version") {
-                self.version.into()
             } else if command.contains("sha256sum") {
-                format!("{}  /opt/mikan/backups/mikan-1.tar.gz\n", self.copy_sum)
+                // As the script does: the copy's own sum against the one it was sent.
+                if command.contains(&format!("= {} ]", self.copy_sum)) { "copy-ok\n" } else { "copy-damaged\n" }.into()
+            } else if command.contains("MIKAN_VERSION") {
+                self.there.into()
             } else if command.contains("ufw status") {
                 self.ufw.into()
             } else {
@@ -659,8 +822,14 @@ mod tests {
         fn sha256(&mut self, _: &Path) -> Result<String> {
             Ok(SUM.into())
         }
+        fn latest_stable(&mut self) -> Result<String> {
+            Ok(self.latest.into())
+        }
         fn stop_old(&mut self) -> Result<()> {
             self.calls.push("stop old".into());
+            if self.stop_fails {
+                bail!("docker compose stop: no");
+            }
             Ok(())
         }
         fn say(&mut self, line: &str) {
@@ -676,6 +845,12 @@ mod tests {
         fn said(&self, s: &str) -> bool {
             self.said.iter().any(|l| l.contains(s))
         }
+        fn restored(&self) -> bool {
+            self.calls.iter().any(|c| c.contains("mikan restore"))
+        }
+        fn installed(&self) -> bool {
+            self.calls.iter().any(|c| c.contains("install.sh"))
+        }
     }
 
     #[test]
@@ -689,7 +864,7 @@ mod tests {
                 "backup",
                 "remote sh -c 'f=$(mktemp) && curl -fsSL --proto",
                 "remote sh -c 'umask 077 && mkdir -p /opt/mikan/backups",
-                "remote sh -c '/usr/local/bin/mikan --version",
+                "remote sh -c 'sed -n ",
                 "remote sh -c '/usr/local/bin/mikan restore -y",
                 "remote sh -c 'if ufw status 2>/dev/null | grep",
                 "stop old",
@@ -699,8 +874,8 @@ mod tests {
         );
         assert!(f.calls[4].ends_with("< /opt/mikan/backups/mikan-1.tar.gz"), "the backup goes on stdin: {}", f.calls[4]);
         assert!(f.calls[6].contains("restore -y /opt/mikan/backups/mikan-1.tar.gz"));
-        assert!(f.said("opened: 2097/tcp 20000:20100/udp"));
-        assert!(f.said("Point the panel's domain") && f.said("within 15 minutes") && f.said("is stopped"));
+        assert!(f.said("opened: 21355/tcp 2097/tcp 20000:20100/udp"));
+        assert!(f.said("Point the panel's domain") && f.said("within 15 minutes") && f.said("daily update is off"));
     }
 
     #[test]
@@ -715,58 +890,122 @@ mod tests {
 
     #[test]
     fn a_server_with_mikan_is_refused_without_force() {
-        let mut f = Fake { probe: "installed\n", ..Default::default() };
+        let mut f = Fake { probe: "installed\nversion=0.5.2.1\n", ..Default::default() };
         let e = execute(&plan(&["root@new"]), &mut f).unwrap_err();
         assert!(format!("{e:#}").contains("--force"), "{e:#}");
         assert_eq!(f.calls.len(), 2, "nothing is done after the check: {:?}", f.calls);
         assert!(f.said("Nothing is changed"));
 
-        let mut f = Fake { probe: "installed\n", ..Default::default() };
+        let mut f = Fake { probe: "installed\nversion=0.5.2.1\n", ..Default::default() };
         execute(&plan(&["root@new", "--force"]), &mut f).unwrap();
-        assert!(f.calls.iter().any(|c| c.contains("mikan restore")));
+        assert!(f.restored());
 
         let mut f = Fake { probe: "installed\nnode\n", ..Default::default() };
         assert!(execute(&plan(&["root@new", "--force"]), &mut f).is_err(), "a node never takes a panel");
+        assert!(!f.said("install.sh") && !f.said("mikan restore"), "no steps by hand for a node: {:?}", f.said);
         let mut f = Fake { probe: "no-curl\n", ..Default::default() };
         assert!(format!("{:#}", execute(&plan(&["root@new"]), &mut f).unwrap_err()).contains("curl"));
     }
 
+    /// Over a mikan that was there the install keeps its old port, and the restore brings
+    /// this panel's: its rule is opened whatever else is.
+    #[test]
+    fn a_forced_move_opens_the_panel_port() {
+        let mut p = plan(&["root@new", "--force"]);
+        p.rules.clear();
+        let mut f = Fake { probe: "installed\nversion=0.5.2.1\n", ..Default::default() };
+        execute(&p, &mut f).unwrap();
+        let ufw = f.calls.iter().find(|c| c.contains("ufw status")).expect("the firewall step runs");
+        assert!(ufw.contains("ufw allow 21355/tcp"), "{ufw}");
+        assert!(f.said("opened: 21355/tcp"));
+    }
+
+    /// The release the new server will run is known before anything is done: a backup does
+    /// not go onto an older one.
+    #[test]
+    fn a_panel_newer_than_the_new_server_stops_at_the_check() {
+        let rc = |line: &[&str]| Plan { version: "0.5.3.0-rc.1".into(), ..plan(line) };
+        let mut f = Fake::default();
+        let e = format!("{:#}", execute(&rc(&["root@new"]), &mut f).unwrap_err());
+        assert!(e.contains("would get mikan 0.5.2.1") && e.contains("Update the new server to 0.5.3.0-rc.1 first"), "{e}");
+        assert!(!e.contains("restore"), "{e}");
+        assert_eq!(f.calls.len(), 2, "stopped at the check: {:?}", f.calls);
+
+        // --force onto a server already at that release: its own panel's release counts
+        let mut f = Fake { probe: "installed\nversion=0.5.3.0-rc.1\n", there: "version=0.5.3.0-rc.1\n", ..Default::default() };
+        execute(&rc(&["root@new", "--force"]), &mut f).unwrap();
+        assert!(f.restored());
+        // ... and onto one older than it, never
+        let mut f = Fake { probe: "installed\nversion=0.5.2.0\n", ..Default::default() };
+        assert!(execute(&rc(&["root@new", "--force"]), &mut f).is_err());
+        assert!(!f.installed());
+
+        // a stable release newer than this panel: fine
+        let mut f = Fake { latest: "0.5.3.0", there: "version=0.5.3.0\n", ..Default::default() };
+        execute(&plan(&["root@new"]), &mut f).unwrap();
+        // the settings there name an older panel after the install (it did not update): no restore
+        let mut f = Fake { there: "version=0.5.2.0\n", ..Default::default() };
+        let e = format!("{:#}", execute(&plan(&["root@new"]), &mut f).unwrap_err());
+        assert!(e.contains("older than this panel's 0.5.2.1"), "{e}");
+        assert!(!f.restored());
+        let mut f = Fake { there: "", ..Default::default() };
+        assert!(execute(&plan(&["root@new"]), &mut f).is_err(), "no release there: no restore");
+        assert!(!f.restored());
+    }
+
+    /// A local build is no release: the move cannot tell what takes its backup.
+    #[test]
+    fn a_panel_of_no_release_needs_force() {
+        for v in ["dev", "unknown", ""] {
+            let p = Plan { version: v.into(), ..plan(&["root@new"]) };
+            let mut f = Fake::default();
+            let e = format!("{:#}", execute(&p, &mut f).unwrap_err());
+            assert!(e.contains("not a release") && e.contains("--force"), "{v}: {e}");
+            assert!(!f.installed());
+            let p = Plan { version: v.into(), ..plan(&["root@new", "--force"]) };
+            let mut f = Fake::default();
+            execute(&p, &mut f).unwrap();
+            assert!(f.restored());
+        }
+    }
+
     #[test]
     fn a_failed_step_stops_and_tells_the_rest() {
-        let mut f = Fake { fail: Some("install.sh"), ..Default::default() };
-        let e = execute(&plan(&["root@new", "-p", "2222"]), &mut f).unwrap_err();
-        assert!(format!("{e:#}").contains("the install on root@new failed"), "{e:#}");
+        let mut f = Fake { uid: "1000\n", fail: Some("install.sh"), ..Default::default() };
+        let e = execute(&plan(&["admin@new", "-p", "2222"]), &mut f).unwrap_err();
+        assert!(format!("{e:#}").contains("the install on admin@new failed"), "{e:#}");
         assert_eq!(f.calls.len(), 4, "nothing after the install: {:?}", f.calls);
         assert!(f.said("The rest by hand"));
         assert!(f.said("install.sh | sudo bash -s -- --yes --port 21355"));
-        assert!(f.said("scp -P 2222 /opt/mikan/backups/mikan-1.tar.gz root@new:"));
+        assert!(f.said("scp -P 2222 /opt/mikan/backups/mikan-1.tar.gz admin@new:"));
         assert!(f.said("sudo mikan restore ~/mikan-1.tar.gz"), "not copied: the restore takes it from the home");
-        assert!(f.said("sudo ufw allow 2097/tcp; sudo ufw allow 20000:20100/udp"));
+        assert!(f.said("sudo ufw allow 21355/tcp; sudo ufw allow 2097/tcp; sudo ufw allow 20000:20100/udp"));
+        assert!(f.said("needs --force"));
         assert!(f.said(GUIDE));
 
         let mut f = Fake { fail: Some("mikan restore"), ..Default::default() };
         assert!(execute(&plan(&["root@new"]), &mut f).is_err());
-        assert!(f.said("sudo mikan restore /opt/mikan/backups/mikan-1.tar.gz"), "copied: {:?}", f.said);
+        assert!(f.said(": mikan restore /opt/mikan/backups/mikan-1.tar.gz"), "copied, as root: {:?}", f.said);
+        assert!(!f.said("sudo mikan") && !f.said("sudo ufw"), "root needs no sudo: {:?}", f.said);
         assert!(!f.said("scp "), "the copy is done, not repeated");
 
         let mut f = Fake { fail: Some("id -u"), ..Default::default() };
         let e = execute(&plan(&["root@new", "-p", "2222"]), &mut f).unwrap_err();
         assert!(format!("{e:#}").contains("`ssh -p 2222 root@new` logs in with your key"), "{e:#}");
+        assert!(!f.said("needs --force"));
+
+        let mut f = Fake { stop_fails: true, ..Default::default() };
+        assert!(execute(&plan(&["root@new", "--stop-old"]), &mut f).is_err());
+        assert!(f.said("The move is done, but the panel here did not stop"), "{:?}", f.said);
+        assert!(!f.said("runs as before") && !f.said("needs --force"));
+        assert!(f.said("compose.yml down") && f.said("--project-directory /opt/mikan stop") && f.said("disable --now mikan-update.timer"));
     }
 
     #[test]
-    fn a_damaged_copy_or_an_older_release_is_not_restored() {
+    fn a_damaged_copy_is_not_restored() {
         let mut f = Fake { copy_sum: "0000000000000000000000000000000000000000000000000000000000000000", ..Default::default() };
         let e = execute(&plan(&["root@new"]), &mut f).unwrap_err();
-        assert!(format!("{e:#}").contains("damaged"), "{e:#}");
-        assert!(!f.calls.iter().any(|c| c.contains("mikan restore")));
-
-        let mut f = Fake { version: "mikan 0.5.2.0\n", ..Default::default() };
-        let e = execute(&plan(&["root@new"]), &mut f).unwrap_err();
-        assert!(format!("{e:#}").contains("older than this panel's 0.5.2.1"), "{e:#}");
-        assert!(!f.calls.iter().any(|c| c.contains("mikan restore")));
-
-        let mut f = Fake { version: "mikan 0.5.3.0\n", ..Default::default() };
-        execute(&plan(&["root@new"]), &mut f).unwrap();
+        assert!(format!("{e:#}").contains("damaged on the way and removed"), "{e:#}");
+        assert!(!f.restored());
     }
 }

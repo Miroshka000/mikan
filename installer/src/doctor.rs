@@ -617,11 +617,13 @@ fn mikan_listeners(ss: &str) -> Vec<(u16, Proto)> {
 pub fn moved_rules(install: &Install) -> Vec<String> {
     let panel = install.config.get("PANEL_PORT").and_then(|p| p.parse().ok());
     let mut wanted = wants(None, panel, node_state().as_ref());
+    let status = if install.ufw() { system::ufw_status() } else { None };
     let ss = system::output("ss", &["-Hlntup"]).unwrap_or_default();
-    for (port, proto) in mikan_listeners(&ss) {
+    // With ufw off no rule tells the core's own UDP sockets (its outgoing ones, on random
+    // ports) from a listener: only TCP listeners count then.
+    for (port, proto) in mikan_listeners(&ss).into_iter().filter(|(_, p)| status.is_some() || *p == Proto::Tcp) {
         wanted.push(Want { what: "mikan listens".into(), lo: port, hi: port, proto: Some(proto), anyone: true, level: Level::Warn });
     }
-    let status = if install.ufw() { system::ufw_status() } else { None };
     let skip = crate::host::rules(panel, None);
     carried(status.as_deref(), &wanted).into_iter().filter(|r| !skip.contains(r)).collect()
 }
