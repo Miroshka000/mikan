@@ -131,6 +131,38 @@ rules:
 	corecheck.SingBox(t, raw)
 }
 
+// The chains of each shape Citrus loads, as Citrus wires them: every server's own outbound
+// dials through the hop before it, of a chain as a hop its first hop, of a group as a hop its
+// members, and past DIRECT nothing. sing-box runs it.
+func TestChainShapes(t *testing.T) {
+	lists(t)
+	// sing-box carries no XHTTP: the template's own proxies.
+	src := `proxies:
+  - {name: a, type: trojan, server: 198.51.100.7, port: 443, password: x, sni: a.example, udp: true}
+  - {name: b, type: ss, server: 198.51.100.8, port: 8388, cipher: aes-128-gcm, password: x}
+  - {name: c, type: trojan, server: 198.51.100.9, port: 443, password: x, sni: c.example}
+  - {name: d, type: ss, server: 198.51.100.10, port: 8388, cipher: aes-128-gcm, password: x}
+` + subtest.Chains("a", "b", "c", "d")
+	prof := profileOf(subtest.TwoNodes())
+	if err := mihomo.CheckTemplate(prof, src); err != nil {
+		t.Fatalf("the template is not saved: %v", err)
+	}
+	raw, err := Render(context.Background(), prof, model.GroupNames{}, routing.All, subtest.Clash(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c sbConfig
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]any{"b": "a", "a": "c", "d": "b", "c": nil} {
+		if o := outbound(c, name); o == nil || o["detour"] != want {
+			t.Errorf("%s dials through %v, want %v", name, o["detour"], want)
+		}
+	}
+	corecheck.SingBox(t, raw)
+}
+
 // Shadowsocks wraps UDP in UDP over TCP when the server asks for it, of mihomo's version 1
 // when none is given; one of a version mihomo refuses is left out.
 func TestShadowsocks(t *testing.T) {

@@ -251,6 +251,29 @@ var Variants = append(slices.Clip(CoreVariants),
 // Clash is the admin's own Clash profile src as the template it is.
 func Clash(src string) model.Template { return model.Template{Core: model.CoreMihomo, Body: src} }
 
+// Chains is an admin's own Clash profile of the proxies a, b, c and d with a chain of each
+// shape Citrus loads: of proxies (Прямая: b through a), a chain as a hop (Вложенная: its first
+// hop, a, through c), a group as a hop (Группа: d of Выход through b), DIRECT as the first hop
+// (Напрямую: c through nothing). Each proxy dials through one hop wherever it goes, and no
+// chain loops.
+func Chains(a, b, c, d string) string {
+	return `mode: rule
+proxy-groups:
+  - {name: Прокси, type: select, proxies: [Прямая, Вложенная, Группа, Напрямую, ` + a + `, ` + b + `, ` + c + `, ` + d + `]}
+  - {name: Выход, type: url-test, proxies: [` + d + `]}
+  - {name: Прямая, type: chain, proxies: [` + a + `, ` + b + `]}
+  - {name: Вложенная, type: chain, proxies: [` + c + `, Прямая]}
+  - {name: Группа, type: chain, proxies: [` + b + `, Выход]}
+  - {name: Напрямую, type: chain, proxies: [DIRECT, ` + c + `]}
+rules:
+  - DOMAIN-SUFFIX,example.com,Прямая
+  - DOMAIN-SUFFIX,example.org,Вложенная
+  - DOMAIN-SUFFIX,example.net,Группа
+  - DOMAIN-SUFFIX,example.io,Напрямую
+  - MATCH,Прокси
+`
+}
+
 // OwnSingBoxTemplate is an admin's own sing-box template with groups of each kind of ask
 // (one left with no server for the two-node user), a rule set downloaded through the main
 // group and DNS through it.

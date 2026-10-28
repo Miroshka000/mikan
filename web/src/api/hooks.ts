@@ -12,6 +12,7 @@ export const qk = {
   boundDevices: (id: number) => ["users", "bound", id] as const,
   deviceBans: (id: number) => ["users", "bans", id] as const,
   userOnline: (id: number) => ["users", "online", id] as const,
+  userNodes: (id: number) => ["users", "nodes", id] as const,
   tariffs: ["tariffs"] as const,
   inbounds: ["inbounds"] as const,
   presets: ["presets"] as const,
@@ -62,6 +63,7 @@ export const qk = {
   inactive: (days: number) => ["users", "inactive", days] as const,
   nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
   nodeShares: (range: string) => ["node-shares", range] as const,
+  nodeClients: (node: number, q: string) => ["node-clients", node, q] as const,
 };
 
 export const meQuery = {
@@ -155,6 +157,15 @@ export function useUserOnline(id: number) {
     queryKey: qk.userOnline(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/online", { params: { path: { id } }, signal })),
     refetchInterval: 15_000,
+  });
+}
+
+/** The nodes a user went through: last seen and traffic on each, and where online now. */
+export function useUserNodes(id: number) {
+  return useQuery({
+    queryKey: qk.userNodes(id),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/nodes", { params: { path: { id } }, signal })),
+    refetchInterval: 60_000,
   });
 }
 
@@ -392,6 +403,23 @@ export function useNodeTraffic(id: number | undefined, range: "24h" | "7d" | "30
     // shows the previous one's.
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === (id ?? 0) ? prev : undefined),
     refetchInterval: 60_000,
+  });
+}
+
+const NODE_CLIENTS_PAGE = 50;
+
+/** Who went through a node, the latest seen first, a page at a time; q is a part of the name. */
+export function useNodeClients(id: number | undefined, q: string) {
+  return useInfiniteQuery({
+    queryKey: qk.nodeClients(id ?? 0, q),
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      unwrap(api.GET("/api/v1/nodes/{id}/clients", { params: { path: { id: id! }, query: { q: q || undefined, limit: NODE_CLIENTS_PAGE, offset: pageParam } }, signal })),
+    getNextPageParam: nextOffset,
+    enabled: !!id,
+    // Another search keeps the last list while it loads; another node never shows the previous one's.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === (id ?? 0) ? prev : undefined),
+    refetchInterval: (query) => 30_000 * Math.max(1, query.state.data?.pages.length ?? 1),
   });
 }
 
