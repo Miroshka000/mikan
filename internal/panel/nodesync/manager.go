@@ -425,6 +425,46 @@ func (m *Manager) ServiceRegions(ctx context.Context, id int64) (nodeapi.Service
 	return c.ServiceRegions(ctx)
 }
 
+// ConnReset is how closing connections went on one node: how many it closed, or why it
+// did not (a *nodeapi.StatusError 404 from a node that predates the call).
+type ConnReset struct {
+	Node   int64
+	Closed int
+	Err    error
+}
+
+// ResetSlots has node id, or every node (0), close the open connections of the slots and
+// keep their access, so the clients connect again at once. The nodes are asked at once;
+// one that cannot is in the answer with its error, the others are not held up by it.
+func (m *Manager) ResetSlots(ctx context.Context, id int64, slots []string) []ConnReset {
+	var ids []int64
+	if id != 0 {
+		ids = []int64{id}
+	} else {
+		for _, s := range m.Syncers() {
+			ids = append(ids, s.id)
+		}
+	}
+	out := make([]ConnReset, len(ids))
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Go(func() {
+			out[i].Node = id
+			c, err := clientOf[interface {
+				ResetSlots(context.Context, []string) (nodeapi.ResetResult, error)
+			}](m, id)
+			if err != nil {
+				out[i].Err = err
+				return
+			}
+			r, err := c.ResetSlots(ctx, slots)
+			out[i].Closed, out[i].Err = r.Closed, err
+		})
+	}
+	wg.Wait()
+	return out
+}
+
 // clientOf returns a node's client as T: methods beyond Node are optional, and tests
 // stand in for nodes with fakes that have only some of them.
 func clientOf[T any](m *Manager, id int64) (T, error) {

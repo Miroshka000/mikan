@@ -1,4 +1,4 @@
-import { Ban, Hourglass, Laptop, Layers, Pencil, Server, Smartphone, Unlink } from "lucide-react";
+import { Ban, Hourglass, Laptop, Layers, Pencil, RotateCw, Server, Smartphone, Unlink } from "lucide-react";
 import { useState } from "react";
 import { ApiError, errorText, type Schemas, type User } from "../../../api/client";
 import { useBoundDevices, useDeviceBans, useDevices, userActions, useSettings, useUserMutation, useUserOnline } from "../../../api/hooks";
@@ -243,46 +243,88 @@ function BoundDevices({ u }: { u: User }) {
   );
 }
 
+type OnlineRow = Schemas["UserOnlineView"];
+
 /**
  * Where the user is online now, by node and by keys (a bound device's or the user's own),
- * as the nodes last reported. Nothing shows while nobody is online. It only shows: for
- * now a node closes a slot's connections only when its access goes (unbind, ban, expiry, quota).
+ * as the nodes last reported. Nothing shows while nobody is online. A row's button, or the
+ * one for all of them, has the nodes close those connections and keep the access: the apps
+ * connect again at once. A node too old for it is skipped and named.
  */
 function OnlineNow({ u }: { u: User }) {
   const online = useUserOnline(u.id);
   const bound = useBoundDevices(u.id);
+  const reset = useUserMutation(userActions.resetConnections, "devices");
+  const toast = useToast();
+  // null: nothing picked; "all": every node and key; else one row.
+  const [pick, setPick] = useState<OnlineRow | "all" | null>(null);
   const list = online.data ?? [];
   if (list.length === 0) return null;
   const device = (id: number | null) => {
     const d = id == null ? undefined : bound.data?.find((b) => b.id === id);
     return d ? deviceName(d) : t("userDrawer.liveOwnKeys");
   };
+  const where = (s: OnlineRow) => `${s.node_name || `#${s.node_id}`} · ${device(s.device_id)}`;
+  const run = () => {
+    if (!pick) return;
+    // The user's own keys are device 0: null in the list means them, not "all keys".
+    const body = pick === "all" ? {} : { node_id: pick.node_id, device_id: pick.device_id ?? 0 };
+    reset.mutate(
+      { id: u.id, ...body },
+      {
+        onSuccess: (r) => {
+          const skipped = r.nodes.filter((n) => n.status !== "ok").map((n) => n.node_name || `#${n.node_id}`);
+          if (skipped.length > 0) toast.error(t("userDrawer.liveResetSkipped", { n: r.closed, nodes: skipped.join(", ") }));
+          else toast.ok(t("userDrawer.liveResetDone", { n: r.closed }));
+          setPick(null);
+        },
+        onError: (e) => toast.error(errorText(e)),
+      },
+    );
+  };
   return (
     <>
-      <h4 className="mt-5 mb-2 flex justify-between gap-2 text-xs font-medium text-[var(--ink-500)]">
+      <h4 className="mt-5 mb-2 flex items-center justify-between gap-2 text-xs font-medium text-[var(--ink-500)]">
         {t("userDrawer.liveTitle")}
-        <span className="num">{list.length}</span>
+        <span className="flex items-center gap-2">
+          <span className="num">{list.length}</span>
+          {list.length > 1 ? (
+            <Button size="sm" variant="ghost" onClick={() => setPick("all")}>
+              {t("userDrawer.liveResetAll")}
+            </Button>
+          ) : null}
+        </span>
       </h4>
       <ul className="flex flex-col gap-2" aria-label={t("userDrawer.liveTitle")}>
         {list.map((s) => (
-          <li key={`${s.node_id}-${s.device_id ?? 0}`} className="panel-soft grid grid-cols-[36px_minmax(0,1fr)] items-center gap-3 p-2">
+          <li key={`${s.node_id}-${s.device_id ?? 0}`} className="panel-soft grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 p-2">
             <span className="grid h-9 w-9 place-items-center rounded-[10px] bg-[var(--hover)] text-[var(--leaf-700)]" aria-hidden>
               <Server size={18} />
             </span>
             <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium">
-                {s.node_name || `#${s.node_id}`} · {device(s.device_id)}
-              </div>
+              <div className="truncate text-[13px] font-medium">{where(s)}</div>
               <div className="truncate text-xs text-[var(--ink-500)]">
                 {s.online_ips.length > 0 ? <span className="mono">{s.online_ips.map(maskIP).join(", ")}</span> : null}
                 {s.online_ips.length > 0 ? " · " : ""}
                 <span className="num">{t("userDrawer.liveConns", { n: s.conns })}</span>
               </div>
             </div>
+            <button type="button" className="icon-btn" aria-label={t("userDrawer.liveResetLabel", { name: where(s) })} title={t("userDrawer.liveReset")} onClick={() => setPick(s)}>
+              <RotateCw size={16} aria-hidden />
+            </button>
           </li>
         ))}
       </ul>
       <p className="mt-2 text-xs text-[var(--ink-500)]">{t("userDrawer.liveNote")}</p>
+      <Confirm
+        open={pick != null}
+        onOpenChange={(v) => !v && setPick(null)}
+        title={pick === "all" ? t("userDrawer.liveResetAllTitle") : t("userDrawer.liveResetTitle", { name: pick ? where(pick) : "" })}
+        text={t("userDrawer.liveResetText")}
+        confirm={t("userDrawer.liveReset")}
+        loading={reset.isPending}
+        onConfirm={run}
+      />
     </>
   );
 }

@@ -69,6 +69,16 @@ func Handler(e *Engine, log *slog.Logger) http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	// Closes the slots' connections and keeps their access: the panel's "reset connections".
+	// A slot the node does not have closes nothing; it is no error, or a panel could not tell
+	// it from the 404 of a node that predates the call.
+	mux.HandleFunc("POST /v1/slots/reset", func(w http.ResponseWriter, r *http.Request) {
+		var req nodeapi.ResetRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		writeJSON(w, http.StatusOK, nodeapi.ResetResult{Closed: e.Reg.ResetSlots(req.Slots)})
+	})
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, e.Health())
 	})

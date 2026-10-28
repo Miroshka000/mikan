@@ -3037,6 +3037,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/reset-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сбросить соединения: ноды закрывают открытые соединения, доступ остаётся, приложения подключаются заново */
+        post: operations["reset-user-connections"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/reset-traffic": {
         parameters: {
             query?: never;
@@ -4088,6 +4105,21 @@ export interface components {
             /** @description Уведомления с 22:00 до 9:00 МСК приходят без звука */
             quiet_night: boolean;
             texts: components["schemas"]["Texts"];
+        };
+        ConnResetView: {
+            /**
+             * Format: int64
+             * @description Сколько соединений закрыла нода
+             */
+            closed: number;
+            /** Format: int64 */
+            node_id: number;
+            node_name: string;
+            /**
+             * @description ok — соединения закрыты; node_too_old — нода старее 0.5.2.1 и сбрасывать не умеет, её пропустили; node_unavailable — нода не ответила
+             * @enum {string}
+             */
+            status: "ok" | "node_too_old" | "node_unavailable";
         };
         CopyInboundInputBody: {
             /** @description REALITY: другой сайт маскировки, host:port; пусто — тот же */
@@ -6534,6 +6566,27 @@ export interface components {
             no_link: components["schemas"]["List"];
             /** @description Имена, которые уже есть в mikan: эти пользователи не перенесены */
             skipped: components["schemas"]["List"];
+        };
+        ResetConnectionsInputBody: {
+            /**
+             * Format: int64
+             * @description Чьи ключи: не передано — все ключи пользователя; 0 — общие ключи пользователя; иначе привязанное устройство (device_id из списка онлайн)
+             */
+            device_id?: number;
+            /**
+             * Format: int64
+             * @description Нода; 0 или не передано — все ноды
+             */
+            node_id?: number;
+        };
+        ResetConnectionsOutputBody: {
+            /**
+             * Format: int64
+             * @description Сколько соединений закрыто на всех нодах
+             */
+            closed: number;
+            /** @description Как прошло на каждой ноде; нода, которая сбрасывать не умеет или не ответила, не делает ошибкой весь запрос */
+            nodes: components["schemas"]["ConnResetView"][];
         };
         ResetPathOutputBody: {
             admin_url: string;
@@ -15421,6 +15474,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "reset-user-connections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetConnectionsInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetConnectionsOutputBody"];
                 };
             };
             /** @description Error */
