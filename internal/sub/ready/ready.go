@@ -45,6 +45,7 @@ const (
 	mikanAuthor  = "mikan"
 	mikanLicense = "GPL-3.0-only"
 	mikanSource  = "https://github.com/Miroshka000/mikan"
+	privWLAuthor = "Nemu-x" // the author of the privWL-clash lists it is built on
 	privWLSource = "https://github.com/Nemu-x/privWL-clash"
 )
 
@@ -57,8 +58,8 @@ var all = []Template{
 		Author: mikanAuthor, License: mikanLicense, Source: mikanSource, Starter: true},
 	// The panel's "only what is blocked" and the address lists of privWL-clash it lacks.
 	{ID: "privwl-blocked", Core: model.CoreMihomo, Name: "privWL · только заблокированное",
-		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. Списки: Nemu-x/privWL-clash. В Happ и INCY (конфиги Xray) эти списки не работают и всё идёт напрямую: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
-		Author:  mikanAuthor, License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
+		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. В Happ и INCY (конфиги Xray) списки privWL-clash не работают и всё идёт напрямую: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
+		Author:  privWLAuthor, License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
 }
 
 // All is the catalog, by core in the order the editor lists it.
