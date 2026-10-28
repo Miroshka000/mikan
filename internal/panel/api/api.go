@@ -323,6 +323,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerTargets()
 	h.registerStats()
 	h.registerNodeTraffic()
+	h.registerNodeClients()
 	h.registerMetrics()
 	h.registerBackups()
 	h.registerImport()

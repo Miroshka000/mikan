@@ -1020,6 +1020,17 @@
     "deleteText": "{n, plural, =0 {The folder is empty.} one {Its client stays, outside any folder.} other {Its clients stay, outside any folder.}}",
     "badge": "Folder: {name}"
   },
+  "nodeClients": {
+    "title": "Node clients",
+    "button": "Clients",
+    "search": "Search by name",
+    "summary": "{total, plural, one {# client} other {# clients}} · {online} online",
+    "keys": "{n, plural, one {# set of keys} other {# sets of keys}}",
+    "seen": "Seen {when}",
+    "empty": "Nobody has gone through this node yet.",
+    "noneFound": "Nobody found",
+    "note": "Clients are counted by node from the version that added it: traffic since then, “seen” is the last stored batch of traffic on this node."
+  },
   "nodeTraffic": {
     "title": "Node traffic",
     "button": "Traffic",
@@ -1228,6 +1239,11 @@
     "pausedUntil": "Unbound by the client · returns {when} at {time}",
     "unpauseTitle": "Let “{name}” back earlier?",
     "pausedForever": "Unbound by the client · stays out until you let it",
+    "nodes": {
+      "title": "Nodes",
+      "seen": "Seen {when}",
+      "note": "The nodes the client went through: traffic on each since the version that added this count, and the last time there."
+    },
     "sites": {
       "title": "Where it goes",
       "off": "the detail is off",
