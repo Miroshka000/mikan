@@ -177,6 +177,142 @@ func (h *handlers) registerInbounds() {
 		Tags: []string{"inbounds"}}, h.setInboundExits)
 	huma.Register(h.api, huma.Operation{OperationID: "update-inbound", Method: http.MethodPatch, Path: "/api/v1/inbounds/{id}", Summary: "Изменить подключение", Tags: []string{"inbounds"}}, h.updateInbound)
 	huma.Register(h.api, huma.Operation{OperationID: "delete-inbound", Method: http.MethodDelete, Path: "/api/v1/inbounds/{id}", Summary: "Удалить подключение", Tags: []string{"inbounds"}, DefaultStatus: http.StatusNoContent}, h.deleteInbound)
+
+	// Hosts are where clients are sent: as the client endpoint of update-inbound, they change
+	// only in the admin's session (requireSession), and are read as the inbound is.
+	huma.Register(h.api, huma.Operation{OperationID: "list-inbound-hosts", Method: http.MethodGet, Path: "/api/v1/inbounds/{id}/hosts", Summary: "Адреса подключения для клиентов", Tags: []string{"inbounds"}}, h.listInboundHosts)
+	huma.Register(h.api, huma.Operation{OperationID: "add-inbound-host", Method: http.MethodPost, Path: "/api/v1/inbounds/{id}/hosts", Summary: "Добавить адрес подключения",
+		Tags: []string{"inbounds"}, Metadata: sessionOnly, Extensions: sessionOnlyExt, DefaultStatus: http.StatusCreated}, h.addInboundHost)
+	huma.Register(h.api, huma.Operation{OperationID: "update-inbound-host", Method: http.MethodPut, Path: "/api/v1/inbounds/{id}/hosts/{host_id}", Summary: "Изменить адрес подключения",
+		Tags: []string{"inbounds"}, Metadata: sessionOnly, Extensions: sessionOnlyExt}, h.updateInboundHost)
+	huma.Register(h.api, huma.Operation{OperationID: "delete-inbound-host", Method: http.MethodDelete, Path: "/api/v1/inbounds/{id}/hosts/{host_id}", Summary: "Удалить адрес подключения",
+		Tags: []string{"inbounds"}, Metadata: sessionOnly, Extensions: sessionOnlyExt, DefaultStatus: http.StatusNoContent}, h.deleteInboundHost)
+}
+
+// HostView is one place clients reach an inbound at. The default host (default: true) is
+// the client endpoint of the inbound (InboundView.client and fingerprint): subscriptions
+// use it, and changing one changes the other. The other hosts are kept in their order for
+// the subscriptions to come and change nothing clients get yet.
+type HostView struct {
+	ID          int64  `json:"id"`
+	Default     bool   `json:"default" doc:"Адрес по умолчанию: тот же, что client и fingerprint подключения; удаляется только с подключением"`
+	Address     string `json:"address" doc:"Адрес для клиентов; пусто — адрес ноды"`
+	Port        int    `json:"port" doc:"Порт для клиентов; 0 — порт подключения"`
+	SNI         string `json:"sni" doc:"SNI для клиентов; пусто — как обычно"`
+	Host        string `json:"host" doc:"HTTP Host у клиентов (WebSocket, XHTTP); пусто — как на сервере"`
+	Fingerprint string `json:"fingerprint" doc:"Отпечаток TLS (uTLS); пусто — общий из настроек"`
+}
+
+// HostInput is a host as it is saved: every field at once.
+type HostInput struct {
+	Address     string `json:"address" maxLength:"253" doc:"Адрес для клиентов; пусто — адрес ноды"`
+	Port        int    `json:"port" minimum:"0" maximum:"65535" doc:"Порт для клиентов; 0 — порт подключения"`
+	SNI         string `json:"sni" maxLength:"253" doc:"SNI для клиентов; пусто — как обычно. Не у REALITY: там имя задаёт сайт маскировки"`
+	Host        string `json:"host" maxLength:"253" doc:"HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере"`
+	Fingerprint string `json:"fingerprint" maxLength:"32" doc:"Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек"`
+}
+
+func (b HostInput) host() domain.Host {
+	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint}
+}
+
+type hostsOutput struct{ Body []HostView }
+type hostOutput struct{ Body HostView }
+
+type addHostInput struct {
+	ID   int64 `path:"id" minimum:"1"`
+	Body HostInput
+}
+
+type updateHostInput struct {
+	ID     int64 `path:"id" minimum:"1"`
+	HostID int64 `path:"host_id" minimum:"1"`
+	Body   HostInput
+}
+
+type hostIDInput struct {
+	ID     int64 `path:"id" minimum:"1"`
+	HostID int64 `path:"host_id" minimum:"1"`
+}
+
+func viewHost(r db.InboundHost) HostView {
+	return HostView{ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint}
+}
+
+func (h *handlers) listInboundHosts(ctx context.Context, in *userIDInput) (*hostsOutput, error) {
+	rows, err := h.d.Inbounds.Hosts(ctx, in.ID)
+	if err != nil {
+		return nil, hostError(err)
+	}
+	out := &hostsOutput{Body: make([]HostView, 0, len(rows))}
+	for _, r := range rows {
+		out.Body = append(out.Body, viewHost(r))
+	}
+	return out, nil
+}
+
+func (h *handlers) addInboundHost(ctx context.Context, in *addHostInput) (*hostOutput, error) {
+	if err := requireSession(ctx, "address"); err != nil {
+		return nil, err
+	}
+	row, err := h.d.Inbounds.AddHost(ctx, in.ID, in.Body.host())
+	if err != nil {
+		return nil, hostError(err)
+	}
+	h.auditHost(ctx, "inbound.host_add", in.ID, row)
+	return &hostOutput{Body: viewHost(row)}, nil
+}
+
+func (h *handlers) updateInboundHost(ctx context.Context, in *updateHostInput) (*hostOutput, error) {
+	if err := requireSession(ctx, "address"); err != nil {
+		return nil, err
+	}
+	row, err := h.d.Inbounds.UpdateHost(ctx, in.ID, in.HostID, in.Body.host())
+	if err != nil {
+		return nil, hostError(err)
+	}
+	// The default host is the template's: clients get the change with their next update.
+	if row.Position == 0 {
+		h.d.Changes.SlotsChanged()
+	}
+	h.auditHost(ctx, "inbound.host_update", in.ID, row)
+	return &hostOutput{Body: viewHost(row)}, nil
+}
+
+func (h *handlers) deleteInboundHost(ctx context.Context, in *hostIDInput) (*struct{}, error) {
+	if err := requireSession(ctx, "host_id"); err != nil {
+		return nil, err
+	}
+	row, err := h.d.Inbounds.DeleteHost(ctx, in.ID, in.HostID)
+	if err != nil {
+		return nil, hostError(err)
+	}
+	h.auditHost(ctx, "inbound.host_delete", in.ID, row)
+	return nil, nil
+}
+
+func (h *handlers) auditHost(ctx context.Context, action string, inboundID int64, r db.InboundHost) {
+	name := ""
+	if in, err := h.d.Store.Q.GetInbound(ctx, inboundID); err == nil {
+		name = in.Name
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, action, "inbound", name, map[string]any{"host_id": r.ID, "default": r.Position == 0,
+		"address": r.Address, "port": r.Port, "sni": r.Sni, "host": r.Host, "fingerprint": r.Fingerprint})
+}
+
+// hostError maps the domain's refusals of a host to the API's codes: a field the inbound's
+// template does not take is named as the host's field (body.sni).
+func hostError(err error) error {
+	var edit *domain.EditError
+	switch {
+	case errors.Is(err, domain.ErrUnknownInbound), errors.Is(err, domain.ErrUnknownHost):
+		return huma.Error404NotFound("not_found")
+	case errors.Is(err, domain.ErrDefaultHost):
+		return huma.Error409Conflict("default_host")
+	case errors.As(err, &edit):
+		return huma.Error422UnprocessableEntity("bad_host", &huma.ErrorDetail{Location: "body." + edit.Field, Message: edit.Err.Code})
+	}
+	return inboundError(err, false)
 }
 
 func (h *handlers) listPresets(context.Context, *struct{}) (*presetsOutput, error) {

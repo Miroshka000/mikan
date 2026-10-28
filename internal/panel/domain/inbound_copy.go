@@ -78,7 +78,7 @@ func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbou
 			return err
 		}
 		now := s.now().Unix()
-		row, err = q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, src.Name), Preset: src.Preset, Port: port,
+		row, err = createInbound(ctx, q, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, src.Name), Preset: src.Preset, Port: port,
 			Config: config, CreatedAt: now, UpdatedAt: now})
 		if err != nil {
 			return err
@@ -95,7 +95,8 @@ func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbou
 			}
 			row.Tags = src.Tags
 		}
-		return nil
+		// The copy is reached at the same places: its default host came with the template.
+		return q.CopyInboundHosts(ctx, db.CopyInboundHostsParams{ToInbound: row.ID, FromInbound: src.ID})
 	})
 	return row, err
 }

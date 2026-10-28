@@ -3593,6 +3593,46 @@
         ],
         "type": "object"
       },
+      "HostInput": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "Адрес для клиентов; пусто — адрес ноды",
+            "maxLength": 253,
+            "type": "string"
+          },
+          "fingerprint": {
+            "description": "Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек",
+            "maxLength": 32,
+            "type": "string"
+          },
+          "host": {
+            "description": "HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере",
+            "maxLength": 253,
+            "type": "string"
+          },
+          "port": {
+            "description": "Порт для клиентов; 0 — порт подключения",
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sni": {
+            "description": "SNI для клиентов; пусто — как обычно. Не у REALITY: там имя задаёт сайт маскировки",
+            "maxLength": 253,
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "port",
+          "sni",
+          "host",
+          "fingerprint"
+        ],
+        "type": "object"
+      },
       "HostItem": {
         "additionalProperties": false,
         "properties": {
@@ -3700,6 +3740,50 @@
           "from",
           "error",
           "at"
+        ],
+        "type": "object"
+      },
+      "HostView": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "Адрес для клиентов; пусто — адрес ноды",
+            "type": "string"
+          },
+          "default": {
+            "description": "Адрес по умолчанию: тот же, что client и fingerprint подключения; удаляется только с подключением",
+            "type": "boolean"
+          },
+          "fingerprint": {
+            "description": "Отпечаток TLS (uTLS); пусто — общий из настроек",
+            "type": "string"
+          },
+          "host": {
+            "description": "HTTP Host у клиентов (WebSocket, XHTTP); пусто — как на сервере",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "port": {
+            "description": "Порт для клиентов; 0 — порт подключения",
+            "format": "int64",
+            "type": "integer"
+          },
+          "sni": {
+            "description": "SNI для клиентов; пусто — как обычно",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "default",
+          "address",
+          "port",
+          "sni",
+          "host",
+          "fingerprint"
         ],
         "type": "object"
       },
@@ -15938,6 +16022,213 @@
         "tags": [
           "inbounds"
         ]
+      }
+    },
+    "/api/v1/inbounds/{id}/hosts": {
+      "get": {
+        "operationId": "list-inbound-hosts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HostView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Адреса подключения для клиентов",
+        "tags": [
+          "inbounds"
+        ]
+      },
+      "post": {
+        "operationId": "add-inbound-host",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Добавить адрес подключения",
+        "tags": [
+          "inbounds"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/inbounds/{id}/hosts/{host_id}": {
+      "delete": {
+        "operationId": "delete-inbound-host",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить адрес подключения",
+        "tags": [
+          "inbounds"
+        ],
+        "x-session-only": true
+      },
+      "put": {
+        "operationId": "update-inbound-host",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "host_id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить адрес подключения",
+        "tags": [
+          "inbounds"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/lifecycle": {

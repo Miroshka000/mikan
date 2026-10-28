@@ -581,8 +581,12 @@ func (h *Handler) sample(ctx context.Context) (profile.Profile, Config, error) {
 	if err != nil {
 		return profile.Profile{}, cfg, err
 	}
+	hosts, err := h.hosts(ctx)
+	if err != nil {
+		return profile.Profile{}, cfg, err
+	}
 	keys := proto.Slot{Name: "preview", UUID: "00000000-0000-0000-0000-000000000000", Secret: "preview"}
-	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint})
+	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds, hosts), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint})
 	prof := cfg.Profile(ps)
 	// A current mihomo: the preview shows every list, and a template started from it keeps
 	// the ones a younger core reads (an app that does not name its core still gets none).

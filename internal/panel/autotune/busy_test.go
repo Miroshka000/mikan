@@ -169,7 +169,7 @@ func TestBusyInboundMovesByItself(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := proto.Slot{Name: slot.Name, UUID: slot.Uuid, Secret: slot.Secret}
-	links, _, err := xray.Links(build.Proxies(build.Profile{Keys: keys, Inbounds: []submodel.Inbound{subsrc.Inbound(e.inbound(t, "vless-xhttp"))},
+	links, _, err := xray.Links(build.Proxies(build.Profile{Keys: keys, Inbounds: []submodel.Inbound{subsrc.Inbound(e.inbound(t, "vless-xhttp"), nil)},
 		Nodes: []submodel.Node{{ID: 1, Endpoint: submodel.Endpoint{Host: "203.0.113.10"}}}}))
 	if err != nil || !strings.Contains(links, "@203.0.113.10:2053?") {
 		t.Fatalf("subscription: %s %v", links, err)

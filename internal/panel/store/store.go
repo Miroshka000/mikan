@@ -275,7 +275,7 @@ func postgresProvider(ctx context.Context, conn *sql.DB, fsys fs.FS) (*goose.Pro
 	if err != nil {
 		return nil, err
 	}
-	p, err := goose.NewProvider(goose.DialectPostgres, conn, fsys, goose.WithSessionLocker(locker))
+	p, err := goose.NewProvider(goose.DialectPostgres, conn, fsys, goose.WithSessionLocker(locker), goose.WithGoMigrations(hostsMigration()))
 	if err != nil {
 		return nil, fmt.Errorf("PostgreSQL migrations: %w", err)
 	}

@@ -18,6 +18,12 @@ In the connection settings, the **Behind a proxy (nginx, HAProxy)** block:
 If the node listens on localhost only and no port for clients is set, clients will go to a port that is closed from outside. The panel warns you about this: set the proxy's port.
 :::
 
+## Several addresses for clients
+
+Since 0.5.2.1 a connection has an **Addresses for clients** block: the places clients can reach it at, each with its own address, port, SNI, HTTP Host and fingerprint. The first one, **Default**, is the address, port and SNI above, with the fingerprint: it is what clients get, and it changes with them. Other addresses are saved in the order you add them, but subscriptions do not give them out yet: a coming version will make one server entry of each. The default address is deleted only with its connection.
+
+The API is the same: `GET`, `POST /api/v1/inbounds/{id}/hosts` and `PUT`, `DELETE /api/v1/inbounds/{id}/hosts/{host_id}`. Like the address for clients, addresses are changed only in the admin's session, not with an API key.
+
 ## nginx stream example
 
 ```nginx
