@@ -15,8 +15,8 @@ import (
 // A bulk action by filter takes the users the list shows for the same filter: the preview
 // counts them as the list does, the action reaches them all and nobody else, past the 1000
 // ids a list of ids may name. The set the admin confirmed (the preview's digest) is required
-// and guards the action, the filter and the ids exclude each other, a read key reaches neither, and the journal says which
-// filter it was.
+// and guards the action, the filter and the ids exclude each other, a read key reaches
+// neither, and the journal says which filter it was.
 func TestBulkByFilter(t *testing.T) {
 	k := newKeyHarness(t)
 	ctx := t.Context()
@@ -193,6 +193,9 @@ func TestBulkByFilter(t *testing.T) {
 	}
 	if code, out := bulk(k.full, map[string]any{"ids": []int64{ids["anna"]}, "action": "enable", "expect": stale}); !strings.Contains(out, "body.expect") || !strings.Contains(out, "expect_with_ids") {
 		t.Errorf("expect with ids: %d %s", code, out)
+	}
+	if code, out := bulk(k.full, map[string]any{"filter": inFolder, "action": "enable", "expect": "3"}); !strings.Contains(out, "body.expect") {
+		t.Errorf("a malformed digest's place: %d %s", code, out)
 	}
 	if code, out := bulk(k.full, map[string]any{"ids": []int64{}, "action": "enable"}); !strings.Contains(out, "body.ids") {
 		t.Errorf("no ids: %d %s", code, out)

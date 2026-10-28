@@ -273,7 +273,7 @@ type bulkInput struct {
 	Body struct {
 		IDs    []int64     `json:"ids,omitempty" maxItems:"1000" doc:"Пользователи по id; задаётся либо ids, либо filter"`
 		Filter *BulkFilter `json:"filter,omitempty" doc:"Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter"`
-		Expect string      `json:"expect,omitempty" pattern:"^[0-9a-f]{64}$" doc:"Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его не читает"`
+		Expect string      `json:"expect,omitempty" pattern:"^[0-9a-f]{64}$" doc:"Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его значение не проверяет"`
 		Action string      `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
 		Days   int64       `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
 		Folder int64       `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`

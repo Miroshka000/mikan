@@ -323,7 +323,7 @@ export function UsersPage() {
                       <thead>
                         <tr>
                           <th className="w-10">
-                            <input type="checkbox" className="check" checked={allSelected} aria-label={t("users.selectAll")} onChange={() => (allSelected ? clear() : setSelected(new Set(items.map((u) => u.id))))} />
+                            <input type="checkbox" className="check" checked={allSelected || byFilter} aria-label={t("users.selectAll")} onChange={() => (allSelected || byFilter ? clear() : setSelected(new Set(items.map((u) => u.id))))} />
                           </th>
                           <th>{t("users.colUser")}</th>
                           <th>{t("users.colTariff")}</th>

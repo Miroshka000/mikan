@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"testing"
 	"time"
@@ -104,5 +106,14 @@ func TestBulkByFilterLimit(t *testing.T) {
 	maxBulkFilterUsers = 3
 	if out, err := h.bulkUsers(ctx, in); err != nil || out.Body.Affected != 3 {
 		t.Fatalf("an action at the limit: %+v %v", out, err)
+	}
+}
+
+// The digest is the documented one: the SHA-256 (hex) of the ids in ascending order, joined
+// by commas, whatever order they come in.
+func TestBulkDigest(t *testing.T) {
+	sum := sha256.Sum256([]byte("1,2,3"))
+	if got, want := bulkDigest([]int64{3, 1, 2}), hex.EncodeToString(sum[:]); got != want {
+		t.Fatalf("bulkDigest(3, 1, 2) = %s, want %s", got, want)
 	}
 }
