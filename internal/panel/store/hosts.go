@@ -11,17 +11,17 @@ import (
 	"mikan/internal/proto"
 )
 
-// hostsMigration is migration 63, the one in Go: the default host of every inbound is its
-// template's mikan.client, and only Go reads a template. Migration 0062 made the table, so
-// no SQL file takes the number 63. Run again, it writes the same rows; going down takes the
-// default hosts away and leaves the others, which 0062's own down drops.
+// hostsMigration is migration 64, the one in Go: the default host of every inbound is its
+// template's mikan.client, and only Go reads a template. Migration 0063 made the table, so
+// no SQL file takes the number 64. Run again, it writes the same rows; going down takes the
+// default hosts away and leaves the others, which 0063's own down drops.
 //
 // Frozen: it runs on old databases and on restored backups long after the code around it
 // has moved on, so it uses nothing that may change with the code (the sqlc queries, proto):
 // its SQL is written out and it reads the template with frozenClient. Leave it as it is; a
 // later change of hosts is a migration of its own.
 func hostsMigration() *goose.Migration {
-	return goose.NewGoMigration(63,
+	return goose.NewGoMigration(64,
 		&goose.GoFunc{RunTx: func(ctx context.Context, tx *sql.Tx) error {
 			rows, err := tx.QueryContext(ctx, "SELECT id, config FROM inbounds")
 			if err != nil {
@@ -68,7 +68,7 @@ SET address = excluded.address, port = excluded.port, sni = excluded.sni, host =
 }
 
 // frozenClient reads the five host fields of mikan.client from a template as subscriptions
-// read them when migration 63 was written (proto.Template.Ext then): a value of another
+// read them when migration 64 was written (proto.Template.Ext then): a value of another
 // type than the field's is left out, a port outside 1..65535 is none, and a template that
 // does not parse has no client. Frozen with hostsMigration.
 func frozenClient(config string) (address string, port int64, sni, host, fingerprint string) {
@@ -96,7 +96,7 @@ func frozenClient(config string) (address string, port int64, sni, host, fingerp
 // mikan.client sets of the five host fields, read the way subscriptions read it
 // (proto.Template.Ext), so the row and the template say the same while both exist. A
 // template that does not parse, or sets none of them, gives an empty host. The panel keeps
-// the row with it (domain.syncDefaultHost); migration 63 has its own frozen copy.
+// the row with it (domain.syncDefaultHost); migration 64 has its own frozen copy.
 func DefaultHost(id int64, config string) db.SetDefaultInboundHostParams {
 	h := db.SetDefaultInboundHostParams{InboundID: id}
 	t, err := proto.Parse(config)

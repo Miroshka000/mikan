@@ -10,7 +10,7 @@ import (
 	"mikan/internal/panel/store/db"
 )
 
-// Migrations 0062 and 63 give every inbound a default host: its template's mikan.client, the
+// Migrations 0063 and 64 give every inbound a default host: its template's mikan.client, the
 // five fields subscriptions read of it, and an empty one when the template sets none or does
 // not parse. Run again, the move writes the same rows; going down takes the default hosts
 // away and then the table, and up again brings the same hosts back.
@@ -25,7 +25,7 @@ func TestInboundHostsMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const table, move = 62, 63
+	const table, move = 63, 64
 	before := int64(0)
 	for _, src := range p.ListSources() {
 		if src.Version < table {
@@ -163,7 +163,7 @@ func TestInboundHostsMigration(t *testing.T) {
 	}
 }
 
-// The frozen reader of migration 63 reads a template as proto did when it was written: the
+// The frozen reader of migration 64 reads a template as proto did when it was written: the
 // same five fields as DefaultHost for every shape of mikan.client the panel has seen.
 func TestFrozenClientReadsAsProto(t *testing.T) {
 	for _, config := range []string{
