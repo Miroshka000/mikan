@@ -693,7 +693,6 @@
       "invalid_passkey": "The passkey was not accepted",
       "passkey_limit": "There are too many passkeys already: delete the ones you do not use",
       "passkey_exists": "This passkey is added already",
-      "bad_host": "The address does not suit this protocol",
       "default_host": "The default address goes only with its protocol"
     },
     "acme": {

@@ -94,7 +94,7 @@ func TestInboundHostsAPI(t *testing.T) {
 		t.Fatalf("added: %+v", added)
 	}
 	if code, body := f.send(http.MethodPost, hostsPath, `{"address": "bad host", "port": 0, "sni": "", "host": "", "fingerprint": ""}`); code != http.StatusUnprocessableEntity ||
-		!strings.Contains(body, "bad_host") || !strings.Contains(body, "body.address") || !strings.Contains(body, "config_client_server") {
+		!strings.Contains(body, "body.address") || !strings.Contains(body, "config_client_server") {
 		t.Fatalf("a bad address: %d %s", code, body)
 	}
 	addedPath := hostsPath + "/" + strconv.FormatInt(added.ID, 10)

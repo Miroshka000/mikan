@@ -310,7 +310,7 @@ func hostError(err error) error {
 	case errors.Is(err, domain.ErrDefaultHost):
 		return huma.Error409Conflict("default_host")
 	case errors.As(err, &edit):
-		return huma.Error422UnprocessableEntity("bad_host", &huma.ErrorDetail{Location: "body." + edit.Field, Message: edit.Err.Code})
+		return fieldErr("body."+edit.Field, edit.Err.Code)
 	}
 	return inboundError(err, false)
 }
