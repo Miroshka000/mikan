@@ -2,6 +2,7 @@ package singbox
 
 import (
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -73,6 +74,34 @@ func TestConvertGroups(t *testing.T) {
 	}, tags)
 	if nested.detours["a"] != "entry" || nested.detours["b"] != "a" || len(nested.detours) != 2 || len(nested.notes) != 0 {
 		t.Fatalf("a nested chain: %v %+v", nested.detours, nested.notes)
+	}
+
+	// Past DIRECT a hop dials through nothing, and keeps it, as in Citrus; a hop that would
+	// loop back to the proxy is no detour.
+	direct := convertGroups([]model.Group{
+		{Name: "out", Type: model.Chain, Members: []string{"DIRECT", "a"}},
+		{Name: "again", Type: model.Chain, Members: []string{"entry", "a"}},
+		{Name: "exits", Type: model.URLTest, Members: []string{"b", "entry"}},
+		{Name: "self", Type: model.Chain, Members: []string{"entry", "exits"}},
+	}, tags)
+	want = []model.Note{{Core: "singbox", Subject: "again", Code: "chain_dialer_taken"}, {Core: "singbox", Subject: "self", Code: "chain_dialer_taken"}}
+	if !maps.Equal(direct.detours, map[string]string{"a": "DIRECT", "b": "entry"}) || !slices.Equal(direct.notes, want) {
+		t.Fatalf("past DIRECT, a loop: %v %+v", direct.detours, direct.notes)
+	}
+}
+
+// A hop past DIRECT has no detour in the config: sing-box's direct is no hop to dial through.
+func TestChainPastDirectInConfig(t *testing.T) {
+	pl := plan{
+		proxies: []model.Proxy{{Name: "exit", Type: "trojan", Server: "198.51.100.2", Port: 443, Password: "y", TLS: &model.TLS{}, UDP: true}},
+		groups:  []model.Group{{Name: "cascade", Type: model.Chain, Members: []string{"DIRECT", "exit"}}},
+		rules:   []routing.Rule{{To: routing.Target{Kind: routing.ToGroup, Group: "cascade"}}},
+		main:    "cascade",
+	}
+	cfg := config(pl, &ruleSets{ctx: t.Context()})
+	raw, _ := json.Marshal(cfg["outbounds"])
+	if strings.Contains(string(raw), `"detour"`) || !strings.Contains(string(raw), `"tag":"cascade"`) {
+		t.Fatalf("outbounds: %s", raw)
 	}
 }
 

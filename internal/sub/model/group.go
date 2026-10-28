@@ -79,3 +79,51 @@ func entries(hop string, byName map[string]Group, isProxy func(string) bool, see
 	}
 	return out
 }
+
+// Wire makes every hop of the chain g after the first dial through the hop before it, as
+// Citrus does on loading: via[p] is the hop (a proxy, a group, a chain, DIRECT) the proxy p
+// dials through, for the proxies each hop is entered by (Entries). The proxy dials through it
+// wherever it goes, not only in g. Citrus refuses a proxy two chains need through different
+// hops, and a dialer that would loop back to the proxy; the panel refuses such a template on
+// saving, and for one saved before Wire keeps the dialer the proxy has and tells (taken).
+func Wire(g Group, byName map[string]Group, isProxy func(string) bool, via map[string]string) (taken bool) {
+	if g.Type != Chain {
+		return false
+	}
+	for i := 1; i < len(g.Members); i++ {
+		prev := g.Members[i-1]
+		for _, p := range Entries(g.Members[i], byName, isProxy) {
+			if d, ok := via[p]; ok {
+				taken = taken || d != prev
+				continue
+			}
+			if reaches(prev, p, byName, via, map[string]bool{}) {
+				taken = true
+				continue
+			}
+			via[p] = prev
+		}
+	}
+	return taken
+}
+
+// reaches says whether dialing name goes through the proxy p: name is p, or a group (a
+// chain) of a member that reaches it, or a proxy that dials through one (via).
+func reaches(name, p string, byName map[string]Group, via map[string]string, seen map[string]bool) bool {
+	if name == p {
+		return true
+	}
+	if seen[name] {
+		return false
+	}
+	seen[name] = true
+	if d, ok := via[name]; ok {
+		return reaches(d, p, byName, via, seen)
+	}
+	for _, m := range byName[name].Members {
+		if reaches(m, p, byName, via, seen) {
+			return true
+		}
+	}
+	return false
+}

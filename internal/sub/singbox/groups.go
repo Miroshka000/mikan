@@ -20,7 +20,8 @@ func note(group, code string) model.Note { return model.Note{Core: core, Subject
 // converted are the groups as sing-box carries them.
 type converted struct {
 	outbounds []map[string]any
-	// detours: a proxy's outbound to the one it dials through, of the chains.
+	// detours: a proxy's outbound to the hop it dials through, of the chains (model.Wire);
+	// DIRECT is none.
 	detours map[string]string
 	notes   []model.Note
 }
@@ -122,23 +123,13 @@ func convertGroups(groups []model.Group, tags map[string]bool) converted {
 	return out
 }
 
-// chain makes every hop of g after the first dial through the hop before it: the detour of
-// the proxies the hop is entered by (model.Entries). A proxy that dials through another hop
-// already keeps it.
+// chain makes every hop of g after the first dial through the hop before it, as Citrus does
+// (model.Wire): the detour of the proxies the hop is entered by, wherever they go. A proxy
+// that dials through another hop already keeps it; a hop past DIRECT dials through nothing,
+// and keeps that.
 func (c *converted) chain(g model.Group, byName map[string]model.Group, tags map[string]bool) {
-	isProxy := func(s string) bool { return tags[s] }
-	for i := 1; i < len(g.Members); i++ {
-		prev := g.Members[i-1]
-		if prev == "DIRECT" {
-			continue // the first hop past the tunnel is no detour at all
-		}
-		for _, p := range model.Entries(g.Members[i], byName, isProxy) {
-			if d, ok := c.detours[p]; ok && d != prev {
-				c.notes = append(c.notes, note(g.Name, "chain_dialer_taken"))
-				continue
-			}
-			c.detours[p] = prev
-		}
+	if model.Wire(g, byName, func(s string) bool { return tags[s] }, c.detours) {
+		c.notes = append(c.notes, note(g.Name, "chain_dialer_taken"))
 	}
 }
 

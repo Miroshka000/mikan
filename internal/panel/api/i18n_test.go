@@ -58,6 +58,7 @@ var codesByText = []string{
 	"resp_op", "resp_respond", "resp_format", "resp_template", "resp_text", "resp_html", "resp_headers_many", "resp_header_name", "resp_header_cache", "resp_header_value",
 	// model.TemplateError of the subscription templates, as a detail's Message.
 	"template_yaml", "template_empty", "template_groups", "template_group_name", "template_group_dup", "template_group_member", "template_group_type",
+	"template_chain_hops", "template_chain_keys", "template_chain_builtin", "template_chain_group", "template_chain_dialer", "template_chain_loop",
 	"template_rule", "template_rule_target", "template_rule_set", "template_filter", "template_json", "template_object", "template_shape",
 	"template_tag", "template_tag_dup", "template_ask", "template_group_empty", "template_detour", "template_rule_set_tag", "template_final",
 	"template_proxy_tag", "template_balancer_tag", "template_rule_to", "template_core",
