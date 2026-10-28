@@ -21,6 +21,7 @@ import { useWarp } from "../node-warp";
 import { Editor, type ListenAt, ValidateResult, hostPort, listenAt, loopback, preloadEditor, useValidate } from "./shared";
 import { TargetPicker } from "./target";
 import { CdnSettings, cdnClient, cdnFormOf, type CdnForm } from "./cdn";
+import { HostsSettings } from "./hosts";
 import { Select } from "../../../components/select";
 
 /** The inbound form's fields as its inputs hold them. */
@@ -544,6 +545,11 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                 </>
                 )}
               </Disclosure>
+              {inbound ? (
+                <Disclosure title={t("inbounds.hosts.title")} sub={t("inbounds.hosts.sub")}>
+                  <HostsSettings inbound={inbound} defaultFingerprint={settings.data?.client_fingerprint ?? "chrome"} />
+                </Disclosure>
+              ) : null}
               <Disclosure title={t("inbounds.auto")} sub={t("settings.autoSub")}>
                 <AutoSwitch
                   title={t("inbounds.autoPort")}

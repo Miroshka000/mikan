@@ -698,7 +698,8 @@
       "passkey_setup_expired": "Adding the passkey took too long. Start again",
       "invalid_passkey": "The passkey was not accepted",
       "passkey_limit": "There are too many passkeys already: delete the ones you do not use",
-      "passkey_exists": "This passkey is added already"
+      "passkey_exists": "This passkey is added already",
+      "default_host": "The default address goes only with its protocol"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to mikan; otherwise free the port",
@@ -1716,7 +1717,22 @@
       "routerOff": "The node's SNI router is off: the protocol stays on its own port until it is on."
     },
     "nestedTLS": "TLS in TLS",
-    "nestedTLSNote": "The TLS of the sites a client opens goes inside this protocol's own TLS (TLS in TLS): DPI can tell a proxy by the sizes of the first packets. Keep a protocol with Vision or AnyTLS next to it: they have no such pattern."
+    "nestedTLSNote": "The TLS of the sites a client opens goes inside this protocol's own TLS (TLS in TLS): DPI can tell a proxy by the sizes of the first packets. Keep a protocol with Vision or AnyTLS next to it: they have no such pattern.",
+    "hosts": {
+      "title": "Addresses for clients",
+      "sub": "Several places clients can reach this protocol at",
+      "note": "The default address is the one clients get now. Other addresses are saved in their order; subscriptions do not give them out yet, a coming version will.",
+      "default": "Default:",
+      "defaultHint": "Changed in \"Behind another server\" or \"Behind a CDN\" above, and with the fingerprint.",
+      "nodeAddress": "node address",
+      "add": "Add an address",
+      "host": "HTTP Host for clients",
+      "hostDefault": "as on the server",
+      "saved": "Address saved",
+      "deleted": "Address deleted",
+      "deleteTitle": "Delete the address {address}?",
+      "deleteText": "Clients do not get it yet, so nothing changes for them."
+    }
   },
   "settings": {
     "subtitle": "Server address, subscription look and sign-in security",

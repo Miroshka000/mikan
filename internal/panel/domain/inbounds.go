@@ -185,7 +185,7 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 			return err
 		}
 		now := s.now().Unix()
-		row, err = q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, base), Preset: info.ID, Port: port,
+		row, err = createInbound(ctx, q, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, base), Preset: info.ID, Port: port,
 			Config: config, CreatedAt: now, UpdatedAt: now})
 		if err != nil || len(in.Tags) == 0 {
 			return err
@@ -404,8 +404,13 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 			}
 		}
 		if client {
-			if _, err := q.UpdateInbound(ctx, db.UpdateInboundParams{Port: next.Port, Enabled: next.Enabled, Config: next.Config, DisplayName: next.DisplayName,
-				UpdatedAt: s.now().Unix(), ID: id}); err != nil {
+			row, err := q.UpdateInbound(ctx, db.UpdateInboundParams{Port: next.Port, Enabled: next.Enabled, Config: next.Config, DisplayName: next.DisplayName,
+				UpdatedAt: s.now().Unix(), ID: id})
+			if err != nil {
+				return err
+			}
+			// The default host is the template's: it changes with it (hosts.go).
+			if err := syncDefaultHost(ctx, q, row); err != nil {
 				return err
 			}
 		}

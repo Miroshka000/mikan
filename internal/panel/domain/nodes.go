@@ -104,7 +104,7 @@ func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeIn
 			if err != nil {
 				return err
 			}
-			if _, err := q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: p.Name, Preset: p.ID, Port: p.Port, Config: config,
+			if _, err := createInbound(ctx, q, db.CreateInboundParams{NodeID: node.ID, Name: p.Name, Preset: p.ID, Port: p.Port, Config: config,
 				CreatedAt: now.Unix(), UpdatedAt: now.Unix()}); err != nil {
 				return err
 			}

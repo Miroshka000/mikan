@@ -115,7 +115,11 @@ func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error)
 		return nil, err
 	}
 	s.reach = r
-	return inbounds(r.inbounds), nil
+	hosts, err := s.h.hosts(ctx, r.inbounds)
+	if err != nil {
+		return nil, err
+	}
+	return inbounds(r.inbounds, hosts), nil
 }
 
 // Fetched: the block detector trusts a device only once it took a profile with an
@@ -212,16 +216,38 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 	return out, nil
 }
 
-// Inbound is in as the subscription module sees it.
-func Inbound(in db.Inbound) submodel.Inbound {
-	return submodel.Inbound{ID: in.ID, Node: in.NodeID, Pool: in.PoolID.Int64, Label: in.Name, Name: domain.ProxyName(in),
+// Inbound is in as the subscription module sees it, reached at hosts.
+func Inbound(in db.Inbound, hosts []db.InboundHost) submodel.Inbound {
+	out := submodel.Inbound{ID: in.ID, Node: in.NodeID, Pool: in.PoolID.Int64, Label: in.Name, Name: domain.ProxyName(in),
 		Named: in.DisplayName != "", Port: domain.FirstPort(in.Port), PortSpec: in.Port, Config: in.Config, NoAuto: in.NoAuto != 0}
-}
-
-func inbounds(ins []db.Inbound) []submodel.Inbound {
-	out := make([]submodel.Inbound, 0, len(ins))
-	for _, in := range ins {
-		out = append(out, Inbound(in))
+	for _, h := range hosts {
+		out.Hosts = append(out.Hosts, submodel.Host{Address: h.Address, Port: int(h.Port), SNI: h.Sni, Host: h.Host, Fingerprint: h.Fingerprint})
 	}
 	return out
+}
+
+// inbounds are ins as the subscription module sees them; hosts are theirs by inbound id.
+func inbounds(ins []db.Inbound, hosts map[int64][]db.InboundHost) []submodel.Inbound {
+	out := make([]submodel.Inbound, 0, len(ins))
+	for _, in := range ins {
+		out = append(out, Inbound(in, hosts[in.ID]))
+	}
+	return out
+}
+
+// hosts are the hosts of ins by inbound id, each inbound's in their order.
+func (h *Handler) hosts(ctx context.Context, ins []db.Inbound) (map[int64][]db.InboundHost, error) {
+	ids := make([]int64, len(ins))
+	for i, in := range ins {
+		ids[i] = in.ID
+	}
+	rows, err := h.st.Q.ListHostsOfInbounds(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64][]db.InboundHost{}
+	for _, r := range rows {
+		out[r.InboundID] = append(out[r.InboundID], r)
+	}
+	return out, nil
 }

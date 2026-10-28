@@ -262,3 +262,33 @@ func TestReachWithoutABalancer(t *testing.T) {
 		t.Errorf("reach: %v, want %v", got, want)
 	}
 }
+
+// The subscription's inbounds carry their hosts, the default one first, each inbound its own.
+func TestInboundsCarryTheirHosts(t *testing.T) {
+	e := newSourceEnv(t)
+	u := newUser(t, e.st, 1)
+	n := e.node("a", true)
+	a, b := e.inbound(n, "a1", true), e.inbound(n, "a2", true)
+	if err := e.st.Q.SetDefaultInboundHost(e.ctx, db.SetDefaultInboundHostParams{InboundID: a.ID, Address: "proxy.example.com", Port: 8443, Fingerprint: "ios"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.st.Q.AddInboundHost(e.ctx, db.AddInboundHostParams{InboundID: a.ID, Address: "b.example.com", Sni: "s.example.com", Host: "h.example.com"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := (&subscription{h: e.h, u: u, cfg: e.cfg}).Inbounds(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[int64][]submodel.Host{
+		a.ID: {{Address: "proxy.example.com", Port: 8443, Fingerprint: "ios"}, {Address: "b.example.com", SNI: "s.example.com", Host: "h.example.com"}},
+		b.ID: nil,
+	}
+	if len(got) != 2 {
+		t.Fatalf("inbounds: %+v", got)
+	}
+	for _, in := range got {
+		if !reflect.DeepEqual(in.Hosts, want[in.ID]) {
+			t.Errorf("%s: hosts %+v, want %+v", in.Label, in.Hosts, want[in.ID])
+		}
+	}
+}

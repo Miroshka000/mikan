@@ -866,6 +866,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inbounds/{id}/hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Адреса подключения для клиентов */
+        get: operations["list-inbound-hosts"];
+        put?: never;
+        /** Добавить адрес подключения */
+        post: operations["add-inbound-host"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inbounds/{id}/hosts/{host_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Изменить адрес подключения */
+        put: operations["update-inbound-host"];
+        post?: never;
+        /** Удалить адрес подключения */
+        delete: operations["delete-inbound-host"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lifecycle": {
         parameters: {
             query?: never;
@@ -4631,6 +4667,21 @@ export interface components {
             name: string;
             value: string;
         };
+        HostInput: {
+            /** @description Адрес для клиентов; пусто — адрес ноды */
+            address: string;
+            /** @description Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек */
+            fingerprint: string;
+            /** @description HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере */
+            host: string;
+            /**
+             * Format: int64
+             * @description Порт для клиентов; 0 — порт подключения
+             */
+            port: number;
+            /** @description SNI для клиентов; пусто — как обычно. Не у REALITY: там имя задаёт сайт маскировки */
+            sni: string;
+        };
         HostItem: {
             detail: string;
             /** @description Что сделать; пусто, если всё хорошо */
@@ -4661,6 +4712,25 @@ export interface components {
             /** @enum {string} */
             state: "running" | "ok" | "failed";
             version: string;
+        };
+        HostView: {
+            /** @description Адрес для клиентов; пусто — адрес ноды */
+            address: string;
+            /** @description Адрес по умолчанию: тот же, что client и fingerprint подключения; удаляется только с подключением */
+            default: boolean;
+            /** @description Отпечаток TLS (uTLS); пусто — общий из настроек */
+            fingerprint: string;
+            /** @description HTTP Host у клиентов (WebSocket, XHTTP); пусто — как на сервере */
+            host: string;
+            /** Format: int64 */
+            id: number;
+            /**
+             * Format: int64
+             * @description Порт для клиентов; 0 — порт подключения
+             */
+            port: number;
+            /** @description SNI для клиентов; пусто — как обычно */
+            sni: string;
         };
         ImportRunInputBody: {
             /** @enum {string} */
@@ -10392,6 +10462,138 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InboundView"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-inbound-hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "add-inbound-host": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-inbound-host": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                host_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HostInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-inbound-host": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+                host_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

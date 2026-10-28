@@ -51,6 +51,20 @@ type Inbound struct {
 	Config   string // the template (proto)
 	// NoAuto keeps the inbound's servers out of the automatic choice (as Node.NoAuto).
 	NoAuto bool
+	// Hosts are the places clients reach the inbound at, the default one first. Until the
+	// build reads them it reads the template's mikan.client, which the default host repeats.
+	Hosts []Host
+}
+
+// Host is one place clients reach an inbound at; an empty field (port 0) keeps what they get
+// without it: the node's address, the inbound's port, the usual TLS name, the server's HTTP
+// Host, the panel's fingerprint.
+type Host struct {
+	Address     string
+	Port        int
+	SNI         string
+	Host        string // HTTP Host of WebSocket and XHTTP
+	Fingerprint string // uTLS profile
 }
 
 // GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.

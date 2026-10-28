@@ -231,6 +231,17 @@ type InboundEvent struct {
 	CreatedAt int64
 }
 
+type InboundHost struct {
+	ID          int64
+	InboundID   int64
+	Position    int64
+	Address     string
+	Port        int64
+	Sni         string
+	Host        string
+	Fingerprint string
+}
+
 type InboundReach struct {
 	Slot      string
 	InboundID int64
