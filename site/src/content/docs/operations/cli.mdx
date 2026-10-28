@@ -66,6 +66,7 @@ Docker Compose подключает файлы из `secrets/` к контейн
 |---|---|
 | `mikan backup` | бэкап в `/opt/mikan/backups` |
 | `mikan restore FILE [-y] [--no-db-snapshot]` | восстановить из бэкапа, см. [Бэкапы](/mikan/operations/backups/) |
+| `mikan move USER@HOST [-p SSH_PORT] [--force] [--stop-old] [--dry-run] [-y]` | перенести панель на новый сервер по SSH: бэкап, установка там с тем же портом панели, восстановление, порты в ufw. `--dry-run` только печатает шаги, `--stop-old` в конце останавливает панель здесь, `--force` заменяет данные mikan, если он на новом сервере уже стоит. См. [Перенос mikan на другой сервер](/mikan/start/migrate/#перенос-mikan-на-другой-сервер) |
 
 ## Ноды и подключения
 
