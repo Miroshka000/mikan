@@ -69,3 +69,10 @@ func TestListsPinned(t *testing.T) {
 		}
 	}
 }
+
+// privWL · only what is blocked is credited to the author of the lists it is built on.
+func TestPrivWLAuthor(t *testing.T) {
+	if r, ok := Get("privwl-blocked"); !ok || r.Author != privWLAuthor || r.Starter {
+		t.Errorf("privwl-blocked: %v %+v", ok, r)
+	}
+}

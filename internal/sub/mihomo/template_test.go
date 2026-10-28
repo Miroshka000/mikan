@@ -290,3 +290,32 @@ func TestTemplateIncludeAllNextToProviders(t *testing.T) {
 		})
 	}
 }
+
+// The parts of a template keep each rule-provider's interval, written as a number or a
+// string; a provider of none has zero.
+func TestTemplatePartsListInterval(t *testing.T) {
+	src := strings.Replace(subtest.OwnTemplate, "    path: ./ru.yaml\n", `    path: ./ru.yaml
+    interval: 3600
+  ip:
+    type: http
+    behavior: ipcidr
+    url: https://example.com/ip.yaml
+    interval: "7200"
+  apps:
+    type: http
+    behavior: classical
+    url: https://example.com/apps.yaml
+`, 1)
+	if src == subtest.OwnTemplate {
+		t.Fatal("the lists are not in the template")
+	}
+	parts, err := TemplateParts(profileOf(subtest.TwoNodes()), src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]int{"ru": 3600, "ip": 7200, "apps": 0} {
+		if got := parts.Lists[name].Interval; got != want {
+			t.Errorf("%s: interval %d, want %d", name, got, want)
+		}
+	}
+}
