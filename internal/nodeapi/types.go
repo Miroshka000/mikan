@@ -180,6 +180,17 @@ type PoliciesRequest struct {
 	Policies []Policy `json:"policies"`
 }
 
+// ResetRequest names the slots whose open connections the node closes (POST
+// /v1/slots/reset); their access stays, so the clients connect again at once.
+type ResetRequest struct {
+	Slots []string `json:"slots"`
+}
+
+// ResetResult is how many connections the core closed.
+type ResetResult struct {
+	Closed int `json:"closed"`
+}
+
 type AckRequest struct {
 	Epoch string `json:"epoch"`
 	Seq   int64  `json:"seq"`

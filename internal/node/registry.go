@@ -285,6 +285,29 @@ func (r *Registry) SetPolicies(epoch string, list []nodeapi.Policy) {
 	r.reconcile()
 }
 
+// ResetSlots closes the open connections of the named slots on every inbound and says how
+// many the core closed. Access stays as it is (policy, bans, quotas, devices): the core
+// lets the clients in again at once, so they connect anew. A name the node does not know
+// closes nothing.
+func (r *Registry) ResetSlots(names []string) int {
+	var keys []userKey
+	r.mu.RLock()
+	for _, n := range names {
+		s := r.byName[n]
+		if s == nil {
+			continue
+		}
+		for in, byUUID := range r.inbounds {
+			keys = append(keys, userKey{in, coreUser(s, byUUID)})
+		}
+	}
+	r.mu.RUnlock()
+	if len(keys) == 0 {
+		return 0
+	}
+	return r.core.closeConns(keys)
+}
+
 // SetShaping turns the node's fair share on or off.
 func (r *Registry) SetShaping(s *nodeapi.Shaping) {
 	r.shaper.setChannel(s)

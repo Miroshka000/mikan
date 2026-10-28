@@ -73,6 +73,9 @@ type Deps struct {
 	// NodeOnline is the live view of each node apart, by node id (nodesync.Manager.OnlineByNode);
 	// nil when the panel runs without nodes.
 	NodeOnline func() map[int64]map[string]nodeapi.Online
+	// ResetSlots has a node (0: every node) close the slots' connections and keep their
+	// access (nodesync.Manager.ResetSlots); nil when the panel runs without nodes.
+	ResetSlots func(ctx context.Context, node int64, slots []string) []nodesync.ConnReset
 	Cert       func() acme.Status
 	RenewCert  func()
 	// RenewCertNow tries the panel's certificate now and waits up to wait for the outcome;
