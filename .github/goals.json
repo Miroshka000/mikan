@@ -8,7 +8,7 @@
         "ru": "Перенос панели на новый сервер одной командой: клиенты, тарифы, ноды и настройки переезжают, ссылки подписок продолжают работать.",
         "en": "Move the panel to a new server with one command: clients, plans, nodes and settings come along, subscription links keep working."
       },
-      "target": 100, "raised": 21, "currency": "USD", "status": "working", "url": "https://t.me/tribute/app?startapp=g6qS"
+      "target": 100, "raised": 21, "currency": "USD", "status": "done", "version": "0.5.2.1", "url": "https://t.me/tribute/app?startapp=g6qS"
     },
     {
       "id": "external-subs",
@@ -71,7 +71,7 @@
         "ru": "Кто подключается через ноду, когда был последний раз и сколько трафика. И наоборот: в карточке клиента его ноды и трафик на каждой.",
         "en": "Who connects through a node, when they were last seen and how much traffic. And the other way round: a client's nodes and traffic on each."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "working", "url": "https://t.me/tribute/app?startapp=g6r1"
+      "target": 50, "raised": 0, "currency": "USD", "status": "done", "version": "0.5.2.1", "url": "https://t.me/tribute/app?startapp=g6r1"
     },
     {
       "id": "inbound-copy",
