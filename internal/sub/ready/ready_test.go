@@ -49,21 +49,32 @@ func TestCatalog(t *testing.T) {
 	}
 }
 
-// Every list a ready template links is pinned to a commit, the one the panel's own routing
-// links (routing.BlockedLists): a push to the list's repository must not reroute the apps.
+// Every list a ready template links is pinned to a commit: privWL-clash's to the one the
+// panel's own routing links (routing.BlockedLists), Davoyan's to one commit for them all. A
+// push to the list's repository must not reroute the apps.
 func TestListsPinned(t *testing.T) {
 	pin, _, _ := strings.Cut(strings.TrimPrefix(routing.BlockedLists[0].URL, "https://raw.githubusercontent.com/Nemu-x/privWL-clash/"), "/")
-	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(pin) {
+	sha := regexp.MustCompile(`^[0-9a-f]{40}$`)
+	if !sha.MatchString(pin) {
 		t.Fatalf("routing's privWL pin %q", pin)
 	}
+	const davoyan = "https://raw.githubusercontent.com/Davoyan/mihomo-rule-sets/"
+	davoyanPin := ""
 	url := regexp.MustCompile(`url: (\S+)`)
 	for _, r := range All() {
 		for _, m := range url.FindAllStringSubmatch(r.Body, -1) {
 			u := m[1]
-			if strings.Contains(u, "gstatic.com/generate_204") {
-				continue
-			}
-			if !strings.HasPrefix(u, "https://raw.githubusercontent.com/Nemu-x/privWL-clash/"+pin+"/") {
+			switch {
+			case strings.Contains(u, "gstatic.com/generate_204"):
+			case strings.HasPrefix(u, davoyan):
+				p, _, _ := strings.Cut(strings.TrimPrefix(u, davoyan), "/")
+				if davoyanPin == "" {
+					davoyanPin = p
+				}
+				if !sha.MatchString(p) || p != davoyanPin || r.Source != davoyanSource {
+					t.Errorf("%s: %s is not Davoyan's lists at one commit, or the source is not his", r.ID, u)
+				}
+			case !strings.HasPrefix(u, "https://raw.githubusercontent.com/Nemu-x/privWL-clash/"+pin+"/"):
 				t.Errorf("%s: %s is not privWL-clash at %s", r.ID, u, pin)
 			}
 		}
