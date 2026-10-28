@@ -53,6 +53,14 @@ func lists(t *testing.T) {
 			return []string{"+.gosuslugi.ru", "ya.ru", "*.wildcard.ru"}, nil
 		case strings.HasSuffix(src, "/ipcidr.yaml"), strings.HasSuffix(src, "/ipcidr-domain.yaml"):
 			return []string{"104.16.0.0/14", "2606:4700::/32", "not an address"}, nil
+		case strings.HasSuffix(src, "/category-ru.yaml"):
+			return []string{"+.tinkoff.*", "+.gosuslugi.ru", "vk.com"}, nil
+		case strings.HasSuffix(src, "/ips-for-ru.yaml"):
+			return []string{"5.8.0.0/16", "2a00:1450::/32"}, nil
+		case strings.HasSuffix(src, "/additional-telegram-domains.yaml"):
+			return []string{"DOMAIN-SUFFIX,legra.ph", "DOMAIN-KEYWORD,nicegram"}, nil
+		case strings.HasSuffix(src, "/additional-telegram-ips.yaml"):
+			return []string{"IP-CIDR,109.239.140.0/24"}, nil
 		case strings.HasSuffix(src, "/ru.txt"):
 			return []string{"5.8.0.0/16", "not an address"}, nil
 		}
