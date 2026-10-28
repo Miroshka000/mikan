@@ -63,3 +63,42 @@ DELETE FROM node_traffic_daily WHERE day < $1;
 -- name: FirstNodeTrafficDay :one
 -- The day the per-node accounting has its first row: 0 when it has none yet.
 SELECT CAST(COALESCE(min(day), 0) AS BIGINT) FROM node_traffic_daily;
+
+-- name: AddUserNodeTraffic :exec
+-- What each user of a batch carried through its node, and that the user was seen there now.
+-- The users are locked already (domain.CountTraffic) and the node is kept by AddNodeTraffic's
+-- lock; a node gone already is skipped. In user order, so two batches of a node take turns.
+INSERT INTO user_node_traffic (user_id, node_id, up, down, last_seen)
+SELECT v.user_id, n.id, v.up, v.down, sqlc.arg(now)::bigint
+FROM (SELECT unnest(sqlc.arg(user_ids)::bigint[]) AS user_id, unnest(sqlc.arg(up)::bigint[]) AS up, unnest(sqlc.arg(down)::bigint[]) AS down) AS v
+JOIN nodes n ON n.id = sqlc.arg(node_id)::bigint
+ORDER BY v.user_id
+ON CONFLICT (user_id, node_id) DO UPDATE SET up = user_node_traffic.up + excluded.up, down = user_node_traffic.down + excluded.down,
+  last_seen = GREATEST(user_node_traffic.last_seen, excluded.last_seen);
+
+-- name: ListNodeClients :many
+-- The users who went through a node, the latest seen first, a page of them: those whose
+-- name holds q (an empty q: all of them).
+SELECT t.user_id, u.name, t.up, t.down, t.last_seen
+FROM user_node_traffic t JOIN users u ON u.id = t.user_id
+WHERE t.node_id = sqlc.arg(node_id) AND (sqlc.arg(q)::text = '' OR strpos(lower(u.name), lower(sqlc.arg(q)::text)) > 0)
+ORDER BY t.last_seen DESC, t.user_id
+LIMIT sqlc.arg(lim) OFFSET sqlc.arg(off);
+
+-- name: CountNodeClients :one
+SELECT count(*) FROM user_node_traffic t JOIN users u ON u.id = t.user_id
+WHERE t.node_id = sqlc.arg(node_id) AND (sqlc.arg(q)::text = '' OR strpos(lower(u.name), lower(sqlc.arg(q)::text)) > 0);
+
+-- name: ListUserNodes :many
+-- The nodes a user went through, the latest seen first.
+SELECT t.node_id, n.name, (n.address = '')::bool AS local, t.up, t.down, t.last_seen
+FROM user_node_traffic t JOIN nodes n ON n.id = t.node_id
+WHERE t.user_id = $1 ORDER BY t.last_seen DESC, t.node_id;
+
+-- name: ListUsersSlotDevices :many
+-- The slots of the users of ids: the own one (device 0) and those of bound devices (their id).
+SELECT u.id AS user_id, s.name AS slot_name, 0::bigint AS device_id FROM users u JOIN slots s ON s.id = u.slot_id
+WHERE u.id = ANY(sqlc.arg(ids)::bigint[])
+UNION ALL
+SELECT d.user_id, s.name, d.id FROM bound_devices d JOIN slots s ON s.id = d.slot_id
+WHERE d.user_id = ANY(sqlc.arg(ids)::bigint[]);

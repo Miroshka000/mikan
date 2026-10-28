@@ -1020,6 +1020,17 @@
     "deleteText": "{n, plural, =0 {The folder is empty.} one {Its client stays, outside any folder.} other {Its clients stay, outside any folder.}}",
     "badge": "Folder: {name}"
   },
+  "nodeClients": {
+    "title": "Node clients",
+    "button": "Clients",
+    "search": "Search by name",
+    "summary": "{total, plural, one {# client} other {# clients}} · {online} online",
+    "keys": "{n, plural, one {# set of keys} other {# sets of keys}}",
+    "seen": "Seen {when}",
+    "empty": "Nobody has gone through this node yet.",
+    "noneFound": "Nobody found",
+    "note": "Clients are counted by node from the version that added it: traffic since then, “seen” is the last stored batch of traffic on this node."
+  },
   "nodeTraffic": {
     "title": "Node traffic",
     "button": "Traffic",
@@ -1228,6 +1239,11 @@
     "pausedUntil": "Unbound by the client · returns {when} at {time}",
     "unpauseTitle": "Let “{name}” back earlier?",
     "pausedForever": "Unbound by the client · stays out until you let it",
+    "nodes": {
+      "title": "Nodes",
+      "seen": "Seen {when}",
+      "note": "The nodes the client went through: traffic on each since the version that added this count, and the last time there."
+    },
     "sites": {
       "title": "Where it goes",
       "off": "the detail is off",
@@ -2759,10 +2775,12 @@
         "mikan-clash": "The panel's built-in profile with the current routing settings; its groups ask for the servers themselves.",
         "mikan-singbox": "A working sing-box config: TUN, DNS through the tunnel, local networks direct.",
         "mikan-xray": "A working Xray config: local SOCKS and HTTP, DNS through the tunnel, local networks direct.",
-        "privwl-blocked": "What is blocked or slowed down in Russia, Telegram and the address ranges that are slowed down (Cloudflare, AWS and others) go through the VPN; the rest goes direct. In Happ and INCY (Xray configs) the privWL-clash lists do not work and everything goes direct: give those apps another template with a response rule, or turn their Xray configs off."
+        "privwl-blocked": "What is blocked or slowed down in Russia, Telegram and the address ranges that are slowed down (Cloudflare, AWS and others) go through the VPN; the rest goes direct. In Happ and INCY (Xray configs) the privWL-clash lists do not work and everything goes direct: give those apps another template with a response rule, or turn their Xray configs off.",
+        "davoyan-ru-direct": "Russian sites and addresses go direct, the rest through the VPN, Telegram too: Russian domains from several lists and the networks of Russia and Belarus from the IPinfo and MaxMind databases, with no geo files. In Happ and INCY (Xray configs) the Davoyan/mihomo-rule-sets lists do not work and everything goes through the VPN, Russian sites too: give those apps another template with a response rule, or turn their Xray configs off."
       },
       "readyNames": {
-        "privwl-blocked": "privWL · only what is blocked"
+        "privwl-blocked": "privWL · only what is blocked",
+        "davoyan-ru-direct": "Davoyan · Russia direct"
       },
       "body": "Template text",
       "size": "{size} of {max}",

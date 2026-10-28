@@ -15,6 +15,7 @@ import { nodeLabel } from "../../lib/node-label";
 import { CascadeDrawer } from "./node-cascade";
 import { NodeCheckDrawer, type FixActions } from "./node-check";
 import { SpeedDrawer } from "./node-speed";
+import { NodeClientsDrawer } from "./node-clients";
 import { NodeTrafficDrawer } from "./node-traffic";
 import { WarpDrawer } from "./node-warp";
 import { BalanceGroups } from "./nodes-balance";
@@ -40,6 +41,7 @@ export function NodesPage() {
   const [warpOf, setWarpOf] = useState<Node | null>(null);
   const [speedOf, setSpeedOf] = useState<Node | null>(null);
   const [trafficOf, setTrafficOf] = useState<Node | null>(null);
+  const [clientsOf, setClientsOf] = useState<Node | null>(null);
   const [cascadeOf, setCascadeOf] = useState<Node | null>(null);
   const [certOf, setCertOf] = useState<Node | null>(null);
   const [checkOf, setCheckOf] = useState<Node | null>(null);
@@ -217,7 +219,7 @@ export function NodesPage() {
                 </p>
               ) : null}
               {(filter ? list.filter((n) => hasTag(n.tags, filter)) : list).map((n, idx) => (
-                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onCheck={() => setCheckOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
+                <NodeCard key={n.id} n={n} idx={idx} total={list.length} ordering={ordering} sorting={order.isPending} moving={order.isPending && order.variables.moved === n.id} onMove={(by) => move(list, idx, by)} updating={update.isPending && update.variables === n.id} busy={update.isPending} onUpdate={() => setUpdateOf(n)} onEdit={() => setEditing(n)} onWarp={() => setWarpOf(n)} onSpeed={() => setSpeedOf(n)} onTraffic={() => setTrafficOf(n)} onClients={() => setClientsOf(n)} onCascade={() => setCascadeOf(n)} onCert={() => setCertOf(n)} onCheck={() => setCheckOf(n)} onRekey={() => setRekeying(n)} onRemove={() => setRemoving(n)} />
               ))}
             </div>
           )
@@ -247,6 +249,7 @@ export function NodesPage() {
       <WarpDrawer node={warpOf ? { id: warpOf.id, name: nodeLabel(warpOf) } : null} onClose={() => setWarpOf(null)} />
       <SpeedDrawer node={speedOf ? { id: speedOf.id, name: nodeLabel(speedOf) } : null} onClose={() => setSpeedOf(null)} />
       <NodeTrafficDrawer node={trafficOf ? { id: trafficOf.id, name: nodeLabel(trafficOf) } : null} onClose={() => setTrafficOf(null)} />
+      <NodeClientsDrawer node={clientsOf ? { id: clientsOf.id, name: nodeLabel(clientsOf) } : null} onClose={() => setClientsOf(null)} />
       <CascadeDrawer node={cascadeOf ? { id: cascadeOf.id, name: nodeLabel(cascadeOf) } : null} onClose={() => setCascadeOf(null)} />
       <CertDrawer
         open={!!certOf}

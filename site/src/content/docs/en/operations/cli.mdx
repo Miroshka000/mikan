@@ -66,6 +66,7 @@ To change a plain setting by hand, edit `config.json` and run `mikan restart`. F
 |---|---|
 | `mikan backup` | a backup into `/opt/mikan/backups` |
 | `mikan restore FILE [-y] [--no-db-snapshot]` | restore from a backup, see [Backups](/mikan/en/operations/backups/) |
+| `mikan move USER@HOST [-p SSH_PORT] [--force] [--stop-old] [--dry-run] [-y]` | move the panel to a new server over SSH: a backup, an install there with the same panel port, the restore, the ports in ufw. `--dry-run` only prints the steps, `--stop-old` stops the panel here at the end, `--force` replaces the data of a mikan already on the new server. See [Moving mikan to another server](/mikan/en/start/migrate/#moving-mikan-to-another-server) |
 
 ## Nodes and connections
 

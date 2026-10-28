@@ -22,7 +22,7 @@ type Template struct {
 	// Name and Summary are Russian fallbacks: the admin panel translates them by the id.
 	Name    string
 	Summary string
-	Author  string
+	Author  string // who is credited: the lists' author for one of ours made on them
 	License string // SPDX id of the template's text
 	Source  string // where it comes from, the lists it links
 	// Starter: mikan's own, which the panel makes when it is loaded (Body is empty).
@@ -47,6 +47,10 @@ const (
 	mikanSource  = "https://github.com/Miroshka000/mikan"
 	privWLAuthor = "Nemu-x" // the author of the privWL-clash lists it is built on
 	privWLSource = "https://github.com/Nemu-x/privWL-clash"
+	// Davoyan's lists come with no license: the template is mikan's, links them pinned to
+	// a commit and copies nothing of them; the entry credits him as their author.
+	davoyanAuthor = "Davoyan"
+	davoyanSource = "https://github.com/Davoyan/mihomo-rule-sets"
 )
 
 var all = []Template{
@@ -60,6 +64,11 @@ var all = []Template{
 	{ID: "privwl-blocked", Core: model.CoreMihomo, Name: "privWL · только заблокированное",
 		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. В Happ и INCY (конфиги Xray) списки privWL-clash не работают и всё идёт напрямую: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
 		Author:  privWLAuthor, License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
+	// The Russian direct of the panel's default mode on Davoyan's lists instead of the
+	// geodata: wider, and with no geosite or GeoIP file to download.
+	{ID: "davoyan-ru-direct", Core: model.CoreMihomo, Name: "Davoyan · Россия напрямую",
+		Summary: "Российские сайты и адреса напрямую, остальное через VPN, Telegram тоже: российские домены из нескольких списков и сети России и Беларуси из баз IPinfo и MaxMind, без geo-файлов. В Happ и INCY (конфиги Xray) списки Davoyan/mihomo-rule-sets не работают и всё идёт через VPN, российские сайты тоже: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
+		Author:  davoyanAuthor, License: mikanLicense, Source: davoyanSource, Body: file("davoyan-ru-direct.yaml")},
 }
 
 // All is the catalog, by core in the order the editor lists it.

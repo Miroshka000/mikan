@@ -19,6 +19,7 @@ mod ops;
 mod panelfs;
 mod redact;
 mod release;
+mod relocate;
 mod setup;
 mod signals;
 mod sites;
@@ -128,6 +129,9 @@ enum Cmd {
         #[arg(long)]
         no_db_snapshot: bool,
     },
+    /// Move this panel to a new server over ssh: back up, install there with the same panel
+    /// port, restore, open its ports in ufw. This panel keeps running until you stop it
+    Move(relocate::MoveArgs),
     /// Update to the latest release, backing up and migrating the database safely
     Update(update::UpdateArgs),
     /// Payment adapters of the marketplace: list, install, remove
@@ -272,6 +276,7 @@ fn main() -> ExitCode {
                 Ok(())
             }
         }
+        Some(Cmd::Move(a)) => relocate::run_move(&a),
         Some(Cmd::Update(a)) => update::update(&a, &mut out, &mut progress_line()),
         Some(Cmd::Addon(c)) => addon_cmd(c),
         Some(Cmd::Join { key, panel_ip }) => ops::join_key(key).and_then(|k| ops::join(&k, panel_ip)),

@@ -5140,6 +5140,108 @@
         ],
         "type": "object"
       },
+      "NodeClient": {
+        "additionalProperties": false,
+        "properties": {
+          "down": {
+            "description": "Скачано через эту ноду с начала учёта",
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_seen": {
+            "description": "Последняя сохранённая порция трафика пользователя на этой ноде",
+            "format": "date-time",
+            "type": "string"
+          },
+          "online": {
+            "description": "Что открыто на ноде сейчас, по ключам; пусто — не в сети",
+            "items": {
+              "$ref": "#/components/schemas/NodeClientOnline"
+            },
+            "type": "array"
+          },
+          "up": {
+            "description": "Отдано через эту ноду с начала учёта",
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "user_name": {
+            "description": "Имя пользователя; оператор поддержки без доступа к подписчикам видит #ID",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "user_name",
+          "up",
+          "down",
+          "last_seen",
+          "online"
+        ],
+        "type": "object"
+      },
+      "NodeClientOnline": {
+        "additionalProperties": false,
+        "properties": {
+          "conns": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "device_id": {
+            "description": "Привязанное устройство, чьими ключами подключены; null — общие ключи пользователя",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "online_ips": {
+            "description": "Адреса с открытыми соединениями; оператор поддержки без доступа к подписчикам получает пустой список",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_id",
+          "online_ips",
+          "conns"
+        ],
+        "type": "object"
+      },
+      "NodeClientsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "description": "Последние увиденные сверху",
+            "items": {
+              "$ref": "#/components/schemas/NodeClient"
+            },
+            "type": "array"
+          },
+          "online": {
+            "description": "Сколько пользователей в сети на ноде сейчас, без учёта запроса",
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Сколько всего пользователей под запрос",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "online"
+        ],
+        "type": "object"
+      },
       "NodeHello": {
         "additionalProperties": false,
         "properties": {
@@ -12237,6 +12339,52 @@
         ],
         "type": "object"
       },
+      "UserNode": {
+        "additionalProperties": false,
+        "properties": {
+          "down": {
+            "description": "Скачано через эту ноду с начала учёта",
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_seen": {
+            "description": "Последняя сохранённая порция трафика пользователя на этой ноде",
+            "format": "date-time",
+            "type": "string"
+          },
+          "local": {
+            "description": "Своя нода панели",
+            "type": "boolean"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "node_name": {
+            "description": "Имя ноды; у своей ноды панели может быть пустым",
+            "type": "string"
+          },
+          "online": {
+            "description": "Подключён к этой ноде сейчас",
+            "type": "boolean"
+          },
+          "up": {
+            "description": "Отдано через эту ноду с начала учёта",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "node_id",
+          "node_name",
+          "local",
+          "up",
+          "down",
+          "last_seen",
+          "online"
+        ],
+        "type": "object"
+      },
       "UserOnlineView": {
         "additionalProperties": false,
         "properties": {
@@ -16972,6 +17120,84 @@
           }
         },
         "summary": "Проверить порты ноды из России через Globalping",
+        "tags": [
+          "node"
+        ]
+      }
+    },
+    "/api/v1/nodes/{id}/clients": {
+      "get": {
+        "description": "Кто ходил через ноду: последний раз, трафик на ней и кто в сети сейчас. Учёт идёт с версии, где он появился.",
+        "operationId": "node-clients",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Часть имени пользователя. Оператору поддержки без показа подписчиков закрыт: 403 support_denied",
+            "explode": false,
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "description": "Часть имени пользователя. Оператору поддержки без показа подписчиков закрыт: 403 support_denied",
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "format": "int32",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "default": 0,
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeClientsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Клиенты ноды",
         "tags": [
           "node"
         ]
@@ -22783,6 +23009,53 @@
           }
         },
         "summary": "Следующий тариф: включится сам, когда кончится срок",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/nodes": {
+      "get": {
+        "description": "Через какие ноды ходил пользователь: последний раз и трафик на каждой. Учёт идёт с версии, где он появился.",
+        "operationId": "user-nodes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserNode"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Ноды пользователя",
         "tags": [
           "users"
         ]

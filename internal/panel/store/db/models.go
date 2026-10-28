@@ -789,6 +789,14 @@ type UserNextTariff struct {
 	CreatedAt int64
 }
 
+type UserNodeTraffic struct {
+	UserID   int64
+	NodeID   int64
+	Up       int64
+	Down     int64
+	LastSeen int64
+}
+
 type UserPool struct {
 	UserID       int64
 	PoolID       int64

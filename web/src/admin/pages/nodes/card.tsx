@@ -1,7 +1,7 @@
 // A node's card on the Servers page: its state, address, certificate and update, and what can be done with it.
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, ShieldCheck, Stethoscope, Trash2, Waypoints } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, ShieldCheck, Stethoscope, Trash2, UsersRound, Waypoints } from "lucide-react";
 import { api, errorText, unwrap } from "../../../api/client";
 import { qk, useNodes } from "../../../api/hooks";
 import { AcmeAttempts, AcmeProblem, caName } from "../../../components/acme";
@@ -40,6 +40,7 @@ export function NodeCard({
   onWarp,
   onSpeed,
   onTraffic,
+  onClients,
   onCascade,
   onCert,
   onCheck,
@@ -66,6 +67,7 @@ export function NodeCard({
   onWarp: () => void;
   onSpeed: () => void;
   onTraffic: () => void;
+  onClients: () => void;
   onCascade: () => void;
   onCert: () => void;
   onCheck: () => void;
@@ -197,6 +199,9 @@ export function NodeCard({
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
+              <Menu.Item className="menu-item" onSelect={onClients}>
+                <UsersRound size={16} aria-hidden /> {t("nodeClients.button")}
+              </Menu.Item>
               <Menu.Item className="menu-item" onSelect={onCheck}>
                 <Stethoscope size={16} aria-hidden /> {t("nodeCheck.button")}
               </Menu.Item>
