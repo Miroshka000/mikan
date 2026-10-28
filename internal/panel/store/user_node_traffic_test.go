@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Migration 0064 adds the users' traffic by node, empty: what was carried before is not
+// Migration 0062 adds the users' traffic by node, empty: what was carried before is not
 // there to split. A row names a user and a node that exist; going down takes the table away.
 func TestUserNodeTrafficMigration(t *testing.T) {
 	ctx := context.Background()
@@ -18,7 +18,7 @@ func TestUserNodeTrafficMigration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const migration = 64
+	const migration = 62
 	before := int64(0)
 	for _, src := range p.ListSources() {
 		if src.Version < migration {
