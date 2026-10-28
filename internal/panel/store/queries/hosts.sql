@@ -1,5 +1,5 @@
--- name: ListAllInboundHosts :many
-SELECT * FROM inbound_hosts ORDER BY inbound_id, position;
+-- name: ListHostsOfInbounds :many
+SELECT * FROM inbound_hosts WHERE inbound_id = ANY(sqlc.arg(ids)::bigint[]) ORDER BY inbound_id, position;
 
 -- name: ListInboundHosts :many
 SELECT * FROM inbound_hosts WHERE inbound_id = $1 ORDER BY position;
@@ -20,7 +20,7 @@ RETURNING *;
 -- name: SetDefaultInboundHost :exec
 INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint)
 VALUES ($1, 0, $2, $3, $4, $5, $6)
-ON CONFLICT (inbound_id, position) DO UPDATE
+ON CONFLICT (inbound_id) WHERE position = 0 DO UPDATE
 SET address = excluded.address, port = excluded.port, sni = excluded.sni, host = excluded.host, fingerprint = excluded.fingerprint;
 
 -- name: UpdateInboundHost :one

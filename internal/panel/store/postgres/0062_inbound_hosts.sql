@@ -13,8 +13,13 @@ CREATE TABLE inbound_hosts (
   sni         TEXT   NOT NULL DEFAULT '',
   host        TEXT   NOT NULL DEFAULT '',
   fingerprint TEXT   NOT NULL DEFAULT '',
-  UNIQUE (inbound_id, position)
+  -- Deferrable, so that hosts change places in one UPDATE; checked at the end of each
+  -- statement unless a transaction defers it.
+  UNIQUE (inbound_id, position) DEFERRABLE INITIALLY IMMEDIATE
 );
+-- One default host per inbound, the conflict target of its upsert: ON CONFLICT takes no
+-- deferrable constraint.
+CREATE UNIQUE INDEX inbound_hosts_default ON inbound_hosts (inbound_id) WHERE position = 0;
 
 -- +goose Down
 DROP TABLE inbound_hosts;

@@ -115,7 +115,7 @@ func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error)
 		return nil, err
 	}
 	s.reach = r
-	hosts, err := s.h.hosts(ctx)
+	hosts, err := s.h.hosts(ctx, r.inbounds)
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func Inbound(in db.Inbound, hosts []db.InboundHost) submodel.Inbound {
 	return out
 }
 
-// inbounds are ins as the subscription module sees them; hosts are every inbound's by id.
+// inbounds are ins as the subscription module sees them; hosts are theirs by inbound id.
 func inbounds(ins []db.Inbound, hosts map[int64][]db.InboundHost) []submodel.Inbound {
 	out := make([]submodel.Inbound, 0, len(ins))
 	for _, in := range ins {
@@ -235,9 +235,13 @@ func inbounds(ins []db.Inbound, hosts map[int64][]db.InboundHost) []submodel.Inb
 	return out
 }
 
-// hosts are the hosts of every inbound by its id, each inbound's in their order.
-func (h *Handler) hosts(ctx context.Context) (map[int64][]db.InboundHost, error) {
-	rows, err := h.st.Q.ListAllInboundHosts(ctx)
+// hosts are the hosts of ins by inbound id, each inbound's in their order.
+func (h *Handler) hosts(ctx context.Context, ins []db.Inbound) (map[int64][]db.InboundHost, error) {
+	ids := make([]int64, len(ins))
+	for i, in := range ins {
+		ids[i] = in.ID
+	}
+	rows, err := h.st.Q.ListHostsOfInbounds(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

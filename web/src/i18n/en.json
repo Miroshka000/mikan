@@ -1699,7 +1699,9 @@
       "host": "HTTP Host for clients",
       "hostDefault": "as on the server",
       "saved": "Address saved",
-      "deleted": "Address deleted"
+      "deleted": "Address deleted",
+      "deleteTitle": "Delete the address {address}?",
+      "deleteText": "Clients do not get it yet, so nothing changes for them."
     }
   },
   "settings": {

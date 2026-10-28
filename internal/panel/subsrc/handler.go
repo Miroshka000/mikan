@@ -581,7 +581,7 @@ func (h *Handler) sample(ctx context.Context) (profile.Profile, Config, error) {
 	if err != nil {
 		return profile.Profile{}, cfg, err
 	}
-	hosts, err := h.hosts(ctx)
+	hosts, err := h.hosts(ctx, r.inbounds)
 	if err != nil {
 		return profile.Profile{}, cfg, err
 	}

@@ -67,14 +67,20 @@ func TestInboundHostsMigration(t *testing.T) {
 	check := func(when string) {
 		t.Helper()
 		q := db.New(s.DB)
-		got, err := q.ListAllInboundHosts(ctx)
+		got, err := q.ListHostsOfInbounds(ctx, []int64{71, 72, 73, 74})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(got) != len(want) {
-			t.Fatalf("%s: %d hosts, want %d: %+v", when, len(got), len(want), got)
-		}
+		var defaults []db.InboundHost
 		for _, h := range got {
+			if h.Position == 0 {
+				defaults = append(defaults, h)
+			}
+		}
+		if len(defaults) != len(want) {
+			t.Fatalf("%s: %d default hosts, want %d: %+v", when, len(defaults), len(want), got)
+		}
+		for _, h := range defaults {
 			w := want[h.InboundID]
 			w.ID = h.ID
 			if h != w {
@@ -101,8 +107,8 @@ func TestInboundHostsMigration(t *testing.T) {
 	}
 	check("after the move ran twice")
 
-	// Going down past the move leaves the table and its other hosts; up again, the same
-	// default hosts come back.
+	// Going down past the move leaves the table and its other hosts; up again, with the
+	// other host still there, the same default hosts come back beside it.
 	if _, err := s.DB.ExecContext(ctx, "INSERT INTO inbound_hosts(inbound_id,position,address) VALUES(71,1,'second.example.com')"); err != nil {
 		t.Fatal(err)
 	}
@@ -130,13 +136,14 @@ func TestInboundHostsMigration(t *testing.T) {
 	if len(left) != 1 || left[0] != "second.example.com" {
 		t.Fatalf("below the move: %q, want only the other host", left)
 	}
-	if _, err := s.DB.ExecContext(ctx, "DELETE FROM inbound_hosts"); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := p.UpTo(ctx, move); err != nil {
 		t.Fatal(err)
 	}
 	check("up again")
+	var second string
+	if err := s.DB.QueryRowContext(ctx, "SELECT address FROM inbound_hosts WHERE inbound_id = 71 AND position = 1").Scan(&second); err != nil || second != "second.example.com" {
+		t.Fatalf("the other host up again: %q %v", second, err)
+	}
 
 	if _, err := p.DownTo(ctx, before); err != nil {
 		t.Fatal(err)
@@ -150,5 +157,27 @@ func TestInboundHostsMigration(t *testing.T) {
 	}
 	if _, err := p.Up(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The frozen reader of migration 63 reads a template as proto did when it was written: the
+// same five fields as DefaultHost for every shape of mikan.client the panel has seen.
+func TestFrozenClientReadsAsProto(t *testing.T) {
+	for _, config := range []string{
+		"type: vless\nmikan:\n    client:\n        server: a.example.com\n        port: 8443\n        sni: s.example.com\n        host: h.example.com\n        fingerprint: ios\n",
+		"{type: trojan, mikan: {client: {server: 203.0.113.9, port: 2053.0}}}",
+		"type: vless\nmikan:\n    client:\n        port: 70000\n        server: 7\n",
+		"type: vless\nmikan:\n    client:\n        port: \"443\"\n        sni: s.example.com\n",
+		"type: vless\nmikan:\n    tls: node\n",
+		"type: vless\nmikan: on\n",
+		"type: [vless",
+		"",
+	} {
+		w := DefaultHost(1, config)
+		address, port, sni, host, fp := frozenClient(config)
+		got := db.SetDefaultInboundHostParams{InboundID: 1, Address: address, Port: port, Sni: sni, Host: host, Fingerprint: fp}
+		if got != w {
+			t.Errorf("%q: frozen %+v, proto %+v", config, got, w)
+		}
 	}
 }

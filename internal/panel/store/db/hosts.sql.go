@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/lib/pq"
 )
 
 const addInboundHost = `-- name: AddInboundHost :one
@@ -108,12 +110,12 @@ func (q *Queries) GetInboundHost(ctx context.Context, arg GetInboundHostParams) 
 	return i, err
 }
 
-const listAllInboundHosts = `-- name: ListAllInboundHosts :many
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint FROM inbound_hosts ORDER BY inbound_id, position
+const listHostsOfInbounds = `-- name: ListHostsOfInbounds :many
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint FROM inbound_hosts WHERE inbound_id = ANY($1::bigint[]) ORDER BY inbound_id, position
 `
 
-func (q *Queries) ListAllInboundHosts(ctx context.Context) ([]InboundHost, error) {
-	rows, err := q.db.QueryContext(ctx, listAllInboundHosts)
+func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]InboundHost, error) {
+	rows, err := q.db.QueryContext(ctx, listHostsOfInbounds, pq.Array(ids))
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +197,7 @@ func (q *Queries) LockInbound(ctx context.Context, id int64) (int64, error) {
 const setDefaultInboundHost = `-- name: SetDefaultInboundHost :exec
 INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint)
 VALUES ($1, 0, $2, $3, $4, $5, $6)
-ON CONFLICT (inbound_id, position) DO UPDATE
+ON CONFLICT (inbound_id) WHERE position = 0 DO UPDATE
 SET address = excluded.address, port = excluded.port, sni = excluded.sni, host = excluded.host, fingerprint = excluded.fingerprint
 `
 

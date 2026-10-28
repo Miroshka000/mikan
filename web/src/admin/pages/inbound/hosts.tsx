@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, unwrap, type Inbound, type Schemas } from "../../../api/client";
 import { qk } from "../../../api/hooks";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
+import { Confirm } from "../../../components/overlay";
 import { useToast } from "../../../components/toast";
 import { Button, Field } from "../../../components/ui";
 import { t } from "../../../i18n";
@@ -76,6 +77,7 @@ function HostRow({ inbound, initial, defaultFingerprint, onDone }: { inbound: In
   const [f, setF] = useState(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [fpOK, setFpOK] = useState(true);
+  const [confirming, setConfirming] = useState(false);
   const set = (patch: Partial<HostForm>) => {
     setF((v) => ({ ...v, ...patch }));
     setErrors({});
@@ -99,6 +101,7 @@ function HostRow({ inbound, initial, defaultFingerprint, onDone }: { inbound: In
   const remove = useMutation({
     mutationFn: () => unwrap(api.DELETE("/api/v1/inbounds/{id}/hosts/{host_id}", { params: { path: { id: inbound.id, host_id: f.id } } })),
     onSuccess: () => {
+      setConfirming(false);
       toast.ok(t("inbounds.hosts.deleted"));
       done();
     },
@@ -191,7 +194,7 @@ function HostRow({ inbound, initial, defaultFingerprint, onDone }: { inbound: In
           {t("common.save")}
         </Button>
         {f.id ? (
-          <Button type="button" size="sm" variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>
+          <Button type="button" size="sm" variant="danger" onClick={() => setConfirming(true)}>
             <Trash2 size={14} aria-hidden /> {t("common.delete")}
           </Button>
         ) : (
@@ -200,6 +203,16 @@ function HostRow({ inbound, initial, defaultFingerprint, onDone }: { inbound: In
           </Button>
         )}
       </div>
+      <Confirm
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t("inbounds.hosts.deleteTitle", { address: f.address.trim() || t("inbounds.hosts.nodeAddress") })}
+        text={t("inbounds.hosts.deleteText")}
+        confirm={t("common.delete")}
+        danger
+        loading={remove.isPending}
+        onConfirm={() => remove.mutate()}
+      />
     </div>
   );
 }
