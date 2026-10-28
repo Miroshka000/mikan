@@ -9,6 +9,7 @@ import (
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 	"mikan/internal/sub/subtest"
+	"mikan/internal/sub/subtest/corecheck"
 )
 
 // What sing-box has no group for becomes the nearest, and the preview is told: a fallback
@@ -46,33 +47,46 @@ func TestConvertGroups(t *testing.T) {
 	if fast, spread := byTag["fast"], byTag["spread"]; fast["idle_timeout"] != nil || spread["interval"] != "3600s" || spread["idle_timeout"] != "7200s" {
 		t.Fatalf("idle timeout: %v %v", fast, spread)
 	}
-	if cascade := byTag["cascade"]; cascade["type"] != "selector" || !slices.Equal(cascade["outbounds"].([]string), []string{"exits"}) {
+	// The exit is a copy of the group over copies of its proxies, which dial through the entry;
+	// the group itself and its proxies dial through nothing.
+	if cascade := byTag["cascade"]; cascade["type"] != "selector" || !slices.Equal(cascade["outbounds"].([]string), []string{"chain1-hop2-exits"}) {
 		t.Fatalf("a chain goes out of its exit: %v", cascade)
 	}
-	if c.detours["b"] != "entry" || c.detours["c"] != "entry" || len(c.detours) != 2 {
-		t.Fatalf("the exits dial through the entry: %v", c.detours)
+	if exits := byTag["chain1-hop2-exits"]; exits["type"] != "urltest" || !slices.Equal(exits["outbounds"].([]string), []string{"chain1-hop2-b", "chain1-hop2-c"}) ||
+		!slices.Equal(byTag["exits"]["outbounds"].([]string), []string{"b", "c"}) {
+		t.Fatalf("the exit's copy: %v %v", exits, byTag["exits"])
+	}
+	if want := []hopCopy{{"chain1-hop2-", "b", "entry"}, {"chain1-hop2-", "c", "entry"}}; !slices.Equal(c.copies, want) {
+		t.Fatalf("the exits dial through the entry: %+v", c.copies)
 	}
 	want := []model.Note{{Core: "singbox", Subject: "first", Code: "fallback_fastest"}, {Core: "singbox", Subject: "spread", Code: "balance_fastest"}}
 	if !slices.Equal(c.notes, want) {
 		t.Fatalf("notes: %+v", c.notes)
 	}
 
-	// A proxy one chain dials through a hop keeps it in another.
+	// Two chains through one proxy: each has its own copy, dialing through its own hop.
 	two := convertGroups([]model.Group{
+		{Name: "pick", Type: model.Select, Members: []string{"a"}},
 		{Name: "one", Type: model.Chain, Members: []string{"entry", "a"}},
 		{Name: "two", Type: model.Chain, Members: []string{"b", "a"}},
 	}, tags)
-	if two.detours["a"] != "entry" || len(two.notes) != 1 || two.notes[0].Code != "chain_dialer_taken" {
-		t.Fatalf("a taken dialer: %v %+v", two.detours, two.notes)
+	if want := []hopCopy{{"chain1-hop2-", "a", "entry"}, {"chain2-hop2-", "a", "b"}}; !slices.Equal(two.copies, want) || len(two.notes) != 0 {
+		t.Fatalf("a proxy of two chains: %+v %+v", two.copies, two.notes)
+	}
+	if o := two.outbounds; !slices.Equal(o[0]["outbounds"].([]string), []string{"a"}) ||
+		!slices.Equal(o[1]["outbounds"].([]string), []string{"chain1-hop2-a"}) || !slices.Equal(o[2]["outbounds"].([]string), []string{"chain2-hop2-a"}) {
+		t.Fatalf("the chains go out of their copies, the select of the proxy: %v", o)
 	}
 
-	// A chain as a hop is entered by its first hop: entry, a, then b.
+	// A chain as a hop is entered by its first hop: entry, a, then b; the inner chain on its
+	// own is a, then b.
 	nested := convertGroups([]model.Group{
 		{Name: "inner", Type: model.Chain, Members: []string{"a", "b"}},
 		{Name: "outer", Type: model.Chain, Members: []string{"entry", "inner"}},
 	}, tags)
-	if nested.detours["a"] != "entry" || nested.detours["b"] != "a" || len(nested.detours) != 2 || len(nested.notes) != 0 {
-		t.Fatalf("a nested chain: %v %+v", nested.detours, nested.notes)
+	if want := []hopCopy{{"chain1-hop2-", "b", "a"}, {"chain2-hop2-", "a", "entry"}, {"chain2-hop3-", "b", "chain2-hop2-a"}}; !slices.Equal(nested.copies, want) ||
+		!slices.Equal(nested.outbounds[1]["outbounds"].([]string), []string{"chain2-hop3-b"}) || len(nested.notes) != 0 {
+		t.Fatalf("a nested chain: %+v %v %+v", nested.copies, nested.outbounds, nested.notes)
 	}
 }
 
@@ -87,9 +101,57 @@ func TestChainInConfig(t *testing.T) {
 	}
 	cfg := config(pl, &ruleSets{ctx: t.Context()})
 	raw, _ := json.Marshal(cfg["outbounds"])
-	if !strings.Contains(string(raw), `"detour":"entry","password":"y"`) || cfg["route"].(map[string]any)["final"] != "cascade" {
+	if !strings.Contains(string(raw), `"detour":"entry","password":"y"`) || !strings.Contains(string(raw), `"tag":"chain1-hop2-exit"`) ||
+		strings.Count(string(raw), `"detour"`) != 1 || cfg["route"].(map[string]any)["final"] != "cascade" {
 		t.Fatalf("outbounds: %s", raw)
 	}
+}
+
+// Two chains share a proxy and a select holds it: each chain dials through its own entry,
+// and the proxy in the select through nothing; a group as a hop is copied too, and a third
+// hop dials through the second's copy. sing-box takes the config.
+func TestChainsShareProxy(t *testing.T) {
+	ss := func(name, ip string) model.Proxy {
+		return model.Proxy{Name: name, Type: "shadowsocks", Server: ip, Port: 8388, Cipher: "aes-128-gcm", Password: "x", UDP: true}
+	}
+	pl := plan{
+		proxies: []model.Proxy{ss("de", "203.0.113.1"), ss("nl", "203.0.113.2"), ss("exit", "198.51.100.2")},
+		groups: []model.Group{
+			{Name: "pick", Type: model.Select, Members: []string{"one", "two", "exit"}},
+			{Name: "one", Type: model.Chain, Members: []string{"de", "exit"}},
+			{Name: "two", Type: model.Chain, Members: []string{"nl", "exit"}},
+			{Name: "auto", Type: model.URLTest, Members: []string{"exit", "nl"}},
+			{Name: "three", Type: model.Chain, Members: []string{"de", "auto"}},
+			{Name: "four", Type: model.Chain, Members: []string{"de", "nl", "exit"}},
+		},
+		rules: []routing.Rule{{To: routing.Target{Kind: routing.ToGroup, Group: "pick"}}},
+		main:  "pick",
+	}
+	cfg := config(pl, &ruleSets{ctx: t.Context()})
+	byTag := map[string]map[string]any{}
+	for _, o := range cfg["outbounds"].([]map[string]any) {
+		byTag[str(o["tag"])] = o
+	}
+	if byTag["exit"]["detour"] != nil || byTag["chain1-hop2-exit"]["detour"] != "de" || byTag["chain2-hop2-exit"]["detour"] != "nl" ||
+		byTag["chain1-hop2-exit"]["server"] != "198.51.100.2" {
+		t.Fatalf("outbounds: %v", cfg["outbounds"])
+	}
+	if !slices.Equal(byTag["one"]["outbounds"].([]string), []string{"chain1-hop2-exit"}) || !slices.Equal(byTag["two"]["outbounds"].([]string), []string{"chain2-hop2-exit"}) ||
+		!slices.Equal(byTag["pick"]["outbounds"].([]string), []string{"one", "two", "exit"}) {
+		t.Fatalf("groups: %v %v %v", byTag["one"], byTag["two"], byTag["pick"])
+	}
+	// A group as a hop is a copy of it over copies.
+	if auto := byTag["chain3-hop2-auto"]; auto["type"] != "urltest" || !slices.Equal(auto["outbounds"].([]string), []string{"chain3-hop2-exit", "chain3-hop2-nl"}) ||
+		byTag["chain3-hop2-nl"]["detour"] != "de" || byTag["nl"]["detour"] != nil || !slices.Equal(byTag["auto"]["outbounds"].([]string), []string{"exit", "nl"}) {
+		t.Fatalf("a group as a hop: %v %v", auto, byTag["auto"])
+	}
+	// A third hop dials through the second's copy.
+	if byTag["chain4-hop2-nl"]["detour"] != "de" || byTag["chain4-hop3-exit"]["detour"] != "chain4-hop2-nl" ||
+		!slices.Equal(byTag["four"]["outbounds"].([]string), []string{"chain4-hop3-exit"}) {
+		t.Fatalf("three hops: %v %v", byTag["chain4-hop3-exit"], byTag["four"])
+	}
+	raw, _ := json.Marshal(cfg)
+	corecheck.SingBox(t, raw)
 }
 
 // The conditions sing-box has: ports and ranges, the source, a dropped rule; what it would

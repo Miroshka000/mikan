@@ -18,6 +18,7 @@ package singbox
 import (
 	"context"
 	"encoding/json"
+	"maps"
 
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/mihomo"
@@ -149,10 +150,20 @@ func config(pl plan, sets *ruleSets) map[string]any {
 	for _, gr := range gs.outbounds {
 		tags[str(gr["tag"])] = true
 	}
+	own := map[string]map[string]any{}
 	for _, o := range outbounds {
-		if d, ok := gs.detours[str(o["tag"])]; ok && tags[d] {
-			o["detour"] = d
+		own[str(o["tag"])] = o
+	}
+	for _, x := range gs.copies {
+		tags[x.Tag()] = true // a copy past another dials through it
+	}
+	for _, x := range gs.copies {
+		o := maps.Clone(own[x.Of])
+		o["tag"] = x.Tag()
+		if tags[x.Dialer] {
+			o["detour"] = x.Dialer
 		}
+		outbounds = append(outbounds, o)
 	}
 	main := pl.main
 	if !tags[main] {

@@ -48,7 +48,7 @@ func (t GroupType) Known() bool { return t == Select || t == Chain || t.Tests() 
 type Note struct {
 	Core    string `json:"core" enum:"mihomo,singbox,xray"`
 	Subject string `json:"group" doc:"О чём заметка: группа, условие TYPE,VALUE, список, ключ политики DNS, сервер или geosite:NAME"`
-	Code    string `json:"code" enum:"fallback_fastest,balance_fastest,balance_random,balance_flat,select_first,chain_group_hop,chain_dialer_taken,proxy_unsupported,rule_unsupported,list_unsupported,dns_policy_unsupported,category_missing"`
+	Code    string `json:"code" enum:"fallback_fastest,balance_fastest,balance_random,balance_flat,select_first,chain_group_hop,proxy_unsupported,rule_unsupported,list_unsupported,dns_policy_unsupported,category_missing"`
 }
 
 // Entries are the proxies a hop of a chain is entered by, which dial through the hop before

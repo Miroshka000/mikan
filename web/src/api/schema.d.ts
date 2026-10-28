@@ -5408,7 +5408,7 @@ export interface components {
         };
         Note: {
             /** @enum {string} */
-            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "chain_dialer_taken" | "proxy_unsupported" | "rule_unsupported" | "list_unsupported" | "dns_policy_unsupported" | "category_missing";
+            code: "fallback_fastest" | "balance_fastest" | "balance_random" | "balance_flat" | "select_first" | "chain_group_hop" | "proxy_unsupported" | "rule_unsupported" | "list_unsupported" | "dns_policy_unsupported" | "category_missing";
             /** @enum {string} */
             core: "mihomo" | "singbox" | "xray";
             /** @description О чём заметка: группа, условие TYPE,VALUE, список, ключ политики DNS, сервер или geosite:NAME */

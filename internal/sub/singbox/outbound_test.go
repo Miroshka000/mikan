@@ -120,8 +120,10 @@ rules:
 	dialed := 0
 	for _, p := range prof.Proxies {
 		if o := outbound(c, p.Name); o != nil {
-			if dialed++; o["detour"] != "вход" {
-				t.Errorf("%s dials past the chain's entry: %v", p.Name, o)
+			// The chain's copy dials past the entry; the server's own outbound, in the other
+			// groups, through nothing.
+			if dialed++; o["detour"] != nil || outbound(c, "chain1-hop2-"+p.Name)["detour"] != "вход" {
+				t.Errorf("%s dials past the chain's entry only in it: %v %v", p.Name, o, outbound(c, "chain1-hop2-"+p.Name))
 			}
 		}
 	}

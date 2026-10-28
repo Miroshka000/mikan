@@ -5793,7 +5793,6 @@
               "balance_flat",
               "select_first",
               "chain_group_hop",
-              "chain_dialer_taken",
               "proxy_unsupported",
               "rule_unsupported",
               "list_unsupported",
