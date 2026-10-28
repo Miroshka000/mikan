@@ -275,7 +275,7 @@ func postgresProvider(ctx context.Context, conn *sql.DB, fsys fs.FS) (*goose.Pro
 	if err != nil {
 		return nil, err
 	}
-	p, err := goose.NewProvider(goose.DialectPostgres, conn, fsys, goose.WithSessionLocker(locker), goose.WithGoMigrations(hostsMigration()))
+	p, err := goose.NewProvider(goose.DialectPostgres, conn, fsys, goose.WithSessionLocker(locker), goose.WithGoMigrations(goMigrations()...))
 	if err != nil {
 		return nil, fmt.Errorf("PostgreSQL migrations: %w", err)
 	}
@@ -285,12 +285,33 @@ func postgresProvider(ctx context.Context, conn *sql.DB, fsys fs.FS) (*goose.Pro
 	if err != nil {
 		return nil, fmt.Errorf("PostgreSQL migration versions: %w", err)
 	}
-	sources := p.ListSources()
-	target := sources[len(sources)-1].Version
+	target := latestOf(p)
 	if current > target {
 		return nil, fmt.Errorf("PostgreSQL schema %d is newer than this binary supports (%d); downgrade refused", current, target)
 	}
 	return p, nil
+}
+
+// goMigrations are the migrations written in Go, beside the SQL files of postgresFS: the
+// schema's versions are both together, and nothing may count the files alone.
+func goMigrations() []*goose.Migration {
+	return []*goose.Migration{hostsMigration()}
+}
+
+// latestOf is the highest version p migrates to, SQL or Go (ListSources is in order).
+func latestOf(p *goose.Provider) int64 {
+	sources := p.ListSources()
+	return sources[len(sources)-1].Version
+}
+
+// LatestMigration is the schema version this binary migrates conn's database to: its
+// latest migration, SQL or Go, the version a database is at after Migrate or a restore.
+func LatestMigration(ctx context.Context, conn *sql.DB) (int64, error) {
+	p, err := postgresProvider(ctx, conn, postgresFS)
+	if err != nil {
+		return 0, err
+	}
+	return latestOf(p), nil
 }
 
 func (s *Store) Close() error {

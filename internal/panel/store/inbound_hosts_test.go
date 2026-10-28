@@ -2,6 +2,9 @@ package store
 
 import (
 	"context"
+	"io/fs"
+	"strconv"
+	"strings"
 	"testing"
 
 	"mikan/internal/panel/store/db"
@@ -179,5 +182,45 @@ func TestFrozenClientReadsAsProto(t *testing.T) {
 		if got != w {
 			t.Errorf("%q: frozen %+v, proto %+v", config, got, w)
 		}
+	}
+}
+
+// The binary's latest migration counts the Go ones beside the SQL files: a database migrated
+// up stands at LatestMigration, which is past the last SQL file while a Go migration is the
+// newest, and a check that counted the files alone would take the schema for a newer one.
+func TestLatestMigrationCountsGoMigrations(t *testing.T) {
+	ctx := context.Background()
+	s, err := OpenTest(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	latest, err := LatestMigration(ctx, s.DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied, err := schemaVersion(ctx, s.DB)
+	if err != nil || applied != latest {
+		t.Fatalf("migrated to %d (%v), latest migration %d", applied, err, latest)
+	}
+	files, err := fs.Glob(postgresFS, "*.sql")
+	if err != nil || len(files) == 0 {
+		t.Fatal(files, err)
+	}
+	var lastFile int64
+	for _, f := range files {
+		num, _, _ := strings.Cut(f, "_")
+		v, err := strconv.ParseInt(num, 10, 64)
+		if err != nil {
+			t.Fatalf("%s: %v", f, err)
+		}
+		lastFile = max(lastFile, v)
+	}
+	want := lastFile
+	for _, m := range goMigrations() {
+		want = max(want, m.Version)
+	}
+	if latest != want {
+		t.Fatalf("latest migration %d, want %d (last SQL file %d)", latest, want, lastFile)
 	}
 }
