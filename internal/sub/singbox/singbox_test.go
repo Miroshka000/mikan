@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/profile"
@@ -38,7 +39,7 @@ type sbConfig struct {
 func lists(t *testing.T) {
 	t.Helper()
 	old := singboxList
-	singboxList = func(_ context.Context, src string) ([]string, error) {
+	singboxList = func(_ context.Context, src string, _ time.Duration) ([]string, error) {
 		switch {
 		case strings.HasSuffix(src, "process-direct-apk.yaml"):
 			return []string{"PROCESS-NAME,ru.sberbankmobile", "PROCESS-NAME,ru.gosuslugi.app"}, nil

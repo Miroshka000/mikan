@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
@@ -34,7 +35,7 @@ func TestNotes(t *testing.T) {
 // number, a binary list, a DNS policy of a negated category. The list it can read is not
 // told, nor the category: sing-box names any geosite.
 func TestDropped(t *testing.T) {
-	singboxList = func(context.Context, string) ([]string, error) {
+	singboxList = func(context.Context, string, time.Duration) ([]string, error) {
 		t.Error("the preview downloads a list")
 		return nil, nil
 	}
@@ -73,7 +74,7 @@ func TestDropped(t *testing.T) {
 // Of the panel's routing, the admin's own lists are not downloaded for the preview either,
 // and the ones sing-box can read are not told; DOMAIN-WILDCARD, which it has none of, is.
 func TestDroppedBuiltin(t *testing.T) {
-	singboxList = func(context.Context, string) ([]string, error) {
+	singboxList = func(context.Context, string, time.Duration) ([]string, error) {
 		t.Error("the preview downloads a list")
 		return nil, nil
 	}

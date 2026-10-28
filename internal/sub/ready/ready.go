@@ -45,9 +45,11 @@ const (
 	mikanAuthor  = "mikan"
 	mikanLicense = "GPL-3.0-only"
 	mikanSource  = "https://github.com/Miroshka000/mikan"
+	privWLAuthor = "Nemu-x" // the author of the privWL-clash lists it is built on
 	privWLSource = "https://github.com/Nemu-x/privWL-clash"
 	// Davoyan's lists come with no license: the template is mikan's, links them pinned to
 	// a commit and copies nothing of them; the entry credits him as their author.
+	davoyanAuthor = "Davoyan"
 	davoyanSource = "https://github.com/Davoyan/mihomo-rule-sets"
 )
 
@@ -60,13 +62,13 @@ var all = []Template{
 		Author: mikanAuthor, License: mikanLicense, Source: mikanSource, Starter: true},
 	// The panel's "only what is blocked" and the address lists of privWL-clash it lacks.
 	{ID: "privwl-blocked", Core: model.CoreMihomo, Name: "privWL · только заблокированное",
-		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. Списки: Nemu-x/privWL-clash. В Happ и INCY (конфиги Xray) эти списки не работают и всё идёт напрямую: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
-		Author:  mikanAuthor, License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
+		Summary: "Через VPN только заблокированное и замедленное в России, Telegram и диапазоны адресов, которые замедляют (Cloudflare, AWS и другие); остальное напрямую. В Happ и INCY (конфиги Xray) списки privWL-clash не работают и всё идёт напрямую: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
+		Author:  privWLAuthor, License: mikanLicense, Source: privWLSource, Body: file("privwl-blocked.yaml")},
 	// The Russian direct of the panel's default mode on Davoyan's lists instead of the
 	// geodata: wider, and with no geosite or GeoIP file to download.
 	{ID: "davoyan-ru-direct", Core: model.CoreMihomo, Name: "Davoyan · Россия напрямую",
-		Summary: "Российские сайты и адреса напрямую, остальное через VPN, Telegram тоже. Списки: Davoyan/mihomo-rule-sets — российские домены из нескольких списков и сети России и Беларуси из баз IPinfo и MaxMind, без geo-файлов. В Happ и INCY (конфиги Xray) эти списки не работают и всё идёт через VPN, российские сайты тоже: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
-		Author:  "Davoyan", License: mikanLicense, Source: davoyanSource, Body: file("davoyan-ru-direct.yaml")},
+		Summary: "Российские сайты и адреса напрямую, остальное через VPN, Telegram тоже: российские домены из нескольких списков и сети России и Беларуси из баз IPinfo и MaxMind, без geo-файлов. В Happ и INCY (конфиги Xray) списки Davoyan/mihomo-rule-sets не работают и всё идёт через VPN, российские сайты тоже: дайте этим приложениям другой шаблон правилом ответа или выключите им конфиги Xray",
+		Author:  davoyanAuthor, License: mikanLicense, Source: davoyanSource, Body: file("davoyan-ru-direct.yaml")},
 }
 
 // All is the catalog, by core in the order the editor lists it.
