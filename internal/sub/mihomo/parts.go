@@ -58,7 +58,7 @@ func TemplateParts(p profile.Profile, src string) (Parts, error) {
 	for name, x := range providers {
 		m, _ := x.(map[string]any)
 		if u := str(m["url"]); u != "" {
-			out.Lists[name] = routing.Provider{Name: name, Behavior: str(m["behavior"]), Format: str(m["format"]), URL: u}
+			out.Lists[name] = routing.Provider{Name: name, Behavior: str(m["behavior"]), Format: str(m["format"]), URL: u, Interval: number(m["interval"])}
 		}
 	}
 	out.DNS = resolversOf(cfg["dns"])
