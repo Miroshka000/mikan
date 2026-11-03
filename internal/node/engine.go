@@ -108,6 +108,7 @@ type Engine struct {
 
 	sys  *sysSampler
 	host hostPortsCache
+	mem  memoryLog // only TickMemory touches it
 
 	routes  string             // routesKey of what tunnel's proxies and rules hold now
 	exitDNS string             // exitDNSKey of the sniffer and resolver mihomo holds now

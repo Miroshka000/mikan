@@ -52,6 +52,9 @@ func run() error {
 	// The last lines of the log, secrets cut out, for the panel's Diagnostics page.
 	logs := logbuf.New(logbuf.DefaultLines)
 	log := slog.New(logs.Handler(slog.NewTextHandler(os.Stderr, nil)))
+	if limit := node.LimitMemory(); limit > 0 {
+		log.Info("soft memory limit", "mib", limit>>20)
+	}
 	dataDir := envOr("MIKAN_DATA_DIR", config.DefaultDataDir)
 	sock := envOr("MIKAN_NODE_SOCKET", config.DefaultNodeSocket)
 
@@ -130,6 +133,7 @@ func run() error {
 				log.Error("persist counters", "err", err)
 			}
 			eng.TickAPILock()
+			eng.TickMemory()
 		case <-ctx.Done():
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
