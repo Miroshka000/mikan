@@ -50,6 +50,25 @@ The server's address goes to public geo bases. How services such as YouTube or N
 
 For nodes the same check is in the "Check node" window, see [Nodes](/mikan/en/nodes/nodes/#country-in-the-geo-bases).
 
+## A node takes a lot of memory
+
+The VPN core usually takes tens of megabytes. Its memory grows with open connections and UDP sessions, so first find out whether there are many. On the node's server:
+
+```bash
+curl -s --unix-socket /var/lib/docker/volumes/mikan_run/_data/node.sock http://node/v1/health | grep -oE '"(conns|proc_rss|mem_used|mem_total)":[0-9]+'
+```
+
+`proc_rss` and `mem_used` are in bytes here, and `conns` is the users' open connections and UDP sessions. If the memory is high and `conns` is low, take the profiles while the memory is high and attach them to your report:
+
+```bash
+curl -s --unix-socket /var/lib/docker/volumes/mikan_run/_data/node.sock http://node/debug/pprof/heap -o heap.pb.gz
+curl -s --unix-socket /var/lib/docker/volumes/mikan_run/_data/node.sock 'http://node/debug/pprof/goroutine?debug=1' -o goroutines.txt
+```
+
+The profiles hold no keys and no client addresses: only the program's functions and how much memory and how many goroutines fall to each.
+
+From 256 MiB on, the node writes a `node memory` line to its log: the memory taken, the heap, the stacks, the goroutines and the connections. A new line comes when the memory has grown by another quarter. Near 60% of the server's memory the node collects garbage more often, to leave room for the panel and its database. This is a soft limit: traffic that really needs the memory still gets it, at the cost of more CPU.
+
 ## Terminal
 
 The tab appears for an operator with "Terminal" level access and only for the servers you ticked for it. Details and limits are in [Support access](/mikan/en/operations/support-access/#terminal).
