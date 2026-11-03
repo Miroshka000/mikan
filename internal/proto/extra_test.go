@@ -146,3 +146,48 @@ func testX25519(t *testing.T) string {
 	priv, _ := realityKey(t)
 	return priv
 }
+
+// A Hysteria2 listener starts with small windows unless its template decides them, a pair at a
+// time, and no other type gets them.
+func TestHysteria2Windows(t *testing.T) {
+	render := func(raw string) map[string]any {
+		t.Helper()
+		tpl, err := Parse(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		l, err := Listener(tpl, "in", "", "443", nil, Cert{CertPath: "/c", KeyPath: "/k"}, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+	const stream, conn = "initial-stream-receive-window", "initial-connection-receive-window"
+
+	l := render("type: hysteria2\n")
+	if l[stream] != hysteria2StreamWindow || l[conn] != hysteria2ConnWindow {
+		t.Errorf("defaults: %v, %v", l[stream], l[conn])
+	}
+	if hysteria2StreamWindow != 838860 || hysteria2ConnWindow != 2097152 {
+		t.Errorf("windows: %d, %d", hysteria2StreamWindow, hysteria2ConnWindow)
+	}
+
+	l = render("type: hysteria2\ninitial-stream-receive-window: 1000000\n")
+	if n, ok := toInt(l[stream]); !ok || n != 1000000 {
+		t.Errorf("the template's own window: %v", l[stream])
+	}
+	if l[conn] != hysteria2ConnWindow {
+		t.Errorf("the other pair: %v", l[conn])
+	}
+
+	// A maximum below the default start: the start is left to the core.
+	l = render("type: hysteria2\nmax-stream-receive-window: 500000\nmax-connection-receive-window: 500000\n")
+	if l[stream] != nil || l[conn] != nil {
+		t.Errorf("a start beside the template's maximum: %v, %v", l[stream], l[conn])
+	}
+
+	l = render("type: tuic\n")
+	if l[stream] != nil || l[conn] != nil {
+		t.Errorf("TUIC got them: %v, %v", l[stream], l[conn])
+	}
+}

@@ -129,9 +129,29 @@ func validateExtra(t Template, o Options) error {
 	return nil
 }
 
+// The windows a Hysteria2 connection starts with, a tenth of what the core allows them to
+// grow to (8 and 20 MiB). The core gives a client the whole window from the first packet, and
+// a client uploading faster than the way on takes it (a speed limit, a slow site) fills it:
+// that is the node's memory, 25 MB a client, for nothing. A window that starts small grows only
+// as fast as it is read, so an upload keeps its speed (checked at up to 200 ms RTT) and
+// one that piles up costs 3 MB.
+const (
+	hysteria2StreamWindow = 8 << 20 / 10
+	hysteria2ConnWindow   = 20 << 20 / 10
+)
+
 // listenerExtra fills in what the node decides for the newer types.
 func listenerExtra(t Template, l map[string]any) {
 	switch t.Type() {
+	case "hysteria2":
+		// A template that names a window of a pair decides that pair: an initial one above its
+		// maximum would not do.
+		if l["initial-stream-receive-window"] == nil && l["max-stream-receive-window"] == nil {
+			l["initial-stream-receive-window"] = hysteria2StreamWindow
+		}
+		if l["initial-connection-receive-window"] == nil && l["max-connection-receive-window"] == nil {
+			l["initial-connection-receive-window"] = hysteria2ConnWindow
+		}
 	case "trusttunnel":
 		l["network"] = []any{"tcp"} // HTTP/2; HTTP/3 would take the UDP port too
 	case "mieru":
