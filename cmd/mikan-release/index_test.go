@@ -201,6 +201,32 @@ func TestGoalsIntoIndex(t *testing.T) {
 	}
 }
 
+// A panel shows the first few goals of the index: the ones closest to their sum go first,
+// whatever the order of the file.
+func TestGoalsInIndexByShareRaised(t *testing.T) {
+	f := newFixture(t, changelog)
+	first := filepath.Join(f.dir, "first")
+	if err := makeIndex([]string{"-version", "0.5.0.1", "-from", "0.4.5", "-seed", "-out", first}); err != nil {
+		t.Fatal(err)
+	}
+	goals := f.write("goals.json", `{"donate": "https://x.example", "items": [
+		{"id": "empty", "title": {"ru": "a"}, "target": 300, "currency": "USD", "status": "open"},
+		{"id": "built", "title": {"ru": "b"}, "target": 100, "raised": 31, "currency": "USD", "status": "done", "version": "0.5.0.1"},
+		{"id": "some", "title": {"ru": "c"}, "target": 200, "raised": 5, "currency": "USD", "status": "open"},
+		{"id": "most", "title": {"ru": "d"}, "target": 100, "raised": 10, "currency": "USD", "status": "open"}]}`)
+	out := filepath.Join(f.dir, "goals")
+	if err := makeGoals([]string{"-file", goals, "-in", filepath.Join(first, "index.json"), "-out", out}); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, g := range f.readIndex(out).Goals.Items {
+		got = append(got, g.ID)
+	}
+	if got, want := strings.Join(got, " "), "most some empty built"; got != want {
+		t.Fatalf("goals in the index: %s, want %s", got, want)
+	}
+}
+
 // The repository's goals file is one the workflow signs.
 func TestGoalsFile(t *testing.T) {
 	data, err := os.ReadFile("../../.github/goals.json")
