@@ -8,7 +8,7 @@
         "ru": "Перенос панели на новый сервер одной командой: клиенты, тарифы, ноды и настройки переезжают, ссылки подписок продолжают работать.",
         "en": "Move the panel to a new server with one command: clients, plans, nodes and settings come along, subscription links keep working."
       },
-      "target": 100, "raised": 21, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6qS"
+      "target": 100, "raised": 31, "currency": "USD", "status": "done", "version": "0.5.2.1", "url": "https://t.me/tribute/app?startapp=g6qS"
     },
     {
       "id": "external-subs",
@@ -71,7 +71,7 @@
         "ru": "Кто подключается через ноду, когда был последний раз и сколько трафика. И наоборот: в карточке клиента его ноды и трафик на каждой.",
         "en": "Who connects through a node, when they were last seen and how much traffic. And the other way round: a client's nodes and traffic on each."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r1"
+      "target": 50, "raised": 0, "currency": "USD", "status": "done", "version": "0.5.2.1", "url": "https://t.me/tribute/app?startapp=g6r1"
     },
     {
       "id": "inbound-copy",
@@ -125,7 +125,7 @@
         "ru": "Личная ссылка у каждого клиента: за приглашённых друзей, которые купили подписку, он получает бонусные дни.",
         "en": "A personal link for every client: they get bonus days for each invited friend who buys a subscription."
       },
-      "target": 100, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rT"
+      "target": 100, "raised": 10, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rT"
     },
     {
       "id": "gift-subs",
@@ -161,7 +161,7 @@
         "ru": "AmneziaWG (AWG) как протокол на нодах: WireGuard с маскировкой от блокировок, ключи создаются сами, как у остальных протоколов.",
         "en": "AmneziaWG (AWG) as a protocol on the nodes: WireGuard disguised against blocking, with keys made automatically like for the other protocols."
       },
-      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rX"
+      "target": 200, "raised": 5, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rX"
     },
     {
       "id": "vk-turn",
@@ -170,7 +170,7 @@
         "ru": "Подключение через TURN-серверы звонков VK: трафик выглядит как обычный звонок и проходит там, где режут всё остальное.",
         "en": "A connection through the TURN servers of VK calls: the traffic looks like an ordinary call and gets through where everything else is cut."
       },
-      "target": 200, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rY"
+      "target": 200, "raised": 10, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6rY"
     },
     {
       "id": "cascade-routes",
@@ -188,7 +188,7 @@
         "ru": "Группа автовыбора со своим названием, как в Clash-приложениях, и для Happ, v2RayTun и других приложений на Xray: приложение само держит самый быстрый рабочий сервер.",
         "en": "An auto choice group with your own name, as in Clash apps, for Happ, v2RayTun and other Xray apps too: the app keeps the fastest working server by itself."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6s0"
+      "target": 50, "raised": 0, "currency": "USD", "status": "done", "version": "0.5.2.1", "url": "https://t.me/tribute/app?startapp=g6s0"
     },
     {
       "id": "auto-renew",
