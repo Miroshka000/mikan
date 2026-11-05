@@ -1,11 +1,13 @@
 package release
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -49,7 +51,7 @@ const (
 )
 
 // MaxGoals is how many goals an index carries; the panel shows the first few. Panels up to
-// 0.5.0.4 read only the first 20, so the open goals go first and the done ones last.
+// 0.5.0.4 read only the first 20, so the open goals go first and the done ones last (Sort).
 const MaxGoals = 40
 
 var (
@@ -131,6 +133,24 @@ func ParseGoals(data []byte) (Goals, error) {
 		g.Items = []Goal{}
 	}
 	return g, nil
+}
+
+// Sort puts the goals in the order readers show them: the one closest to its sum first, by
+// the share of it raised, and the done ones last. Goals with the same share, and the done
+// ones among themselves, keep the order of the file.
+func (g Goals) Sort() {
+	slices.SortStableFunc(g.Items, func(a, b Goal) int {
+		switch aDone, bDone := a.Status == GoalDone, b.Status == GoalDone; {
+		case aDone && bDone:
+			return 0
+		case aDone:
+			return 1
+		case bDone:
+			return -1
+		}
+		// a.Raised/a.Target against b.Raised/b.Target, in whole numbers.
+		return cmp.Compare(int64(b.Raised)*int64(a.Target), int64(a.Raised)*int64(b.Target))
+	})
 }
 
 // decodeGoals reads the goals of a signed index leniently: what a reader cannot show is

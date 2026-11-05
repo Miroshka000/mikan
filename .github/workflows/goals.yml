@@ -6,7 +6,8 @@ name: goals
 on:
   push:
     branches: [main]
-    paths: [.github/goals.json]
+    # The code too: it decides the order the panels get the goals in.
+    paths: [.github/goals.json, internal/release/goals.go]
   workflow_dispatch:
 
 permissions: {}

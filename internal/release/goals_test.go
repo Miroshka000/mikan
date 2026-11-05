@@ -1,6 +1,33 @@
 package release
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
+
+// The goal closest to its sum comes first and the done ones last, whatever the order of the
+// file; goals with the same share keep it, and so do the done ones among themselves.
+func TestGoalsSort(t *testing.T) {
+	g := Goals{Items: []Goal{
+		{ID: "done-a", Target: 100, Raised: 100, Status: GoalDone},
+		{ID: "empty-small", Target: 50, Status: GoalOpen},
+		{ID: "a-tenth", Target: 100, Raised: 10, Status: GoalOpen},
+		{ID: "more-money-less-share", Target: 1000, Raised: 50, Status: GoalOpen},
+		{ID: "also-a-tenth", Target: 200, Raised: 20, Status: GoalOpen},
+		{ID: "done-b", Target: 50, Status: GoalDone},
+		{ID: "empty-big", Target: 300, Status: GoalOpen},
+		{ID: "past-its-sum", Target: 50, Raised: 60, Status: GoalWorking},
+	}}
+	g.Sort()
+	got := make([]string, 0, len(g.Items))
+	for _, it := range g.Items {
+		got = append(got, it.ID)
+	}
+	want := []string{"past-its-sum", "a-tenth", "also-a-tenth", "more-money-less-share", "empty-small", "empty-big", "done-a", "done-b"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("order: %v, want %v", got, want)
+	}
+}
 
 // A reader shows the goals it can and leaves the rest out; an index without goals, or
 // with goals it cannot read at all, still gives its releases.
