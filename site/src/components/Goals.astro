@@ -21,7 +21,9 @@ const { lang = 'ru', compact = false } = Astro.props as { lang?: Lang; compact?:
 const other: Lang = lang === 'ru' ? 'en' : 'ru';
 const text = (m?: Partial<Record<Lang, string>>) => m?.[lang] || m?.[other] || '';
 const items = goals.items as Goal[];
-const active = items.filter((g) => g.status !== 'done').slice(0, compact ? 3 : undefined);
+// The goal closest to its sum first, as the panels get them (release.Goals.Sort).
+const fill = (g: Goal) => g.raised / g.target;
+const active = items.filter((g) => g.status !== 'done').sort((a, b) => fill(b) - fill(a)).slice(0, compact ? 3 : undefined);
 const done = items.filter((g) => g.status === 'done');
 
 const t = {

@@ -226,6 +226,7 @@ func makeGoals(args []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", *file, err)
 	}
+	goals.Sort()
 	data, err := os.ReadFile(*in)
 	if err != nil {
 		return err
