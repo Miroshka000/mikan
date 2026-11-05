@@ -71,5 +71,9 @@ if [ "$status" != 0 ]; then
 fi
 if [ "${KEEP:-0}" != 1 ]; then
   docker compose --profile client --profile client2 --profile node2 --profile blocker --profile blocker2 down -v --remove-orphans
+  # The core's egress guard, which MIKAN_ALLOW_PRIVATE keeps off on the stack above.
+  if [ "$status" = 0 ]; then
+    sh ./guard.sh || status=$?
+  fi
 fi
 exit "$status"

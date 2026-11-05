@@ -33,7 +33,7 @@ services:
 
   # As the installer runs it (installer/src/docker.rs): no network, the panel talks to it
   # over the shared unix socket with a scram-sha-256 password.
-  postgres:
+  postgres: &postgres
     image: postgres:18-alpine
     network_mode: none
     security_opt: ["no-new-privileges:true"]
@@ -114,11 +114,80 @@ services:
       - "mikan-gocache:/root/.cache/go-build"
     networks: [default, isp2]
 
+  # The core's egress guard (guard.sh), on a stack of its own: the panel shares the node's
+  # network as the installer has them share the server's, and MIKAN_ALLOW_PRIVATE is not set.
+  guard-node:
+    image: mikan:slice
+    entrypoint: ["/usr/local/bin/mikan-node"]
+    environment:
+      MIKAN_DATA_DIR: /data/node
+    volumes: ["guard-data:/data", "guard-run:/run/mikan"]
+    networks:
+      public:
+        aliases: [guard.test]
+    profiles: ["guard"]
+
+  guard-panel:
+    image: mikan:slice
+    network_mode: "service:guard-node"
+    depends_on:
+      guard-node: {condition: service_started}
+      guard-postgres: {condition: service_healthy}
+    environment:
+      MIKAN_DATA_DIR: /data/panel
+      MIKAN_PANEL_LISTEN: 0.0.0.0:2053
+      MIKAN_DATABASE_URL: postgresql://mikan:${MIKAN_TEST_POSTGRES_PASSWORD:?set test database password}@localhost/mikan?host=/run/postgresql
+      # Port 80 is the web server's below.
+      MIKAN_ACME_LISTEN: 127.0.0.1:8088
+    volumes: ["guard-data:/data", "guard-run:/run/mikan", "guard-pg-run:/run/postgresql"]
+    profiles: ["guard"]
+
+  guard-postgres:
+    <<: *postgres
+    volumes: ["guard-pg-data:/var/lib/postgresql", "guard-pg-run:/run/postgresql"]
+    profiles: ["guard"]
+
+  # What else listens on that server, each answering with what it gets: a web server, and
+  # two services a firewall would close from outside.
+  guard-server:
+    image: alpine:3
+    network_mode: "service:guard-node"
+    entrypoint: ["sh", "-c"]
+    command:
+      - for port in 80 5432 5433; do nc -lk -p "$$port" -e /bin/cat & done; wait
+    profiles: ["guard"]
+
+  guard-client:
+    image: metacubex/mihomo:v1.19.31
+    command: ["-d", "/tmp/mihomo", "-f", "/work/client.yaml"]
+    volumes: ["guard-work:/work:ro"]
+    networks: [public]
+    profiles: ["guard"]
+
+  guard-driver:
+    image: golang:1.27
+    working_dir: /src
+    command: ["sleep", "infinity"]
+    environment:
+      SLICE_PANEL: guard.test:2053
+    volumes:
+      - "../..:/src:ro"
+      - "guard-work:/work"
+      - "mikan-gomod:/go/pkg/mod"
+      - "mikan-gocache:/root/.cache/go-build"
+    networks: [public]
+    profiles: ["guard"]
+
 networks:
   default: {}
   isp2:
     ipam:
       config: [{subnet: 10.77.2.0/24}]
+  # Addresses the core takes for public (11.0.0.0/8 is not private or reserved), and nothing
+  # outside the stack is reached on them.
+  public:
+    ipam:
+      config: [{subnet: 11.77.0.0/24}]
 
 volumes:
   pg-data: {}
@@ -127,5 +196,10 @@ volumes:
   data2: {}
   run: {}
   work: {}
+  guard-pg-data: {}
+  guard-pg-run: {}
+  guard-data: {}
+  guard-run: {}
+  guard-work: {}
   mikan-gomod: {external: true}
   mikan-gocache: {external: true}

@@ -72,6 +72,7 @@ type Syncer struct {
 	failedKey   string    // the state key the last failed Apply was for
 	retry       retry     // the pace of attempts at a node that does not answer
 	badInbounds string    // the inbounds left out of the state, as last logged
+	nodeVersion string    // the version the node last reported; "" until it did
 
 	// Only the counters loop touches these.
 	counterFails int       // consecutive failed pulls
@@ -266,6 +267,9 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	st.Detail = snap.detail
 	st.HTTPRedirect = n.HttpRedirect != 0 && n.Address != ""
 	st.APIAllow = s.apiAllow(ctx, n)
+	if st.OwnPorts, err = s.ownPorts(ctx, n); err != nil {
+		return st, "", err
+	}
 	// The front page: what the inbounds on an HTTP transport give a stranger's request, and
 	// with the shared 443 what the node's own domain gives.
 	st.FrontPage = n.FrontPage
@@ -832,6 +836,8 @@ func (s *Syncer) refreshHealth(ctx context.Context) {
 	if applied != 0 && h.Revision == applied {
 		view.Ports = s.ports
 	}
+	updated := s.nodeVersion != "" && h.Version != s.nodeVersion
+	s.nodeVersion = h.Version
 	s.health.Store(view)
 	// The node is back: what was held off for it goes out now.
 	back := s.retry.down
@@ -845,7 +851,9 @@ func (s *Syncer) refreshHealth(ctx context.Context) {
 		signal(s.policiesDirty)
 	}
 	// A node that lost its state (new volume, crash before saving) reports an older revision.
-	if h.Revision < applied || (applied == 0 && h.Revision == 0) {
+	// One that was updated holds the state as its old version saved it, without the fields
+	// that version did not know, at the same revision.
+	if updated || h.Revision < applied || (applied == 0 && h.Revision == 0) {
 		s.mu.Lock()
 		s.stateKey = ""
 		s.mu.Unlock()

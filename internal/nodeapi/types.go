@@ -64,6 +64,11 @@ type DesiredState struct {
 	// same rule; both lift by themselves after APILockStale without the panel. Nodes older
 	// than it ignore it.
 	APIAllow []string `json:"api_allow,omitzero"`
+	// OwnPorts: of the node's own public addresses its users reach these ports alone, over TCP
+	// and UDP (the core's egress guard). nil: anything the rules leave them, as an older panel
+	// says nothing of what must stay open. Empty but not nil is on too, with nothing open.
+	// Nodes older than it ignore it.
+	OwnPorts []int `json:"own_ports,omitzero"`
 }
 
 // APILockStale is how long the panel may stay away before a node with APIAllow opens its

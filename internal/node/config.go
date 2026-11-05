@@ -131,10 +131,6 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool, fr
 		"proxies":           proxies,
 		"rules":             rules(st, allowPrivate),
 		"listeners":         listeners,
-		// What users reach is the rules' word. The core's own guard, on unless this says
-		// otherwise, refuses the server's public addresses too: a client going through the
-		// node beside the panel could not open the panel or refresh its subscription.
-		"egress-guard": map[string]any{"enable": false},
 	}
 	raw, err = json.Marshal(cfg)
 	return raw, rejected, err

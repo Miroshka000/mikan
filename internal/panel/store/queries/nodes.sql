@@ -41,6 +41,9 @@ UPDATE nodes SET billing_provider = $1, pay_day = $2, pay_months = $3, remind_da
 -- name: SetNodeAPILockdown :exec
 UPDATE nodes SET api_lockdown = $1, api_allow = $2, updated_at = $3 WHERE id = $4;
 
+-- name: SetNodeOwnPorts :exec
+UPDATE nodes SET own_ports = $1, updated_at = $2 WHERE id = $3;
+
 -- name: SetNodeCert :exec
 UPDATE nodes SET cert_sha256 = $1, updated_at = $2 WHERE id = $3;
 

@@ -545,6 +545,10 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	if (b.SubPort != nil || b.SubDomain != nil) && h.d.Gateway != nil {
 		h.d.Gateway.Reload()
 	}
+	// The panel's own node keeps the subscription port open to its users (nodesync.ownPorts).
+	if b.SubPort != nil {
+		h.d.Changes.SlotsChanged()
+	}
 	// The certificate is for the domain, or the address without one: a new name gets its
 	// certificate now, not at the next six-hourly check.
 	caChanged := b.ACMECA != nil || b.ACMEEmail != nil || b.ACMEEABKID != nil || b.ACMEEABHMAC != nil

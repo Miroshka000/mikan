@@ -1,13 +1,13 @@
 ---
 title: Hardening a node
-description: The node's API for the panel's address only (an nftables rule, self-lift, mikan api-lockdown) and an HTTP to HTTPS redirect on port 80.
+description: The node's API for the panel's address only (an nftables rule, self-lift, mikan api-lockdown), an HTTP to HTTPS redirect on port 80, and the server's ports open to the node's clients.
 ---
 
 :::note[New in 0.5.2.0]
-Both settings are new in 0.5.2.0 and exist for remote nodes.
+The node's API from the panel's IP only and the redirect are new in 0.5.2.0 and exist for remote nodes.
 :::
 
-Two settings in **Nodes → the node → Configure** make a node's server less visible to scanners. The node on the panel's own server ("Own node") has neither: it talks to the panel over a socket and opens no API port.
+Two settings in **Nodes → the node → Configure** make a node's server less visible to scanners. The node on the panel's own server ("Own node") has neither: it talks to the panel over a socket and opens no API port. The third, [open ports of the server](#open-ports-of-the-server), exists on every node: it decides what the node's clients reach on the server itself.
 
 ## Node API from the panel's IP only
 
@@ -56,3 +56,24 @@ The **HTTP → HTTPS** switch. The node takes port 80 and answers plain HTTP wit
 HTTP-01 certificates keep being issued: the node handles the certificate authority's checks on `/.well-known/acme-challenge/` as before, see [Node certificate](/mikan/en/nodes/nodes/#node-certificate).
 
 Do not turn it on if another web server on this server needs port 80. If the port is taken, the node card shows "Port 80 cannot be taken" and the reason.
+
+## Open ports of the server
+
+:::note[New in 0.5.2.1]
+Exists on every node, the panel's own node included.
+:::
+
+The **Open ports of the server** field. A connection from a node to its server's own address goes through the `lo` interface, which a firewall usually lets through whole. So a client connected to the node could reach whatever listens on the server's public address, even a port closed from outside: a database, a monitoring service, SSH open to your own IP only.
+
+The node's core does not let those connections through. On the server's own address clients reach only:
+
+- ports 80 and 443: a site or a reverse proxy on the server is there for anyone anyway, and without these it would open from everywhere but this node;
+- on the panel's own node also the panel's port and the subscription port: otherwise a client going through it could not open the panel or refresh the subscription.
+
+A panel on another server is not affected: to the node that is someone else's address.
+
+If clients need a service on the node's server, such as your own DNS, put its port in this field: separated by commas, up to 16 ports. The port opens for both TCP and UDP. The firewall does not stop these connections, so leave SSH and databases out.
+
+The core learns the server's addresses from its network interfaces. On a server behind NAT the public address is not on an interface, and this protection does not refuse those connections: they go out into the hoster's network and come back from outside, like any other.
+
+A node older than 0.5.2.1, or a node under a panel older than 0.5.2.1, does not turn this protection on.

@@ -101,8 +101,10 @@ type NodeInfo struct {
 	APILockdown  bool     `json:"api_lockdown" doc:"API ноды отвечает только адресам панели"`
 	APIAllow     []string `json:"api_allow" doc:"Сети и адреса, которые админ добавил к адресам панели"`
 	APILockError string   `json:"api_lock_error,omitempty" doc:"Почему на сервере ноды нет правила файрвола для API"`
-	Capacity     *int64   `json:"capacity" doc:"Мест для клиентов в группе; null — без ограничения"`
-	ChannelMbps  *int64   `json:"channel_mbps" doc:"Ширина канала ноды, Мбит/с в каждую сторону; null — не задана"`
+	// OwnPorts: what the admin leaves open to the node's users on its server's own addresses.
+	OwnPorts    []int  `json:"own_ports" doc:"Порты адреса самого сервера, которые админ открыл клиентам этой ноды, кроме 80, 443 и, на ноде панели, портов панели и подписок: они открыты всегда"`
+	Capacity    *int64 `json:"capacity" doc:"Мест для клиентов в группе; null — без ограничения"`
+	ChannelMbps *int64 `json:"channel_mbps" doc:"Ширина канала ноды, Мбит/с в каждую сторону; null — не задана"`
 
 	// Tags are the admin's labels of the node, as a user's.
 	Tags []string `json:"tags" doc:"Метки ноды: свои слова админа, по ним фильтруют список"`
@@ -148,7 +150,9 @@ type patchNodeInput struct {
 		// The node's API for the panel alone, and the networks added to the panel's own.
 		APILockdown *bool     `json:"api_lockdown,omitempty" doc:"API ноды только с адресов панели; не для ноды панели"`
 		APIAllow    *[]string `json:"api_allow,omitempty" maxItems:"16" doc:"Ещё сети или адреса (203.0.113.5, 198.51.100.0/24), с которых панель ходит к ноде"`
-		Tags        *[]string `json:"tags,omitempty" maxItems:"20" doc:"Метки ноды целиком; пустой список снимает все"`
+		// What the node's users reach on its server's own addresses, past the server's firewall.
+		OwnPorts *[]int    `json:"own_ports,omitempty" maxItems:"16" doc:"Порты адреса самого сервера, которые открыть клиентам этой ноды, например свой DNS; файрвол сервера такие подключения не закрывает. Весь список целиком; пустой убирает все"`
+		Tags     *[]string `json:"tags,omitempty" maxItems:"20" doc:"Метки ноды целиком; пустой список снимает все"`
 	}
 }
 
@@ -208,6 +212,10 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, FrontPage: n.FrontPage, InAuto: n.NoAuto == 0, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow}
 	if v.APIAllow == nil {
 		v.APIAllow = []string{}
+	}
+	v.OwnPorts = make([]int, 0, len(n.OwnPorts))
+	for _, p := range n.OwnPorts {
+		v.OwnPorts = append(v.OwnPorts, int(p))
 	}
 	h.nodeBilling(&v, n)
 	v.Cascade = []CascadeConns{}
@@ -368,10 +376,10 @@ func (h *handlers) getNode(ctx context.Context, id int64) (db.Node, error) {
 
 func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInfoOutput, error) {
 	b := in.Body
-	// A node's address and domain are where its clients go: the admin's alone, or an
-	// operator's in the extended mode. The form sends both as they are, so only a change is
-	// refused.
-	if _, ok := supportGrantOf(ctx); ok && (b.Host != nil || b.Domain != nil) {
+	// A node's address and domain are where its clients go, and its open ports what they reach
+	// on the server itself: the admin's alone, or an operator's in the extended mode. The form
+	// sends them as they are, so only a change is refused.
+	if _, ok := supportGrantOf(ctx); ok && (b.Host != nil || b.Domain != nil || b.OwnPorts != nil) {
 		cur, err := h.d.Store.Q.GetNode(ctx, in.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, huma.Error404NotFound("not_found")
@@ -389,6 +397,14 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 				return nil, err
 			}
 		}
+		if b.OwnPorts != nil {
+			ports, err := domain.NormalizeOwnPorts(*b.OwnPorts)
+			if err != nil || !slices.Equal(ports, cur.OwnPorts) {
+				if err := requireSession(ctx, "own_ports"); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 	var billing *domain.NodeBilling
 	if b.Billing != nil {
@@ -403,14 +419,14 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 		return nil, err
 	}
 	n, err := domain.UpdateNode(ctx, h.d.Store, in.ID, domain.NodePatch{Name: b.Name, PublicName: b.PublicName, Host: b.Host, Domain: b.Domain,
-		Enabled: b.Enabled, FairShare: b.FairShare, ChannelMbps: b.ChannelMbps, HTTPRedirect: b.HTTPRedirect, SNIRouter: b.SNIRouter, FrontPage: b.FrontPage, InAuto: b.InAuto, Billing: billing, APILockdown: b.APILockdown, APIAllow: b.APIAllow, Tags: b.Tags, Rules: rules}, h.d.Now())
+		Enabled: b.Enabled, FairShare: b.FairShare, ChannelMbps: b.ChannelMbps, HTTPRedirect: b.HTTPRedirect, SNIRouter: b.SNIRouter, FrontPage: b.FrontPage, InAuto: b.InAuto, Billing: billing, APILockdown: b.APILockdown, APIAllow: b.APIAllow, OwnPorts: b.OwnPorts, Tags: b.Tags, Rules: rules}, h.d.Now())
 	if err != nil {
 		return nil, h.nodeErr(err)
 	}
 	h.nodesChanged()
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0,
-		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "front_page": n.FrontPage, "in_auto": n.NoAuto == 0, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow, "tags": domain.DecodeTags(n.Tags),
+		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "front_page": n.FrontPage, "in_auto": n.NoAuto == 0, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow, "own_ports": n.OwnPorts, "tags": domain.DecodeTags(n.Tags),
 		"billing": billingView(domain.BillingOf(n))})
 	return h.nodeInfo(ctx, n.ID)
 }
@@ -445,6 +461,8 @@ func (h *handlers) nodeErr(err error) error {
 		return refusal("local_node_lockdown")
 	case errors.Is(err, domain.ErrManyAPIAllow):
 		return fieldErr("body.api_allow", "api_allow_many")
+	case errors.Is(err, domain.ErrManyOwnPorts):
+		return fieldErr("body.own_ports", "own_ports_many")
 	}
 	if fe, ok := fieldFromDomain(err); ok {
 		return fe
@@ -452,6 +470,10 @@ func (h *handlers) nodeErr(err error) error {
 	var bad *domain.APIAllowError
 	if errors.As(err, &bad) {
 		return fieldErrValue("body.api_allow", "api_allow_invalid", bad.Value)
+	}
+	var badPort *domain.OwnPortError
+	if errors.As(err, &badPort) {
+		return fieldErrValue("body.own_ports", "own_port_invalid", badPort.Value)
 	}
 	var details []error
 	if errors.Is(err, domain.ErrBadHost) {

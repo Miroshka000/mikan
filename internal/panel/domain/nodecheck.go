@@ -158,6 +158,9 @@ type NodePatch struct {
 	// which the panel reaches over its socket.
 	APILockdown *bool
 	APIAllow    *[]string
+	// OwnPorts: the ports the node's users reach on its server's own addresses, besides the
+	// ones the panel keeps open there (NormalizeOwnPorts).
+	OwnPorts *[]int
 	// Tags are the admin's labels of the node, as a user's (encodeTags).
 	Tags  *[]string
 	Rules NodeRules
@@ -166,7 +169,7 @@ type NodePatch struct {
 // UpdateNode changes the fields p names and returns the node. Errors: ErrUnknownNode,
 // ErrLocalNode (a host or domain for the panel's own node), ErrLocalLockdown, ErrBadHost,
 // ErrBadDomain, *NameError, *DomainError, ErrChannelRequired, *APIAllowError, ErrManyAPIAllow,
-// *FieldError (a front page or a billing out of bounds).
+// *OwnPortError, ErrManyOwnPorts, *FieldError (a front page or a billing out of bounds).
 //
 // The checks run first, the domain's one over the network included. Only what p names is
 // written, over the row as it is by then and in one transaction: an edit made meanwhile
@@ -202,6 +205,12 @@ func UpdateNode(ctx context.Context, st *store.Store, id int64, p NodePatch, now
 	}
 	if cur.Address == "" && (p.APILockdown != nil && *p.APILockdown || len(allow) > 0) {
 		return db.Node{}, ErrLocalLockdown
+	}
+	var ownPorts []int64
+	if p.OwnPorts != nil {
+		if ownPorts, err = NormalizeOwnPorts(*p.OwnPorts); err != nil {
+			return db.Node{}, err
+		}
 	}
 	if p.Host != nil {
 		if !hostname.Valid(host) {
@@ -295,6 +304,11 @@ func UpdateNode(ctx context.Context, st *store.Store, id int64, p NodePatch, now
 				cur.ApiAllow = allow
 			}
 			if err := q.SetNodeAPILockdown(ctx, db.SetNodeAPILockdownParams{ApiLockdown: cur.ApiLockdown, ApiAllow: cur.ApiAllow, UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
+				return err
+			}
+		}
+		if p.OwnPorts != nil {
+			if err := q.SetNodeOwnPorts(ctx, db.SetNodeOwnPortsParams{OwnPorts: ownPorts, UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
 				return err
 			}
 		}

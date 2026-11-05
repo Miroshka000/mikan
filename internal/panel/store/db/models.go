@@ -304,6 +304,7 @@ type Node struct {
 	ResetDay        int64
 	TrafficAlert    int64
 	Tags            string
+	OwnPorts        []int64
 }
 
 type NodeAssignment struct {

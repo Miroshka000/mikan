@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -52,7 +53,8 @@ type Options struct {
 	Log     *slog.Logger
 	// A device (source IP) keeps its place for this long after its last connection closed.
 	DeviceRelease time.Duration
-	// AllowPrivate lets VPN users reach private and loopback networks of the server.
+	// AllowPrivate lets VPN users reach private and loopback networks of the server, with the
+	// core's egress guard off (guard.go). Test setups: their targets live on such networks.
 	AllowPrivate bool
 	// ACMEListen is where the panel's HTTP-01 challenges for this node are answered
 	// (acmechallenge.ParseListen); "" is port 80.
@@ -109,6 +111,17 @@ type Engine struct {
 	sys  *sysSampler
 	host hostPortsCache
 	mem  memoryLog // only TickMemory touches it
+
+	// The core's egress guard as last published (guard.go): the ports the state leaves open
+	// (nil: off), the server's public addresses they are open on, what the log last said, and
+	// whether the addresses could not be read at the last look.
+	guardMu    sync.Mutex
+	guardPorts []int
+	guardAddrs []netip.Addr
+	guardOn    bool
+	guardOpen  []netip.AddrPort
+	guardBlind bool
+	ownAddrs   func() ([]netip.Addr, error) // interfaceAddrs, unless a test swaps it
 
 	routes  string             // routesKey of what tunnel's proxies and rules hold now
 	exitDNS string             // exitDNSKey of the sniffer and resolver mihomo holds now
@@ -258,7 +271,8 @@ var (
 
 // applyBase gives the core its general settings, once per process: ApplyConfig patches
 // listeners with the stock tunnel and drops any others, so it runs with no listeners and
-// ours are patched separately in Apply; the way out and the DNS come with every Apply.
+// ours are patched separately in Apply; the way out, the DNS and the egress guard come with
+// every Apply. Until then the guard is as the core has it: on, with nothing open.
 func applyBase() error {
 	baseOnce.Do(func() {
 		base, _, err := buildConfig(nodeapi.DesiredState{}, proto.Cert{}, false, "")
@@ -386,6 +400,9 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 			e.exitDNS = key
 		}
 	}
+
+	// Before the listeners: a new one takes users under the guard the state asks for.
+	e.setGuard(st.OwnPorts)
 
 	e.Reg.SetSlots(st.Slots)
 	e.Reg.SetShaping(st.Shaping)

@@ -14,10 +14,14 @@
 //	                main quota; past the limit the node cuts it while XHTTP keeps going
 //	cascade:        VLESS Vision of the panel's node leaves through node2: the target sees node2's
 //	                address, the user is charged once, node2 off means no way out, not a leak
+//	guard-prepare:  on the stack of guard.sh: log in, create a user, write the client's config
+//	guard:          through the node beside the panel the client opens the panel and refreshes
+//	                its subscription, and of the server's other ports only the listed ones answer
 package main
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/binary"
@@ -40,9 +44,17 @@ import (
 )
 
 const (
-	panelURL  = "https://panel:2053/slice-admin-path-0000"
-	subPrefix = "https://panel:2053/slicesub0000/"
+	adminPath = "/slice-admin-path-0000"
+	subPath   = "/slicesub0000/"
 	mib       = 1 << 20
+)
+
+// panelAddr is where the driver reaches the panel: guard.sh's stack has a panel of its own.
+var panelAddr = cmp.Or(os.Getenv("SLICE_PANEL"), "panel:2053")
+
+var (
+	panelURL  = "https://" + panelAddr + adminPath
+	subPrefix = "https://" + panelAddr + subPath
 )
 
 // protos: the four default inbounds of a fresh install, then the ones prepare adds through
@@ -164,8 +176,36 @@ func main() {
 		autotune()
 	case "autotune-check":
 		autotuneCheck()
+	case "guard-prepare":
+		guardPrepare()
+	case "guard":
+		guardCheck()
+	default:
+		log.Fatalf("no phase %q", os.Args[1])
 	}
 }
+
+// createUser makes a user on the standard tariff.
+func createUser(p *panel) user {
+	var tariffs []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	p.call("GET", "/api/v1/tariffs", nil, &tariffs)
+	var tariffID int64
+	for _, t := range tariffs {
+		if t.Name == "Стандарт" {
+			tariffID = t.ID
+		}
+	}
+	var u user
+	p.call("POST", "/api/v1/users", map[string]any{"name": "Slice User", "tariff_id": tariffID}, &u)
+	log.Printf("created user %d, subscription %s", u.ID, u.SubURL)
+	return u
+}
+
+// token is the last part of the user's subscription link.
+func (u user) token() string { return u.SubURL[strings.LastIndex(u.SubURL, "/")+1:] }
 
 func prepare() {
 	p := login()
@@ -198,24 +238,11 @@ func prepare() {
 	// from GitHub on start; the slice checks the tunnel, not the geodata. The automatic
 	// moves run on test timings here: off until the autotune phase blocks a port on purpose.
 	p.call("PATCH", "/api/v1/settings", map[string]any{"sub_routing": "all", "auto_port": false, "auto_sni": false}, nil)
-	var tariffs []struct {
-		ID   int64  `json:"id"`
-		Name string `json:"name"`
-	}
-	p.call("GET", "/api/v1/tariffs", nil, &tariffs)
-	var tariffID int64
-	for _, t := range tariffs {
-		if t.Name == "Стандарт" {
-			tariffID = t.ID
-		}
-	}
-	var u user
-	p.call("POST", "/api/v1/users", map[string]any{"name": "Slice User", "tariff_id": tariffID}, &u)
-	log.Printf("created user %d, subscription %s", u.ID, u.SubURL)
+	u := createUser(p)
 	if !strings.HasPrefix(u.SubURL, "https://node.test:2053/slicesub0000/") {
 		log.Fatalf("unexpected sub_url %q", u.SubURL)
 	}
-	token := u.SubURL[strings.LastIndex(u.SubURL, "/")+1:]
+	token := u.token()
 
 	// Links for apps that read them: every inbound of both nodes with a share-link format.
 	links := fetchSub(token, "Shadowrocket/2592")
