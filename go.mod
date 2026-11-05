@@ -20,6 +20,7 @@ require (
 )
 
 require (
+	github.com/Nemu-x/desync v0.2.1-0.20261029232908-673cbefddb80 // indirect
 	github.com/RyuaNerin/go-krypto v1.3.0 // indirect
 	github.com/Yawning/aez v0.0.0-20211027044916-e49e68abd344 // indirect
 	github.com/akutz/memconn v0.1.0 // indirect
@@ -167,7 +168,7 @@ require (
 // mihomo pins a protobuf fork; replace directives of dependencies are not inherited.
 replace google.golang.org/protobuf => github.com/metacubex/protobuf-go v0.0.0-20260306035419-7ceee0674686
 
-replace github.com/metacubex/mihomo => github.com/getmikan/Citrus v1.19.33-0.20261021235540-ca8204d95c32
+replace github.com/metacubex/mihomo => github.com/getmikan/Citrus v1.19.33-0.20261030003808-62d1f567711c
 
 replace github.com/metacubex/utls => github.com/getmikan/utls v1.8.9-0.20261020173537-32502cba39f4
 
