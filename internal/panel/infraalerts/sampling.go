@@ -162,7 +162,8 @@ func (m *Monitor) round(ctx context.Context) {
 	}
 	levels := make(map[int64]hysteresis.Level, len(nodes))
 	listenerHealth := make(map[int64]map[string]bool, len(nodes))
-	// Whether the tuner moves a busy relay by itself: there is no switch for one relay.
+	// Whether the tuner moves a busy relay by itself: the switch in settings, and the relay's
+	// own (a port the admin set stays, checkRelay).
 	relayMoves := false
 	if m.settings != nil {
 		on, err := m.settings.On(ctx, settings.AutoPort)
@@ -212,7 +213,11 @@ func (m *Monitor) round(ctx context.Context) {
 				nodeLevel = hysteresis.Degraded
 			}
 		}
-		if m.checkRelay(&st, cfg, n, hv, relayMoves, lang) != hysteresis.Healthy {
+		moves := relayMoves
+		if r, err := m.nodeRelay(ctx, n.ID); err == nil && r.AutoPort == 0 {
+			moves = false
+		}
+		if m.checkRelay(&st, cfg, n, hv, moves, lang) != hysteresis.Healthy {
 			nodeLevel = hysteresis.Degraded
 		}
 		levels[n.ID] = nodeLevel

@@ -167,6 +167,33 @@ func TestRelayPortMovesWhenTheWayIsBlocked(t *testing.T) {
 	}
 }
 
+// A port the admin set stays: neither a dropping way nor another program moves it.
+func TestRelayPortOfTheAdminStays(t *testing.T) {
+	e := setup(t)
+	e.localRelay(t)
+	b := e.sourceThrough1(t)
+	local, err := e.st.Q.GetNode(e.ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := domain.SetRelayPort(e.ctx, e.st.Q, local, "9443", false); err != nil {
+		t.Fatal(err)
+	}
+	e.runsRelay(t, nodeapi.ListenerStatus{OK: true}, nil)
+	e.nodes.probes[strconv.FormatInt(b, 10)+"/"+nodeapi.ExitName(1)] = nodeapi.ProbeResult{Error: "timeout"}
+	for range 4 {
+		e.step(t, time.Hour)
+	}
+	if got := e.relayPort(t); got != "9443" {
+		t.Fatalf("the admin's port moved for a dropping way: %s", got)
+	}
+	e.runsRelay(t, nodeapi.ListenerStatus{Error: inUse, Code: nodeapi.ListenerAddrInUse}, nil)
+	e.tn.MoveBusy(e.ctx)
+	if got := e.relayPort(t); got != "9443" {
+		t.Fatalf("the admin's port moved off a busy port: %s", got)
+	}
+}
+
 // A relay whose node shows no site of its own gets one next to the server once a node leaves
 // through it, never the panel's own name; it is not looked for again within Cooldown, and a
 // site that keeps failing is replaced after TargetFails checks and Cooldown.

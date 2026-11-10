@@ -151,6 +151,32 @@ func MoveRelay(ctx context.Context, st *store.Store, node db.Node, from, to stri
 	})
 }
 
+// SetRelayPort puts node's relay on port, one TCP port ("" keeps the one it has), and says
+// whether the panel moves it by itself from now on: off a port another program holds or the
+// way between the servers drops. A malformed port is ErrBadPort, one something of mikan's
+// holds a *PortInUseError. It runs on the caller's transaction; the sources of the relay
+// follow with the next sync of the nodes.
+func SetRelayPort(ctx context.Context, q *db.Queries, node db.Node, port string, auto bool) error {
+	r, err := q.GetNodeRelay(ctx, node.ID)
+	if err != nil {
+		return err
+	}
+	if port != "" && port != r.Port {
+		lo, hi, ok := ParsePort(port)
+		if !ok || lo != hi {
+			return ErrBadPort
+		}
+		port = strconv.Itoa(lo)
+		if err := CheckPort(ctx, q, node, port, "tcp", PortHolder{Kind: PortRelay}); err != nil {
+			return err
+		}
+		if err := q.SetNodeRelayPort(ctx, db.SetNodeRelayPortParams{Port: port, NodeID: node.ID}); err != nil {
+			return err
+		}
+	}
+	return q.SetNodeRelayAutoPort(ctx, db.SetNodeRelayAutoPortParams{AutoPort: Flag(auto), NodeID: node.ID})
+}
+
 // UseExit lets node src leave through node exit: the chain is checked, exit gets its
 // relay and src a key there. It runs on the caller's transaction; host tells what listens
 // on exit's server, nil when nobody knows.

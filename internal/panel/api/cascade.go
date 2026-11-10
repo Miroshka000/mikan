@@ -57,6 +57,7 @@ type CascadeRelay struct {
 	ServerName string       `json:"server_name" doc:"Имя сайта (SNI), под которое маскируются подключения нод к служебному входу"`
 	AutoSNI    bool         `json:"auto_sni" doc:"Сайт держит панель: как у протоколов ноды, иначе подобранный рядом с сервером, и меняет его, когда он перестал работать"`
 	Target     string       `json:"target" enum:"own,protocol,picked,default,manual" doc:"Откуда сайт: own - свой домен сервера, protocol - как у протоколов ноды, picked - подобран рядом с сервером, default - www.microsoft.com, пока лучшего нет, manual - задан админом"`
+	AutoPort   bool         `json:"auto_port" doc:"Порт держит панель: переносит его, если порт занят другой программой или его режут между серверами (при включённом «Менять порт, если его блокируют»); false - порт задан админом и не меняется сам"`
 }
 
 type CascadeView struct {
@@ -74,6 +75,8 @@ type cascadePatchInput struct {
 		AutoSNI    *bool  `json:"auto_sni,omitempty" doc:"true: сайт маскировки служебного входа держит панель; false: dest и server_name задают его"`
 		Dest       string `json:"dest,omitempty" maxLength:"255" doc:"Сайт маскировки служебного входа, host:port; с auto_sni: false"`
 		ServerName string `json:"server_name,omitempty" maxLength:"253" doc:"Имя для подключений нод; нужно, когда в dest IP"`
+		AutoPort   *bool  `json:"auto_port,omitempty" doc:"true: порт служебного входа держит панель; false: port задаёт его"`
+		Port       string `json:"port,omitempty" maxLength:"5" doc:"Порт служебного входа, один TCP-порт; с auto_port: false"`
 	}
 }
 
@@ -174,7 +177,7 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 		}
 		dest, sni := domain.RelayTargetOf(r)
 		v := &CascadeRelay{Port: r.Port, Sources: []CascadeHop{}, Outbound: r.Outbound, Listener: relayUnknown,
-			Dest: dest, ServerName: sni, AutoSNI: r.AutoSni != 0, Target: domain.RelayTargetSource(r, own)}
+			Dest: dest, ServerName: sni, AutoSNI: r.AutoSni != 0, Target: domain.RelayTargetSource(r, own), AutoPort: r.AutoPort != 0}
 		out.Body.Relay = v
 		for _, u := range users {
 			v.Sources = append(v.Sources, CascadeHop{NodeID: u.SrcNodeID, Name: names[u.SrcNodeID]})
@@ -266,12 +269,27 @@ func (h *handlers) patchCascade(ctx context.Context, in *cascadePatchInput) (*ca
 			// one next to the server.
 			_, err = domain.SetRelayAuto(ctx, q, in.ID)
 		}
-		return err
+		if err != nil || b.AutoPort == nil {
+			return err
+		}
+		port := ""
+		if !*b.AutoPort {
+			if port = strings.TrimSpace(b.Port); port == "" {
+				return domain.ErrBadPort
+			}
+		}
+		return domain.SetRelayPort(ctx, q, n, port, *b.AutoPort)
 	})
 	if err != nil {
 		var pe *proto.Error
-		if errors.As(err, &pe) {
+		var busy *domain.PortInUseError
+		switch {
+		case errors.As(err, &pe):
 			return nil, relayTargetError(err)
+		case errors.Is(err, domain.ErrBadPort):
+			return nil, fieldErr("body.port", "bad_port")
+		case errors.As(err, &busy):
+			return nil, portError(err)
 		}
 		return nil, cascadeError(err, "exit_node_id")
 	}
@@ -281,6 +299,12 @@ func (h *handlers) patchCascade(ctx context.Context, in *cascadePatchInput) (*ca
 		details["auto_sni"] = *b.AutoSNI
 		if manual {
 			details["dest"], details["server_name"] = strings.TrimSpace(b.Dest), strings.TrimSpace(b.ServerName)
+		}
+	}
+	if b.AutoPort != nil {
+		details["auto_port"] = *b.AutoPort
+		if !*b.AutoPort {
+			details["port"] = strings.TrimSpace(b.Port)
 		}
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.cascade", "node", strconv.FormatInt(in.ID, 10), details)

@@ -3915,6 +3915,16 @@
         "manual": "Now {site}, set by hand."
       }
     },
+    "port": {
+      "label": "Relay port",
+      "hint": "The TCP port other nodes connect to this one on.",
+      "auto": "Automatic",
+      "manual": "My own port",
+      "autoNow": "Now {port}. The panel moves it by itself if another program takes the port or the way between the servers starts dropping it: “Move to another port when it is blocked” has to be on.",
+      "autoNext": "Once you save, the panel again moves the port by itself if it is taken or dropped.",
+      "manualLabel": "Port",
+      "manualHint": "Any free TCP port of the server, such as 443 if this node's protocols do not take it. It does not change by itself."
+    },
     "route": "Where other nodes' traffic goes next",
     "routeHint": {
       "direct": "To the internet from this server.",

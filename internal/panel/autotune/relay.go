@@ -44,7 +44,8 @@ const probeFresh = 10 * time.Minute
 // блокируют» on, every source that answered failing on the way to the relay (the first step
 // of its probe: a connection through the relay) for Hold, and Cooldown after the relay's last
 // move; the new port is the next free one of the pool the relay did not leave lately. A
-// source that reaches the relay, or fails past it (the exit has no internet), keeps it.
+// source that reaches the relay, or fails past it (the exit has no internet), keeps it, and so
+// does a port the admin set (auto_port off).
 func (t *Tuner) relayPorts(ctx context.Context, w *world) {
 	if !w.portOn {
 		t.mu.Lock()
@@ -68,7 +69,7 @@ func (t *Tuner) relayPorts(ctx context.Context, w *world) {
 	cas := domain.NewCascade(w.nodes, all, relays)
 	for _, r := range relays {
 		n, ok := nodes[r.NodeID]
-		if !ok || ctx.Err() != nil {
+		if !ok || r.AutoPort == 0 || ctx.Err() != nil {
 			continue
 		}
 		blocked, known := t.relayBlockedNow(ctx, w, n, r, cas)

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -192,6 +193,65 @@ func TestRelayTargetFollowsTheNodeAndKeepsTheKeys(t *testing.T) {
 	}
 	if d, s := RelayTargetOf(rb); d != bDest || s != bName {
 		t.Fatalf("B's relay shows %s %s, want its protocol's", d, s)
+	}
+}
+
+// The admin's own relay port: one free TCP port, which turns the panel's moves off for it;
+// a malformed one or one an inbound holds is refused; handed back, the port stays.
+func TestSetRelayPort(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	st, _, _ := setup(t, &now)
+	ctx := context.Background()
+	q := st.Q
+	local, err := q.GetNode(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureRelay(ctx, q, local, now, nil); err != nil {
+		t.Fatal(err)
+	}
+	relay := func() db.NodeRelay {
+		t.Helper()
+		r, err := q.GetNodeRelay(ctx, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	if r := relay(); r.AutoPort != 1 {
+		t.Fatalf("a new relay keeps its port by itself: %d", r.AutoPort)
+	}
+	for _, bad := range []string{"0", "70000", "2000-3000", "port"} {
+		if err := SetRelayPort(ctx, q, local, bad, false); err != ErrBadPort {
+			t.Errorf("%s: %v", bad, err)
+		}
+	}
+	ins, err := q.ListNodeInbounds(ctx, 1)
+	if err != nil || len(ins) == 0 {
+		t.Fatal(err)
+	}
+	var tcp string
+	for _, in := range ins {
+		if InboundNetwork(in) == "tcp" {
+			tcp = in.Port
+			break
+		}
+	}
+	var busy *PortInUseError
+	if err := SetRelayPort(ctx, q, local, tcp, false); !errors.As(err, &busy) {
+		t.Fatalf("an inbound's port %s: %v", tcp, err)
+	}
+	if err := SetRelayPort(ctx, q, local, "9443", false); err != nil {
+		t.Fatal(err)
+	}
+	if r := relay(); r.Port != "9443" || r.AutoPort != 0 {
+		t.Fatalf("the admin's port: %s auto %d", r.Port, r.AutoPort)
+	}
+	if err := SetRelayPort(ctx, q, local, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if r := relay(); r.Port != "9443" || r.AutoPort != 1 {
+		t.Fatalf("handed back: %s auto %d", r.Port, r.AutoPort)
 	}
 }
 

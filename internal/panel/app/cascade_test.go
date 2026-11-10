@@ -150,6 +150,24 @@ func TestRelaySiteOverHTTP(t *testing.T) {
 	if _, body := h.do(http.MethodPatch, url, map[string]any{"outbound": "warp"}, csrf); !strings.Contains(string(body), `"server_name":"near.example"`) {
 		t.Fatalf("route only: %s", body)
 	}
+	// The admin's own port: a malformed one and B's node API port are refused, a free one kept.
+	if resp, body := h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": false, "port": "70000"}, csrf); resp.StatusCode != http.StatusUnprocessableEntity ||
+		!strings.Contains(string(body), "body.port") || !strings.Contains(string(body), "bad_port") {
+		t.Fatalf("past 65535: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": false, "port": "40000"}, csrf); resp.StatusCode != http.StatusConflict ||
+		!strings.Contains(string(body), "port_node_api") {
+		t.Fatalf("the node API's port: %d %s", resp.StatusCode, body)
+	}
+	resp, body = h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": false, "port": "9443"}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"port":"9443"`) || !strings.Contains(string(body), `"auto_port":false`) {
+		t.Fatalf("the admin's port: %d %s", resp.StatusCode, body)
+	}
+	resp, body = h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": true}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"port":"9443"`) || !strings.Contains(string(body), `"auto_port":true`) {
+		t.Fatalf("the port back to the panel: %d %s", resp.StatusCode, body)
+	}
+
 	// Handed back on a node whose protocols show no site of their own: the default, which the
 	// tuner replaces once nodes leave through B; the admin's site is not kept as the panel's.
 	resp, body = h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_sni": true}, csrf)

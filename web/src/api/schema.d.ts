@@ -4025,6 +4025,8 @@ export interface components {
             node_id: number;
         };
         CascadePatchInputBody: {
+            /** @description true: порт служебного входа держит панель; false: port задаёт его */
+            auto_port?: boolean;
             /** @description true: сайт маскировки служебного входа держит панель; false: dest и server_name задают его */
             auto_sni?: boolean;
             /** @description Сайт маскировки служебного входа, host:port; с auto_sni: false */
@@ -4036,10 +4038,14 @@ export interface components {
              * @enum {string}
              */
             outbound: "direct" | "warp" | "node";
+            /** @description Порт служебного входа, один TCP-порт; с auto_port: false */
+            port?: string;
             /** @description Имя для подключений нод; нужно, когда в dest IP */
             server_name?: string;
         };
         CascadeRelay: {
+            /** @description Порт держит панель: переносит его, если порт занят другой программой или его режут между серверами (при включённом «Менять порт, если его блокируют»); false - порт задан админом и не меняется сам */
+            auto_port: boolean;
             /** @description Сайт держит панель: как у протоколов ноды, иначе подобранный рядом с сервером, и меняет его, когда он перестал работать */
             auto_sni: boolean;
             /** @description Сайт маскировки REALITY служебного входа, host:port */

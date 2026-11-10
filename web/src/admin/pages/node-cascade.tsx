@@ -49,20 +49,23 @@ function Body({ nodeId, c, refetch, checking }: { nodeId: number; c: Cascade; re
   // "Check" refetches `c`: the chosen route and site survive it.
   const relay = c.relay;
   const {
-    draft: { route, exit, auto, dest, sni },
+    draft: { route, exit, auto, dest, sni, autoPort, port },
     setDraft,
-  } = useDraft<{ route: Route; exit: number; auto: boolean; dest: string; sni: string }>({
+  } = useDraft<{ route: Route; exit: number; auto: boolean; dest: string; sni: string; autoPort: boolean; port: string }>({
     route: (relay?.outbound as Route) ?? "direct",
     exit: relay?.exit_node_id ?? 0,
     auto: relay?.auto_sni ?? true,
     dest: relay?.dest ?? "",
     sni: relay?.server_name ?? "",
+    autoPort: relay?.auto_port ?? true,
+    port: relay?.port ?? "",
   });
   const setRoute = (v: Route) => setDraft((d) => ({ ...d, route: v }));
   const setExit = (v: number) => setDraft((d) => ({ ...d, exit: v }));
   // The relay's site goes with the route only when it changed: auto back, or the admin's own.
   const targetChanged =
     !!relay && (auto !== relay.auto_sni || (!auto && (dest.trim() !== relay.dest || (destIsIP(dest) && sni.trim() !== relay.server_name))));
+  const portChanged = !!relay && (autoPort !== relay.auto_port || (!autoPort && port.trim() !== relay.port));
   const save = useMutation({
     mutationFn: () =>
       unwrap(
@@ -72,18 +75,28 @@ function Body({ nodeId, c, refetch, checking }: { nodeId: number; c: Cascade; re
             outbound: route,
             ...(route === "node" ? { exit_node_id: exit } : {}),
             ...(targetChanged ? (auto ? { auto_sni: true } : { auto_sni: false, dest: dest.trim(), ...(destIsIP(dest) ? { server_name: sni.trim() } : {}) }) : {}),
+            ...(portChanged ? (autoPort ? { auto_port: true } : { auto_port: false, port: port.trim() }) : {}),
           },
         }),
       ),
     onSuccess: (v) => {
       qc.setQueryData(qk.cascade(nodeId), v);
-      setDraft((d) => ({ ...d, auto: v.relay?.auto_sni ?? true, dest: v.relay?.dest ?? "", sni: v.relay?.server_name ?? "" }));
+      setDraft((d) => ({
+        ...d,
+        auto: v.relay?.auto_sni ?? true,
+        dest: v.relay?.dest ?? "",
+        sni: v.relay?.server_name ?? "",
+        autoPort: v.relay?.auto_port ?? true,
+        port: v.relay?.port ?? "",
+      }));
       toast.ok(t("cascade.saved"));
     },
   });
   const fields = fieldErrors(save.error);
-  const changed = route !== ((relay?.outbound as Route) ?? "direct") || (route === "node" && exit !== (relay?.exit_node_id ?? 0)) || targetChanged;
+  const changed =
+    route !== ((relay?.outbound as Route) ?? "direct") || (route === "node" && exit !== (relay?.exit_node_id ?? 0)) || targetChanged || portChanged;
   const siteMissing = !!relay && !auto && (!dest.trim() || (destIsIP(dest) && !sni.trim()));
+  const portMissing = !!relay && !autoPort && !port.trim();
 
   return (
     <>
@@ -182,6 +195,33 @@ function Body({ nodeId, c, refetch, checking }: { nodeId: number; c: Cascade; re
                 <TargetPicker dest={dest} sni={sni} nodeId={nodeId} onPick={(d, s) => setDraft((x) => ({ ...x, dest: d, sni: s }))} />
               </>
             )}
+            <Field label={t("cascade.port.label")} hint={t("cascade.port.hint")}>
+              <Segmented
+                label={t("cascade.port.label")}
+                value={autoPort ? "auto" : "manual"}
+                onChange={(v) => setDraft((d) => ({ ...d, autoPort: v === "auto" }))}
+                options={[
+                  { value: "auto", label: t("cascade.port.auto") },
+                  { value: "manual", label: t("cascade.port.manual") },
+                ]}
+              />
+            </Field>
+            {autoPort ? (
+              <p className="-mt-2 mb-4 text-xs text-[var(--ink-500)]">{t(relay.auto_port ? "cascade.port.autoNow" : "cascade.port.autoNext", { port: relay.port })}</p>
+            ) : (
+              <Field label={t("cascade.port.manualLabel")} htmlFor="cascade-port" hint={t("cascade.port.manualHint")} error={fields.port}>
+                <input
+                  id="cascade-port"
+                  className="input mono max-w-[160px]"
+                  inputMode="numeric"
+                  value={port}
+                  onChange={(e) => setDraft((d) => ({ ...d, port: e.target.value }))}
+                  placeholder="443"
+                  aria-invalid={!!fields.port}
+                  autoComplete="off"
+                />
+              </Field>
+            )}
           </>
         ) : null}
         {save.error && !Object.keys(fields).length ? <div className="banner err mb-4" role="alert">{errorText(save.error)}</div> : null}
@@ -212,7 +252,7 @@ function Body({ nodeId, c, refetch, checking }: { nodeId: number; c: Cascade; re
           ) : null}
         </Field>
         <div className="form-actions">
-          <Button variant="primary" loading={save.isPending} disabled={!changed || (route === "node" && !exit) || siteMissing} onClick={() => save.mutate()}>
+          <Button variant="primary" loading={save.isPending} disabled={!changed || (route === "node" && !exit) || siteMissing || portMissing} onClick={() => save.mutate()}>
             {t("common.save")}
           </Button>
         </div>
