@@ -28,6 +28,9 @@ type Nodes interface {
 	CheckTarget(ctx context.Context, id int64, req nodeapi.TargetCheckRequest) (nodeapi.TargetResult, error)
 	ScanTargets(ctx context.Context, id int64, req nodeapi.TargetScanRequest) (nodeapi.TargetScan, error)
 	Health(id int64) (nodesync.HealthView, bool)
+	// Probe is a node's last look at the internet through one of its outbounds, as the way
+	// through another node's relay; the node keeps an answer for a minute.
+	Probe(ctx context.Context, id int64, proxy string) (nodeapi.ProbeResult, error)
 }
 
 // Options are the tuner's timings. The windows are long on purpose: a server whose
@@ -102,9 +105,12 @@ type Tuner struct {
 	// table for them as there is for inbounds, so a restart forgets them.
 	relayLeft map[int64]map[string]time.Time
 	// relayFails are the failed checks in a row of each relay's own site, relayPicked when a
-	// site next to its server was last looked for; by node id.
-	relayFails  map[int64]int
-	relayPicked map[int64]time.Time
+	// site next to its server was last looked for; relayBlocked since when its sources have
+	// not reached it, relayMoved when its port was last moved for that; by node id.
+	relayFails   map[int64]int
+	relayPicked  map[int64]time.Time
+	relayBlocked map[int64]time.Time
+	relayMoved   map[int64]time.Time
 
 	busyMu sync.Mutex // one MoveBusy at a time
 
@@ -124,7 +130,7 @@ type state struct {
 func New(st *store.Store, set *settings.Settings, nodes Nodes, changes domain.Changes, log *slog.Logger, now func() time.Time, o Options) *Tuner {
 	return &Tuner{st: st, inbounds: domain.NewInbounds(st, nil, now), set: set, nodes: nodes, changes: changes, log: log, now: now, o: o, pick: rand.IntN,
 		state: map[int64]*state{}, busy: map[int64]string{}, relayLeft: map[int64]map[string]time.Time{}, failed: map[string]time.Time{},
-		relayFails: map[int64]int{}, relayPicked: map[int64]time.Time{}}
+		relayFails: map[int64]int{}, relayPicked: map[int64]time.Time{}, relayBlocked: map[int64]time.Time{}, relayMoved: map[int64]time.Time{}}
 }
 
 // Status returns the tuner's view of an inbound; false before its first round.
@@ -193,6 +199,7 @@ func (t *Tuner) Step(ctx context.Context) {
 	}
 	// After the inbounds' checks: a relay follows the site an inbound just moved to.
 	t.relayTargets(ctx, w, checks)
+	t.relayPorts(ctx, w)
 	for _, n := range w.nodes {
 		t.detect(ctx, w, n)
 	}

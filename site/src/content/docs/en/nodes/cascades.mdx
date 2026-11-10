@@ -52,6 +52,8 @@ Open **Check node** on the entry node (A), see [Nodes](/mikan/en/nodes/nodes/#ch
 
 On the exit node itself, if others go out through it now, the check shows its relay port. While nobody does, the relay is not running and the check does not show it.
 
-## If the relay port is taken
+## If the relay port is taken or dropped
 
 If another program has taken the relay's port, the relay moves to a free port by itself when the "Move to another port when it is blocked" switch is on (**Settings → General → Automatic fixes**). When the relay is not working, a notification arrives in Telegram. This works with nodes on version 0.5.0.2 and newer.
+
+With the same switch the relay also moves when its port is dropped on the way between the servers: the exit node and the relay work, but the source nodes cannot reach it for half an hour in a row. This happens when a provider or censorship on the entry node's side does not let that port through. The relay goes to the next free spare port, at most once in 6 hours, and the source nodes follow by themselves. If at least one source node reaches the relay, or the exit node merely has no internet, the port stays.

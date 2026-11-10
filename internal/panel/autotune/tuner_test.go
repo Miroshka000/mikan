@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
@@ -25,6 +26,20 @@ type fakeNodes struct {
 	checks   int
 	onScan   func() // runs while a scan is under way: the admin edits meanwhile
 	health   map[int64]nodesync.HealthView
+	// probes are the nodes' answers by "node/outbound", made at clock unless they say when.
+	probes map[string]nodeapi.ProbeResult
+	clock  func() time.Time
+}
+
+func (f *fakeNodes) Probe(_ context.Context, id int64, proxy string) (nodeapi.ProbeResult, error) {
+	r, ok := f.probes[strconv.FormatInt(id, 10)+"/"+proxy]
+	if !ok {
+		return nodeapi.ProbeResult{}, nodeapi.ErrUnavailable
+	}
+	if r.CheckedAt.IsZero() {
+		r.CheckedAt = f.clock()
+	}
+	return r, nil
 }
 
 func (f *fakeNodes) Health(id int64) (nodesync.HealthView, bool) {
@@ -112,7 +127,7 @@ func setup(t *testing.T) *env {
 	}
 	e.slot, e.user = slot.Name, u.ID
 	e.refreshProfile(t)
-	e.nodes = &fakeNodes{activity: map[int64]nodeapi.Activity{}, targets: map[string]nodeapi.TargetResult{}}
+	e.nodes = &fakeNodes{activity: map[int64]nodeapi.Activity{}, targets: map[string]nodeapi.TargetResult{}, probes: map[string]nodeapi.ProbeResult{}, clock: clock}
 	e.tn = New(e.st, e.set, e.nodes, e.ch, slog.New(slog.NewTextHandler(io.Discard, nil)), clock, DefaultOptions())
 	e.tn.pick = func(int) int { return 0 }
 	return e

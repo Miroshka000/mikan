@@ -2,6 +2,7 @@ package autotune
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/audit"
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/presets"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -28,6 +30,156 @@ const (
 	relayReasonDefault  = "default"  // it showed the default site
 	relayReasonDown     = "target_down"
 )
+
+// ReasonBlocked is the reason of a relay port moved because its sources could not reach it
+// while its node and the relay were up: something on the way between the servers drops it.
+const ReasonBlocked = "blocked"
+
+// probeFresh: an answer of a source node's probe older than this says nothing of now.
+const probeFresh = 10 * time.Minute
+
+// relayPorts moves the port of a relay its sources cannot reach while its node and the relay
+// itself are up: the provider's or a censor's filter on the way between the servers drops
+// that port, as Russian ones do with servers abroad. It needs «Менять порт, если его
+// блокируют» on, every source that answered failing on the way to the relay (the first step
+// of its probe: a connection through the relay) for Hold, and Cooldown after the relay's last
+// move; the new port is the next free one of the pool the relay did not leave lately. A
+// source that reaches the relay, or fails past it (the exit has no internet), keeps it.
+func (t *Tuner) relayPorts(ctx context.Context, w *world) {
+	if !w.portOn {
+		t.mu.Lock()
+		clear(t.relayBlocked)
+		t.mu.Unlock()
+		return
+	}
+	relays, err := t.st.Q.ListNodeRelays(ctx)
+	if err != nil {
+		t.log.Error("autotune: relays", "err", err)
+		return
+	}
+	nodes := map[int64]db.Node{}
+	for _, n := range w.nodes {
+		nodes[n.ID] = n
+	}
+	var all []db.Inbound
+	for _, ins := range w.inbounds {
+		all = append(all, ins...)
+	}
+	cas := domain.NewCascade(w.nodes, all, relays)
+	for _, r := range relays {
+		n, ok := nodes[r.NodeID]
+		if !ok || ctx.Err() != nil {
+			continue
+		}
+		blocked, known := t.relayBlockedNow(ctx, w, n, r, cas)
+		if !known {
+			continue
+		}
+		t.mu.Lock()
+		since, was := t.relayBlocked[n.ID]
+		if !blocked {
+			delete(t.relayBlocked, n.ID)
+		} else if !was {
+			t.relayBlocked[n.ID] = w.now
+		}
+		moved := t.relayMoved[n.ID]
+		t.mu.Unlock()
+		if !blocked || !was || w.now.Sub(since) < t.o.Hold || !moved.IsZero() && w.now.Sub(moved) < t.o.Cooldown {
+			continue
+		}
+		t.moveBlockedRelay(ctx, w, n, r.Port)
+	}
+}
+
+// relayBlockedNow says whether every source of node's relay that answered fails on the way
+// to it; known is false when nothing is known now: the node or its relay is not up, no
+// source leaves through it, or none answered.
+func (t *Tuner) relayBlockedNow(ctx context.Context, w *world, n db.Node, r db.NodeRelay, cas *domain.Cascade) (blocked, known bool) {
+	hv, ok := t.nodes.Health(n.ID)
+	if !ok || !relayUp(hv, r.Port) {
+		return false, false
+	}
+	users, err := t.st.Q.ListRelayUsers(ctx, n.ID)
+	if err != nil {
+		return false, false
+	}
+	answered, failed := 0, 0
+	for _, u := range cas.RelaySources(n.ID, users) {
+		if src, ok := t.nodes.Health(u.SrcNodeID); !ok || !src.OK {
+			continue
+		}
+		p, err := t.nodes.Probe(ctx, u.SrcNodeID, nodeapi.ExitName(n.ID))
+		if err != nil || p.CheckedAt.IsZero() || w.now.Sub(p.CheckedAt) > probeFresh {
+			continue
+		}
+		answered++
+		if !p.OK && wayBlocked(p) {
+			failed++
+		}
+	}
+	return answered > 0 && failed == answered, answered > 0
+}
+
+// relayUp: the node runs its relay on port and the relay listens.
+func relayUp(hv nodesync.HealthView, port string) bool {
+	if !hv.OK || hv.Ports[nodeapi.RelayListener] != port {
+		return false
+	}
+	for _, l := range hv.Listeners {
+		if l.Name == nodeapi.RelayListener {
+			return l.OK
+		}
+	}
+	return false
+}
+
+// wayBlocked: a probe failed at its first step, the connection through the relay, which
+// the node words as a timeout, a refusal or a failure that is not past the tunnel.
+func wayBlocked(p nodeapi.ProbeResult) bool {
+	switch p.Error {
+	case "timeout", "refused":
+		return true
+	case "failed":
+		return !strings.HasPrefix(p.Detail, "the tunnel is up")
+	}
+	return false
+}
+
+// moveBlockedRelay moves node's relay off port, which the way to it drops. The admin, or a
+// move of a busy port, may have changed the row since: then it stays as it is.
+func (t *Tuner) moveBlockedRelay(ctx context.Context, w *world, n db.Node, port string) {
+	ports, err := t.nodePorts(ctx, n)
+	if err != nil {
+		t.log.Error("autotune: blocked relay: node ports", "node", n.ID, "err", err)
+		return
+	}
+	next, why := BusyRelayMove(ports, port, port, true, t.relayLeftPorts(n.ID, w.now))
+	if why != "" {
+		t.noteBusy(n, -n.ID, nodeapi.RelayListener, port, why)
+		return
+	}
+	err = domain.MoveRelay(ctx, t.st, n, port, next)
+	if errors.Is(err, domain.ErrRelayChanged) {
+		return
+	}
+	if err != nil {
+		t.log.Error("autotune: blocked relay: move", "node", n.ID, "err", err)
+		return
+	}
+	t.mu.Lock()
+	if t.relayLeft[n.ID] == nil {
+		t.relayLeft[n.ID] = map[string]time.Time{}
+	}
+	t.relayLeft[n.ID][port] = w.now
+	t.relayMoved[n.ID] = w.now
+	delete(t.relayBlocked, n.ID)
+	t.mu.Unlock()
+	_ = audit.Write(ctx, t.st.Q, w.now, audit.Entry{Action: "auto.relay_port", TargetType: "node", TargetID: strconv.FormatInt(n.ID, 10),
+		Details: map[string]any{"node": n.ID, "old": port, "new": next, "reason": ReasonBlocked}})
+	t.log.Warn("autotune: relay port changed", "node", n.ID, "old", port, "new", next, "reason", ReasonBlocked)
+	// Every node reads the port from the row: the sources of the relay follow.
+	t.changes.SlotsChanged()
+}
 
 func (t *Tuner) relayTargets(ctx context.Context, w *world, checks bool) {
 	relays, err := t.st.Q.ListNodeRelays(ctx)

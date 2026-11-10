@@ -2,12 +2,14 @@ package autotune
 
 import (
 	"database/sql"
+	"strconv"
 	"testing"
 	"time"
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/presets"
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
 )
 
@@ -72,6 +74,96 @@ func TestRelayFollowsTheProtocolsSite(t *testing.T) {
 	e.step(t, time.Minute)
 	if d, _ := e.relaySite(t, 1); d != "www.example.net:443" {
 		t.Fatalf("the admin's site was replaced with %s", d)
+	}
+}
+
+// sourceThrough1 makes a remote node B whose protocol leaves through node 1's relay, and
+// says B is up; it returns B's id.
+func (e *env) sourceThrough1(t *testing.T) int64 {
+	t.Helper()
+	b, err := e.st.Q.CreateNode(e.ctx, db.CreateNodeParams{Name: "B", Address: "198.51.100.20:40000", PublicHost: "198.51.100.20", CreatedAt: e.now.Unix(), UpdatedAt: e.now.Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, err := e.tn.inbounds.Create(e.ctx, domain.NewInbound{NodeID: b.ID, Preset: "vless_reality_xhttp", Port: "443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := domain.UseExit(e.ctx, e.st.Q, b.ID, 1, e.now, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.st.Q.SetInboundExit(e.ctx, db.SetInboundExitParams{ExitNodeID: sql.NullInt64{Int64: 1, Valid: true}, Outbound: "direct", ID: in.ID}); err != nil {
+		t.Fatal(err)
+	}
+	e.runs(t, b.ID)
+	return b.ID
+}
+
+func (e *env) relayPort(t *testing.T) string {
+	t.Helper()
+	r, err := e.st.Q.GetNodeRelay(e.ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r.Port
+}
+
+// The way from the source to the relay drops its port while node 1 and the relay are up:
+// after Hold the relay moves to the pool's next port, with an audit entry and a push; not
+// again within Cooldown, not when the exit only has no internet, not with moves off.
+func TestRelayPortMovesWhenTheWayIsBlocked(t *testing.T) {
+	e := setup(t)
+	e.localRelay(t)
+	b := e.sourceThrough1(t)
+	e.runsRelay(t, nodeapi.ListenerStatus{OK: true}, nil)
+	via := strconv.FormatInt(b, 10) + "/" + nodeapi.ExitName(1)
+
+	// The exit has no internet: the way to the relay is fine, the port stays.
+	e.nodes.probes[via] = nodeapi.ProbeResult{Error: "https_timeout", Detail: "the tunnel is up, but the HTTPS request to cloudflare.com timed out"}
+	e.step(t, 0)
+	e.step(t, time.Hour)
+	if got := e.relayPort(t); got != "2053" {
+		t.Fatalf("moved for an exit without internet: %s", got)
+	}
+
+	// The way drops the port: not before Hold.
+	e.nodes.probes[via] = nodeapi.ProbeResult{Error: "timeout", Detail: "no answer through the outbound in time"}
+	pushes := e.ch.slots
+	e.step(t, time.Minute)
+	e.step(t, 20*time.Minute)
+	if got := e.relayPort(t); got != "2053" {
+		t.Fatalf("moved before Hold: %s", got)
+	}
+	e.step(t, 15*time.Minute)
+	if got := e.relayPort(t); got != "2083" {
+		t.Fatalf("relay on %s, want 2083", got)
+	}
+	var audits int
+	if err := e.st.DB.QueryRowContext(e.ctx, `SELECT count(*) FROM audit_log WHERE action = 'auto.relay_port' AND details LIKE '%"reason":"blocked"%'`).Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits != 1 || e.ch.slots == pushes {
+		t.Fatalf("audits %d, pushes %d → %d", audits, pushes, e.ch.slots)
+	}
+
+	// Still dropped on the new port: no second move within Cooldown.
+	e.runsRelay(t, nodeapi.ListenerStatus{OK: true}, nil)
+	for range 3 {
+		e.step(t, time.Hour)
+	}
+	if got := e.relayPort(t); got != "2083" {
+		t.Fatalf("moved again within Cooldown: %s", got)
+	}
+
+	// With moves off nothing moves, however long the way drops the port.
+	if err := settings.Set(e.ctx, e.set, settings.KeyAutoPort, false); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		e.step(t, 4*time.Hour)
+	}
+	if got := e.relayPort(t); got != "2083" {
+		t.Fatalf("moved with moves off: %s", got)
 	}
 }
 
