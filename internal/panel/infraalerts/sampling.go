@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/domain"
 	"mikan/internal/panel/hysteresis"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/settings"
@@ -43,6 +44,7 @@ type world struct {
 	inbounds []db.Inbound
 	warp     map[int64]db.NodeWarp
 	relay    map[int64]db.NodeRelay
+	relays   []db.NodeRelay // every node's, nil until read (nodeRelays)
 }
 
 // loadWorld returns the nodes and the inbounds, read again once worldTTL has passed.
@@ -93,6 +95,25 @@ func (m *Monitor) nodeRelay(ctx context.Context, id int64) (db.NodeRelay, error)
 	}
 	m.world.relay[id] = r
 	return r, nil
+}
+
+// nodeRelays are all the nodes' relays, read once per world.
+func (m *Monitor) nodeRelays(ctx context.Context) ([]db.NodeRelay, error) {
+	if m.world == nil {
+		return m.store.Q.ListNodeRelays(ctx)
+	}
+	if m.world.relays != nil {
+		return m.world.relays, nil
+	}
+	rs, err := m.store.Q.ListNodeRelays(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if rs == nil {
+		rs = []db.NodeRelay{}
+	}
+	m.world.relays = rs
+	return rs, nil
 }
 
 // inboundFailAfter is how many failed samples make an inbound or the cascade relay
@@ -440,18 +461,30 @@ func (m *Monitor) probeExits(ctx context.Context, st *persistentState, cfg Alert
 	}
 	var asks []ask
 	seen := map[string]bool{}
+	// An inbound through another node is stored as outbound "direct" with its exit node; a
+	// relay goes on to its exit only while some node leaves through it (nodesync).
+	relays, err := m.nodeRelays(ctx)
+	if err != nil {
+		m.logError("infrastructure alerts: relays", err)
+		return
+	}
+	var all []db.Inbound
+	for _, ins := range inbounds {
+		all = append(all, ins...)
+	}
+	cas := domain.NewCascade(nodes, all, relays)
 	for _, n := range nodes {
 		if n.Enabled == 0 || levels[n.ID] == hysteresis.Unavailable {
 			continue
 		}
 		exits := map[int64]bool{}
 		for _, in := range inbounds[n.ID] {
-			if in.Enabled != 0 && in.Outbound == "node" && in.ExitNodeID.Valid {
+			if in.Enabled != 0 && in.ExitNodeID.Valid {
 				exits[in.ExitNodeID.Int64] = true
 			}
 		}
 		relay, err := m.nodeRelay(ctx, n.ID)
-		if err == nil && relay.Outbound == "node" && relay.ExitNodeID.Valid {
+		if err == nil && relay.ExitNodeID.Valid && cas.RelayLive(n.ID) {
 			exits[relay.ExitNodeID.Int64] = true
 		}
 		for exitID := range exits {

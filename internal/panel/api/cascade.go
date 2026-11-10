@@ -135,16 +135,28 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 	for _, n := range nodes {
 		names[n.ID] = n.Name
 	}
+	ins, err := q.ListInbounds(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := &cascadeOutput{Body: CascadeView{Exits: []CascadeExit{}}}
 	r, err := q.GetNodeRelay(ctx, in.ID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+	// The relay runs, and goes on to its exit, only while some node leaves through it now.
+	live := false
 	if err == nil {
 		users, err := q.ListRelayUsers(ctx, in.ID)
 		if err != nil {
 			return nil, err
 		}
+		relays, err := q.ListNodeRelays(ctx)
+		if err != nil {
+			return nil, err
+		}
+		users = domain.NewCascade(nodes, ins, relays).RelaySources(in.ID, users)
+		live = len(users) > 0
 		v := &CascadeRelay{Port: r.Port, Sources: []CascadeHop{}, Outbound: r.Outbound, Listener: relayUnknown}
 		out.Body.Relay = v
 		for _, u := range users {
@@ -154,15 +166,11 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 			id := r.ExitNodeID.Int64
 			v.Outbound, v.ExitNodeID = "node", &id
 		}
-		if h.d.Nodes != nil {
+		if live && h.d.Nodes != nil {
 			if hv, ok := h.d.Nodes.Health(in.ID); ok {
 				v.Listener, v.Error = relayListener(hv, r.Port)
 			}
 		}
-	}
-	ins, err := q.ListInbounds(ctx)
-	if err != nil {
-		return nil, err
 	}
 	idx := map[int64]int{}
 	exit := func(id int64) *CascadeExit {
@@ -179,7 +187,7 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 			e.Inbounds = append(e.Inbounds, i.Name)
 		}
 	}
-	if r.ExitNodeID.Valid {
+	if live && r.ExitNodeID.Valid {
 		exit(r.ExitNodeID.Int64).Relay = true
 	}
 	if h.d.Nodes != nil {

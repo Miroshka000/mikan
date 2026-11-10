@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"slices"
 	"strconv"
@@ -95,5 +97,33 @@ func TestCascadeConns(t *testing.T) {
 	}
 	if got := cascadeConns(nil); got == nil || len(got) != 0 {
 		t.Fatalf("none: %#v", got)
+	}
+}
+
+// A probe the entry node did not answer says why: the exit is not in its applied config yet,
+// the node predates /v1/probe, or the call itself failed. Only the old node is told to update.
+func TestProbeErrItem(t *testing.T) {
+	params := map[string]string{"exit": "se", "exit_id": "2"}
+	for name, tc := range map[string]struct {
+		err               error
+		status, code, fix string
+		detail            bool
+	}{
+		"not applied":  {&nodeapi.Error{Code: "no_such_outbound", Message: "not an outbound of this node"}, nodeapi.CheckWarn, "not_applied", "", false},
+		"old node 404": {&nodeapi.StatusError{Method: "GET", Path: "/v1/probe", Status: 404}, nodeapi.CheckSkip, "old_node", "update_node", false},
+		"old node 405": {&nodeapi.StatusError{Method: "GET", Path: "/v1/probe", Status: 405}, nodeapi.CheckSkip, "old_node", "update_node", false},
+		"node error":   {&nodeapi.StatusError{Method: "GET", Path: "/v1/probe", Status: 502}, nodeapi.CheckSkip, "probe_failed", "", true},
+		"other code":   {&nodeapi.Error{Code: "not_ready", Message: "starting"}, nodeapi.CheckSkip, "probe_failed", "", true},
+		"no link":      {fmt.Errorf("%w: %w", nodeapi.ErrUnavailable, errors.New("dial tcp: i/o timeout")), nodeapi.CheckSkip, "probe_failed", "", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			it := probeErrItem(params, tc.err)
+			if it.ID != "cascade" || it.Status != tc.status || it.Code != tc.code || it.Fix != tc.fix || (it.Detail != "") != tc.detail || it.Params["exit"] != "se" {
+				t.Fatalf("%+v", it)
+			}
+			if tc.detail && it.Detail != tc.err.Error() {
+				t.Fatalf("detail %q, want the error's words", it.Detail)
+			}
+		})
 	}
 }

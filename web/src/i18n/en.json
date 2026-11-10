@@ -4572,7 +4572,9 @@
         "exit_relay": "The relay of node {exit} did not start, port {port}",
         "exit_no_relay": "Node {exit} has no relay",
         "exit_blocked": "This node cannot reach port {port} of node {exit}, or {exit} has no internet",
-        "old_node": "The node cannot check the cascade, update it"
+        "old_node": "The node cannot check the cascade, update it",
+        "not_applied": "The node has not applied this exit yet, check again in a minute",
+        "probe_failed": "The node did not answer the cascade check, see the details"
       },
       "node_dns": {
         "ok": "Names resolve",

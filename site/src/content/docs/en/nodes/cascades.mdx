@@ -13,9 +13,11 @@ Clients connect to node A, and sites see node B's address. This way you can keep
 
 ## Set up
 
-1. Open the connection on node A and in the **Way out to the internet** field choose "Via a node".
+1. On the **Protocols** page open a protocol of node A and in the **Way out to the internet** field choose "Via a node".
 2. In the **Exit node** field choose node B.
 3. Save.
+
+The **Where other nodes' traffic goes next** field in the **Cascade** window is not needed for such a cascade: it is set on the exit node when the chain is longer, see below.
 
 The panel itself opens a hidden relay on node B with a separate key for each source node. The relay listens on a TCP port: the first free one among the spare ports (2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 11443, 12443), or a random one from 30000 to 59999 if all are taken.
 
@@ -39,7 +41,7 @@ Open **Check node** on the entry node (A), see [Nodes](/mikan/en/nodes/nodes/#ch
 - **the relay on the exit node is not started**: the exit node did not bring up its port, see that node's check;
 - **the entry cannot reach the relay port on the exit** or **the exit has no internet**: the port is closed by the exit node's hoster firewall, or the exit server does not go out to the internet.
 
-On the exit node itself, if others go out through it, the check shows its relay port.
+On the exit node itself, if others go out through it now, the check shows its relay port. While nobody does, the relay is not running and the check does not show it.
 
 ## If the relay port is taken
 

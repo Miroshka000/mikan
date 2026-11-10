@@ -218,10 +218,14 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	}
 	inbounds := snap.inbounds
 	st.Inbounds = []nodeapi.Inbound{}
-	if st.Warp, err = s.warp(ctx, n, inbounds); err != nil {
+	cas, err := domain.LoadCascadeWith(ctx, q, inbounds)
+	if err != nil {
 		return st, "", err
 	}
-	if st.Relay, st.Exits, err = s.cascade(ctx, n, inbounds); err != nil {
+	if st.Relay, st.Exits, err = s.cascade(ctx, n, inbounds, cas); err != nil {
+		return st, "", err
+	}
+	if st.Warp, err = s.warp(ctx, n, inbounds, st.Relay != nil); err != nil {
 		return st, "", err
 	}
 	if s.local {
@@ -898,8 +902,9 @@ func limited(n int64) int64 {
 }
 
 // warp is the node's WARP outbound, nil when it has none or it is off. Inbounds set to
-// WARP on a node without it simply leave directly.
-func (s *Syncer) warp(ctx context.Context, n db.Node, inbounds []db.Inbound) (*nodeapi.Warp, error) {
+// WARP on a node without it simply leave directly. relay says whether the node runs its
+// relay listener (cascade).
+func (s *Syncer) warp(ctx context.Context, n db.Node, inbounds []db.Inbound, relay bool) (*nodeapi.Warp, error) {
 	w, err := s.m.st.Q.GetNodeWarp(ctx, n.ID)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && w.Enabled == 0 {
 		return nil, nil
@@ -922,6 +927,9 @@ func (s *Syncer) warp(ctx context.Context, n db.Node, inbounds []db.Inbound) (*n
 		}
 	}
 	// Traffic other nodes relay through this one may leave by WARP too.
+	if !relay {
+		return out, nil
+	}
 	if r, err := s.m.st.Q.GetNodeRelay(ctx, n.ID); err == nil && r.Outbound == "warp" && !r.ExitNodeID.Valid {
 		out.Inbounds = append(out.Inbounds, nodeapi.RelayListener)
 	}
@@ -941,10 +949,11 @@ func (m *Manager) Warp(ctx context.Context, id int64, force bool) (nodeapi.WarpS
 }
 
 // cascade is the node's part in cascades: its relay listener when other nodes leave
-// through it, and the other nodes it sends inbounds (and its own relay) to. Keys and
-// relays are made by the API when an exit is chosen; a missing one leaves that exit out,
-// and the inbounds behind it fail instead of going direct.
-func (s *Syncer) cascade(ctx context.Context, n db.Node, inbounds []db.Inbound) (*nodeapi.Relay, []nodeapi.Exit, error) {
+// through it now (cas), and the other nodes it sends inbounds (and its own relay) to. Keys
+// and relays are made by the API when an exit is chosen; a missing one leaves that exit
+// out, and the inbounds behind it fail instead of going direct. A key of a node that no
+// longer leaves through this one stays in the database, out of the listener.
+func (s *Syncer) cascade(ctx context.Context, n db.Node, inbounds []db.Inbound, cas *domain.Cascade) (*nodeapi.Relay, []nodeapi.Exit, error) {
 	q := s.m.st.Q
 	if n.Enabled == 0 {
 		return nil, nil, nil
@@ -960,7 +969,7 @@ func (s *Syncer) cascade(ctx context.Context, n db.Node, inbounds []db.Inbound) 
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(users) > 0 {
+		if users = cas.RelaySources(n.ID, users); len(users) > 0 {
 			t, err := proto.Parse(own.Config)
 			if err != nil {
 				return nil, nil, err
