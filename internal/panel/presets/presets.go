@@ -246,6 +246,21 @@ func SetDest(t proto.Template, dest, sni string) error {
 	return nil
 }
 
+// SetServerNames keeps a template's REALITY target and changes the names it is shown under:
+// links carry the first, the node lets in clients that send any of them.
+func SetServerNames(t proto.Template, names []string) error {
+	r, ok := t["reality-config"].(map[string]any)
+	if !ok {
+		return &proto.Error{Code: "dest_no_reality", Field: "reality-config"}
+	}
+	list := make([]any, 0, len(names))
+	for _, n := range names {
+		list = append(list, n)
+	}
+	r["server-names"] = list
+	return nil
+}
+
 // Dest reads the REALITY target of a template ("" when there is none).
 func Dest(t proto.Template) (dest string, serverNames []string) {
 	r, ok := t["reality-config"].(map[string]any)

@@ -143,6 +143,11 @@ pub fn lines(h: &Hello, api_port: Option<u16>) -> Vec<(Level, String)> {
     let because = if detail.is_empty() { String::new() } else { format!(": {detail}") };
     if h.ok {
         let mut out = vec![(Level::Ok, "The panel connected to this node.".to_owned())];
+        // The panel had lost the node at its old address and moved it to this one.
+        if let Some(from) = h.param("moved_from") {
+            out.push((Level::Ok, format!("This server's address changed: the panel moved the node from {from} to {node_host} by itself")));
+            return out;
+        }
         let seen = h.seen_ip.as_deref().and_then(|s| s.parse::<IpAddr>().ok());
         let known = host.as_deref().and_then(|s| s.parse::<IpAddr>().ok());
         if let (Some(seen), Some(known)) = (seen, known)
@@ -265,6 +270,11 @@ mod tests {
         );
         assert_eq!(lines(&h, None), [(Level::Ok, "The panel connected to this node.".to_owned())]);
         // a name for the host is no reason to compare
+        let moved = hello(
+            r#"{"at":"a","started":"b","final":true,"ok":true,"seen_ip":"198.51.100.9","host":"198.51.100.9","params":{"moved_from":"203.0.113.10"}}"#,
+        );
+        let said = lines(&moved, None);
+        assert!(said.len() == 2 && said[1].1.contains("from 203.0.113.10 to 198.51.100.9"), "{said:?}");
         let named = hello(r#"{"at":"a","started":"b","final":true,"ok":true,"seen_ip":"203.0.113.10","host":"node.example.com"}"#);
         assert_eq!(lines(&named, None).len(), 1);
     }

@@ -1835,6 +1835,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/former-domains/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Перестать отвечать по прежнему домену: старые ссылки с ним перестанут работать */
+        delete: operations["remove-former-domain"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/reset-admin-path": {
         parameters: {
             query?: never;
@@ -3542,6 +3559,16 @@ export interface components {
             /** @description Панель видит каталог данных сервера; иначе ставить адаптеры нельзя */
             supported: boolean;
         };
+        AddressStatus: {
+            /** Format: date-time */
+            checked_at?: string;
+            found?: string;
+            /** Format: date-time */
+            moved_at?: string;
+            moved_from?: string;
+            reaches: boolean;
+            unchecked?: boolean;
+        };
         AdjustBalanceInputBody: {
             /**
              * Format: int64
@@ -3615,6 +3642,8 @@ export interface components {
             error?: string;
             /** @description Кто держал порт 80 (port80_busy), если это видно */
             holder?: string;
+            /** @description На какое имя заказан сертификат: при смене домена новое */
+            identifier?: string;
         };
         AuditEntry: {
             /** @description Например user.create, settings.update, auth.login_failed */
@@ -4568,6 +4597,32 @@ export interface components {
              * @description Сколько пользователей в папке, скрытые тоже
              */
             users: number;
+        };
+        FormerStatus: {
+            /** @enum {string} */
+            ca?: "letsencrypt" | "zerossl" | "google";
+            /** Format: date-time */
+            checked_at: string;
+            /**
+             * Format: date-time
+             * @description Без действующего сертификата имя уберётся само в это время
+             */
+            drop_at?: string;
+            /** @description Код errors.acme последнего заказа */
+            error?: string;
+            error_detail?: string;
+            /** @enum {string} */
+            kind: "own" | "none";
+            name: string;
+            /** Format: date-time */
+            not_after?: string;
+            /**
+             * Format: date-time
+             * @description Когда имя перестало быть именем панели
+             */
+            since: string;
+            /** @description Бывший домен подписок: по нему открываются только подписки */
+            sub?: boolean;
         };
         GeoAnswer: {
             /** @description ISO 3166-1 alpha-2 */
@@ -6073,7 +6128,9 @@ export interface components {
             acme_email?: string;
             any_port?: boolean;
             app_branding?: boolean;
+            auto_node_address?: boolean;
             auto_port?: boolean;
+            auto_public_host?: boolean;
             auto_sni?: boolean;
             brand?: string;
             /** @description #RRGGBB или пусто */
@@ -6088,6 +6145,8 @@ export interface components {
             device_require_hwid?: boolean;
             device_unbind?: components["schemas"]["UnbindRules"];
             domain?: string;
+            /** @description Сохранить новый домен или адрес, не дожидаясь сертификата на него (обычно панель сначала получает сертификат, а старое имя работает дальше) */
+            force_domain?: boolean;
             /** @enum {string} */
             happ_crypt?: "off" | "api" | "local";
             happ_hide_settings?: boolean;
@@ -6978,13 +7037,19 @@ export interface components {
             acme_eab_kid: string;
             /** @description E-mail для центра сертификации; ZeroSSL привязывает к нему аккаунт */
             acme_email: string;
+            /** @description Последняя проверка адреса сервера: ведёт ли он на эту панель */
+            address_check?: components["schemas"]["AddressStatus"];
             admin_url: string;
             /** @description Когда запасные порты (2053, 2083…) заняты, панель сама берёт любой свободный из 20000-32767: для нового подключения без порта и при автопереносе. Эти порты установщик в файрволе не открывает */
             any_port: boolean;
             /** @description Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки */
             app_branding: boolean;
+            /** @description Панель сама переносит удалённую ноду на новый IP, когда не может достучаться до неё по старому, а нода прислала hello с нового и ответила там */
+            auto_node_address: boolean;
             /** @description Переносить подключение на другой порт, если клиенты перестали до него доходить */
             auto_port: boolean;
+            /** @description Панель сама сохраняет новый «Адрес сервера» (IP), когда сохранённый перестал вести на неё, а новый проверен: хостер сменил IP, панель переехала */
+            auto_public_host: boolean;
             /** @description Менять сайт маскировки REALITY, если он перестал подходить */
             auto_sni: boolean;
             brand: string;
@@ -7007,6 +7072,8 @@ export interface components {
             /** @description Сколько устройств подписчик может отвязать сам и через сколько отвязанное может вернуться */
             device_unbind: components["schemas"]["UnbindRules"];
             domain: string;
+            /** @description Прежние домены панели и подписок (и адрес панели, у которой не было домена): старые ссылки, вебхуки и ключи нод работают через них, пока имя ведёт на сервер */
+            former_domains: components["schemas"]["FormerStatus"][];
             /**
              * @description Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама
              * @enum {string}
@@ -12790,6 +12857,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Status"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "remove-former-domain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsView"];
                 };
             };
             /** @description Error */

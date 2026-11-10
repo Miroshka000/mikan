@@ -17,6 +17,7 @@ mod lock;
 mod net;
 mod ops;
 mod panelfs;
+mod panelip;
 mod redact;
 mod release;
 mod relocate;
@@ -88,6 +89,21 @@ enum Cmd {
     },
     /// Print the panel's link
     Url,
+    /// The panel's domain: show it, change it (the old one keeps working for the links handed
+    /// out with it while it leads here), or drop it with --clear
+    Domain {
+        /// The new domain, such as vpn.example.com
+        name: Option<String>,
+        /// No domain any more: the links go to the server's address
+        #[arg(long, conflicts_with = "name")]
+        clear: bool,
+    },
+    /// The server's address the links use without a domain: show it or change it (the panel
+    /// follows a new IP by itself as well)
+    Address {
+        /// The new address
+        ip: Option<String>,
+    },
     /// Set a new admin password; all sessions end
     ResetPassword,
     /// Give the panel a new secret link
@@ -251,6 +267,15 @@ fn main() -> ExitCode {
         Some(Cmd::Support { code, dry_run }) => support::run(&code, dry_run),
         Some(Cmd::Logs { service }) => ops::logs(service.as_deref()),
         Some(Cmd::Url) => ops::admin(&["url"]),
+        Some(Cmd::Domain { name, clear }) => match (name, clear) {
+            (_, true) => ops::admin(&["domain", "--clear"]),
+            (Some(n), _) => ops::admin(&["domain", &n]),
+            (None, _) => ops::admin(&["domain"]),
+        },
+        Some(Cmd::Address { ip }) => match ip {
+            Some(ip) => ops::admin(&["address", &ip]),
+            None => ops::admin(&["address"]),
+        },
         Some(Cmd::ResetPassword) => ops::admin(&["reset-password"]),
         Some(Cmd::ResetPath) => ops::admin(&["reset-path"]),
         Some(Cmd::Disable2fa) => ops::admin(&["disable-2fa"]),

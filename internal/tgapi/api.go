@@ -471,6 +471,25 @@ func (c *Client) SetMenuButton(ctx context.Context, text, url string) error {
 	return c.call(ctx, "setChatMenuButton", map[string]any{"menu_button": btn}, nil)
 }
 
+// MenuButton is the Mini App button of the private chats: its text and link, "" for both
+// while the chats show the command list.
+func (c *Client) MenuButton(ctx context.Context) (text, url string, err error) {
+	var out struct {
+		Type   string `json:"type"`
+		Text   string `json:"text"`
+		WebApp struct {
+			URL string `json:"url"`
+		} `json:"web_app"`
+	}
+	if err := c.call(ctx, "getChatMenuButton", map[string]any{}, &out); err != nil {
+		return "", "", err
+	}
+	if out.Type != "web_app" {
+		return "", "", nil
+	}
+	return out.Text, out.WebApp.URL, nil
+}
+
 // SuccessfulPayment is what Telegram reports after a Stars payment.
 type SuccessfulPayment struct {
 	Currency       string `json:"currency"`

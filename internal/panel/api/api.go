@@ -34,6 +34,7 @@ import (
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/reach"
 	"mikan/internal/panel/secure"
+	"mikan/internal/panel/selfaddr"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -134,6 +135,21 @@ type Deps struct {
 	// SubCerts is that certificate. nil in development and tests.
 	SubDomain func(name string)
 	SubCerts  SubCerts
+	// StageCert gets the certificate for a new name of the panel ready before the name is
+	// saved (acme.Manager.Stage), StageSubCert the subscription domain's; nil in development.
+	StageCert, StageSubCert func(ctx context.Context, id string, wait time.Duration) acme.Staged
+	// AddressChanged follows a change of the panel's address saved just now: the former
+	// names keep their certificates, the panel's node its self-steal site, the bot's button
+	// and the nodes follow; nil in tests.
+	AddressChanged func(ctx context.Context)
+	// Formers are the former names and their certificates (acme.Formers.Status); nil in
+	// development, where the saved list is shown as it is.
+	Formers func() []acme.FormerStatus
+	// FormerRemoved follows a former name the admin let go; nil in tests.
+	FormerRemoved func(ctx context.Context, name string)
+	// AddressCheck is the panel's last look at its server's address (selfaddr.Watcher);
+	// nil where the panel does not look (development, tests).
+	AddressCheck func() selfaddr.AddressStatus
 	// SetCert installs the admin's own certificate for the panel, ClearCert goes back to
 	// Let's Encrypt; nil in development.
 	SetCert   func(ctx context.Context, certPEM, keyPEM []byte) error

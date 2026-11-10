@@ -1,16 +1,19 @@
 package node
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net"
 	"net/netip"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"mikan/internal/hostchan"
+	"mikan/internal/netaddr"
 	"mikan/internal/nodeapi"
 )
 
@@ -25,7 +28,9 @@ import (
 // panel behind NAT or with a second address is not locked out by the panel's own guess.
 // And when the panel stays away for nodeapi.APILockStale (it moved to an address nobody
 // knew), both the listener and the host's rule let everyone in again, the panel gets in
-// with its new address, and the rule comes back with it.
+// with its new address, and the rule comes back with it. A panel with a domain is let in
+// sooner: the node looks up the host of the panel's address (DesiredState.PanelURL) once a
+// minute, and the addresses it leads to are the panel's too.
 
 const (
 	// apiLockFrom is how many of the addresses the panel came from are kept: its IPv4 and
@@ -37,6 +42,8 @@ const (
 	// apiHostSilent is how long the host may take to put the rule in before the panel is
 	// told it did not: its timer looks every minute.
 	apiHostSilent = 3 * time.Minute
+	// panelLookupEvery is how often the host of the panel's address is looked up.
+	panelLookupEvery = time.Minute
 )
 
 // apiLock is the lock's state; the zero allow (nil) is off.
@@ -54,10 +61,18 @@ type apiLock struct {
 	// when; "" while it is not known (the host may hold a rule of before).
 	asked   string
 	askedAt time.Time
+	// panelHost is the host of the panel's address; panelAddrs what it leads to, looked up
+	// at lookedAt. resolve looks a name up; tests replace it.
+	panelHost  string
+	panelAddrs []netip.Addr
+	lookedAt   time.Time
+	resolve    func(ctx context.Context, host string) ([]netip.Addr, error)
 }
 
 func newAPILock(ch *hostchan.Channel, log *slog.Logger, now func() time.Time) *apiLock {
-	l := &apiLock{ch: ch, log: log, now: now, asked: "off"}
+	l := &apiLock{ch: ch, log: log, now: now, asked: "off", resolve: func(ctx context.Context, host string) ([]netip.Addr, error) {
+		return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	}}
 	if s, ok := ch.ReadAPILockSeen(); ok {
 		if s.At > 0 {
 			l.seen = time.Unix(s.At, 0)
@@ -97,6 +112,64 @@ func (l *apiLock) set(allow []string) {
 	l.sync()
 }
 
+// setPanel takes the panel's address of a new state: the addresses its host leads to are
+// let in. An address literal is taken at once, a name is looked up by tick.
+func (l *apiLock) setPanel(panelURL string) {
+	host := ""
+	if u, err := url.Parse(panelURL); err == nil && u.Scheme == "https" {
+		host = strings.ToLower(u.Hostname())
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if host == l.panelHost {
+		return
+	}
+	l.panelHost, l.panelAddrs, l.lookedAt = host, nil, time.Time{}
+	if a, err := netip.ParseAddr(host); err == nil && netaddr.IsPublic(a) {
+		l.panelAddrs = []netip.Addr{a.Unmap()}
+	}
+	l.sync()
+}
+
+// lookUpPanel looks the host of the panel's address up again once panelLookupEvery: a
+// panel that moved with its domain gets in as soon as the name leads to its new address.
+// What was known stays when the lookup fails.
+func (l *apiLock) lookUpPanel() {
+	l.mu.Lock()
+	host, due := l.panelHost, l.now().Sub(l.lookedAt) >= panelLookupEvery
+	l.mu.Unlock()
+	if host == "" || !due {
+		return
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	found, err := l.resolve(ctx, host)
+	cancel()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.panelHost != host {
+		return
+	}
+	l.lookedAt = l.now()
+	if err != nil {
+		return
+	}
+	var addrs []netip.Addr
+	for _, a := range found {
+		// Only the internet: a name that led into the node's own network would open the API to it.
+		if a = a.Unmap(); netaddr.IsPublic(a) && !slices.Contains(addrs, a) {
+			addrs = append(addrs, a)
+		}
+	}
+	slices.SortFunc(addrs, func(a, b netip.Addr) int { return a.Compare(b) })
+	if !slices.Equal(addrs, l.panelAddrs) {
+		l.panelAddrs = addrs
+		l.sync()
+	}
+}
+
 // active says whether strangers are refused now: the lock is on and the panel came lately.
 // Call with mu held.
 func (l *apiLock) active(now time.Time) bool {
@@ -114,7 +187,7 @@ func (l *apiLock) admit(a netip.Addr) bool {
 	if !l.active(l.now()) {
 		return true
 	}
-	if slices.Contains(l.from, a) {
+	if slices.Contains(l.from, a) || slices.Contains(l.panelAddrs, a) {
 		return true
 	}
 	for _, p := range l.allow {
@@ -158,6 +231,7 @@ func (l *apiLock) contact(remote string) {
 // tick runs every few seconds: it lifts the lock when the host's admin did, and takes the
 // rule away from the host when the panel stayed away.
 func (l *apiLock) tick() {
+	l.lookUpPanel()
 	lifted := l.ch.TakeAPILifted()
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -195,7 +269,7 @@ func (l *apiLock) wanted(now time.Time) []string {
 	for _, p := range l.allow {
 		nets = append(nets, p.String())
 	}
-	for _, a := range l.from {
+	for _, a := range slices.Concat(l.from, l.panelAddrs) {
 		nets = append(nets, netip.PrefixFrom(a, a.BitLen()).String())
 	}
 	slices.Sort(nets)
@@ -281,6 +355,28 @@ func (e *Engine) apiLock() *apiLock {
 
 // PanelContact notes a request that came over the panel's TLS, from remote ("ip:port").
 func (e *Engine) PanelContact(remote string) { e.apiLock().contact(remote) }
+
+// PanelSeen is when the panel last reached the node over its TLS; zero before it did.
+func (e *Engine) PanelSeen() time.Time {
+	l := e.apiLock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.seen
+}
+
+// PanelURL is the panel's address its last state named, the one saved before a restart
+// until the panel sends one; "" while none named it.
+func (e *Engine) PanelURL() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.appliedAny {
+		return e.applied.PanelURL
+	}
+	if e.saved != nil && e.saved.ok {
+		return e.saved.state.PanelURL
+	}
+	return ""
+}
 
 // TickAPILock is called every few seconds (see apiLock.tick).
 func (e *Engine) TickAPILock() { e.apiLock().tick() }

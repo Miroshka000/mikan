@@ -30,6 +30,7 @@ import (
 	"mikan/internal/panel/ipgeo"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/reach"
+	"mikan/internal/panel/selfaddr"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
@@ -103,6 +104,7 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	var (
 		certs     *acme.Manager
 		subCerts  *acme.Manager
+		formers   *acme.Formers
 		nodesACME *acme.Nodes
 	)
 	// The subscription domain gets its own certificate; clients that name another get the
@@ -121,6 +123,10 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 		certs.Load(ctx)
 		opts.Certs = certs
 		opts.HSTS = certs.Trusted
+		// The names the panel answered at before keep their certificates from the start.
+		formers = certs.Formers(names)
+		formers.Reconcile(ctx, false)
+		opts.Formers = formers
 		// Each remote node's public certificate, the challenge answered on its port 80.
 		nodesACME = certs.Nodes(func(ctx context.Context) ([]acme.NodeTarget, error) {
 			nodes, err := st.Q.ListNodes(ctx)
@@ -147,6 +153,13 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 			return out, nil
 		})
 		opts.NodesACME = nodesACME
+	}
+	opts.Names = names
+	if !cfg.Dev {
+		// The panel saves the address its server has now when the saved one leads elsewhere:
+		// it proves the new one with a token of its own over its HTTPS port.
+		opts.SelfAddr = &selfaddr.Watcher{Set: set, Prober: &selfaddr.Prober{}, DNS: opts.DNS, Egress: selfaddr.Egress,
+			Interfaces: func() []netip.Addr { return dnscheck.Own("") }, Log: logger, Now: time.Now}
 	}
 	opts.TLS = NewNodeTLS(cfg.DataDir, nodeCerts, certs, nodesACME, set, logger, time.Now)
 	opts.PanelCert = func() (nodetls.Pair, error) { return nodetls.LoadOrCreate(nodesDir, time.Now()) }
@@ -218,6 +231,7 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	if certs != nil {
 		running.Go(func() { certs.Run(workers) })
 		running.Go(func() { subCerts.Run(workers) })
+		running.Go(func() { formers.Run(workers) })
 		running.Go(func() { nodesACME.Run(workers) })
 		// kill -HUP (an external tool's renewal hook) serves a new custom certificate now.
 		hup := make(chan os.Signal, 1)

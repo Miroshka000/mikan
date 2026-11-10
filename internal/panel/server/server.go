@@ -24,10 +24,15 @@ type Server struct {
 	// hello answers a node's hello and says so; whatever it does not answer is served
 	// like any unknown path (see nodehello). nil: none.
 	hello func(w http.ResponseWriter, r *http.Request) bool
+	// self answers the panel's own probe of its address (selfaddr) the same way. nil: none.
+	self func(w http.ResponseWriter, r *http.Request) bool
 }
 
 // SetHello takes the handler of the nodes' hellos.
 func (s *Server) SetHello(h func(w http.ResponseWriter, r *http.Request) bool) { s.hello = h }
+
+// SetSelf takes the handler of the panel's own probes of its address.
+func (s *Server) SetSelf(h func(w http.ResponseWriter, r *http.Request) bool) { s.self = h }
 
 // SetLegacy takes the handler of the old panel's subscription links.
 func (s *Server) SetLegacy(h http.Handler) { s.legacy = h }
@@ -89,6 +94,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 		r2.URL.RawPath = ""
 		s.legacy.ServeHTTP(w, r2)
 	case s.hello != nil && s.hello(w, r):
+	case s.self != nil && s.self(w, r):
 	default:
 		s.other(w, r)
 	}

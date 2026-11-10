@@ -288,6 +288,18 @@ pub fn requested() -> Result<()> {
     if !install.node {
         return Ok(());
     }
+    // A node installed with --panel-ip lets the panel's address alone in through ufw: while
+    // the panel stays away, the rule follows the panel's address (panelip).
+    if let Some(port) = install.node_port() {
+        let seen = Dir::open(Path::new(DIR), "data/node/apilock", false).ok().flatten().and_then(|d| seen(&d));
+        if !seen.is_some_and(|at| now() - at < crate::panelip::SILENT) {
+            match crate::panelip::follow(port) {
+                Ok(Some(note)) => crate::out(&note),
+                Ok(None) => {}
+                Err(e) => crate::out(&format!("api port: the rule did not follow the panel: {e:#}")),
+            }
+        }
+    }
     let mut st = load_state();
     let Some(dir) = hostreq::dir(true, "apilock")? else {
         // The node never asked; a rule of before (its data moved away) still goes.

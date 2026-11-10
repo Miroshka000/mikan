@@ -56,6 +56,13 @@ const (
 	// KeySupportAccess lets the admin open support access (internal/panel/support); off, no
 	// grant can be made and the live one ends.
 	KeySupportAccess = "support_access"
+	// KeyAutoAddress lets the panel save the address its server has now in place of a
+	// saved one that leads elsewhere (internal/panel/selfaddr); on unless switched off.
+	KeyAutoAddress = "auto_public_host"
+	// KeyAutoNodeAddress lets the panel move a remote node it cannot reach to the address
+	// the node's hello came from, once the node answers there (internal/panel/hello); on
+	// unless switched off.
+	KeyAutoNodeAddress = "auto_node_address"
 	// Devices (domain.Devices): bind subscriptions to devices, on unless switched off;
 	// refuse apps that send no device id instead of seating them together, off by default.
 	KeyDeviceBinding = "device_binding"
@@ -153,22 +160,24 @@ type Switch struct {
 
 // The panel's switches.
 var (
-	AutoPort       = Switch{KeyAutoPort, true}
-	AutoSNI        = Switch{KeyAutoSNI, true}
-	AnyPort        = Switch{KeyAnyPort, false}
-	WideScan       = Switch{KeyWideScan, false}
-	DeviceBinding  = Switch{KeyDeviceBinding, true}
-	RequireHWID    = Switch{KeyRequireHWID, false}
-	AutoUpdate     = Switch{KeyAutoUpdate, false}
-	NodesFollow    = Switch{KeyNodesFollow, true}
-	ShowGoals      = Switch{KeyShowGoals, true}
-	AppBranding    = Switch{KeyAppBranding, false}
-	HappHide       = Switch{KeyHappHide, false}
-	InactiveServer = Switch{KeyInactiveServer, false}
-	XrayJSON       = Switch{KeyXrayJSON, true}
-	SubBuiltin     = Switch{KeySubBuiltin, true}
-	TrafficDetail  = Switch{KeyTrafficDetail, false}
-	SupportAccess  = Switch{KeySupportAccess, true}
+	AutoPort        = Switch{KeyAutoPort, true}
+	AutoSNI         = Switch{KeyAutoSNI, true}
+	AnyPort         = Switch{KeyAnyPort, false}
+	WideScan        = Switch{KeyWideScan, false}
+	DeviceBinding   = Switch{KeyDeviceBinding, true}
+	RequireHWID     = Switch{KeyRequireHWID, false}
+	AutoUpdate      = Switch{KeyAutoUpdate, false}
+	NodesFollow     = Switch{KeyNodesFollow, true}
+	ShowGoals       = Switch{KeyShowGoals, true}
+	AppBranding     = Switch{KeyAppBranding, false}
+	HappHide        = Switch{KeyHappHide, false}
+	InactiveServer  = Switch{KeyInactiveServer, false}
+	XrayJSON        = Switch{KeyXrayJSON, true}
+	SubBuiltin      = Switch{KeySubBuiltin, true}
+	TrafficDetail   = Switch{KeyTrafficDetail, false}
+	SupportAccess   = Switch{KeySupportAccess, true}
+	AutoAddress     = Switch{KeyAutoAddress, true}
+	AutoNodeAddress = Switch{KeyAutoNodeAddress, true}
 )
 
 // ValidLang says whether s is a language of the panel.

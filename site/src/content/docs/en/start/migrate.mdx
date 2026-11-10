@@ -84,7 +84,7 @@ A mikan backup goes onto a freshly installed server, see [Restore](/mikan/en/ope
 
 3. Restore the backup: `mikan restore /path/to/mikan-….tar.gz`.
 
-4. If the server has another IP, change "Server address" in **Settings → General → Server**, and point the domain's A record at the new server. Subscription links are built from this address, see [Change the domain or address](/mikan/en/start/domain/#change-the-domain-or-address). With a [subscription domain](/mikan/en/subscriptions/domain/), clients' links do not change in a move.
+4. Point the domain's A record at the new server. The panel finds the new IP and saves it by itself within minutes (or: `mikan address IP` on the new server), see [The server's IP changed](/mikan/en/start/domain/#the-servers-ip-changed). With a domain and with a [subscription domain](/mikan/en/subscriptions/domain/), clients' links do not change in a move; without a domain, clients have to add the subscription again.
 
 5. The connection to the nodes comes back by itself. If "Node API from the panel's IP only" is on for them, the rule lifts itself after 15 minutes and comes back with the new address, see [Hardening a node](/mikan/en/nodes/hardening/#node-api-from-the-panels-ip-only).
 

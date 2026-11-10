@@ -271,6 +271,12 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	st.Detail = snap.detail
 	st.HTTPRedirect = n.HttpRedirect != 0 && n.Address != ""
 	st.APIAllow = s.apiAllow(ctx, n)
+	if n.Address != "" {
+		// Where the node says hello: the panel's address now, not the one in its join key.
+		if ep, err := s.m.set.Endpoint(ctx); err == nil {
+			st.PanelURL = ep.URL()
+		}
+	}
 	if st.OwnPorts, err = s.ownPorts(ctx, n); err != nil {
 		return st, "", err
 	}

@@ -121,7 +121,7 @@ func run() error {
 		// With the panel's API lock on, strangers are closed before the TLS handshake.
 		go serve(tls.NewListener(eng.APIListener(tcp), cfg))
 		log.Info("node api for the panel", "port", key.Port)
-		go helloLoop(ctx, key, dataDir, log)
+		go helloLoop(ctx, key, eng, dataDir, log)
 	}
 
 	t := time.NewTicker(10 * time.Second)

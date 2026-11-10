@@ -40,6 +40,7 @@ import (
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/reach"
+	"mikan/internal/panel/selfaddr"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -82,6 +83,8 @@ type Panel struct {
 	Addons    *addons.Manager
 	AddonsAPI *panelapi.Server
 	server    *server.Server
+	address   *addressFollower
+	selfAddr  *selfaddr.Watcher
 	spa       *server.SPA
 	subPage   *server.SPA
 	sessions  *auth.Sessions
@@ -129,6 +132,14 @@ type Options struct {
 	// the panel runs no server, and in development.
 	SubDomain func(name string)
 	SubCerts  *acme.Manager
+	// Formers keeps the names the panel answered at before working, Names serves the
+	// certificates by the name clients ask for. nil where the panel runs no server; Formers
+	// nil in development too.
+	Formers *acme.Formers
+	Names   *tlscert.BySNI
+	// SelfAddr looks at the server's address now and then and saves the one that leads to
+	// the panel; nil: not looked at (development, tests).
+	SelfAddr *selfaddr.Watcher
 	// DataDir is where the host updater and the panel meet (update/); "" turns that off.
 	DataDir string
 	// Releases finds the release to update to; nil never checks.
@@ -375,6 +386,35 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		return subHandler.PreviewTemplate(ctx, req)
 	}
 	deps.HappLink = func(ctx context.Context, u db.User) (string, error) { return subHandler.HappLink(ctx, u) }
+	// What hangs on the panel's address follows it, whoever changed it.
+	p.address = &addressFollower{set: set, formers: o.Formers, certs: o.Certs, subCerts: o.SubCerts, names: o.Names, nodes: p.Nodes,
+		inbounds: deps.Inbounds, gateway: p.Gateway, log: o.Log, now: o.Now}
+	deps.AddressChanged = func(ctx context.Context) {
+		if err := p.address.Check(ctx); err != nil {
+			o.Log.Warn("address: not followed", "err", err)
+		}
+	}
+	if o.Certs != nil {
+		deps.StageCert = o.Certs.Stage
+	}
+	if o.SubCerts != nil {
+		deps.StageSubCert = o.SubCerts.Stage
+	}
+	if o.Formers != nil {
+		deps.Formers = o.Formers.Status
+		o.Formers.OnDrop(p.address.formerDropped)
+	}
+	if o.SelfAddr != nil {
+		p.selfAddr = o.SelfAddr
+		o.SelfAddr.Moved = p.addressMoved
+		deps.AddressCheck = o.SelfAddr.Status
+	}
+	deps.FormerRemoved = func(ctx context.Context, name string) {
+		if o.Formers != nil {
+			o.Formers.Reconcile(ctx, false)
+		}
+		p.address.formerDropped(ctx, name)
+	}
 	apiHandler, _, err := api.New(deps)
 	if err != nil {
 		return nil, err
@@ -447,7 +487,10 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	p.server.SetHSTS(o.HSTS)
 	if p.Nodes != nil && o.PanelCert != nil {
-		p.server.SetHello(nodeHello(st, p.Nodes, o).Serve)
+		p.server.SetHello(nodeHello(st, p.Nodes, o, p.nodeMoved).Serve)
+	}
+	if p.selfAddr != nil {
+		p.server.SetSelf(p.selfAddr.Prober.Serve)
 	}
 	p.Handler = p.server
 	return p, nil
@@ -506,7 +549,10 @@ func (p *Panel) Run(ctx context.Context) {
 	if p.NodeUpdates != nil {
 		workers = append(workers, p.NodeUpdates.Run)
 	}
-	workers = append(workers, p.Gateway.Run, p.Telegram.Run, p.Billing.Run, p.AddonsAPI.Run, p.AddonsAPI.RunPush, p.Webhooks.Run, (&botAddon{p: p}).Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
+	if p.selfAddr != nil {
+		workers = append(workers, p.selfAddr.Run)
+	}
+	workers = append(workers, p.address.Run, p.Gateway.Run, p.Telegram.Run, p.Billing.Run, p.AddonsAPI.Run, p.AddonsAPI.RunPush, p.Webhooks.Run, (&botAddon{p: p}).Run, p.Updates.Run, p.Alerts.Run, p.Backups.Run, p.Importer.Run,
 		func(ctx context.Context) {
 			pace.Tick(ctx, 5*time.Second, func(ctx context.Context) {
 				if _, err := p.Apply(ctx); err != nil {

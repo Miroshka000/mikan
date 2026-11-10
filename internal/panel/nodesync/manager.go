@@ -149,6 +149,16 @@ func (m *Manager) SlotsChanged() {
 	}
 }
 
+// AddressChanged follows a change of the panel's address (settings.Address): the API locks
+// take the panel's addresses anew, and every node gets its state again, the cascades into
+// the panel's own node with its new address.
+func (m *Manager) AddressChanged() {
+	m.addrMu.Lock()
+	m.addrAt = time.Time{}
+	m.addrMu.Unlock()
+	m.SlotsChanged()
+}
+
 // NodesChanged restarts syncers after a node was added, removed or re-keyed.
 func (m *Manager) NodesChanged() {
 	m.generation.Add(1)

@@ -36,7 +36,9 @@ The panel stores only the key's fingerprint. If you lose it, the "Change key" bu
 
 The key carries the panel's address: when the node starts, it reports itself to the panel with a signed request, and the panel dials the node back at once. Keys from older panels have no panel address, so there is no such check for them and the node works as before. If the node's server goes out to the internet from a different IP than the one set in the panel, both the terminal and the panel say so: "the node reported from IP Y, the panel has X". Fix the address in **Configure**.
 
-The key contains the node's private key. To keep it out of the process list, you can pass it through the `MIKAN_JOIN_KEY` variable. The `--panel-ip IP` flag opens the node's API port only to the panel's address.
+The key contains the node's private key. To keep it out of the process list, you can pass it through the `MIKAN_JOIN_KEY` variable. The `--panel-ip IP` flag opens the node's API port only to the panel's address; should the panel move to another IP, the node moves that rule to the panel's new address by itself.
+
+When the node's server gets a new IP, the node tells the panel its new address (at its start, and when the panel has not reached it for a few minutes). The panel checks that this very node answers there and saves it, and a Telegram notice comes. Clients get the new address with their next subscription update. Turn it off in **Settings → System → Automatic fixes → Move nodes to a new IP**. A node added by a domain just follows its DNS.
 
 You can also add a node from the panel's server: `mikan node add --name NAME --host IP` prints the key.
 

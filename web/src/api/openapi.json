@@ -549,6 +549,35 @@
         ],
         "type": "object"
       },
+      "AddressStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "found": {
+            "type": "string"
+          },
+          "moved_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "moved_from": {
+            "type": "string"
+          },
+          "reaches": {
+            "type": "boolean"
+          },
+          "unchecked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reaches"
+        ],
+        "type": "object"
+      },
       "AdjustBalanceInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -738,6 +767,10 @@
           },
           "holder": {
             "description": "Кто держал порт 80 (port80_busy), если это видно",
+            "type": "string"
+          },
+          "identifier": {
+            "description": "На какое имя заказан сертификат: при смене домена новое",
             "type": "string"
           }
         },
@@ -3297,6 +3330,65 @@
           "color",
           "emoji",
           "users"
+        ],
+        "type": "object"
+      },
+      "FormerStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "ca": {
+            "enum": [
+              "letsencrypt",
+              "zerossl",
+              "google"
+            ],
+            "type": "string"
+          },
+          "checked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "drop_at": {
+            "description": "Без действующего сертификата имя уберётся само в это время",
+            "format": "date-time",
+            "type": "string"
+          },
+          "error": {
+            "description": "Код errors.acme последнего заказа",
+            "type": "string"
+          },
+          "error_detail": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "own",
+              "none"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "not_after": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "since": {
+            "description": "Когда имя перестало быть именем панели",
+            "format": "date-time",
+            "type": "string"
+          },
+          "sub": {
+            "description": "Бывший домен подписок: по нему открываются только подписки",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "since",
+          "kind",
+          "checked_at"
         ],
         "type": "object"
       },
@@ -7351,7 +7443,13 @@
           "app_branding": {
             "type": "boolean"
           },
+          "auto_node_address": {
+            "type": "boolean"
+          },
           "auto_port": {
+            "type": "boolean"
+          },
+          "auto_public_host": {
             "type": "boolean"
           },
           "auto_sni": {
@@ -7396,6 +7494,10 @@
           "domain": {
             "maxLength": 253,
             "type": "string"
+          },
+          "force_domain": {
+            "description": "Сохранить новый домен или адрес, не дожидаясь сертификата на него (обычно панель сначала получает сертификат, а старое имя работает дальше)",
+            "type": "boolean"
           },
           "happ_crypt": {
             "enum": [
@@ -9941,6 +10043,10 @@
             "description": "E-mail для центра сертификации; ZeroSSL привязывает к нему аккаунт",
             "type": "string"
           },
+          "address_check": {
+            "$ref": "#/components/schemas/AddressStatus",
+            "description": "Последняя проверка адреса сервера: ведёт ли он на эту панель"
+          },
           "admin_url": {
             "type": "string"
           },
@@ -9952,8 +10058,16 @@
             "description": "Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки",
             "type": "boolean"
           },
+          "auto_node_address": {
+            "description": "Панель сама переносит удалённую ноду на новый IP, когда не может достучаться до неё по старому, а нода прислала hello с нового и ответила там",
+            "type": "boolean"
+          },
           "auto_port": {
             "description": "Переносить подключение на другой порт, если клиенты перестали до него доходить",
+            "type": "boolean"
+          },
+          "auto_public_host": {
+            "description": "Панель сама сохраняет новый «Адрес сервера» (IP), когда сохранённый перестал вести на неё, а новый проверен: хостер сменил IP, панель переехала",
             "type": "boolean"
           },
           "auto_sni": {
@@ -10001,6 +10115,13 @@
           },
           "domain": {
             "type": "string"
+          },
+          "former_domains": {
+            "description": "Прежние домены панели и подписок (и адрес панели, у которой не было домена): старые ссылки, вебхуки и ключи нод работают через них, пока имя ведёт на сервер",
+            "items": {
+              "$ref": "#/components/schemas/FormerStatus"
+            },
+            "type": "array"
           },
           "happ_crypt": {
             "description": "Шифрованная ссылка для кнопки Happ: off — обычная happ://add/, api — через сервис Happ (адрес подписки уходит на crypto.happ.su), local — панель шифрует сама",
@@ -10168,6 +10289,7 @@
           "public_host",
           "domain",
           "sub_domain",
+          "former_domains",
           "panel_port",
           "sub_port",
           "quiet_hour_utc",
@@ -10181,6 +10303,8 @@
           "sub_routes",
           "client_fingerprint",
           "auto_port",
+          "auto_public_host",
+          "auto_node_address",
           "auto_sni",
           "wide_sni_scan",
           "any_port",
@@ -19549,6 +19673,49 @@
         "tags": [
           "settings"
         ]
+      }
+    },
+    "/api/v1/settings/former-domains/{name}": {
+      "delete": {
+        "operationId": "remove-former-domain",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "maxLength": 253,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingsView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Перестать отвечать по прежнему домену: старые ссылки с ним перестанут работать",
+        "tags": [
+          "settings"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/settings/reset-admin-path": {

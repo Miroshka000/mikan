@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/netip"
@@ -236,5 +237,44 @@ func TestAPIListenerRefusesStrangers(t *testing.T) {
 		a.Close()
 	case <-time.After(5 * time.Second):
 		t.Fatal("an admitted connection did not reach the server")
+	}
+}
+
+// A panel with a domain is let in by the addresses the domain leads to, looked up once a
+// minute: one that moved with its domain does not wait for the lock to lift. An address
+// literal is taken at once; a name that leads into a private network lets nobody in.
+func TestAPILockLetsInThePanelsName(t *testing.T) {
+	f := newLockFixture(t)
+	answer := []netip.Addr{netip.MustParseAddr("198.51.100.50"), netip.MustParseAddr("10.0.0.7")}
+	f.l.resolve = func(context.Context, string) ([]netip.Addr, error) { return answer, nil }
+	f.l.set([]string{})
+	f.l.contact("203.0.113.5:40000") // the panel came: the lock holds
+	f.l.setPanel("https://panel.example.com:2053")
+	if f.admits("198.51.100.50") {
+		t.Fatal("let in before the name was looked up")
+	}
+	f.l.tick()
+	if !f.admits("198.51.100.50") || f.admits("10.0.0.7") || f.admits("192.0.2.9") {
+		t.Fatal("the name's addresses")
+	}
+	if got := f.asked(); !slices.Contains(got, "198.51.100.50/32") || slices.Contains(got, "10.0.0.7/32") {
+		t.Fatalf("the host's rule: %v", got)
+	}
+	// The panel moved with its domain: a minute later the new address gets in.
+	answer = []netip.Addr{netip.MustParseAddr("198.51.100.60")}
+	f.now = f.now.Add(30 * time.Second)
+	f.l.tick()
+	if f.admits("198.51.100.60") {
+		t.Fatal("looked up again within the minute")
+	}
+	f.now = f.now.Add(time.Minute)
+	f.l.contact("203.0.113.5:40000")
+	f.l.tick()
+	if !f.admits("198.51.100.60") || f.admits("198.51.100.50") {
+		t.Fatal("the name's new address")
+	}
+	f.l.setPanel("https://203.0.113.77:2053")
+	if !f.admits("203.0.113.77") {
+		t.Fatal("an address literal")
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"mikan/internal/acmechallenge"
 	"mikan/internal/fsutil"
 	"mikan/internal/panel/settings"
+	"mikan/internal/panel/tlscert"
 )
 
 // issuer orders certificates from the chosen CA for the panel and its nodes: one ACME
@@ -195,6 +196,63 @@ func savePair(dir string, certPEM, keyPEM []byte, ca string) error {
 		return err
 	}
 	return fsutil.WriteFileAtomic(filepath.Join(dir, pairCA), []byte(ca+"\n"), 0o600)
+}
+
+// Beside a pair the panel keeps for itself: prevDir holds the pair a change of the panel's
+// name replaced, which that name keeps serving (Formers takes it from there); nextDir one
+// ordered ahead of a change of the name (Stage).
+const (
+	prevDir = "prev"
+	nextDir = "next"
+)
+
+// keepPrevious copies the pair in dir to dir/prev when the one about to replace it is for
+// another name than id: the name left behind still has it.
+func keepPrevious(dir, id string) error {
+	cur, _, err := loadPair(dir)
+	if err != nil || tlscert.Covers(cur.Leaf, id) {
+		return nil
+	}
+	return copyPair(dir, filepath.Join(dir, prevDir))
+}
+
+// copyPair copies a pair from one directory to another, as whole as savePair writes one.
+func copyPair(from, to string) error {
+	pairMu.Lock()
+	defer pairMu.Unlock()
+	files := map[string][]byte{}
+	for _, name := range []string{pairKey, pairCert, pairCA} {
+		raw, err := os.ReadFile(filepath.Join(from, name))
+		if err != nil && !(name == pairCA && errors.Is(err, os.ErrNotExist)) {
+			return err
+		}
+		files[name] = raw
+	}
+	if err := os.MkdirAll(to, 0o700); err != nil {
+		return err
+	}
+	for _, name := range []string{pairKey, pairCert, pairCA} {
+		if files[name] == nil {
+			continue
+		}
+		if err := fsutil.WriteFileAtomic(filepath.Join(to, name), files[name], 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// removePair deletes the pair in dir and dir itself when nothing else is left in it.
+func removePair(dir string) error {
+	pairMu.Lock()
+	defer pairMu.Unlock()
+	for _, name := range []string{pairCert, pairKey, pairCA} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	_ = os.Remove(dir) // only when empty
+	return nil
 }
 
 func loadPair(dir string) (*tls.Certificate, string, error) {

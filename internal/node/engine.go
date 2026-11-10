@@ -412,6 +412,7 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	e.Reg.SetIngress(st.Filters)
 	e.setRedirect(st.HTTPRedirect)
 	e.apiLock().set(st.APIAllow)
+	e.apiLock().setPanel(st.PanelURL)
 	e.Reg.SetDetail(st.Detail)
 	pools := map[string]string{}
 	for _, in := range st.Inbounds {
@@ -736,6 +737,22 @@ func loadCounters(path string, log *slog.Logger) (counterState, error) {
 // loadState reads the saved desired state; ok is false when there is none to apply: no
 // file, or a broken one, which is kept aside. The panel then pushes the whole state, as
 // it does to any node that reports revision 0.
+// SavedPanelURL is the panel's address in the state the node saved last (DesiredState.
+// PanelURL), for what runs beside the node (mikan-node hello); "" when there is none.
+func SavedPanelURL(dataDir string) string {
+	raw, err := os.ReadFile(filepath.Join(dataDir, stateFile))
+	if err != nil {
+		return ""
+	}
+	var st struct {
+		PanelURL string `json:"panel_url"`
+	}
+	if json.Unmarshal(raw, &st) != nil {
+		return ""
+	}
+	return st.PanelURL
+}
+
 func loadState(path string, log *slog.Logger) (st nodeapi.DesiredState, ok bool, err error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {

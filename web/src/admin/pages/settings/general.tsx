@@ -16,20 +16,43 @@ import { fieldErrors } from "../../../lib/fields";
 import { inlineMarkdown } from "../../../lib/inline-md";
 import { ago, utcHourLabel } from "../../../lib/format";
 import { useSaveSettings } from "./shared";
+import { certRefusal } from "./cert-refusal";
+import { CertRefusalNote, FormerDomains } from "./former-domains";
 import { Select } from "../../../components/select";
 
 const serviceForm = (s: Schemas["SettingsView"]) => ({ brand: s.brand, public_host: s.public_host, domain: s.domain, support_url: s.support_url, quiet_hour_utc: s.quiet_hour_utc });
+
+/** The panel's own look at its server's address: a move it made by itself, or one it is about to make. */
+function AddressCheck({ c }: { c: Schemas["AddressStatus"] | undefined }) {
+  if (!c) return null;
+  if (c.moved_at && c.moved_from) {
+    return <p className="mb-3 text-xs text-[var(--ink-500)]">{t("settings.addressMoved", { from: c.moved_from, ago: ago(c.moved_at) })}</p>;
+  }
+  if (!c.reaches && !c.unchecked && c.found) {
+    return <p className="banner warn mb-3 text-xs">{t("settings.addressFound", { found: c.found })}</p>;
+  }
+  return null;
+}
 
 /** What the service is called, where it lives and where its people ask for help: the first things to fill in. */
 export function ServiceCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   // Saving another card replaces `s`: what is typed here stays.
   const { draft: form, setDraft: setForm, dirty, reset } = useDraft(serviceForm(s));
+  const refusal = certRefusal(save.error, ["domain", "public_host"]);
   const errors = fieldErrors(save.error);
+  if (refusal) delete errors[refusal.field];
+  const address = form.domain.trim().toLowerCase() !== s.domain.toLowerCase() || form.public_host.trim() !== s.public_host;
+  const domainMoves = !!s.domain && form.domain.trim().toLowerCase() !== s.domain.toLowerCase();
+  const send = (force: boolean) =>
+    // The server trims what it keeps: the draft takes it back, or the card stayed unsaved.
+    save.mutate(
+      { brand: form.brand, public_host: form.public_host, domain: form.domain, support_url: form.support_url, quiet_hour_utc: form.quiet_hour_utc, ...(force ? { force_domain: true } : {}) },
+      { onSuccess: (v) => setForm(serviceForm(v)) },
+    );
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    // The server trims what it keeps: the draft takes it back, or the card stayed unsaved.
-    save.mutate({ brand: form.brand, public_host: form.public_host, domain: form.domain, support_url: form.support_url, quiet_hour_utc: form.quiet_hour_utc }, { onSuccess: (v) => setForm(serviceForm(v)) });
+    send(false);
   };
   const set = (k: "brand" | "public_host" | "domain" | "support_url") => (e: React.ChangeEvent<HTMLInputElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   return (
@@ -47,6 +70,22 @@ export function ServiceCard({ s }: { s: Schemas["SettingsView"] }) {
             <input id="s-domain" className="input mono" value={form.domain} onChange={set("domain")} placeholder="vpn.example.com" aria-invalid={!!errors.domain} />
           </Field>
         </div>
+        <AddressCheck c={s.address_check} />
+        {domainMoves ? <p className="banner info mb-3 text-xs">{t("settings.domainChangeNote", { domain: s.domain })}</p> : null}
+        {save.isPending && address ? (
+          <p className="mb-3 text-xs text-[var(--ink-500)]" role="status">
+            {t("settings.certPending")}
+          </p>
+        ) : null}
+        {refusal ? (
+          <CertRefusalNote
+            r={refusal}
+            retrying={save.isPending && !save.variables?.force_domain}
+            forcing={save.isPending && !!save.variables?.force_domain}
+            onRetry={() => send(false)}
+            onForce={() => send(true)}
+          />
+        ) : null}
         <Field label={t("settings.support")} htmlFor="s-support" hint={t("settings.supportHint")} error={errors.support_url}>
           <input id="s-support" className="input" value={form.support_url} onChange={set("support_url")} placeholder="https://t.me/your_support" aria-invalid={!!errors.support_url} />
         </Field>
@@ -63,6 +102,7 @@ export function ServiceCard({ s }: { s: Schemas["SettingsView"] }) {
         </Disclosure>
         <FormActions dirty={dirty} saving={save.isPending} onReset={reset} />
       </form>
+      <FormerDomains list={s.former_domains} />
     </section>
   );
 }
@@ -105,6 +145,8 @@ export function AutoCard({ s }: { s: Schemas["SettingsView"] }) {
   const rows = [
     { key: "auto_port", title: t("settings.autoPort"), sub: t("settings.autoPortSub"), on: s.auto_port },
     { key: "auto_sni", title: t("settings.autoSni"), sub: t("settings.autoSniSub"), on: s.auto_sni },
+    { key: "auto_public_host", title: t("settings.autoAddress"), sub: t("settings.autoAddressSub"), on: s.auto_public_host },
+    { key: "auto_node_address", title: t("settings.autoNodeAddress"), sub: t("settings.autoNodeAddressSub"), on: s.auto_node_address },
   ] as const;
   // Switches with a cost the admin takes on: said before they go on, and kept in view while on.
   const risky = [

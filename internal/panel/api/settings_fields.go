@@ -38,6 +38,13 @@ func value[T any](name, key string, session bool, get func(*patchSettingsBody) *
 		}}
 }
 
+// flag is a switch of the request itself, not a setting: gated like the settings it goes
+// with, nothing written.
+func flag(name string, session bool, get func(*patchSettingsBody) *bool) settingField {
+	return settingField{name, session, func(b *patchSettingsBody) bool { return get(b) != nil },
+		func(context.Context, *settings.Settings, *patchSettingsBody) error { return nil }}
+}
+
 // custom writes a string by its own rule.
 func custom(name string, session bool, get func(*patchSettingsBody) *string, write func(context.Context, *settings.Settings, string) error) settingField {
 	return settingField{name, session, func(b *patchSettingsBody) bool { return get(b) != nil },
@@ -51,6 +58,9 @@ var settingFields = []settingField{
 	text("public_host", settings.KeyPublicHost, true, func(b *patchSettingsBody) *string { return b.PublicHost }),
 	text("domain", settings.KeyDomain, true, func(b *patchSettingsBody) *string { return b.Domain }),
 	text("sub_domain", settings.KeySubDomain, true, func(b *patchSettingsBody) *string { return b.SubDomain }),
+	flag("force_domain", true, func(b *patchSettingsBody) *bool { return b.ForceDomain }),
+	value("auto_public_host", settings.KeyAutoAddress, true, func(b *patchSettingsBody) *bool { return b.AutoAddress }),
+	value("auto_node_address", settings.KeyAutoNodeAddress, true, func(b *patchSettingsBody) *bool { return b.AutoNodeAddress }),
 	value("sub_port", settings.KeySubPort, true, func(b *patchSettingsBody) *int { return b.SubPort }),
 	custom("sub_rules", true, func(b *patchSettingsBody) *string { return b.SubRules }, func(ctx context.Context, set *settings.Settings, v string) error {
 		return settings.Set(ctx, set, settings.KeyRules, strings.TrimRight(v, " \n\r\t"))

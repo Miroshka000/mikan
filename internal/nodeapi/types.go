@@ -69,6 +69,11 @@ type DesiredState struct {
 	// says nothing of what must stay open. Empty but not nil is on too, with nothing open.
 	// Nodes older than it ignore it.
 	OwnPorts []int `json:"own_ports,omitzero"`
+	// PanelURL is the panel's address as it is now (https://host:port): the node says its
+	// hellos there rather than at the address its join key was issued with, which a change
+	// of the panel's domain or address leaves behind, and with the API lock on it lets in
+	// the addresses the host leads to. "": the key's. Nodes older than it ignore it.
+	PanelURL string `json:"panel_url,omitempty"`
 }
 
 // APILockStale is how long the panel may stay away before a node with APIAllow opens its

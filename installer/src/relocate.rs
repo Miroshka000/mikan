@@ -301,7 +301,7 @@ impl Plan {
             format!(
                 "  1. Point the panel's domain (and the subscription domain, if you have one) at {host}'s IP. Subscription links keep working once it does."
             ),
-            "     Without a domain the links hold this server's IP: change Server address in Settings → General → Server on the new panel, and clients take the new links.".into(),
+            "     The new panel finds its own address by itself within minutes (or: mikan address <its IP> there). Without a domain the links handed out hold this server's IP: clients add the subscription again.".into(),
             "  2. The nodes reach the new panel by themselves. Those with \"API only from the panel\" let it in within 15 minutes.".into(),
         ];
         if self.stop_old {

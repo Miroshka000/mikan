@@ -23,6 +23,7 @@ import (
 	"mikan/internal/panel/audit"
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/config"
+	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -35,6 +36,8 @@ Commands:
   serve                         run the panel
   admin bootstrap [flags]       first setup: admin, secret paths, address, language
   admin url                     print the panel's link
+  admin domain [NAME | --clear] the panel's domain: show it, change it (the old one keeps working), or drop it
+  admin address [IP]            the server's address: show it or change it (links use it without a domain)
   admin reset-password          set a new admin password (ends all sessions and revokes all API keys)
   admin reset-path              give the panel a new secret link
   admin disable-2fa             turn off the admin's 2FA
@@ -138,6 +141,10 @@ func adminCmd(ctx context.Context, args []string) error {
 		}
 		printURL(os.Stdout, os.Stderr, u, login)
 		return nil
+	case "domain":
+		return domainCmd(ctx, st, set, args[1:], dnscheck.New(), os.Stdout)
+	case "address":
+		return addressCmd(ctx, st, set, args[1:], dnscheck.New(), os.Stdout)
 	case "reset-password":
 		return resetPassword(ctx, st, args[1:], os.Stdin, os.Stdout)
 	case "reset-path":
