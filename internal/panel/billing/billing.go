@@ -203,7 +203,11 @@ func LoadConfig(ctx context.Context, set *settings.Settings) (Config, error) {
 func (s *Service) Config(ctx context.Context) Config {
 	c, err := s.LoadConfig(ctx)
 	if err != nil {
-		s.d.Log.Warn("billing: payment settings unreadable, selling paused", "err", err)
+		// A caller that left (a page closed before the answer) failed only its own read: the
+		// store is fine and selling goes on for everyone else.
+		if ctx.Err() == nil {
+			s.d.Log.Warn("billing: payment settings unreadable, selling paused", "err", err)
+		}
 		c.Enabled = false
 	}
 	return c
