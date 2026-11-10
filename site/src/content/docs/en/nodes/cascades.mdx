@@ -27,6 +27,15 @@ Traffic is counted once, on the first node. A cascade does not need WARP.
 If the exit node is unavailable, this protocol's traffic does not go direct, the protocol simply does not work until the node is back. This way node A's address is not exposed by accident.
 :::
 
+## Relay camouflage
+
+The client's protocol does not go on between the nodes: node A connects to node B's relay over VLESS REALITY, and that connection looks like a site, as REALITY protocols do. The site is set in node B's **Cascade** window, the **Relay camouflage** field.
+
+- **Automatic** (the default). The relay takes the site of node B's REALITY protocols, the server's own domain first, and changes with them. Without such protocols the panel finds a site next to the server as soon as nodes leave through node B, and replaces it when it stops working.
+- **My own site**. The site is set by hand, with the **Check** and **Find near the server** buttons, as for a protocol.
+
+The relay keeps its keys when its site changes, and the source nodes take the new site by themselves.
+
 ## Longer chains
 
 The **Cascade** button on a node card shows which nodes it sends traffic through, the check status (which address sites see) and the relay status: listening on a port, port taken, or did not start.

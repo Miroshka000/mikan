@@ -101,6 +101,10 @@ type Tuner struct {
 	// relayLeft are the ports each node's relay left lately, by node id: there is no event
 	// table for them as there is for inbounds, so a restart forgets them.
 	relayLeft map[int64]map[string]time.Time
+	// relayFails are the failed checks in a row of each relay's own site, relayPicked when a
+	// site next to its server was last looked for; by node id.
+	relayFails  map[int64]int
+	relayPicked map[int64]time.Time
 
 	busyMu sync.Mutex // one MoveBusy at a time
 
@@ -119,7 +123,8 @@ type state struct {
 
 func New(st *store.Store, set *settings.Settings, nodes Nodes, changes domain.Changes, log *slog.Logger, now func() time.Time, o Options) *Tuner {
 	return &Tuner{st: st, inbounds: domain.NewInbounds(st, nil, now), set: set, nodes: nodes, changes: changes, log: log, now: now, o: o, pick: rand.IntN,
-		state: map[int64]*state{}, busy: map[int64]string{}, relayLeft: map[int64]map[string]time.Time{}, failed: map[string]time.Time{}}
+		state: map[int64]*state{}, busy: map[int64]string{}, relayLeft: map[int64]map[string]time.Time{}, failed: map[string]time.Time{},
+		relayFails: map[int64]int{}, relayPicked: map[int64]time.Time{}}
 }
 
 // Status returns the tuner's view of an inbound; false before its first round.
@@ -181,10 +186,13 @@ func (t *Tuner) Step(ctx context.Context) {
 		return
 	}
 	t.forget(w)
-	if w.now.Sub(t.checkedAt) >= t.o.CheckEvery {
+	checks := w.now.Sub(t.checkedAt) >= t.o.CheckEvery
+	if checks {
 		t.checkedAt = w.now
 		t.checkTargets(ctx, w)
 	}
+	// After the inbounds' checks: a relay follows the site an inbound just moved to.
+	t.relayTargets(ctx, w, checks)
 	for _, n := range w.nodes {
 		t.detect(ctx, w, n)
 	}
@@ -757,20 +765,7 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 			}
 		}
 	}
-	var pick *nodeapi.TargetResult
-	for i := range found.Results {
-		c := &found.Results[i]
-		sni := strings.ToLower(c.SNI)
-		if !c.OK || !c.DNSMatch || w.ownNames[sni] || c.Dest == oldDest || slices.ContainsFunc(oldNames, func(s string) bool { return strings.EqualFold(s, sni) }) {
-			continue
-		}
-		if at, ok := t.failed[strings.ToLower(c.Dest)]; ok && w.now.Sub(at) < 24*time.Hour {
-			continue
-		}
-		if pick == nil || used[strings.ToLower(pick.SNI)] && !used[sni] {
-			pick = c // results come fastest first
-		}
-	}
+	pick := t.chooseTarget(w, found.Results, oldDest, oldNames, used)
 	if pick == nil {
 		t.setStuck(x.ID, "no_target")
 		return false
@@ -788,6 +783,28 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 	}
 	t.changed(ctx, w, n, next, db.AddInboundEventParams{Kind: "sni", OldValue: old, NewValue: pick.SNI, Reason: reason})
 	return true
+}
+
+// chooseTarget is the site of a scan to move to: one that works and whose name leads to
+// where it was found, not the panel's or a node's own name, not the site being left, not
+// one that failed lately, preferably one used (the names the node's other inbounds show)
+// does not hold. Results come fastest first; nil when none will do.
+func (t *Tuner) chooseTarget(w *world, results []nodeapi.TargetResult, oldDest string, oldNames []string, used map[string]bool) *nodeapi.TargetResult {
+	var pick *nodeapi.TargetResult
+	for i := range results {
+		c := &results[i]
+		sni := strings.ToLower(c.SNI)
+		if !c.OK || !c.DNSMatch || w.ownNames[sni] || c.Dest == oldDest || slices.ContainsFunc(oldNames, func(s string) bool { return strings.EqualFold(s, sni) }) {
+			continue
+		}
+		if at, ok := t.failed[strings.ToLower(c.Dest)]; ok && w.now.Sub(at) < 24*time.Hour {
+			continue
+		}
+		if pick == nil || used[strings.ToLower(pick.SNI)] && !used[sni] {
+			pick = c
+		}
+	}
+	return pick
 }
 
 // nodeIP is the IPv4 address clients reach the node at: the /24 around it is scanned.

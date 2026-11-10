@@ -1720,6 +1720,15 @@
       "CascadePatchInputBody": {
         "additionalProperties": false,
         "properties": {
+          "auto_sni": {
+            "description": "true: сайт маскировки служебного входа держит панель; false: dest и server_name задают его",
+            "type": "boolean"
+          },
+          "dest": {
+            "description": "Сайт маскировки служебного входа, host:port; с auto_sni: false",
+            "maxLength": 255,
+            "type": "string"
+          },
           "exit_node_id": {
             "format": "int64",
             "minimum": 0,
@@ -1733,6 +1742,11 @@
               "node"
             ],
             "type": "string"
+          },
+          "server_name": {
+            "description": "Имя для подключений нод; нужно, когда в dest IP",
+            "maxLength": 253,
+            "type": "string"
           }
         },
         "required": [
@@ -1743,6 +1757,14 @@
       "CascadeRelay": {
         "additionalProperties": false,
         "properties": {
+          "auto_sni": {
+            "description": "Сайт держит панель: как у протоколов ноды, иначе подобранный рядом с сервером, и меняет его, когда он перестал работать",
+            "type": "boolean"
+          },
+          "dest": {
+            "description": "Сайт маскировки REALITY служебного входа, host:port",
+            "type": "string"
+          },
           "error": {
             "description": "Почему служебный вход не запустился, как сказала нода",
             "type": "string"
@@ -1773,19 +1795,38 @@
           "port": {
             "type": "string"
           },
+          "server_name": {
+            "description": "Имя сайта (SNI), под которое маскируются подключения нод к служебному входу",
+            "type": "string"
+          },
           "sources": {
             "description": "Ноды, которые выходят через эту",
             "items": {
               "$ref": "#/components/schemas/CascadeHop"
             },
             "type": "array"
+          },
+          "target": {
+            "description": "Откуда сайт: own - свой домен сервера, protocol - как у протоколов ноды, picked - подобран рядом с сервером, default - www.microsoft.com, пока лучшего нет, manual - задан админом",
+            "enum": [
+              "own",
+              "protocol",
+              "picked",
+              "default",
+              "manual"
+            ],
+            "type": "string"
           }
         },
         "required": [
           "port",
           "sources",
           "outbound",
-          "listener"
+          "listener",
+          "dest",
+          "server_name",
+          "auto_sni",
+          "target"
         ],
         "type": "object"
       },

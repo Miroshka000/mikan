@@ -4025,6 +4025,10 @@ export interface components {
             node_id: number;
         };
         CascadePatchInputBody: {
+            /** @description true: сайт маскировки служебного входа держит панель; false: dest и server_name задают его */
+            auto_sni?: boolean;
+            /** @description Сайт маскировки служебного входа, host:port; с auto_sni: false */
+            dest?: string;
             /** Format: int64 */
             exit_node_id?: number;
             /**
@@ -4032,8 +4036,14 @@ export interface components {
              * @enum {string}
              */
             outbound: "direct" | "warp" | "node";
+            /** @description Имя для подключений нод; нужно, когда в dest IP */
+            server_name?: string;
         };
         CascadeRelay: {
+            /** @description Сайт держит панель: как у протоколов ноды, иначе подобранный рядом с сервером, и меняет его, когда он перестал работать */
+            auto_sni: boolean;
+            /** @description Сайт маскировки REALITY служебного входа, host:port */
+            dest: string;
             /** @description Почему служебный вход не запустился, как сказала нода */
             error?: string;
             /** Format: int64 */
@@ -4049,8 +4059,15 @@ export interface components {
              */
             outbound: "direct" | "warp" | "node";
             port: string;
+            /** @description Имя сайта (SNI), под которое маскируются подключения нод к служебному входу */
+            server_name: string;
             /** @description Ноды, которые выходят через эту */
             sources: components["schemas"]["CascadeHop"][];
+            /**
+             * @description Откуда сайт: own - свой домен сервера, protocol - как у протоколов ноды, picked - подобран рядом с сервером, default - www.microsoft.com, пока лучшего нет, manual - задан админом
+             * @enum {string}
+             */
+            target: "own" | "protocol" | "picked" | "default" | "manual";
         };
         CascadeView: {
             /** @description Ноды, через которые эта нода выпускает трафик */

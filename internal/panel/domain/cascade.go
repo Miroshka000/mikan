@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"math/rand/v2"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -106,7 +107,25 @@ func EnsureRelay(ctx context.Context, q *db.Queries, node db.Node, now time.Time
 		return db.NodeRelay{}, err
 	}
 	t := proto.Template{"type": "vless", "reality-config": reality}
-	if err := proto.Validate(t, proto.Options{}); err != nil {
+	// The relay shows the site the node's own protocols show (RelayTarget); without one the
+	// tuner finds a site next to the server.
+	ins, err := q.ListNodeInbounds(ctx, node.ID)
+	if err != nil {
+		return db.NodeRelay{}, err
+	}
+	if dest, sni, ok := RelayTarget(ins); ok {
+		if err := presets.SetDest(t, dest, sni); err != nil {
+			return db.NodeRelay{}, err
+		}
+	}
+	selfSteal := 0
+	if dest, _ := presets.Dest(t); onServer(dest) {
+		// Only the panel's own node shows the panel's HTTPS, and only its protocols did.
+		if _, p, err := net.SplitHostPort(dest); err == nil {
+			selfSteal, _ = strconv.Atoi(p)
+		}
+	}
+	if err := proto.Validate(t, proto.Options{SelfStealPort: selfSteal}); err != nil {
 		return db.NodeRelay{}, err
 	}
 	return q.CreateNodeRelay(ctx, db.CreateNodeRelayParams{NodeID: node.ID, Port: strconv.Itoa(port), Config: proto.Marshal(t), CreatedAt: now.Unix()})

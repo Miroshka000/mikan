@@ -321,6 +321,7 @@ type NodeRelay struct {
 	Outbound   string
 	ExitNodeID sql.NullInt64
 	CreatedAt  int64
+	AutoSni    int64
 }
 
 type NodeSpeedtest struct {

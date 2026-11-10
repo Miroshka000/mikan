@@ -3901,6 +3901,20 @@
       "busyText": "Another program holds port {port}/tcp, so other nodes cannot leave through this one. With “Move to another port when it is blocked” on, the panel moves the relay to a free port itself.",
       "failedText": "The relay did not start, so other nodes cannot leave through this one."
     },
+    "target": {
+      "label": "Relay camouflage",
+      "hint": "The site the connections of other nodes to this one look like.",
+      "auto": "Automatic",
+      "manual": "My own site",
+      "autoNext": "Once you save, the panel takes the site of this node's protocols, or without them finds a site next to the server.",
+      "source": {
+        "own": "Now {site}: the server's own domain, as this node's protocols show.",
+        "protocol": "Now {site}: as this node's protocols show. It changes with theirs.",
+        "picked": "Now {site}: the panel found it next to the server and replaces it if it stops working.",
+        "default": "Now {site}, the default site. The panel finds a site next to the server as soon as nodes leave through this one.",
+        "manual": "Now {site}, set by hand."
+      }
+    },
     "route": "Where other nodes' traffic goes next",
     "routeHint": {
       "direct": "To the internet from this server.",
