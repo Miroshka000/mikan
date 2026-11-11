@@ -16,6 +16,7 @@ import { t } from "../../../i18n";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
 import { fingerprintLabel, validFingerprint } from "../../../lib/fingerprints";
 import { destIsIP } from "../../../lib/format";
+import { hopMemoryMB, hopPorts, MAX_HOP_PORTS } from "../../../lib/hop";
 import { nodeLabel } from "../../../lib/node-label";
 import { useWarp } from "../node-warp";
 import { Editor, type ListenAt, ValidateResult, hostPort, listenAt, loopback, preloadEditor, useValidate } from "./shared";
@@ -264,9 +265,14 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
               <Field label={t("tags.label")} htmlFor="ed-tags" hint={t("tags.inboundHint")} error={errors.tags}>
                 <input id="ed-tags" className="input" value={tags} onChange={(e) => set.tags(e.target.value)} placeholder={t("tags.placeholder")} aria-invalid={!!errors.tags} autoComplete="off" />
               </Field>
-              <Field label={t("inbounds.portLabel")} htmlFor="ed-port" error={errors.port} hint={inbound?.type === "hysteria2" ? t("inbounds.portHopHint") : undefined}>
+              <Field label={t("inbounds.portLabel")} htmlFor="ed-port" error={errors.port} hint={inbound?.type === "hysteria2" ? t("inbounds.portHopHint", { max: MAX_HOP_PORTS }) : undefined}>
                 <input id="ed-port" className="input max-w-[200px]" inputMode="numeric" value={port} onChange={(e) => set.port(e.target.value)} aria-invalid={!!errors.port} />
               </Field>
+              {hopPorts(port) > MAX_HOP_PORTS && !errors.port ? (
+                <p className="banner warn -mt-2 mb-4 text-[13px]" role="note">
+                  {t("inbounds.wideRangeWarn", { n: hopPorts(port), mb: hopMemoryMB(hopPorts(port)), max: MAX_HOP_PORTS })}
+                </p>
+              ) : null}
               {inbound?.dest !== undefined ? (
                 <>
                   <Field

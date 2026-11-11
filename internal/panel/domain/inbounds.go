@@ -25,6 +25,7 @@ var (
 	ErrUnknownPreset  = errors.New("unknown_preset")
 	ErrUnknownInbound = errors.New("unknown_inbound")
 	ErrBadPort        = errors.New("bad_port")
+	ErrPortRangeWide  = errors.New("port_range_wide") // a hopping range of more than MaxHopPorts
 	ErrBadListen      = errors.New("bad_listen")
 	ErrAutoPortListen = errors.New("auto_port_listen") // a proxy in front would not learn the new port
 	ErrAutoSNIListen  = errors.New("auto_sni_listen")  // nor the new site, if it routes by SNI
@@ -158,8 +159,8 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 			return db.Inbound{}, err
 		}
 	}
-	if !ValidPort(port) {
-		return db.Inbound{}, ErrBadPort
+	if err := checkNewPort(port); err != nil {
+		return db.Inbound{}, err
 	}
 	config := in.Config
 	if info.ID != presets.Custom {
@@ -288,8 +289,12 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 		}
 	}
 	if p.Port != nil {
-		if !ValidPort(*p.Port) {
-			return fail(ErrBadPort)
+		// A port sent back as it is passes: a range wider than MaxHopPorts saved before
+		// keeps working, and only a new port has to fit.
+		if *p.Port != prev.Port {
+			if err := checkNewPort(*p.Port); err != nil {
+				return fail(err)
+			}
 		}
 		next.Port = *p.Port
 	}
@@ -645,10 +650,32 @@ func (s *Inbounds) node(ctx context.Context, id int64) (db.Node, error) {
 	return n, err
 }
 
-// ValidPort accepts a port ("443") or a Hysteria2 hopping range ("20000-30000").
-func ValidPort(spec string) bool {
-	_, _, ok := ParsePort(spec)
-	return ok
+// MaxHopPorts is the widest Hysteria2 hopping range a new port may be. The core gives every
+// port of a range a QUIC server of its own, a socket, five goroutines and about 120 KB, so
+// 20000-30000 held over a gigabyte of a node's memory, and on a small server its
+// processor went to collecting it. A wider range saved before keeps working (ParsePort).
+const MaxHopPorts = 1000
+
+// HopPorts is how many ports spec takes: 1 for a port, every port of a range, 0 when spec
+// is neither.
+func HopPorts(spec string) int {
+	lo, hi, ok := ParsePort(spec)
+	if !ok {
+		return 0
+	}
+	return hi - lo + 1
+}
+
+// checkNewPort accepts a port, or a hopping range of at most MaxHopPorts, for an inbound
+// made, copied or given another port.
+func checkNewPort(spec string) error {
+	switch n := HopPorts(spec); {
+	case n == 0:
+		return ErrBadPort
+	case n > MaxHopPorts:
+		return ErrPortRangeWide
+	}
+	return nil
 }
 
 // ParseListen reads the address an inbound listens on: "" (or 0.0.0.0, ::) for every

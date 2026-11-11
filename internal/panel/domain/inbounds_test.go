@@ -188,6 +188,59 @@ func TestUpdatePort(t *testing.T) {
 	}
 }
 
+// The core runs a QUIC server on every port of a hopping range: a new range is at most
+// MaxHopPorts wide, while one saved before the limit keeps working and saves as it is.
+func TestUpdatePortRangeWidth(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	st, s := inbounds(t, &now, nil)
+	ctx := context.Background()
+	hy := find(t, s, 1, "hysteria2")
+
+	if _, next, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("40000-40999")}); err != nil || next.Port != "40000-40999" {
+		t.Fatalf("a range of %d ports: %+v %v", MaxHopPorts, next, err)
+	}
+	if _, _, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("40000-41000")}); !errors.Is(err, ErrPortRangeWide) {
+		t.Fatalf("a range of %d ports: %v", MaxHopPorts+1, err)
+	}
+
+	// A range from before the limit, as the hint suggested.
+	if _, err := st.DB.ExecContext(ctx, "UPDATE inbounds SET port = $1 WHERE id = $2", "20000-30000", hy.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, next, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("20000-30000"), DisplayName: ptr("Hy2")}); err != nil || next.Port != "20000-30000" {
+		t.Fatalf("the saved wide range sent back with another change: %+v %v", next, err)
+	}
+	if _, _, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("20000-30001")}); !errors.Is(err, ErrPortRangeWide) {
+		t.Fatalf("another wide range: %v", err)
+	}
+	if _, next, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("20000-20099")}); err != nil || next.Port != "20000-20099" {
+		t.Fatalf("narrowed: %+v %v", next, err)
+	}
+}
+
+func TestHopPorts(t *testing.T) {
+	for _, c := range []struct {
+		spec string
+		n    int
+		err  error
+	}{
+		{"443", 1, nil},
+		{"20000-20099", 100, nil},
+		{"20000-20999", MaxHopPorts, nil},
+		{"20000-21000", MaxHopPorts + 1, ErrPortRangeWide},
+		{"20000-30000", 10001, ErrPortRangeWide},
+		{"2083-2000", 0, ErrBadPort},
+		{"", 0, ErrBadPort},
+	} {
+		if n := HopPorts(c.spec); n != c.n {
+			t.Errorf("HopPorts(%q) = %d, want %d", c.spec, n, c.n)
+		}
+		if err := checkNewPort(c.spec); !errors.Is(err, c.err) {
+			t.Errorf("checkNewPort(%q) = %v, want %v", c.spec, err, c.err)
+		}
+	}
+}
+
 // The installer and the admin point REALITY inbounds at a site next to the server; the
 // panel's own HTTPS (self-steal) is for the panel's own node only.
 func TestUpdateTarget(t *testing.T) {

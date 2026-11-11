@@ -11,6 +11,7 @@ import { Switch } from "../../components/switch";
 import { hasTag, TagChips, TagFilter } from "../../components/tags";
 import { t, tMaybe } from "../../i18n";
 import { ago, maskedAs } from "../../lib/format";
+import { hopMemoryMB, hopPorts, MAX_HOP_PORTS } from "../../lib/hop";
 import { nodeLabel } from "../../lib/node-label";
 import { hostPort, listenerError } from "./inbound/shared";
 import { AddDrawer } from "./inbound/add";
@@ -178,6 +179,11 @@ export function InboundsPage() {
                     {i.shared ? (
                       <span title={t("inbounds.sharedWarn")}>
                         <Pill tone="warn">{t("inbounds.sharedKey")}</Pill>
+                      </span>
+                    ) : null}
+                    {hopPorts(i.port) > MAX_HOP_PORTS ? (
+                      <span title={t("inbounds.wideRangeWarn", { n: hopPorts(i.port), mb: hopMemoryMB(hopPorts(i.port)), max: MAX_HOP_PORTS })}>
+                        <Pill tone="warn">{t("inbounds.wideRange", { n: hopPorts(i.port) })}</Pill>
                       </span>
                     ) : null}
                     {i.dest ? <span className="text-xs text-[var(--ink-500)]">{t("inbounds.maskedAs", { dest: maskedAs(i) })}</span> : null}

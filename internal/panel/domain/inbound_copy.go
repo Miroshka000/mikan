@@ -61,8 +61,8 @@ func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbou
 			return db.Inbound{}, err
 		}
 	}
-	if !ValidPort(port) {
-		return db.Inbound{}, ErrBadPort
+	if err := checkNewPort(port); err != nil {
+		return db.Inbound{}, err
 	}
 	config := proto.Marshal(t)
 	if _, err := s.CheckTemplate(ctx, node, config, port); err != nil {
