@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"io"
 	"log"
@@ -152,7 +151,7 @@ func subThroughNode(port int, token string) bool {
 func getThroughNode(link, ua string) (*http.Response, error) {
 	// A connection of its own each time: one kept open would outlive a change of the guard.
 	hc := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig:   panelTLS(),
 		Proxy:             http.ProxyURL(&url.URL{Scheme: "socks5", Host: guardProxy}),
 		DisableKeepAlives: true,
 	}}

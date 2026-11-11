@@ -23,9 +23,11 @@ import (
 	"bytes"
 	"cmp"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -88,6 +90,43 @@ const (
 	clashOnly = 5
 )
 
+// panelCert is the panel's self-signed certificate: the panel makes it in its data directory
+// when it starts, for the public host bootstrap gave it (node.test, guard.test on guard.sh's
+// stack). compose.yaml mounts that volume into the driver read-only.
+const panelCert = "/data/panel/tls/self.crt"
+
+// panelTLS trusts the panel's own certificate and nothing else, for the name it was made for:
+// the driver reaches the panel by its container's name or through a node, never by that name.
+var panelTLS = sync.OnceValue(func() *tls.Config {
+	var raw []byte
+	for try := 0; ; try++ {
+		var err error
+		if raw, err = os.ReadFile(panelCert); err == nil {
+			break
+		} else if try == 120 {
+			log.Fatalf("the panel's certificate: %v", err)
+		}
+		time.Sleep(500 * time.Millisecond) // the panel writes it as it starts
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		log.Fatalf("%s: no certificate", panelCert)
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.Fatalf("%s: %v", panelCert, err)
+	}
+	name := leaf.Subject.CommonName
+	if len(leaf.DNSNames) > 0 {
+		name = leaf.DNSNames[0]
+	} else if len(leaf.IPAddresses) > 0 {
+		name = leaf.IPAddresses[0].String()
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(leaf)
+	return &tls.Config{RootCAs: roots, ServerName: name, MinVersion: tls.VersionTLS12}
+})
+
 type panel struct {
 	hc   *http.Client
 	csrf string
@@ -95,8 +134,7 @@ type panel struct {
 
 func login() *panel {
 	jar, _ := cookiejar.New(nil)
-	// The panel uses its self-signed certificate inside the test network.
-	p := &panel{hc: &http.Client{Jar: jar, Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}}
+	p := &panel{hc: &http.Client{Jar: jar, Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: panelTLS()}}}
 	var me struct {
 		CSRF string `json:"csrf_token"`
 	}
@@ -367,7 +405,7 @@ func fetchSub(token, ua string) []byte { return fetchSubVia(token, ua, "") }
 // fetchSubVia fetches the subscription through a client's SOCKS port ("" = from here):
 // the panel records the device that took the profile by its address.
 func fetchSubVia(token, ua, socks string) []byte {
-	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	tr := &http.Transport{TLSClientConfig: panelTLS()}
 	if socks != "" {
 		tr.Proxy = http.ProxyURL(&url.URL{Scheme: "socks5", Host: socks})
 	}
@@ -478,7 +516,7 @@ var devProtos = []struct{ name, proxy string }{
 
 // fetchDevice fetches the subscription as a device that sends its id.
 func fetchDevice(token, hwid string) (*http.Response, []byte) {
-	hc := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	hc := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: panelTLS()}}
 	req, _ := http.NewRequest("GET", subPrefix+token, nil)
 	req.Header.Set("User-Agent", "mihomo/1.19.31")
 	req.Header.Set("X-Hwid", hwid)

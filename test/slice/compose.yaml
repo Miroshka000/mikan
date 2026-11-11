@@ -110,6 +110,8 @@ services:
     volumes:
       - "../..:/src:ro"
       - "work:/work"
+      # The panel's self-signed certificate (data/panel/tls/self.crt), the one TLS is checked by.
+      - "data:/data:ro"
       - "mikan-gomod:/go/pkg/mod"
       - "mikan-gocache:/root/.cache/go-build"
     networks: [default, isp2]
@@ -173,6 +175,7 @@ services:
     volumes:
       - "../..:/src:ro"
       - "guard-work:/work"
+      - "guard-data:/data:ro"
       - "mikan-gomod:/go/pkg/mod"
       - "mikan-gocache:/root/.cache/go-build"
     networks: [public]
