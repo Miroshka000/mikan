@@ -1,6 +1,7 @@
 package xray
 
 import (
+	"maps"
 	"net/netip"
 	"regexp"
 	"slices"
@@ -34,10 +35,7 @@ func fields(when []routing.Match, geo routing.Geodata) []map[string]any {
 		var next []map[string]any
 		for _, have := range out {
 			for _, alt := range alts {
-				f := make(map[string]any, len(have)+len(alt))
-				for k, v := range have {
-					f[k] = v
-				}
+				f := maps.Clone(have)
 				for k, v := range alt {
 					if _, taken := f[k]; taken {
 						return nil // two conditions on one field would read as either of them
@@ -309,10 +307,8 @@ func policyDomains(key string, geo routing.Geodata) []string {
 
 // withRef is a rule of the fields f that sends to r: an outbound, or a balancer.
 func withRef(f map[string]any, r Ref) map[string]any {
-	out := make(map[string]any, len(f)+1)
-	for k, v := range f {
-		out[k] = v
-	}
+	out := make(map[string]any, len(f))
+	maps.Copy(out, f)
 	if r.Balancer {
 		out["balancerTag"] = r.Tag
 	} else {
