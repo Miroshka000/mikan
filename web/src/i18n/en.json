@@ -898,6 +898,7 @@
     "extendPeriod": "+1 month",
     "extendPeriodHint": "To the next billing day where one is set, otherwise by 30 days",
     "disable": "Disable",
+    "enable": "Enable",
     "deleteSelected": "Delete selected",
     "clearSelection": "Clear selection",
     "deleteTitle": "{n, plural, one {Delete # client?} other {Delete # clients?}}",
@@ -910,6 +911,7 @@
         "extend": "{n, plural, one {Extend # client?} other {Extend # clients?}}",
         "reset": "{n, plural, one {Reset the traffic of # client?} other {Reset the traffic of # clients?}}",
         "disable": "{n, plural, one {Disable # client?} other {Disable # clients?}}",
+        "enable": "{n, plural, one {Enable # client?} other {Enable # clients?}}",
         "hide": "{n, plural, one {Hide # client from the list?} other {Hide # clients from the list?}}",
         "unhide": "{n, plural, one {Bring # client back to the list?} other {Bring # clients back to the list?}}",
         "move": "{n, plural, one {Move # client?} other {Move # clients?}}"
@@ -918,6 +920,7 @@
         "extend": "Each by one period from their end date: to the next billing day, 30 days without one. Disabled clients are turned on.",
         "reset": "What was used in the period is zeroed and the period starts anew. Traffic packages that last for the period burn.",
         "disable": "Their subscriptions stop working until they are turned on. Term and traffic are kept.",
+        "enable": "Their subscriptions work again with the same term and traffic. Whoever's term has ended or traffic has run out stays without access until extended.",
         "hide": "They leave the list; their subscriptions keep working.",
         "unhide": "They are shown in the list again.",
         "move": "Their folder changes; their subscriptions do not."
@@ -926,12 +929,14 @@
         "extend": "Extend",
         "reset": "Reset",
         "disable": "Disable",
+        "enable": "Enable",
         "hide": "Hide",
         "unhide": "Bring back",
         "move": "Move"
       },
       "nothing": "Nothing to change: all of the selected are that way already.",
       "alreadyOff": "Already disabled: {n}.",
+      "alreadyOn": "Already enabled: {n}.",
       "unchanged": "Already that way: {n}.",
       "matching": "Everyone matching the filter right now: {n}, not only those loaded on the page.",
       "typeCount": "To confirm, type the number of clients: {n}",
@@ -1272,7 +1277,8 @@
       "other": "other sites",
       "block": "Block {site} for everyone",
       "blocked": "{site} is in the filters: the nodes let nobody there",
-      "isBlocked": "In the filters already",
+      "unblock": "Unblock {site}",
+      "unblocked": "{site} is out of the filters: the nodes let users there again",
       "hint": "Traffic by site, with no times or addresses. Kept for {n, plural, one {# day} other {# days}}; turned on on the Filters page."
     },
     "noProtocols": "No protocols are on: turn some on or add them in Protocols.",

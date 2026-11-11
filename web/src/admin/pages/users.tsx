@@ -603,7 +603,7 @@ function bulkFilter(s: UsersSearch): Schemas["BulkFilter"] {
 /** What the bulk preview found for an action the admin is asked to confirm, and the body the
  * confirmation sends: the ids or the filter previewed, by filter with the preview's digest as
  * expect, so the action reaches the very users counted or nobody. */
-type Asked = { action: Exclude<BulkAction, "enable">; body: Schemas["BulkInputBody"]; byFilter: boolean; plan: Schemas["BulkPreviewOutputBody"] };
+type Asked = { action: BulkAction; body: Schemas["BulkInputBody"]; byFilter: boolean; plan: Schemas["BulkPreviewOutputBody"] };
 
 /** Everyone the list's filter matches, as the list counted them. */
 type Matching = { filter: Schemas["BulkFilter"]; total: number };
@@ -626,6 +626,10 @@ function BulkBar({ chosen, matching, clear, folders }: { chosen: User[]; matchin
   // are hidden (by filter: the list shows only the hidden), hide them otherwise.
   const unhide = matching ? matching.filter.hidden === "only" : n > 0 && chosen.every((u) => u.hidden);
   const hideAction: Asked["action"] = unhide ? "unhide" : "hide";
+  // Access is one button the same way: turn the chosen back on when all of them are off (by
+  // filter: the list shows only the disabled), turn them off otherwise. Both are confirmed.
+  const enable = matching ? matching.filter.state === "disabled" : n > 0 && chosen.every((u) => u.state === "disabled");
+  const powerAction: Asked["action"] = enable ? "enable" : "disable";
   const run = (action: Asked["action"], body: Schemas["BulkInputBody"]) =>
     bulk.mutate(
       body,
@@ -685,9 +689,9 @@ function BulkBar({ chosen, matching, clear, folders }: { chosen: User[]; matchin
           {unhide ? <Eye size={16} aria-hidden /> : <EyeOff size={16} aria-hidden />}
           <span className="max-sm:hidden">{unhide ? t("users.unhide") : t("users.hide")}</span>
         </Button>
-        <Button size="sm" variant="danger" loading={running("disable")} disabled={busy} onClick={() => ask("disable")} aria-label={t("users.disable")}>
+        <Button size="sm" variant={enable ? "glass" : "danger"} loading={running(powerAction)} disabled={busy} onClick={() => ask(powerAction)} aria-label={enable ? t("users.enable") : t("users.disable")}>
           <Power size={16} aria-hidden />
-          <span className="max-sm:hidden">{t("users.disable")}</span>
+          <span className="max-sm:hidden">{enable ? t("users.enable") : t("users.disable")}</span>
         </Button>
         <Button size="sm" variant="danger" loading={running("delete")} disabled={busy} onClick={() => ask("delete")} aria-label={t("users.deleteSelected")}>
           <Trash2 size={16} aria-hidden />
@@ -713,7 +717,7 @@ function BulkConfirm({ asked, loading, onClose, onConfirm }: { asked: Asked; loa
   const typeCount = byFilter && action === "delete";
   const notes = [
     byFilter ? t("users.bulkConfirm.matching", { n: plan.found }) : "",
-    plan.unchanged > 0 ? t(action === "disable" ? "users.bulkConfirm.alreadyOff" : "users.bulkConfirm.unchanged", { n: plan.unchanged }) : "",
+    plan.unchanged > 0 ? t(action === "disable" ? "users.bulkConfirm.alreadyOff" : action === "enable" ? "users.bulkConfirm.alreadyOn" : "users.bulkConfirm.unchanged", { n: plan.unchanged }) : "",
     plan.missing > 0 ? t("users.bulkConfirm.missing", { n: plan.missing }) : "",
   ].filter(Boolean);
   const warnings = stake
