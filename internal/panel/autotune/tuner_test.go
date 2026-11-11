@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,12 +20,15 @@ import (
 	"mikan/internal/proto"
 )
 
+// fakeNodes answers for the nodes. The tuner asks them as it asks the real ones:
+// checkTargets runs one goroutine per node, so what CheckTarget changes is safe for
+// concurrent use; the maps are set between steps only.
 type fakeNodes struct {
 	activity map[int64]nodeapi.Activity
 	targets  map[string]nodeapi.TargetResult // by dest; any other dest works
 	found    []nodeapi.TargetResult
-	checks   int
-	onScan   func() // runs while a scan is under way: the admin edits meanwhile
+	checks   atomic.Int64 // targets the nodes were asked to check
+	onScan   func()       // runs while a scan is under way: the admin edits meanwhile
 	health   map[int64]nodesync.HealthView
 	// probes are the nodes' answers by "node/outbound", made at clock unless they say when.
 	probes map[string]nodeapi.ProbeResult
@@ -56,7 +60,7 @@ func (f *fakeNodes) Activity(_ context.Context, id int64) (nodeapi.Activity, err
 }
 
 func (f *fakeNodes) CheckTarget(_ context.Context, _ int64, req nodeapi.TargetCheckRequest) (nodeapi.TargetResult, error) {
-	f.checks++
+	f.checks.Add(1)
 	if r, ok := f.targets[req.Dest]; ok {
 		return r, nil
 	}
@@ -243,8 +247,8 @@ func TestMovesABlockedPortAfterHold(t *testing.T) {
 	if len(ev) != 1 || ev[0].Kind != "port" || ev[0].OldValue != "443" || ev[0].NewValue != "2053" || ev[0].Reason != "blocked" || ev[0].Network != "tcp" {
 		t.Fatalf("event: %+v", ev)
 	}
-	if e.ch.slots == 0 || e.nodes.checks == 0 {
-		t.Fatalf("the node must get the change (%d) and the target is checked first (%d)", e.ch.slots, e.nodes.checks)
+	if checks := e.nodes.checks.Load(); e.ch.slots == 0 || checks == 0 {
+		t.Fatalf("the node must get the change (%d) and the target is checked first (%d)", e.ch.slots, checks)
 	}
 	if s, _ := e.tn.Status(x.ID); s.CutOff {
 		t.Fatalf("state is reset after a move: %+v", s)

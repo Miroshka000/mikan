@@ -116,8 +116,8 @@ func TestSharedDeadTargetCountsForEveryInbound(t *testing.T) {
 			t.Fatalf("%s: %d failed checks after one round", name, fails)
 		}
 	}
-	if e.nodes.checks != 1 {
-		t.Fatalf("the shared site was checked %d times", e.nodes.checks)
+	if checks := e.nodes.checks.Load(); checks != 1 {
+		t.Fatalf("the shared site was checked %d times", checks)
 	}
 }
 
