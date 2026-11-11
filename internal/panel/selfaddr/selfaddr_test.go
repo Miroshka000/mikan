@@ -10,7 +10,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/netip"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -49,21 +52,46 @@ var (
 	newIP = netip.MustParseAddr("203.0.113.20")
 )
 
-// An address leads here when this panel's own token comes back from it: a copy of the panel
-// left on the old server answers its own probes only, and a token never handed out gets the
+// An address leads here when this panel's keyed answer to its own challenge comes back from
+// it, also through a proxy in front of the panel that holds the TLS: a copy of the panel left
+// on the old server (the same certificate, another key) answers its own probes only, a server
+// that repeats what it is asked cannot answer, and a challenge never handed out gets the
 // router's 404.
 func TestProber(t *testing.T) {
 	ctx := context.Background()
 	p := &Prober{}
 	srv, other := panelServer(t, p), panelServer(t, &Prober{})
-	p.Client = routed(map[string]string{"203.0.113.20:2053": srv.Listener.Addr().String(), "203.0.113.10:2053": other.Listener.Addr().String()})
+	panelURL, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	front := httputil.NewSingleHostReverseProxy(panelURL)
+	front.Transport = srv.Client().Transport
+	proxy := httptest.NewTLSServer(front)
+	t.Cleanup(proxy.Close)
+	echo := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, strings.TrimPrefix(r.URL.Path, Path))
+	}))
+	t.Cleanup(echo.Close)
+	p.Client = routed(map[string]string{
+		"203.0.113.20:2053": srv.Listener.Addr().String(),
+		"203.0.113.10:2053": other.Listener.Addr().String(),
+		"203.0.113.21:443":  proxy.Listener.Addr().String(),
+		"203.0.113.30:2053": echo.Listener.Addr().String(),
+	})
 	if !p.Reaches(ctx, newIP, 2053, "vpn.example.com") || !p.Reaches(ctx, newIP, 2053, "") {
 		t.Fatal("this panel's address")
+	}
+	if !p.Reaches(ctx, netip.MustParseAddr("203.0.113.21"), 443, "vpn.example.com") {
+		t.Fatal("this panel behind a proxy that holds the TLS")
 	}
 	if p.Reaches(ctx, oldIP, 2053, "") {
 		t.Fatal("another panel answered for this one")
 	}
 	if p.Reaches(ctx, netip.MustParseAddr("203.0.113.30"), 2053, "") {
+		t.Fatal("a server that repeats the challenge passed for this panel")
+	}
+	if p.Reaches(ctx, netip.MustParseAddr("203.0.113.40"), 2053, "") {
 		t.Fatal("an address that leads nowhere")
 	}
 	resp, err := srv.Client().Get(srv.URL + Path + "0123456789abcdef0123456789abcdef")
@@ -72,10 +100,10 @@ func TestProber(t *testing.T) {
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("a token not handed out: %d", resp.StatusCode)
+		t.Fatalf("a challenge not handed out: %d", resp.StatusCode)
 	}
-	if len(p.tokens) != 0 {
-		t.Fatalf("tokens kept: %v", p.tokens)
+	if len(p.challenges) != 0 {
+		t.Fatalf("challenges kept: %v", p.challenges)
 	}
 }
 

@@ -2,16 +2,21 @@
 // the address its server has now. A hoster gives the server a new address, the panel moves
 // to another server (mikan move), the domain is pointed at the new address: the saved one
 // leads elsewhere then. The panel looks for the address that leads to it now, proves it with
-// a token of its own fetched over its HTTPS port, and saves it in place of the old one.
+// its keyed answer to a challenge of its own, fetched over its HTTPS port, and saves it in
+// place of the old one.
 //
-// The proof is the token, not the certificate: after a move the old server may still run a
-// copy of the panel with the same certificate. A request for a token this panel did not
-// hand out gets the panel's plain 404, like any other unknown path.
+// The proof is the answer, not the certificate: after a move the old server may still run a
+// copy of the panel with the same certificate, and a new address may have no certificate for
+// it yet. The answer is an HMAC under a key that never leaves this process, so neither that
+// copy nor a server that repeats what it is asked can give it. A request for a challenge this
+// panel did not hand out gets the panel's plain 404, like any other unknown path.
 package selfaddr
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
@@ -32,20 +37,22 @@ import (
 	"mikan/internal/panel/settings"
 )
 
-// Path is where the panel answers its own probes; the token follows it.
+// Path is where the panel answers its own probes; the challenge follows it.
 const Path = "/.well-known/mikan-self/"
 
-// tokenTTL is how long a probe's token is answered.
-const tokenTTL = 30 * time.Second
+// challengeTTL is how long a probe's challenge is answered.
+const challengeTTL = 30 * time.Second
 
-// Prober proves an address leads to this panel: it fetches a token of its own there.
+// Prober proves an address leads to this panel: it asks there for the answer to a challenge
+// of its own, which only this process can give.
 type Prober struct {
-	// Client fetches the token; nil: one that takes any certificate (the token is the proof)
-	// and follows no redirect.
+	// Client fetches the answer; nil: one that takes any certificate (the answer is the
+	// proof, TLS only the way to it) and follows no redirect.
 	Client *http.Client
 
-	mu     sync.Mutex
-	tokens map[string]time.Time // token → until when it is answered
+	mu         sync.Mutex
+	key        []byte               // the answers' HMAC-SHA256 key, made on first use
+	challenges map[string]time.Time // challenge → until when it is answered
 }
 
 func (p *Prober) client() *http.Client {
@@ -63,55 +70,71 @@ func (p *Prober) Serve(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodGet || !strings.HasPrefix(r.URL.Path, Path) {
 		return false
 	}
-	token := strings.TrimPrefix(r.URL.Path, Path)
+	challenge := strings.TrimPrefix(r.URL.Path, Path)
 	p.mu.Lock()
-	until, ok := p.tokens[token]
+	until, ok := p.challenges[challenge]
+	key := p.key
 	p.mu.Unlock()
 	if !ok || time.Now().After(until) {
 		return false
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_, _ = io.WriteString(w, token)
+	_, _ = io.WriteString(w, answer(key, challenge))
 	return true
 }
 
-func (p *Prober) present() (string, error) {
+// answer is the keyed answer to a challenge, in hex.
+func answer(key []byte, challenge string) string {
+	m := hmac.New(sha256.New, key)
+	m.Write([]byte(challenge))
+	return hex.EncodeToString(m.Sum(nil))
+}
+
+// present hands out a challenge and returns it with the key that answers it.
+func (p *Prober) present() (string, []byte, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", err
+		return "", nil, err
 	}
-	token := hex.EncodeToString(b[:])
+	challenge := hex.EncodeToString(b[:])
 	now := time.Now()
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.tokens == nil {
-		p.tokens = map[string]time.Time{}
+	if p.key == nil {
+		key := make([]byte, sha256.Size)
+		if _, err := rand.Read(key); err != nil {
+			return "", nil, err
+		}
+		p.key = key
 	}
-	for t, until := range p.tokens {
+	if p.challenges == nil {
+		p.challenges = map[string]time.Time{}
+	}
+	for c, until := range p.challenges {
 		if now.After(until) {
-			delete(p.tokens, t)
+			delete(p.challenges, c)
 		}
 	}
-	p.tokens[token] = now.Add(tokenTTL)
-	return token, nil
+	p.challenges[challenge] = now.Add(challengeTTL)
+	return challenge, p.key, nil
 }
 
-func (p *Prober) forget(token string) {
+func (p *Prober) forget(challenge string) {
 	p.mu.Lock()
-	delete(p.tokens, token)
+	delete(p.challenges, challenge)
 	p.mu.Unlock()
 }
 
 // Reaches says whether https://addr:port leads to this panel; sni is the name the request
 // goes with ("" for none), for a proxy in front of the panel that routes by it.
 func (p *Prober) Reaches(ctx context.Context, addr netip.Addr, port int, sni string) bool {
-	token, err := p.present()
+	challenge, key, err := p.present()
 	if err != nil {
 		return false
 	}
-	defer p.forget(token)
-	u := "https://" + net.JoinHostPort(addr.String(), strconv.Itoa(port)) + Path + token
+	defer p.forget(challenge)
+	u := "https://" + net.JoinHostPort(addr.String(), strconv.Itoa(port)) + Path + challenge
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return false
@@ -130,7 +153,7 @@ func (p *Prober) Reaches(ctx context.Context, addr netip.Addr, port int, sni str
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
-	return err == nil && resp.StatusCode == http.StatusOK && string(body) == token
+	return err == nil && resp.StatusCode == http.StatusOK && hmac.Equal(body, []byte(answer(key, challenge)))
 }
 
 // AddressStatus is the panel's look at its address, for the admin panel.

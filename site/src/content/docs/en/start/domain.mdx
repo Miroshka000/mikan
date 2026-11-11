@@ -83,7 +83,7 @@ Without access to the panel, a command on the server does the same: `mikan domai
 
 ## The server's IP changed
 
-The hoster changed the IP or the panel moved to another server: the panel finds the address that leads to it (the domain's DNS, the server's addresses, the address the server goes out from), checks it with a token of its own over the panel's port, and after two checks in a row five minutes apart saves it in place of the old one. A Telegram notice comes. Turn it off in **Settings → System → Automatic fixes → Follow the server's address**.
+The hoster changed the IP or the panel moved to another server: the panel finds the address that leads to it (the domain's DNS, the server's addresses, the address the server goes out from), checks it over the panel's port with its answer to a challenge of its own, keyed by a secret only this panel holds (a copy of the panel left on the old server cannot give it), and after two checks in a row five minutes apart saves it in place of the old one. A Telegram notice comes. Turn it off in **Settings → System → Automatic fixes → Follow the server's address**.
 
 With a domain, clients notice nothing: links go to the domain, point its A record at the new IP. Without one, clients' links lead to the old IP: they have to add the subscription again. So set up a domain beforehand.
 
