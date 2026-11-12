@@ -206,6 +206,11 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 		return err
 	}
 	frontpage.SetSeed(seed)
+	own, err := set.String(ctx, settings.KeySiteHTML)
+	if err != nil {
+		return err
+	}
+	frontpage.SetCustom([]byte(own))
 	if p.Nodes != nil {
 		p.Nodes.SetFrontSeed(seed)
 	}

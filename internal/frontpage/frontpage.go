@@ -3,6 +3,8 @@
 package frontpage
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"embed"
 	"net/http"
 	"slices"
@@ -16,8 +18,29 @@ var pages embed.FS
 // Templates are the names of the built-in pages.
 var Templates = []string{"maintenance", "cats"}
 
+// Custom is the name of the page the admin made in the panel's builder (SetCustom): the
+// installation's own from its first byte, so the seed does not touch it.
+const Custom = "custom"
+
+// MaxCustom bounds the admin's page: it travels to every node with the node's state.
+const MaxCustom = 200 << 10
+
 // seed is the installation's own (SetSeed); nil: the pages as written.
 var seed atomic.Pointer[string]
+
+// custom is the admin's page (SetCustom); nil: none.
+var custom atomic.Pointer[[]byte]
+
+// SetCustom sets the admin's page: the panel at start and when the page is saved, a node
+// from its state. Empty: there is none, and Page(Custom) is nil.
+func SetCustom(page []byte) {
+	if len(page) == 0 {
+		custom.Store(nil)
+		return
+	}
+	page = bytes.Clone(page)
+	custom.Store(&page)
+}
 
 // made are the pages rendered so far, by name and seed.
 var made sync.Map
@@ -43,6 +66,12 @@ func currentSeed() string {
 // Page is the built-in page called name as the installation shows it; nil for none (""
 // included). The bytes are shared: a caller does not change them.
 func Page(name string) []byte {
+	if name == Custom {
+		if p := custom.Load(); p != nil {
+			return *p
+		}
+		return nil
+	}
 	file := File(name)
 	if file == "" {
 		return nil
@@ -64,9 +93,19 @@ func Page(name string) []byte {
 	return b
 }
 
+// Pick is the built-in page an installation with seed takes where the admin chose none:
+// one of Templates, the same for the seed every time, so installations do not all show one.
+func Pick(seed string) string {
+	sum := sha256.Sum256([]byte("pick\x00" + seed))
+	return Templates[int(sum[0])%len(Templates)]
+}
+
 // File is the file of the built-in page called name ("cats.html"), named from Templates and
 // not from name, so a path made of it holds no name a caller sent; "" for none.
 func File(name string) string {
+	if name == Custom {
+		return Custom + ".html"
+	}
 	if i := slices.Index(Templates, name); i >= 0 {
 		return Templates[i] + ".html"
 	}

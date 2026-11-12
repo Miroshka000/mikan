@@ -61,6 +61,9 @@ type DesiredState struct {
 	// the panel's seed, so its nodes and the panel show one page and no other installation
 	// shows the same; "": the page as written. Nodes older than it ignore it.
 	FrontSeed string `json:"front_seed,omitempty"`
+	// FrontHTML is the page itself when FrontPage is frontpage.Custom, the one the admin made
+	// in the panel. Nodes older than it are sent a built-in page instead.
+	FrontHTML string `json:"front_html,omitempty"`
 	// APIAllow: the node's API answers only these networks ("203.0.113.5/32"), loopback and
 	// the addresses the panel has reached it from; nil: anyone (the panel's certificate
 	// still guards it). Empty but not nil is on too, with the panel's addresses alone. The

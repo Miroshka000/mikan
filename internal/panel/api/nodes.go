@@ -87,7 +87,7 @@ type NodeInfo struct {
 	RouterError string `json:"router_error,omitempty" doc:"Почему нода не смогла занять порт 443"`
 	// FrontPage is the built-in page strangers get on the node's own domain through the
 	// shared 443.
-	FrontPage string `json:"front_page" enum:",maintenance,cats" doc:"Заглушка для посторонних: её отдают протоколы VLESS и Trojan с XHTTP, WebSocket или gRPC на чужие запросы вместо пустого 404, а с общим портом 443 и домен ноды; пусто — нет, maintenance — технические работы, cats — котики-кликер"`
+	FrontPage string `json:"front_page" enum:",maintenance,cats,custom" doc:"Заглушка для посторонних: её отдают протоколы VLESS и Trojan с XHTTP, WebSocket или gRPC на чужие запросы вместо пустого 404, а с общим портом 443 и домен ноды; пусто — нет, maintenance — технические работы, cats — котики-кликер"`
 	// InAuto: the node's servers are in the subscriptions' automatic choice.
 	InAuto bool `json:"in_auto" doc:"Серверы ноды входят в «Авто» подписки; выключено — только в списке и группе страны, например сервер для белых списков"`
 	// Billing is the node's server at its provider; NextPayment and VPSTraffic are what the
@@ -144,7 +144,7 @@ type patchNodeInput struct {
 		ChannelMbps  *int64       `json:"channel_mbps,omitempty" minimum:"1" maximum:"100000" doc:"Ширина канала ноды, Мбит/с в каждую сторону"`
 		HTTPRedirect *bool        `json:"http_redirect,omitempty" doc:"Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели"`
 		SNIRouter    *bool        `json:"sni_router,omitempty" doc:"SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним"`
-		FrontPage    *string      `json:"front_page,omitempty" enum:",maintenance,cats" doc:"Заглушка для посторонних: протоколы с XHTTP, WebSocket или gRPC отдают её на чужие запросы вместо пустого 404, общий порт 443 — на домене ноды и на запросах без имени (сертификат ноды, TLS 1.2+, HSTS); пусто — нет"`
+		FrontPage    *string      `json:"front_page,omitempty" enum:",maintenance,cats,custom" doc:"Заглушка для посторонних: протоколы с XHTTP, WebSocket или gRPC отдают её на чужие запросы вместо пустого 404, общий порт 443 — на домене ноды и на запросах без имени (сертификат ноды, TLS 1.2+, HSTS); пусто — нет"`
 		InAuto       *bool        `json:"in_auto,omitempty" doc:"Серверы ноды в «Авто» подписки; false — только в списке и группе страны"`
 		Billing      *NodeBilling `json:"billing,omitempty" doc:"Учёт сервера у хостера, целиком"`
 		// The node's API for the panel alone, and the networks added to the panel's own.

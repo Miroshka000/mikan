@@ -2,6 +2,7 @@ package server
 
 import (
 	"io"
+	"mikan/internal/frontpage"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -90,5 +91,33 @@ func TestOwnSite(t *testing.T) {
 	}
 	if HasOwnSite(empty) || !HasOwnSite(dir) {
 		t.Fatal("HasOwnSite")
+	}
+}
+
+// The admin's own page at the panel's address has an origin of its own and loads nothing:
+// the admin's session lives at this address too. The built-in pages keep their scripts.
+func TestOwnPageIsSandboxed(t *testing.T) {
+	panel := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "panel") })
+	s := New(panel, panel)
+	s.SetPaths(settings.Paths{Admin: "adm1n", Sub: "s0b"})
+	kind := "custom"
+	s.SetSite(OwnSite(t.TempDir(), func() string { return kind }))
+	get := func() (int, string, string) {
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+		return rec.Code, rec.Body.String(), rec.Header().Get("Content-Security-Policy")
+	}
+	t.Cleanup(func() { frontpage.SetCustom(nil) })
+	if code, _, _ := get(); code != http.StatusNotFound {
+		t.Fatalf("no page saved: %d", code)
+	}
+	frontpage.SetCustom([]byte("<!doctype html><title>Bakery</title>"))
+	code, body, csp := get()
+	if code != http.StatusOK || body != "<!doctype html><title>Bakery</title>" || csp != CustomPageCSP || !strings.HasPrefix(csp, "sandbox") {
+		t.Fatalf("the admin's page: %d %q, policy %q", code, body, csp)
+	}
+	kind = "cats"
+	if code, _, csp := get(); code != http.StatusOK || strings.HasPrefix(csp, "sandbox") {
+		t.Fatalf("a built-in page: %d, policy %q", code, csp)
 	}
 }

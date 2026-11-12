@@ -5678,7 +5678,8 @@
             "enum": [
               "",
               "maintenance",
-              "cats"
+              "cats",
+              "custom"
             ],
             "type": "string"
           },
@@ -7305,7 +7306,8 @@
             "enum": [
               "",
               "maintenance",
-              "cats"
+              "cats",
+              "custom"
             ],
             "type": "string"
           },
@@ -7542,7 +7544,8 @@
             "enum": [
               "",
               "maintenance",
-              "cats"
+              "cats",
+              "custom"
             ],
             "type": "string"
           },
@@ -8217,6 +8220,128 @@
         ],
         "type": "object"
       },
+      "PostureApplyInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "description": "Строки плана, как их показала панель",
+            "items": {
+              "$ref": "#/components/schemas/PostureChange"
+            },
+            "maxItems": 500,
+            "type": "array"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "type": "object"
+      },
+      "PostureChange": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "description": "Что меняется; у строки manual: что остаётся сделать самому",
+            "enum": [
+              "panel_page",
+              "front_page",
+              "site",
+              "port",
+              "through_443",
+              "direct",
+              "router_on",
+              "router_off",
+              "api_lockdown",
+              "port_443_busy",
+              "port_443_panel",
+              "same_name",
+              "no_site",
+              "no_port",
+              "ssh_open"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "description": "После применения: почему не получилось",
+            "type": "string"
+          },
+          "inbound": {
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "manual": {
+            "description": "Пресет этого сделать не может: строка для админа",
+            "type": "boolean"
+          },
+          "node": {
+            "description": "Нода; 0: сама панель",
+            "format": "int64",
+            "type": "integer"
+          },
+          "node_name": {
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "node",
+          "code",
+          "manual"
+        ],
+        "type": "object"
+      },
+      "PostureOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "enum": [
+              "standard",
+              "secure",
+              "custom"
+            ],
+            "type": "string"
+          },
+          "secure": {
+            "description": "Сколько изменений осталось до «Безопасного»",
+            "format": "int64",
+            "type": "integer"
+          },
+          "standard": {
+            "description": "Сколько изменений осталось до «Стандартного»",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "current",
+          "secure",
+          "standard"
+        ],
+        "type": "object"
+      },
+      "PosturePlanOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/PostureChange"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "type": "object"
+      },
       "Preview": {
         "additionalProperties": false,
         "properties": {
@@ -8728,6 +8853,27 @@
           "bonus_bytes",
           "discount_orders",
           "discount_amount"
+        ],
+        "type": "object"
+      },
+      "PutSitePageInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "doc": {
+            "description": "Документ конструктора (JSON)",
+            "maxLength": 204800,
+            "type": "string"
+          },
+          "html": {
+            "description": "Готовая страница: один HTML-файл без внешних запросов",
+            "maxLength": 204800,
+            "minLength": 64,
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc",
+          "html"
         ],
         "type": "object"
       },
@@ -10176,12 +10322,17 @@
             "description": "В data/panel/www есть своя страница: шаблон не действует",
             "type": "boolean"
           },
+          "site_page": {
+            "description": "Своя заглушка из конструктора сохранена: её можно выбрать (custom)",
+            "type": "boolean"
+          },
           "site_template": {
             "description": "Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер",
             "enum": [
               "",
               "maintenance",
-              "cats"
+              "cats",
+              "custom"
             ],
             "type": "string"
           },
@@ -10285,6 +10436,7 @@
           "sub_log_days",
           "site_template",
           "site_own",
+          "site_page",
           "brand_accent",
           "brand_logo_url",
           "public_host",
@@ -10363,6 +10515,36 @@
           "site",
           "up",
           "down"
+        ],
+        "type": "object"
+      },
+      "SitePageOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "doc": {
+            "description": "Документ конструктора (JSON), как он был сохранён; пусто: своей страницы ещё нет",
+            "type": "string"
+          },
+          "max": {
+            "description": "Наибольший размер страницы в байтах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "seed": {
+            "description": "Зерно установки для конструктора: от него зависят страницы и блоки по умолчанию",
+            "type": "string"
+          },
+          "size": {
+            "description": "Размер сохранённой страницы в байтах; 0: её нет",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "doc",
+          "size",
+          "max",
+          "seed"
         ],
         "type": "object"
       },
@@ -19479,6 +19661,137 @@
         ]
       }
     },
+    "/api/v1/security/presets": {
+      "get": {
+        "operationId": "get-security-preset",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostureOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "На каком пресете безопасности стоит панель",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/security/presets/{preset}/apply": {
+      "post": {
+        "operationId": "apply-security-preset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preset",
+            "required": true,
+            "schema": {
+              "enum": [
+                "standard",
+                "secure"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PostureApplyInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosturePlanOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Применить пресет безопасности",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/security/presets/{preset}/plan": {
+      "post": {
+        "operationId": "plan-security-preset",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "preset",
+            "required": true,
+            "schema": {
+              "enum": [
+                "standard",
+                "secure"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PosturePlanOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Что изменит пресет безопасности",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/v1/settings": {
       "get": {
         "operationId": "get-settings",
@@ -19818,6 +20131,76 @@
           }
         },
         "summary": "Профиль Clash с этой маршрутизацией, без сохранения",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/site-page": {
+      "get": {
+        "operationId": "get-site-page",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePageOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Своя заглушка: документ конструктора",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "operationId": "put-site-page",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutSitePageInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SitePageOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Сохранить свою заглушку",
         "tags": [
           "settings"
         ]

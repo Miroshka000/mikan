@@ -27,8 +27,8 @@ func seeded(t *testing.T, seed string) {
 // placeholders took nothing away and added nothing.
 func TestPagesAsWritten(t *testing.T) {
 	for name, want := range map[string]string{
-		"cats":        "4a74aa175e06adbeb5314c13bf4673dbfd5fd9c58fd9f5401916d7c38f1787e4",
-		"maintenance": "24f7d38593d36d711ece52cb39873f0ac2b9e4b7562400754759023955b274b6",
+		"cats":        "b4e9e101000ca3f032ea8f0eafbdc5d26e33a8c2a178a621c268d84cb34b1599",
+		"maintenance": "a15bb7efeaa260a90da3a4387dc9c4e7dc598bfb666741099361dac094791ac6",
 	} {
 		if got := digest(Page(name)); got != want {
 			t.Errorf("%s as written: %s, want %s", name, got, want)
@@ -81,7 +81,7 @@ func TestSeededPage(t *testing.T) {
 			t.Fatalf("name %s: %q %v (twice: %v)", name, w, err, seen[w])
 		}
 		seen[w] = true
-		if slices.Contains([]string{"items", "cats", "s", "face", "count", "rate", "cat", "shop", "pop", "it", "b", "i", "a", "n", "ps", "p", "e"}, w) {
+		if slices.Contains([]string{"items", "s", "face", "count", "rate", "cat", "shop", "pop", "it", "b", "i", "a", "n", "ps", "p", "e"}, w) {
 			t.Fatalf("name %s took %q, a variable of the script", name, w)
 		}
 	}

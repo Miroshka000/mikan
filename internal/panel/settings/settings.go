@@ -121,6 +121,10 @@ const (
 	// KeySiteTemplate is the built-in front page a stranger sees at the panel's address
 	// (frontpage.Templates); "" for none.
 	KeySiteTemplate = "site_template"
+	// KeySiteHTML is the front page the admin made in the builder (frontpage.Custom), and
+	// KeySiteDoc what the builder made it of, to open it again.
+	KeySiteHTML = "site_html"
+	KeySiteDoc  = "site_doc"
 	// KeyFrontSeed is the installation's seed of the built-in front pages and of the plain
 	// 404 (frontpage.SetSeed): made once and kept, so the pages stay what they are.
 	KeyFrontSeed = "front_seed"

@@ -151,3 +151,36 @@ func TestExposureOfATellingName(t *testing.T) {
 		t.Errorf("an ordinary name: %q", w)
 	}
 }
+
+// Behind the shared 443 each REALITY protocol has a name of its own, and the panel's own
+// names are the server's own certificate: neither is a row of strangers' certificates.
+func TestExposureBehindTheSharedPort(t *testing.T) {
+	routed := func(name, preset, port, dest string) db.Inbound {
+		in := exposureInbound(t, name, preset, port, dest)
+		tpl, err := proto.Parse(in.Config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := proto.SetSNI443(tpl, true); err != nil {
+			t.Fatal(err)
+		}
+		in.Config = string(tpl.JSON())
+		return in
+	}
+	e := exposure{node: db.Node{SniRouter: 1}, names: []string{"my.example.com"}, inbounds: []db.Inbound{
+		routed("vless-xhttp", "vless_reality_xhttp", "20000", "news.example.org:443"),
+		routed("vless-vision", "vless_reality_vision", "20001", "shop.example.net:443"),
+		routed("vless-grpc", "vless_reality_grpc", "20002", "blog.example.com:443"),
+	}}
+	if got := exposureCodes(e.items()); !slices.Equal(got, []string{"ok"}) {
+		t.Fatalf("three names behind one 443: %v", got)
+	}
+	// On ports of their own the same three stand out, the panel's own name aside.
+	e = exposure{names: []string{"my.example.com"}, inbounds: []db.Inbound{
+		exposureInbound(t, "vless-xhttp", "vless_reality_xhttp", "9443", "news.example.org:443"),
+		exposureInbound(t, "vless-vision", "vless_reality_vision", "8443", "my.example.com:443"),
+	}}
+	if got := exposureCodes(e.items()); !slices.Equal(got, []string{"ok"}) {
+		t.Fatalf("a stranger's site and the panel's own: %v", got)
+	}
+}

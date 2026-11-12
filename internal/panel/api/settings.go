@@ -12,6 +12,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/frontpage"
 	"mikan/internal/hostname"
 	"mikan/internal/panel/acme"
 	"mikan/internal/panel/dnscheck"
@@ -42,8 +43,9 @@ type SettingsView struct {
 	InactiveText   string `json:"sub_inactive_text" doc:"Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки"`
 	XrayJSON       bool   `json:"sub_xray_json" doc:"Happ и INCY получают полные конфиги Xray (JSON) вместо ссылок: маршрутизация, DNS и «Авто» панели доходят до них; запрос с ?format= получает свой формат в любом случае"`
 	SubLogDays     int    `json:"sub_log_days" doc:"Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен"`
-	SiteTemplate   string `json:"site_template" enum:",maintenance,cats" doc:"Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер"`
+	SiteTemplate   string `json:"site_template" enum:",maintenance,cats,custom" doc:"Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер"`
 	SiteOwn        bool   `json:"site_own" doc:"В data/panel/www есть своя страница: шаблон не действует"`
+	SitePage       bool   `json:"site_page" doc:"Своя заглушка из конструктора сохранена: её можно выбрать (custom)"`
 	BrandAccent    string `json:"brand_accent" doc:"Цвет бренда #RRGGBB; пусто — цвет приложения"`
 	BrandLogoURL   string `json:"brand_logo_url" doc:"Логотип: https, PNG, WebP или JPEG до 512 КБ; пусто — значок приложения"`
 	PublicHost     string `json:"public_host"`
@@ -118,7 +120,7 @@ type patchSettingsBody = struct {
 	InactiveText    *string              `json:"sub_inactive_text,omitempty" maxLength:"120"`
 	XrayJSON        *bool                `json:"sub_xray_json,omitempty"`
 	SubLogDays      *int                 `json:"sub_log_days,omitempty" minimum:"0" maximum:"90"`
-	SiteTemplate    *string              `json:"site_template,omitempty" enum:",maintenance,cats"`
+	SiteTemplate    *string              `json:"site_template,omitempty" enum:",maintenance,cats,custom"`
 	BrandAccent     *string              `json:"brand_accent,omitempty" maxLength:"7" doc:"#RRGGBB или пусто"`
 	BrandLogoURL    *string              `json:"brand_logo_url,omitempty" maxLength:"500" doc:"https://… или пусто"`
 	HappRouting     *string              `json:"happ_routing,omitempty" maxLength:"65536" doc:"happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать"`
@@ -314,6 +316,7 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	get(settings.KeyInactiveText, &v.InactiveText)
 	v.SubLogDays = subsrc.LogDays(ctx, h.d.Settings)
 	get(settings.KeySiteTemplate, &v.SiteTemplate)
+	v.SitePage = frontpage.Page(frontpage.Custom) != nil
 	if h.d.DataDir != "" {
 		v.SiteOwn = server.HasOwnSite(filepath.Join(h.d.DataDir, "www"))
 	}
@@ -394,6 +397,10 @@ func (h *handlers) getSettings(ctx context.Context, _ *struct{}) (*settingsOutpu
 }
 
 func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (*settingsOutput, error) {
+	// The admin's own page can be chosen once there is one.
+	if t := in.Body.SiteTemplate; t != nil && *t == frontpage.Custom && frontpage.Page(frontpage.Custom) == nil {
+		return nil, fieldErr("body.site_template", "bad_front_page")
+	}
 	b := &in.Body
 	for _, f := range settingFields {
 		if f.session && f.given(b) {

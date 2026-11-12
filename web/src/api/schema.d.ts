@@ -1765,6 +1765,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/security/presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** На каком пресете безопасности стоит панель */
+        get: operations["get-security-preset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/security/presets/{preset}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Применить пресет безопасности */
+        post: operations["apply-security-preset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/security/presets/{preset}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Что изменит пресет безопасности */
+        post: operations["plan-security-preset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings": {
         parameters: {
             query?: never;
@@ -1897,6 +1948,24 @@ export interface paths {
         put?: never;
         /** Профиль Clash с этой маршрутизацией, без сохранения */
         post: operations["routes-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/site-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Своя заглушка: документ конструктора */
+        get: operations["get-site-page"];
+        /** Сохранить свою заглушку */
+        put: operations["put-site-page"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5492,7 +5561,7 @@ export interface components {
              * @description Заглушка для посторонних: её отдают протоколы VLESS и Trojan с XHTTP, WebSocket или gRPC на чужие запросы вместо пустого 404, а с общим портом 443 и домен ноды; пусто — нет, maintenance — технические работы, cats — котики-кликер
              * @enum {string}
              */
-            front_page: "" | "maintenance" | "cats";
+            front_page: "" | "maintenance" | "cats" | "custom";
             /** @description Последний hello ноды после запуска: достучалась ли панель в ответ */
             hello?: components["schemas"]["NodeHello"];
             /** @description Адрес для клиентов: домен ноды, без него server_host */
@@ -6066,7 +6135,7 @@ export interface components {
              * @description Заглушка для посторонних: протоколы с XHTTP, WebSocket или gRPC отдают её на чужие запросы вместо пустого 404, общий порт 443 — на домене ноды и на запросах без имени (сертификат ноды, TLS 1.2+, HSTS); пусто — нет
              * @enum {string}
              */
-            front_page?: "" | "maintenance" | "cats";
+            front_page?: "" | "maintenance" | "cats" | "custom";
             host?: string;
             /** @description Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели */
             http_redirect?: boolean;
@@ -6160,7 +6229,7 @@ export interface components {
             /** Format: int64 */
             quiet_hour_utc?: number;
             /** @enum {string} */
-            site_template?: "" | "maintenance" | "cats";
+            site_template?: "" | "maintenance" | "cats" | "custom";
             /** @description До 10 строк: страница подписки и Mini App показывают их с переносами, приложения получают одну строку до 200 символов */
             sub_announce?: string;
             /** @description https://… или tg://… */
@@ -6424,6 +6493,50 @@ export interface components {
             inbounds: string[];
             name: string;
         };
+        PostureApplyInputBody: {
+            /** @description Строки плана, как их показала панель */
+            changes: components["schemas"]["PostureChange"][];
+        };
+        PostureChange: {
+            /**
+             * @description Что меняется; у строки manual: что остаётся сделать самому
+             * @enum {string}
+             */
+            code: "panel_page" | "front_page" | "site" | "port" | "through_443" | "direct" | "router_on" | "router_off" | "api_lockdown" | "port_443_busy" | "port_443_panel" | "same_name" | "no_site" | "no_port" | "ssh_open";
+            /** @description После применения: почему не получилось */
+            error?: string;
+            inbound?: string;
+            /** Format: int64 */
+            inbound_id?: number;
+            /** @description Пресет этого сделать не может: строка для админа */
+            manual: boolean;
+            /**
+             * Format: int64
+             * @description Нода; 0: сама панель
+             */
+            node: number;
+            node_name?: string;
+            params?: {
+                [key: string]: string;
+            };
+        };
+        PostureOutputBody: {
+            /** @enum {string} */
+            current: "standard" | "secure" | "custom";
+            /**
+             * Format: int64
+             * @description Сколько изменений осталось до «Безопасного»
+             */
+            secure: number;
+            /**
+             * Format: int64
+             * @description Сколько изменений осталось до «Стандартного»
+             */
+            standard: number;
+        };
+        PosturePlanOutputBody: {
+            changes: components["schemas"]["PostureChange"][];
+        };
         Preview: {
             /** @description Пользователи, которых mikan не примет, с причиной */
             invalid: components["schemas"]["List"];
@@ -6615,6 +6728,12 @@ export interface components {
             promo_codes: number;
             /** Format: int64 */
             successful_activations: number;
+        };
+        PutSitePageInputBody: {
+            /** @description Документ конструктора (JSON) */
+            doc: string;
+            /** @description Готовая страница: один HTML-файл без внешних запросов */
+            html: string;
         };
         PutSubAppsInputBody: {
             /** @description Идентификаторы заблокированных приложений из списка */
@@ -7101,11 +7220,13 @@ export interface components {
             rule_targets: string[];
             /** @description В data/panel/www есть своя страница: шаблон не действует */
             site_own: boolean;
+            /** @description Своя заглушка из конструктора сохранена: её можно выбрать (custom) */
+            site_page: boolean;
             /**
              * @description Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер
              * @enum {string}
              */
-            site_template: "" | "maintenance" | "cats";
+            site_template: "" | "maintenance" | "cats" | "custom";
             /** @description Объявление над профилем в приложениях (заголовок announce): Happ и v2RayTun показывают его под названием подписки; пусто — нет. Те же переменные, что в sub_title */
             sub_announce: string;
             /** @description Куда ведёт нажатие на объявление */
@@ -7173,6 +7294,22 @@ export interface components {
             site: string;
             /** Format: int64 */
             up: number;
+        };
+        SitePageOutputBody: {
+            /** @description Документ конструктора (JSON), как он был сохранён; пусто: своей страницы ещё нет */
+            doc: string;
+            /**
+             * Format: int64
+             * @description Наибольший размер страницы в байтах
+             */
+            max: number;
+            /** @description Зерно установки для конструктора: от него зависят страницы и блоки по умолчанию */
+            seed: string;
+            /**
+             * Format: int64
+             * @description Размер сохранённой страницы в байтах; 0: её нет
+             */
+            size: number;
         };
         SourceSkipView: {
             /** @description Идентификатор записи, как его написал источник */
@@ -12690,6 +12827,101 @@ export interface operations {
             };
         };
     };
+    "get-security-preset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostureOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "apply-security-preset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset: "standard" | "secure";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostureApplyInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PosturePlanOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "plan-security-preset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                preset: "standard" | "secure";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PosturePlanOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-settings": {
         parameters: {
             query?: never;
@@ -12979,6 +13211,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RoutesPreviewOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-site-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitePageOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-site-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSitePageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SitePageOutputBody"];
                 };
             };
             /** @description Error */

@@ -268,6 +268,43 @@ func TestUpdateTarget(t *testing.T) {
 	if _, _, err := s.Update(ctx, find(t, s, 1, "vless-vision").ID, InboundPatch{Dest: ptr("127.0.0.1:21355"), ServerName: ptr("vpn.example.com")}); err != nil {
 		t.Fatalf("self-steal on the panel's node: %v", err)
 	}
+	// The panel's own names typed as a site, on whatever port, are the panel's HTTPS asked
+	// for by that name: written as they are they would lead to the node's own 443.
+	set := settings.New(st.Q)
+	if err := settings.Set(ctx, set, settings.KeyDomain, "my.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.Set(ctx, set, settings.KeySubDomain, "sub.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	for typed, want := range map[string]string{"SUB.example.com:443": "sub.example.com", " my.example.com.:8443 ": "my.example.com"} {
+		_, got, err := s.Update(ctx, find(t, s, 1, "vless-vision").ID, InboundPatch{Dest: ptr(typed)})
+		if err != nil {
+			t.Fatalf("%q: %v", typed, err)
+		}
+		gt, _ := proto.Parse(got.Config)
+		if d, n := presets.Dest(gt); d != "127.0.0.1:21355" || len(n) != 1 || n[0] != want {
+			t.Fatalf("%q became %s %v, want the panel's own port asked for by %s", typed, d, n, want)
+		}
+	}
+	// A name of somebody else stays as written.
+	_, other, err := s.Update(ctx, find(t, s, 1, "vless-vision").ID, InboundPatch{Dest: ptr("shop.example.org:443")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ot, _ := proto.Parse(other.Config)
+	if d, n := presets.Dest(ot); d != "shop.example.org:443" || len(n) != 1 || n[0] != "shop.example.org" {
+		t.Fatalf("a stranger's site: %s %v", d, n)
+	}
+	// A new inbound given an own name starts on the panel's port as well.
+	fresh, err := s.Create(ctx, NewInbound{NodeID: 1, Preset: "vless_reality_grpc", Port: "2096", Dest: "my.example.com:443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft, _ := proto.Parse(fresh.Config)
+	if d, n := presets.Dest(ft); d != "127.0.0.1:21355" || len(n) != 1 || n[0] != "my.example.com" {
+		t.Fatalf("a new inbound on the own domain: %s %v", d, n)
+	}
 
 	n, err := st.Q.CreateNode(ctx, db.CreateNodeParams{Name: "🇺🇸 США", Address: "203.0.113.7:25305", PublicHost: "203.0.113.7", CreatedAt: now.Unix(), UpdatedAt: now.Unix()})
 	if err != nil {

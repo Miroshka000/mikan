@@ -2,6 +2,7 @@ package nodesync
 
 import (
 	"context"
+	"mikan/internal/frontpage"
 	"slices"
 	"testing"
 
@@ -84,5 +85,36 @@ func TestFrontSeedGoesWithThePage(t *testing.T) {
 	page("")
 	if d, err := s.desired(ctx); err != nil || d.FrontSeed != "" {
 		t.Fatalf("no page, no seed: %q %v", d.FrontSeed, err)
+	}
+}
+
+// The admin's own page goes to a node whole. A node from before it knows only the built-in
+// pages: it gets the installation's built-in one, never an empty answer. With no page saved
+// the node shows none.
+func TestOwnFrontPageInTheState(t *testing.T) {
+	s, _, st, _, _ := setup(t)
+	ctx := context.Background()
+	if _, err := st.DB.ExecContext(ctx, "UPDATE nodes SET front_page = 'custom' WHERE id = $1", s.id); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { frontpage.SetCustom(nil) })
+	s.m.SetFrontSeed("the-installations-own")
+	if d, err := s.desired(ctx); err != nil || d.FrontPage != "" || d.FrontHTML != "" || d.FrontSeed != "" {
+		t.Fatalf("no page saved: page %q, %d bytes, seed %q, %v", d.FrontPage, len(d.FrontHTML), d.FrontSeed, err)
+	}
+	const page = "<!doctype html><title>Bakery</title>"
+	frontpage.SetCustom([]byte(page))
+	if d, err := s.desired(ctx); err != nil || d.FrontPage != frontpage.Custom || d.FrontHTML != page {
+		t.Fatalf("the page whole: page %q html %q %v", d.FrontPage, d.FrontHTML, err)
+	}
+	s.nodeVersion = "0.5.2.1-rc.9"
+	if d, err := s.desired(ctx); err != nil || d.FrontPage != frontpage.Pick("the-installations-own") || d.FrontHTML != "" || d.FrontSeed == "" {
+		t.Fatalf("a node from before the page: page %q, %d bytes, seed %q, %v", d.FrontPage, len(d.FrontHTML), d.FrontSeed, err)
+	}
+	for _, v := range []string{"0.5.2.1-rc.10", "0.5.2.1", "0.6.0", "dev"} {
+		s.nodeVersion = v
+		if d, err := s.desired(ctx); err != nil || d.FrontPage != frontpage.Custom || d.FrontHTML != page {
+			t.Fatalf("a node on %s: page %q, %d bytes, %v", v, d.FrontPage, len(d.FrontHTML), err)
+		}
 	}
 }

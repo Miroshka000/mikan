@@ -208,11 +208,12 @@ export function createAppRouter(queryClient: QueryClient) {
     }),
   });
   const apiDocs = createRoute({ getParentRoute: () => app, path: "/settings/api", component: page(() => import("./pages/api"), "ApiPage") });
+  const siteBuilder = createRoute({ getParentRoute: () => app, path: "/settings/site-builder", component: page(() => import("./pages/site-builder"), "SiteBuilderPage") });
   const webhooks = createRoute({ getParentRoute: () => app, path: "/settings/webhooks", component: page(() => import("./pages/webhooks"), "WebhooksPage") });
   // The API section lived in the sidebar until 0.4.2: old links land on its new place.
   const apiDocsOld = createRoute({ getParentRoute: () => app, path: "/api-docs", beforeLoad: () => { throw redirect({ to: "/settings/api" }); } });
 
-  const routeTree = root.addChildren([login, supportEnter, app.addChildren([dashboard, users, tariffs, inbounds, nodes, diagnostics, promocodes, payments, addons, telegram, torrent, filters, market, addonApp, telegramOld, apiDocs, apiDocsOld, webhooks, settings])]);
+  const routeTree = root.addChildren([login, supportEnter, app.addChildren([dashboard, users, tariffs, inbounds, nodes, diagnostics, promocodes, payments, addons, telegram, torrent, filters, market, addonApp, telegramOld, apiDocs, apiDocsOld, siteBuilder, webhooks, settings])]);
   return createRouter({
     routeTree,
     basepath: basePath || "/",

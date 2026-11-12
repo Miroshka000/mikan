@@ -51,7 +51,8 @@ func (e exposure) items() []CheckItem {
 		out = append(out, CheckItem{ID: "exposure", Status: nodeapi.CheckWarn, Code: code, Params: params})
 	}
 	var (
-		sites  []string // the REALITY sites the node's ports show, each once
+		sites  []string // the strangers' sites the node's own ports show, each once
+		seen   []string // every REALITY site of the node, each once
 		weak   []string
 		stock  []string // inbounds still on the site every fresh installation starts with
 		ports  []string // TCP ports the node takes TLS connections on, each its own
@@ -71,7 +72,10 @@ func (e exposure) items() []CheckItem {
 		} else {
 			direct++
 		}
-		if t.Network() != "udp" && !(e.node.SniRouter != 0 && proto.SNI443(t) && proto.CanSNI443(t)) && !slices.Contains(ports, in.Port) {
+		// Behind the shared 443 the inbound has no port of its own outside, and its site is
+		// shown only to who asks for it by name.
+		routed := e.node.SniRouter != 0 && proto.SNI443(t) && proto.CanSNI443(t)
+		if t.Network() != "udp" && !routed && !slices.Contains(ports, in.Port) {
 			ports = append(ports, in.Port)
 		}
 		if !proto.Reality(t) {
@@ -83,12 +87,17 @@ func (e exposure) items() []CheckItem {
 		}
 		for _, name := range names {
 			name = strings.ToLower(name)
-			if slices.Contains(sites, name) {
+			// The panel's own name on its own node is the server's own certificate, not a
+			// stranger's.
+			if slices.Contains(seen, name) {
 				continue
 			}
-			sites = append(sites, name)
+			seen = append(seen, name)
 			if scan.Weak(name) {
 				weak = append(weak, name)
+			}
+			if !routed && !(e.node.Address == "" && slices.ContainsFunc(e.names, func(own string) bool { return strings.EqualFold(own, name) })) {
+				sites = append(sites, name)
 			}
 		}
 	}

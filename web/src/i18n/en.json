@@ -1,4 +1,102 @@
 {
+  "siteBuilder": {
+    "back": "Settings, security",
+    "title": "Front page builder",
+    "sub": "The site a stranger sees at the panel's address and on the nodes instead of an empty answer. The page is one file with no scripts and no outside requests, and every installation has its own: the markup, the names and the drawings depend on your panel's seed.",
+    "random": "Random site",
+    "relook": "Another look",
+    "relookHint": "The same words, other markup, spacing and drawings",
+    "randomHint": "\"Random site\" makes a whole page: the kind of site, its name, words and looks. After that you may change anything.",
+    "kind": "Kind of site",
+    "kindAny": "Any",
+    "kinds": {
+      "notes": "Personal blog",
+      "tool": "A utility's page",
+      "recipes": "Recipe notebook",
+      "club": "Board game club",
+      "studio": "Ceramics workshop",
+      "gallery": "Drawing gallery"
+    },
+    "lang": "Language of the site",
+    "langHint": "Changing the kind or the language makes a new site: the changes to this one are lost.",
+    "site": "Site",
+    "brand": "Name",
+    "tag": "Short description",
+    "tagHint": "Shown in the tab's title and in search",
+    "foot": "Line in the footer",
+    "look": "Looks",
+    "palette": "Palette",
+    "paletteN": "Palette {n}",
+    "color": {
+      "accent": "Accent",
+      "bg": "Background",
+      "ink": "Text"
+    },
+    "font": {
+      "heading": "Heading font",
+      "body": "Text font"
+    },
+    "fonts": {
+      "serif": "Serif",
+      "sans": "Sans serif",
+      "mono": "Monospace",
+      "slab": "Slab serif",
+      "humanist": "Humanist"
+    },
+    "radius": "Corner radius",
+    "width": "Page width",
+    "blocks": "Blocks",
+    "noBlocks": "No blocks: add the first one.",
+    "types": {
+      "hero": "First screen",
+      "list": "List",
+      "prose": "Text",
+      "table": "Table",
+      "gallery": "Gallery",
+      "code": "Code"
+    },
+    "up": "Up",
+    "down": "Down",
+    "remove": "Remove",
+    "addBlock": "New block",
+    "add": "Add",
+    "addRow": "Add a row",
+    "heading": "Heading",
+    "text": "Text",
+    "paragraph": "Paragraph {n}",
+    "listStyle": "List style",
+    "styles": {
+      "cards": "Cards",
+      "rows": "Rows",
+      "steps": "Steps"
+    },
+    "itemTitle": "Title of item {n}",
+    "itemMeta": "Note of item {n}",
+    "itemText": "Text of item {n}",
+    "metaPlaceholder": "A note: a date, a time, a level",
+    "rowName": "Name of row {n}",
+    "rowValue": "Value of row {n}",
+    "rowNote": "Note of row {n}",
+    "notePlaceholder": "Note",
+    "works": "Works",
+    "worksHint": "One caption a line. The panel draws a picture for each.",
+    "code": "Lines",
+    "codeHint": "A line that starts with \"$ \" is shown as a command.",
+    "viewport": "Screen size",
+    "desktop": "Computer",
+    "phone": "Phone",
+    "preview": "Preview of the front page",
+    "size": "Page: {size} KB",
+    "tooLarge": "The page is {size} KB and {max} KB fit: remove some blocks",
+    "oldNodes": "Nodes {names} are older than 0.5.2.1: until updated they show a built-in page in place of this one.",
+    "unsaved": "There are unsaved changes",
+    "upToDate": "Saved",
+    "save": "Save",
+    "saveEverywhere": "Save and set everywhere",
+    "saved": "The page is saved",
+    "savedEverywhere": "The page stands on the panel and on every node",
+    "failedNodes": "The page is saved, but was not set on the nodes: {names}"
+  },
   "common": {
     "add": "Add",
     "cancel": "Cancel",
@@ -658,6 +756,10 @@
       "servers_empty": "Choose at least one server or protocol",
       "node_not_found": "No such node",
       "bad_front_page": "No such front page",
+      "bad_change": "The preset has no such change",
+      "page_bad_doc": "The builder's document is damaged",
+      "page_not_html": "This is not an HTML page",
+      "page_too_large": "The page is larger than 200 KB",
       "bad_billing": "Check the server billing fields",
       "balance_currency_in_use": "The balance currency cannot change while balances hold money, top-ups wait or balance payments may still be refunded",
       "topup_currency": "The top-up was in another balance currency: it cannot be approved, reject it and ask the client to top up again",
@@ -2076,6 +2178,52 @@
     "brandLogoHint": "An https link to a PNG, WebP or JPEG up to 512 KB, square, 256×256. Empty: the app's icon.",
     "newLinkIssued": "New link issued, redirecting",
     "adminLinkCopied": "Panel link copied",
+    "presets": {
+      "title": "Security presets",
+      "sub": "How the whole installation is set up: ports, camouflage sites and front pages on every node. A preset changes nothing until you read its list of changes and apply it.",
+      "now": {
+        "standard": "Now: standard",
+        "secure": "Now: secure",
+        "custom": "Now: your own setup"
+      },
+      "active": "On",
+      "standard": {
+        "name": "Standard",
+        "text": "How the panel sets itself up: every protocol has a port of its own and clients connect to it directly. The simplest for a first start, but a server with a row of TLS ports is easier to tell from an ordinary site."
+      },
+      "secure": {
+        "name": "Secure",
+        "text": "One port 443 a node is left outside: the protocols behind it are told apart by the name a client asks for. Every REALITY protocol has a site of its own (your domains first, then sites next to the server), the nodes' API answers only the panel, a front page stands everywhere."
+      },
+      "show": "Show the changes",
+      "left": "{n, plural, one {# change} other {# changes}} away",
+      "count": "{n, plural, one {# change} other {# changes}}",
+      "planning": "Working out the changes. If protocols need new sites, the panel looks for them next to the server: it takes up to a minute.",
+      "nothing": "Nothing to change: the installation is set up this way already.",
+      "warn": "Clients connect to the old addresses until they refresh the subscription. Apps that refresh it themselves reconnect after the next refresh, the rest have to refresh by hand.",
+      "apply": "Apply",
+      "applied": "The preset is applied",
+      "partly": "Not applied: {n, plural, one {# change} other {# changes}}. The reasons are in the list.",
+      "manual": "Left for you to do",
+      "change": {
+        "panel_page": "Front page at the panel's address: {page}",
+        "front_page": "Front page on the node: {page}",
+        "site": "{inbound}: camouflage site {sni} in place of {from}",
+        "site_plain": "{inbound}: camouflage site {sni}",
+        "port": "{inbound}: inner port {to} in place of {from}, to free 443",
+        "through_443": "{inbound}: clients connect to 443 in place of {port}",
+        "direct": "{inbound}: clients connect to port {port} in place of 443",
+        "router_on": "Turn on the shared port 443 (SNI router)",
+        "router_off": "Turn off the shared port 443 (SNI router)",
+        "api_lockdown": "The node's API answers only the panel",
+        "port_443_busy": "Port 443 is held by a protocol that cannot work behind the shared port. Move it to another port, and the preset gathers the rest behind 443.",
+        "port_443_panel": "Port 443 of this server is taken by the panel itself, so the shared port 443 cannot be turned on for its node. Move the panel to another port, and the preset gathers the protocols behind 443.",
+        "same_name": "The name {name} belongs to another protocol behind the shared 443. Give the protocol a name of its own for clients (SNI) or turn it off.",
+        "no_site": "No site was found that the node's other protocols do not have yet. The protocol stays on its port: give it a site by hand or turn it off.",
+        "no_port": "No free port was found to move the protocol off 443.",
+        "ssh_open": "Port 22 (SSH) is open to everyone in \"Open ports of the server\". The preset leaves it, so as not to cut your own way in: close it yourself when it is not needed, or limit it by IP at the hosting."
+      }
+    },
     "adminLink": "Panel link",
     "adminLinkSub": "The panel opens only through this link. Keep it like a password.",
     "noHost": "server address not set",
@@ -2582,7 +2730,8 @@
       "short": {
         "none": "None",
         "maintenance": "Maintenance",
-        "cats": "Cats"
+        "cats": "Cats",
+        "custom": "Own"
       },
       "nodeOld": "The node runs {version}: it shows the page once updated",
       "nodeHint": "A node gives the page on VLESS and Trojan over XHTTP, WebSocket or gRPC, and with the shared port 443 on its own domain too.",
@@ -2597,14 +2746,17 @@
       "option": {
         "none": "Empty (404)",
         "maintenance": "Maintenance",
-        "cats": "Cat clicker"
+        "cats": "Cat clicker",
+        "custom": "Your own site"
       },
       "hint": {
         "none": "A 404 without a page, as before.",
         "maintenance": "A “Scheduled maintenance” page: the site is down for upkeep and back soon.",
-        "cats": "A small game: pet the cat and collect treats. Progress stays in the visitor's browser."
+        "cats": "A small game: pet the cat and collect treats. Progress stays in the visitor's browser.",
+        "custom": "A site from the builder: every installation's own, with no scripts and no outside requests."
       },
-      "open": "Open the panel's page"
+      "open": "Open the panel's page",
+      "builder": "Front page builder"
     },
     "detail": {
       "title": "Where clients go",

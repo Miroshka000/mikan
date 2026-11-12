@@ -354,13 +354,23 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	// router's names get it from the page held in memory (front.go).
 	front := ""
 	frontpage.SetSeed(st.FrontSeed)
+	frontpage.SetCustom([]byte(st.FrontHTML))
 	if page := frontpage.Page(st.FrontPage); page != nil {
-		front = filepath.Join(e.home, "front", frontpage.File(st.FrontPage))
-		if err := os.MkdirAll(filepath.Dir(front), 0o755); err != nil {
+		dir := filepath.Join(e.home, "front")
+		front = filepath.Join(dir, frontFile(st.FrontPage, page))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nodeapi.ApplyResult{}, err
 		}
 		if err := fsutil.WriteFileAtomic(front, page, 0o644); err != nil {
 			return nodeapi.ApplyResult{}, err
+		}
+		// The pages of before: an inbound that still runs with one has read it already.
+		if old, err := os.ReadDir(dir); err == nil {
+			for _, f := range old {
+				if f.Name() != filepath.Base(front) {
+					_ = os.Remove(filepath.Join(dir, f.Name()))
+				}
+			}
 		}
 	}
 	raw, rejected, err := buildConfig(st, cert, e.allowPrivate, front)
@@ -816,4 +826,14 @@ func (e *Engine) Probe(ctx context.Context, proxy string) (nodeapi.ProbeResult, 
 		e.probes[proxy] = r
 	}
 	return r, true
+}
+
+// frontFile is the name of the file of the page kind: the template's name with a mark of
+// the page's own bytes. The core reads the file when an inbound starts and not again, so a
+// page that changes (another template, the installation's seed arriving after a start with
+// the state of before) must be another file: the inbounds' config changes with the name, and
+// they start anew with the new page.
+func frontFile(kind string, page []byte) string {
+	sum := sha256.Sum256(page)
+	return strings.TrimSuffix(frontpage.File(kind), ".html") + "-" + hex.EncodeToString(sum[:6]) + ".html"
 }

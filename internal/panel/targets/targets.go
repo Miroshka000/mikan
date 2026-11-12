@@ -121,6 +121,13 @@ func (d Deps) check(ctx context.Context, dest, sni string) scan.Result {
 	return scan.Check(cctx, dest, sni, d.options(ctx))
 }
 
+// Own checks the panel's own HTTPS asked for by name, one of the panel's names (its domain,
+// the subscriptions' domain): what a REALITY inbound of the panel's own node shows when the
+// name is its site.
+func (d Deps) Own(ctx context.Context, name string) scan.Result {
+	return d.check(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(PanelPort(ctx, d.Settings))), name)
+}
+
 // ScanRequest says where to look.
 type ScanRequest struct {
 	Node db.Node

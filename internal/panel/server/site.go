@@ -54,9 +54,11 @@ func OwnSite(dir string, template func() string) http.Handler {
 // no template, is NotFound.
 func builtIn(w http.ResponseWriter, r *http.Request, name string, template func() string) bool {
 	var page []byte
-	if t := ""; template != nil && (name == "" || name == "index.html") {
-		if t = template(); t != "" {
-			page = frontpage.Page(path.Base(t))
+	kind := ""
+	if template != nil && (name == "" || name == "index.html") {
+		if t := template(); t != "" {
+			kind = path.Base(t)
+			page = frontpage.Page(kind)
 		}
 	}
 	if page == nil {
@@ -64,9 +66,17 @@ func builtIn(w http.ResponseWriter, r *http.Request, name string, template func(
 		return true
 	}
 	plain(w.Header())
+	if kind == frontpage.Custom {
+		// The admin's own page stands at the panel's address, where the admin's session
+		// lives: it gets an origin of its own and may load nothing from anywhere.
+		w.Header().Set("Content-Security-Policy", CustomPageCSP)
+	}
 	frontpage.Write(w, r, page)
 	return true
 }
+
+// CustomPageCSP is the policy of the admin's own front page at the panel's address.
+const CustomPageCSP = "sandbox allow-popups; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 // HasOwnSite says whether dir has a page at "/" of its own: the templates do not apply then.
 func HasOwnSite(dir string) bool {

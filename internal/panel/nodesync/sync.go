@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"mikan/internal/frontpage"
 	"mikan/internal/nodeapi"
 	"mikan/internal/pace"
 	"mikan/internal/panel/domain"
@@ -30,6 +31,7 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/warp"
 	"mikan/internal/proto"
+	"mikan/internal/release"
 	"mikan/internal/sub/build"
 	"mikan/internal/sub/mihomo"
 )
@@ -283,11 +285,24 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	// The front page: what the inbounds on an HTTP transport give a stranger's request, and
 	// with the shared 443 what the node's own domain gives.
 	st.FrontPage = n.FrontPage
-	if n.FrontPage != "" {
+	if n.FrontPage == frontpage.Custom {
+		// The admin's own page goes whole. A node from before it knows only the built-in
+		// ones and would show nothing: it gets the built-in page of this installation.
+		page := frontpage.Page(frontpage.Custom)
+		switch {
+		case page == nil:
+			st.FrontPage = ""
+		case s.nodeVersion != "" && release.Valid(s.nodeVersion) && !release.AtLeast(s.nodeVersion, customPageSince):
+			st.FrontPage = frontpage.Pick(s.m.frontSeed)
+		default:
+			st.FrontHTML = string(page)
+		}
+	}
+	if st.FrontPage != "" {
 		st.FrontSeed = s.m.frontSeed
 	}
 	if n.SniRouter != 0 {
-		st.Router = sniRouter(st.Inbounds, n.Domain, n.FrontPage != "")
+		st.Router = sniRouter(st.Inbounds, n.Domain, st.FrontPage != "")
 	}
 	if n.FairShare != 0 && n.ChannelMbps.Valid {
 		st.Shaping = &nodeapi.Shaping{ChannelMbps: int(n.ChannelMbps.Int64)}
@@ -1170,15 +1185,26 @@ func countSites(ctx context.Context, q *db.Queries, c nodeapi.Counters, owner ma
 	return nil
 }
 
+// customPageSince is the first node version that shows the admin's own front page.
+const customPageSince = "0.5.2.1-rc.10"
+
 // sniRouter is the node's SNI router for the inbounds marked for it: each by the names its
 // clients ask for, the first REALITY one taking any other name (it passes a stranger on to
 // its target, as on a port of its own). With front, the node's front page takes the node's
 // own domain, unless an inbound asks for it, and a ClientHello with no name. nil when no
 // inbound is marked, and with only the page when an inbound of its own holds TCP 443.
+//
+// An inbound behind a CDN or another server (its clients are given that server's address)
+// takes any other name instead, and a ClientHello with no name too: what connects to the
+// node for it is the CDN, which asks for the name its own settings give the origin (the
+// origin's host, the zone's apex, no name at all when the origin is an address), and that
+// name is nothing the panel knows. A stranger with a name of his own gets what the inbound
+// gives a request that is not its client's: the node's certificate and its front page.
 func sniRouter(inbounds []nodeapi.Inbound, nodeDomain string, front bool) *nodeapi.SNIRouter {
 	r := &nodeapi.SNIRouter{}
 	taken := map[string]bool{}
 	busy := false // TCP 443 held by an inbound outside the router
+	origin := ""  // the first inbound behind a CDN or another server
 	for _, in := range inbounds {
 		t, err := proto.Parse(string(in.Config))
 		if err != nil {
@@ -1196,12 +1222,21 @@ func sniRouter(inbounds []nodeapi.Inbound, nodeDomain string, front bool) *nodea
 		if r.Default == "" && proto.Reality(t) {
 			r.Default = in.Name
 		}
+		if origin == "" && !proto.Reality(t) && t.Ext().Client.Server != "" {
+			origin = in.Name
+		}
+	}
+	if origin != "" {
+		r.Default = origin
 	}
 	if front {
 		if d := strings.ToLower(strings.TrimSuffix(nodeDomain, ".")); d != "" && !taken[d] {
 			r.Stub = append(r.Stub, d)
 		}
-		r.Stub = append(r.Stub, "")
+		// With an inbound behind a CDN a ClientHello with no name is the CDN's as well.
+		if origin == "" {
+			r.Stub = append(r.Stub, "")
+		}
 	}
 	if len(r.Routes) == 0 && (len(r.Stub) == 0 || busy) {
 		return nil

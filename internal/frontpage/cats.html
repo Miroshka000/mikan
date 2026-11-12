@@ -5,36 +5,75 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>[[t "title"]]</title>
 <style>
-  :root { color-scheme: light dark; --bg: [[c "#fff7ef"]]; --card: [[c "#fff"]]; --ink: [[c "#2b211b"]]; --muted: [[c "#7a6a5e"]]; --line: [[c "#f0e2d4"]]; --accent: [[c "#f08a24"]]; --accent-ink: [[c "#fff"]]; }
+  :root { color-scheme: light dark; --bg: [[c "#fff7ef"]]; --card: [[c "#ffffff"]]; --ink: [[c "#2b211b"]]; --muted: [[c "#75655a"]]; --line: [[c "#f0e2d4"]]; --accent: [[c "#e8801c"]]; --accent-ink: [[c "#2b1606"]]; --fur: [[n "fur"]]; --muzzle: #fff6ea; --eye: #2b211b; }
   @media (prefers-color-scheme: dark) { :root { --bg: [[c "#17120e"]]; --card: [[c "#1f1914"]]; --ink: [[c "#f3e9df"]]; --muted: [[c "#b3a294"]]; --line: [[c "#2e251d"]]; --accent: [[c "#f59a3c"]]; --accent-ink: [[c "#1b130c"]]; } }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; }
-  main { width: min([[n "width"]]px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: [[n "radius"]]px; padding: 24px; text-align: center; }
-  h1 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 700; }
-  .[[id "count"]] { margin: 8px 0 0; font-size: 40px; line-height: 48px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .[[id "rate"]] { margin: 0; color: var(--muted); font-size: 13px; }
-  .[[id "cat"]] { position: relative; display: block; margin: 16px auto; width: [[n "size"]]px; height: [[n "size"]]px; border: 0; border-radius: 50%; background: var(--bg); font-size: 120px; line-height: [[n "size"]]px; cursor: pointer; transition: transform 0.08s; }
-  .[[id "cat"]]:hover { transform: scale(1.04); }
-  .[[id "cat"]]:active { transform: scale(0.94); }
-  .[[id "cat"]]:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
-  .[[id "pop"]] { position: absolute; left: 50%; top: 24px; font-size: 20px; font-weight: 700; color: var(--accent); pointer-events: none; animation: [[id "up"]] 0.8s ease-out forwards; }
+  body { margin: 0; min-height: 100vh; padding: 24px 16px; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: min([[n "width"]]px, 100%); margin-inline: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 720px) { main { grid-template-columns: minmax(0, 1fr); } }
+  header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 24px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 28px; line-height: 36px; font-weight: 800; letter-spacing: -0.01em; }
+  .[[id "rate"]] { margin: 0; color: var(--muted); font-size: 14px; }
+  .[[id "stage"]] { padding: 24px; border-radius: [[n "radius"]]px; background: var(--card); border: 1px solid var(--line); text-align: center; user-select: none; }
+  .[[id "count"]] { margin: 0; font-size: 56px; line-height: 64px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .[[id "cat"]] { position: relative; display: block; margin: 8px auto 0; width: min([[n "size"]]px, 100%); padding: 0; border: 0; background: none; cursor: pointer; transition: transform 0.08s; -webkit-tap-highlight-color: transparent; }
+  .[[id "cat"]] svg { display: block; width: 100%; height: auto; }
+  .[[id "cat"]]:hover { transform: scale(1.03); }
+  .[[id "cat"]]:active { transform: scale(0.95); }
+  .[[id "cat"]]:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: [[n "radius"]]px; }
+  .[[id "tail"]] { transform-origin: 150px 160px; animation: [[id "wag"]] 2.4s ease-in-out infinite alternate; }
+  @keyframes [[id "wag"]] { to { transform: rotate(-14deg); } }
+  .[[id "ec"]], .[[id "bl"]] { display: none; }
+  svg[data-m="2"] .[[id "eo"]], svg[data-m="3"] .[[id "eo"]], svg[data-m="4"] .[[id "eo"]] { display: none; }
+  svg[data-m="2"] .[[id "ec"]], svg[data-m="3"] .[[id "ec"]], svg[data-m="4"] .[[id "ec"]] { display: inline; }
+  svg[data-m="3"] .[[id "bl"]], svg[data-m="4"] .[[id "bl"]] { display: inline; }
+  svg[data-m="4"] .[[id "tail"]] { animation-duration: 0.6s; }
+  .[[id "pop"]] { position: absolute; left: 50%; top: 8px; font-size: 22px; font-weight: 800; color: var(--accent); pointer-events: none; animation: [[id "up"]] 0.8s ease-out forwards; }
   @keyframes [[id "up"]] { to { transform: translate(-50%, -64px); opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { .[[id "pop"]] { animation-duration: 0.01s; } .[[id "cat"]] { transition: none; } }
-  .[[id "shop"]] { display: grid; gap: 8px; margin-top: 8px; }
-  .[[id "shop"]] button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 8px 16px; border: 1px solid var(--line); border-radius: [[n "radius.small"]]px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  @media (prefers-reduced-motion: reduce) { .[[id "pop"]] { animation-duration: 0.01s; } .[[id "cat"]] { transition: none; } .[[id "tail"]] { animation: none; } }
+  .[[id "side"]] h2 { margin: 0 0 12px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--muted); }
+  .[[id "shop"]] { display: grid; gap: 8px; }
+  .[[id "shop"]] button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 64px; padding: 12px 16px; border: 1px solid var(--line); border-radius: [[n "radius.small"]]px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transition: border-color 0.15s, transform 0.08s; }
   .[[id "shop"]] button:hover:not(:disabled) { border-color: var(--accent); }
-  .[[id "shop"]] button:disabled { opacity: 0.48; cursor: not-allowed; }
-  .[[id "shop"]] b { white-space: nowrap; color: var(--accent); }
-  .[[id "shop"]] span small { display: block; color: var(--muted); font-size: 12px; }
+  .[[id "shop"]] button:active:not(:disabled) { transform: scale(0.99); }
+  .[[id "shop"]] button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .[[id "shop"]] button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .[[id "shop"]] b { white-space: nowrap; padding: 4px 12px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+  .[[id "shop"]] span { font-weight: 600; }
+  .[[id "shop"]] span small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; }
+  .[[id "foot"]] { margin: 16px 0 0; color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>[[t "title"]]</h1>
-  <p class="[[id "count"]]" id="[[id "count"]]" aria-live="polite">0</p>
-  <p class="[[id "rate"]]" id="[[id "rate"]]">[[t "hint"]]</p>
-  <button class="[[id "cat"]]" id="[[id "cat"]]" type="button" aria-label="[[t "pet"]]"><span id="[[id "face"]]">🐱</span></button>
-  <div class="[[id "shop"]]" id="[[id "shop"]]"></div>
+  <header>
+    <h1>[[t "title"]]</h1>
+    <p class="[[id "rate"]]" id="[[id "rate"]]">[[t "hint"]]</p>
+  </header>
+  <section class="[[id "stage"]]">
+    <p class="[[id "count"]]" id="[[id "count"]]" aria-live="polite">0</p>
+    <button class="[[id "cat"]]" id="[[id "cat"]]" type="button" aria-label="[[t "pet"]]">
+      <svg id="[[id "face"]]" data-m="0" viewBox="0 0 200 200" fill="none" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path class="[[id "tail"]]" d="M150 160c26 2 34-18 26-36" stroke="var(--fur)" stroke-width="14"/>
+        <ellipse cx="100" cy="158" rx="56" ry="34" fill="var(--fur)"/>
+        <path d="M52 92 46 38l38 24q16-6 32 0l38-24-6 54q2 42-48 42T52 92Z" fill="var(--fur)"/>
+        <path d="m56 56 16 10-12 10ZM144 56l-16 10 12 10Z" fill="var(--muzzle)" opacity="0.7"/>
+        <ellipse cx="100" cy="112" rx="26" ry="18" fill="var(--muzzle)"/>
+        <g class="[[id "eo"]]" fill="var(--eye)"><ellipse cx="78" cy="92" rx="7" ry="9"/><ellipse cx="122" cy="92" rx="7" ry="9"/><circle cx="80" cy="89" r="2.5" fill="#fff"/><circle cx="124" cy="89" r="2.5" fill="#fff"/></g>
+        <g class="[[id "ec"]]" stroke="var(--eye)" stroke-width="4"><path d="M70 95q8-10 16 0M114 95q8-10 16 0"/></g>
+        <g class="[[id "bl"]]" fill="var(--accent)" opacity="0.45"><circle cx="64" cy="108" r="8"/><circle cx="136" cy="108" r="8"/></g>
+        <path d="M95 104h10l-5 6Z" fill="var(--eye)"/>
+        <path d="M100 110q-7 9-15 3M100 110q7 9 15 3" stroke="var(--eye)" stroke-width="3"/>
+        <path d="M70 112 44 108M70 118l-24 6M130 112l26-4M130 118l24 6" stroke="var(--eye)" stroke-width="2" opacity="0.45"/>
+        <ellipse cx="78" cy="186" rx="16" ry="8" fill="var(--muzzle)"/><ellipse cx="122" cy="186" rx="16" ry="8" fill="var(--muzzle)"/>
+      </svg>
+    </button>
+  </section>
+  <section class="[[id "side"]]">
+    <h2>[[t "shelf"]]</h2>
+    <div class="[[id "shop"]]" id="[[id "shop"]]"></div>
+    <p class="[[id "foot"]]">[[t "foot"]]</p>
+  </section>
 </main>
 <script>
 (function () {
@@ -44,7 +83,6 @@
     { id: "kitten", name: "[[t "kitten"]]", note: "+5 treats every second", cost: [[n "cost.c"]], per: 0, auto: 5 },
     { id: "tower", name: "[[t "tower"]]", note: "+25 treats every second", cost: [[n "cost.d"]], per: 0, auto: 25 }
   ];
-  var cats = ["🐱", "😺", "😸", "😻", "😽"];
   var s = { treats: 0, have: {} };
   try { s = JSON.parse(localStorage.getItem("[[t "store"]]")) || s; } catch (e) {}
   s.have = s.have || {};
@@ -58,7 +96,7 @@
     count.textContent = Math.floor(s.treats).toLocaleString();
     var ps = [[id "perSec"]]();
     rate.textContent = ps ? ps + " treats per second · " + [[id "perPet"]]() + " per pet" : "[[t "hint"]]";
-    face.textContent = cats[Math.min(cats.length - 1, Math.floor(Math.log10(1 + s.treats)))];
+    face.setAttribute("data-m", Math.min(4, Math.floor(Math.log10(1 + s.treats))));
     Array.prototype.forEach.call(shop.children, function (b, i) {
       var it = items[i];
       b.disabled = s.treats < [[id "price"]](it);

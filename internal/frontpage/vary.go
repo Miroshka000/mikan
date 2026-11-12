@@ -51,6 +51,8 @@ var texts = map[string]map[string][]string{
 		"yarn":   {"Ball of yarn", "Yarn ball", "Toy mouse", "Feather wand"},
 		"kitten": {"Kitten", "Little kitten", "Tiny kitten", "Sleepy kitten"},
 		"tower":  {"Cat tower", "Cat tree", "Scratching post", "Window perch"},
+		"shelf":  {"Things for the cat", "The cat's shelf", "Spend your treats", "For a happier cat"},
+		"foot":   {"Your treats are kept in this browser.", "Progress is saved on this device.", "The cat remembers you in this browser."},
 		"store":  {"cat-clicker", "kitty-clicker", "cat-treats", "purr-game", "cat-tap", "treats"},
 	},
 	"maintenance": {
@@ -63,6 +65,16 @@ var texts = map[string]map[string][]string{
 		},
 		"thanks": {"Thank you for your patience.", "Thanks for bearing with us.", "We appreciate your patience.", "Sorry for the wait."},
 		"label":  {"Maintenance in progress", "Work in progress", "Updating"},
+		"head":   {"Service status", "System status", "Status", "Status page"},
+		"plan":   {"What is being done", "The plan of the work", "Steps of the maintenance"},
+		// The three lines of the plan are one set (one group), and so are their states.
+		"step.a":  {"Backups made and checked", "Data copied to the new servers", "Traffic moved off the old machines", "New storage prepared"},
+		"step.b":  {"Moving data to the new storage", "Upgrading the database", "Installing the new software", "Switching to the new network"},
+		"step.c":  {"Checks, then the site opens again", "Final tests and reopening", "Verification and return to service", "Tests, then back online"},
+		"state.a": {"Done", "Finished", "Complete"},
+		"state.b": {"In progress", "Under way", "Now"},
+		"state.c": {"Up next", "Waiting", "Later"},
+		"foot":    {"This page updates as the work goes on.", "The site returns when the last step is done.", "Nothing is needed from you while we work."},
 	},
 }
 
@@ -78,18 +90,18 @@ var numbers = map[string]map[string][]string{
 		"tick":         {"250", "200", "500", "100"},
 		"tick.per":     {"4", "5", "2", "10"},
 		"keep":         {"5000", "3000", "4000", "8000", "10000"},
-		"width":        {"440", "400", "420", "460", "480"},
+		"width":        {"880", "840", "920", "860", "960"},
 		"radius":       {"24", "16", "20", "28", "12"},
 		"radius.small": {"12", "8", "10", "14", "6"},
-		"size":         {"192", "176", "184", "200", "208"},
+		"size":         {"260", "240", "250", "270", "280"},
+		// The cat's coat: a cat's own colours, in either colour scheme.
+		"fur": {"#f4a04a", "#9aa0a8", "#c98a5a", "#e9d3ad", "#b9b2a8", "#e08a34"},
 	},
 	"maintenance": {
-		"width":  {"480", "440", "460", "500", "520"},
-		"radius": {"16", "12", "20", "24", "8"},
-		"pad":    {"32", "24", "28", "40", "36"},
-		"gear":   {"48", "40", "56", "44", "52"},
-		"turn":   {"6", "5", "8", "7", "10"},
-		"glide":  {"2.4", "2", "3", "2.8", "1.8"},
+		"width": {"640", "600", "680", "620", "660"},
+		"pad":   {"24", "20", "28", "32", "16"},
+		"gap":   {"56", "48", "64", "52", "72"},
+		"glide": {"2.4", "2", "3", "2.8", "1.8"},
 	},
 }
 
@@ -105,8 +117,8 @@ var idWords = []string{
 // ids are the names a page's template asks for (id), in a fixed order: each gets a word of
 // its own.
 var ids = map[string][]string{
-	"cats":        {"cat", "count", "face", "owned", "perPet", "perSec", "pop", "price", "rate", "render", "save", "shop", "up"},
-	"maintenance": {"bar", "gear", "slide", "spin"},
+	"cats":        {"cat", "count", "face", "owned", "perPet", "perSec", "pop", "price", "rate", "render", "save", "shop", "up", "stage", "side", "foot", "tail", "wag", "eo", "ec", "bl"},
+	"maintenance": {"wrap", "state", "pulse", "lead", "steps", "done", "now", "slide", "thanks"},
 }
 
 func (l look) text(key string) (string, error) {

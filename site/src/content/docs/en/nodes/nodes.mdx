@@ -183,12 +183,23 @@ In the API a node has `tags` (up to 20, on create and change), and `GET /api/v1/
 
 ## Front page for strangers
 
-In **Edit node** → **Front page for strangers**: "Maintenance" or "Cats clicker", the same pages as the panel's first page. A stranger who opens the server in a browser sees it instead of a bare 404:
+In **Edit node** → **Front page for strangers**: "Maintenance", "Cats clicker" or, since 0.5.2.1, "Your own site" from the builder, the same pages as the panel's first page. A stranger who opens the server in a browser sees it instead of a bare 404:
 
 - VLESS and Trojan on XHTTP, WebSocket or gRPC give it to any request that is not theirs, on any domain of theirs;
 - with the **shared port 443**, the node's own domain and a request with no name (by IP) get it too: on the node's real certificate, TLS 1.2 or later, with HSTS. A domain a protocol on the shared 443 takes stays with the protocol.
 
 Protocols without HTTP (REALITY, Vision, Trojan over TCP, Hysteria2 and the others) give no page, and REALITY still sends strangers on to its masking site.
+
+### Your own site from the builder
+
+Since 0.5.2.1, **Settings** → **Security** → **Front page for strangers** has a **Front page builder** button. It makes a site of blocks (first screen, list, text, table, gallery, code) and shows it beside them in a frame as a stranger will get it.
+
+- **Random site** makes a whole page: the kind of site (a blog, a utility's page, recipes, a board game club, a ceramics workshop, a gallery of drawings), its name, words, palette and drawings. The site's language switches between Russian and English.
+- **Another look** keeps the words and changes the markup, the spacing and the drawings.
+- The name, the texts, the colours, the fonts, the corners, the width and the blocks can be changed by hand.
+- **Save and set everywhere** sets the page on the panel and on every node; **Save** only keeps it, to be chosen later with the "Your own site" tile.
+
+The page is one file of up to 200 KB with no scripts, no fonts and no outside requests. Every installation has its own: the markup, the names of the classes and the drawings depend on the panel's seed, so one hash of a page does not find other installations. A node older than 0.5.2.1 shows a built-in page in its place until it is updated.
 
 ## Speed check
 

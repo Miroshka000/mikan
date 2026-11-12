@@ -164,8 +164,19 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 	}
 	config := in.Config
 	if info.ID != presets.Custom {
-		if config, err = presets.NewConfig(info.ID, in.Dest); err != nil {
+		dest, site := in.Dest, ""
+		if target, name, own, err := s.ownSite(ctx, node, dest); err != nil {
 			return db.Inbound{}, err
+		} else if own {
+			dest, site = target, name
+		}
+		if config, err = presets.NewConfig(info.ID, dest); err != nil {
+			return db.Inbound{}, err
+		}
+		if site != "" {
+			if config, err = editTemplate(config, InboundPatch{Dest: &dest, ServerName: &site}); err != nil {
+				return db.Inbound{}, err
+			}
 		}
 	}
 	t, err := s.CheckTemplate(ctx, node, config, port)
@@ -303,6 +314,22 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 	}
 	if p.Config != nil {
 		next.Config = *p.Config
+	}
+	if p.Dest != nil {
+		node, err := s.node(ctx, prev.NodeID)
+		if err != nil {
+			return fail(err)
+		}
+		target, name, own, err := s.ownSite(ctx, node, *p.Dest)
+		if err != nil {
+			return fail(err)
+		}
+		if own {
+			p.Dest = &target
+			if p.ServerName == nil || strings.TrimSpace(*p.ServerName) == "" {
+				p.ServerName = &name
+			}
+		}
 	}
 	if next.Config, err = editTemplate(next.Config, p); err != nil {
 		return fail(err)
@@ -610,6 +637,37 @@ func (s *Inbounds) dryRun(ctx context.Context, node db.Node, t proto.Template, p
 		return nil
 	}
 	return err
+}
+
+// ownSite says whether dest, a REALITY site as the admin gave it, is one of the panel's own
+// names on the panel's own node (the panel's domain, the subscriptions' domain, on any
+// port), and gives what it stands for: the panel's HTTPS on loopback, asked for by that
+// name. "My own domain" typed as a site means the site this server shows, and that is the
+// panel. Taken as written, the name leads to the server's own address: on 443 that is the
+// node itself, whose certificate is for another name ("the certificate does not suit the
+// name"), and behind the shared 443 it is the very inbound that asks, without end.
+func (s *Inbounds) ownSite(ctx context.Context, node db.Node, dest string) (target, name string, own bool, err error) {
+	host, _, splitErr := net.SplitHostPort(strings.TrimSpace(dest))
+	if splitErr != nil || host == "" || node.Address != "" {
+		return "", "", false, nil
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	set := settings.New(s.st.Q)
+	for _, key := range []string{settings.KeyDomain, settings.KeySubDomain} {
+		n, err := set.String(ctx, key)
+		if err != nil {
+			return "", "", false, err
+		}
+		own = own || n != "" && strings.EqualFold(strings.TrimSuffix(n, "."), host)
+	}
+	if !own {
+		return "", "", false, nil
+	}
+	port, err := s.selfStealPort(ctx, node)
+	if err != nil || port == 0 {
+		return "", "", false, err
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), host, true, nil
 }
 
 // selfStealPort is the panel's port for the panel's own node, the only one that may use
