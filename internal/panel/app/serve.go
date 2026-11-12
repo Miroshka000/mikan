@@ -32,6 +32,7 @@ import (
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/reach"
 	"mikan/internal/panel/selfaddr"
+	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
@@ -86,6 +87,12 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	holder := &tlscert.Holder{}
 	holder.Set(self)
 
+	// Behind a proxy the client's address is read from X-Forwarded-For, of the proxies on
+	// this server and its private networks and of those named in MIKAN_TRUSTED_PROXIES.
+	server.SetTrustedProxies(cfg.TrustedProxies)
+	if cfg.TrustProxy {
+		logger.Info("X-Forwarded-For is read from proxies on this server, on its private networks and in MIKAN_TRUSTED_PROXIES", "networks", len(cfg.TrustedProxies))
+	}
 	opts := Options{Version: version, Web: web, TrustProxy: cfg.TrustProxy, SupportOff: cfg.SupportOff, Log: logger, Now: time.Now,
 		Autotune: autotune.DefaultOptions().Scaled(cfg.AutotuneScale), TelegramAPI: cfg.TelegramAPI,
 		DataDir: cfg.DataDir, Dev: cfg.Dev, Releases: updates.Fetch(release.IndexURL, release.LatestURL), DNS: dnscheck.New(), Reach: reach.New("", nil, time.Now), Geo: ipgeo.New(nil, time.Now), Logs: logs}

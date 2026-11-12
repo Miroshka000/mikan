@@ -72,8 +72,8 @@ github.com/getmikan/smux v0.0.0-20261017193300-1d830d820876 h1:K+AdGZRxqkfrP+P8G
 github.com/getmikan/smux v0.0.0-20261017193300-1d830d820876/go.mod h1:/yI4OiGOSn0SURhZdJF3CbtPg3nwK700bG8TZLMBvAg=
 github.com/getmikan/tls v0.1.9-0.20261018054601-0a54a49f00e8 h1:8spntLCLNJoWVXJy3R+YgwsOopUSgMNsAmFMEfUr3mI=
 github.com/getmikan/tls v0.1.9-0.20261018054601-0a54a49f00e8/go.mod h1:0XeVdL0cBw+8i5Hqy3lVeP9IyD/LFTq02ExvHM6rzEM=
-github.com/getmikan/utls v1.8.9-0.20261110224923-a6dee38a3c8d h1:b1MT7Aed05RMpADFJ7Wj4hmQLPQcJRgGTtqb091Lw5w=
-github.com/getmikan/utls v1.8.9-0.20261110224923-a6dee38a3c8d/go.mod h1:gxkPJpm+5l3rStQM59z70up244h0tv4TlSkB5dlakjU=
+github.com/getmikan/utls v1.8.9-0.20261112112555-4989099de205 h1:U09CAgUegsuD6a8IWrJ7JhgwsAzT+JaZ3Kn5FK01pYc=
+github.com/getmikan/utls v1.8.9-0.20261112112555-4989099de205/go.mod h1:gxkPJpm+5l3rStQM59z70up244h0tv4TlSkB5dlakjU=
 github.com/github/fakeca v0.1.0 h1:Km/MVOFvclqxPM9dZBC4+QE564nU4gz4iZ0D9pMw28I=
 github.com/github/fakeca v0.1.0/go.mod h1:+bormgoGMMuamOscx7N91aOuUST7wdaJ2rNjeohylyo=
 github.com/go-acme/lego/v4 v4.35.2 h1:uVQg+KC/yj9R2g7Q9W5wDqhvQvxV5SMu5eqFVoN5xZU=

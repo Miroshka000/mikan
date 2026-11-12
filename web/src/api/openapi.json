@@ -875,7 +875,8 @@
               "blocked",
               "target_down",
               "still_blocked",
-              "busy"
+              "busy",
+              "default_site"
             ],
             "type": "string"
           }

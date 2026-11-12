@@ -170,7 +170,7 @@ replace google.golang.org/protobuf => github.com/metacubex/protobuf-go v0.0.0-20
 
 replace github.com/metacubex/mihomo => github.com/getmikan/Citrus v1.0.0-beta.3
 
-replace github.com/metacubex/utls => github.com/getmikan/utls v1.8.9-0.20261110224923-a6dee38a3c8d
+replace github.com/metacubex/utls => github.com/getmikan/utls v1.8.9-0.20261112112555-4989099de205
 
 replace github.com/metacubex/http => github.com/getmikan/http v0.1.8-citrus.2
 

@@ -381,12 +381,14 @@ func TestEscalatesToTheTarget(t *testing.T) {
 	e := setup(t)
 	o := DefaultOptions()
 	x := e.inbound(t, "vless-xhttp")
-	e.nodes.found = []nodeapi.TargetResult{good("203.0.113.44:443", "shop.example.org")}
 	blocked := func(d time.Duration) {
 		e.reaches("hysteria2", "tuic", "vless-vision")
 		e.step(t, d)
 	}
 	e.worked(t)
+	// The site next to the server turns up only now: the inbounds have clients by then, and
+	// one with clients does not leave the stock site by itself (leaveStockSite).
+	e.nodes.found = []nodeapi.TargetResult{good("203.0.113.44:443", "shop.example.org")}
 	blocked(0)
 	blocked(o.Hold)
 	if e.inbound(t, "vless-xhttp").Port != "2053" {

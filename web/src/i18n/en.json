@@ -1645,7 +1645,8 @@
       "blocked": "clients could not connect",
       "target_down": "the old site stopped responding",
       "still_blocked": "a new port did not help",
-      "busy": "another program on the server held the port"
+      "busy": "another program on the server held the port",
+      "default_site": "nobody had used the protocol yet, the default site gave way to one next to the server"
     },
     "clashOnly": "Clash apps only",
     "clashOnlyNote": "Only Clash apps on a recent mihomo get it: Koala Clash, SlothClash, FlClash, Clash Verge, ClashFest. Happ, v2RayTun and Hiddify will not see it.",

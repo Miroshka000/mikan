@@ -102,8 +102,8 @@ func TestRealityReplayWindow(t *testing.T) {
 		}
 		return fmt.Sprintf("%.0f", toFloat(l["reality-config"].(map[string]any)["max-time-difference"]))
 	}
-	if got := window(src); got != "7200000" {
-		t.Fatalf("default window: %s (the Citrus core reads milliseconds: 2 h = 7200000)", got)
+	if got := window(src); got != "600000" {
+		t.Fatalf("default window: %s (the Citrus core reads milliseconds: 10 min = 600000)", got)
 	}
 	if got := window(src + "  max-time-difference: 60000\n"); got != "60000" {
 		t.Fatalf("the template's own window: %s", got)

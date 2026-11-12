@@ -199,6 +199,9 @@ func TestRelayPortOfTheAdminStays(t *testing.T) {
 // site that keeps failing is replaced after TargetFails checks and Cooldown.
 func TestRelayFindsASiteNextToTheServer(t *testing.T) {
 	e := setup(t)
+	// The node's inbounds have clients: they keep their site, and the searches counted below
+	// are the relay's alone.
+	e.worked(t)
 	scans := 0
 	e.nodes.onScan = func() { scans++ }
 	e.localRelay(t)
@@ -216,6 +219,11 @@ func TestRelayFindsASiteNextToTheServer(t *testing.T) {
 	}
 	in, err := e.tn.inbounds.Create(e.ctx, domain.NewInbound{NodeID: b.ID, Preset: "vless_reality_xhttp", Port: "443"})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// B's new inbound keeps its site: a fresh one would look for a site of its own
+	// (leaveStockSite), and the searches counted here are the relay's.
+	if err := e.st.Q.SetInboundAuto(e.ctx, db.SetInboundAutoParams{AutoPort: 1, AutoSni: 0, ID: in.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if err := domain.UseExit(e.ctx, e.st.Q, b.ID, 1, e.now, nil); err != nil {

@@ -2,6 +2,7 @@ package autotune
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand/v2"
 	"slices"
@@ -119,7 +120,10 @@ type Tuner struct {
 	// under mu; a replacement reads them once the checks are over.
 	failed    map[string]time.Time
 	checkedAt time.Time
-	prunedAt  time.Time
+	// stockTried is when a site was last looked for for an inbound on the stock site
+	// (leaveStockSite), by inbound id; under mu.
+	stockTried map[int64]time.Time
+	prunedAt   time.Time
 }
 
 type state struct {
@@ -129,7 +133,7 @@ type state struct {
 
 func New(st *store.Store, set *settings.Settings, nodes Nodes, changes domain.Changes, log *slog.Logger, now func() time.Time, o Options) *Tuner {
 	return &Tuner{st: st, inbounds: domain.NewInbounds(st, nil, now), set: set, nodes: nodes, changes: changes, log: log, now: now, o: o, pick: rand.IntN,
-		state: map[int64]*state{}, busy: map[int64]string{}, relayLeft: map[int64]map[string]time.Time{}, failed: map[string]time.Time{},
+		state: map[int64]*state{}, busy: map[int64]string{}, relayLeft: map[int64]map[string]time.Time{}, failed: map[string]time.Time{}, stockTried: map[int64]time.Time{},
 		relayFails: map[int64]int{}, relayPicked: map[int64]time.Time{}, relayBlocked: map[int64]time.Time{}, relayMoved: map[int64]time.Time{}}
 }
 
@@ -171,6 +175,19 @@ type world struct {
 	// picked are the sites this round moved an inbound or a relay to, by node id: the next
 	// one of the node to need a site takes the same, before the snapshot shows the first move.
 	picked map[int64]string
+	// scans are the sites found next to a node's server in this round, by node id (sitesNear).
+	scans map[int64][]nodeapi.TargetResult
+}
+
+// reached says whether a client got through to the inbound within the time the tuner
+// remembers (reachKeep).
+func (w *world) reached(inbound int64) bool {
+	for _, by := range w.reach {
+		if by[inbound] != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // siteNames are the names node's other enabled inbounds show to a stranger, and the site
@@ -695,6 +712,7 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 		tpl proto.Template
 	}
 	found := make([][]candidate, len(w.nodes))
+	stock := make([][]candidate, len(w.nodes)) // on the site a fresh inbound starts with, and it answers
 	var wg sync.WaitGroup
 	for i, n := range w.nodes {
 		wg.Go(func() {
@@ -720,6 +738,8 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 						t.noteTarget(x.ID, dest, *prev)
 						if !prev.OK {
 							found[i] = append(found[i], candidate{n, x, tpl})
+						} else if dest == presets.DefaultDest {
+							stock[i] = append(stock[i], candidate{n, x, tpl})
 						}
 					}
 					continue
@@ -732,6 +752,8 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 				seen[key] = &r
 				if !r.OK {
 					found[i] = append(found[i], candidate{n, x, tpl})
+				} else if dest == presets.DefaultDest {
+					stock[i] = append(stock[i], candidate{n, x, tpl})
 				}
 			}
 		})
@@ -750,6 +772,58 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 				t.replaceTarget(ctx, w, c.n, c.x, c.tpl, "target_down")
 			}
 		}
+	}
+	for _, list := range stock {
+		for _, c := range list {
+			if ctx.Err() != nil {
+				return
+			}
+			t.leaveStockSite(ctx, w, c.n, c.x, c.tpl)
+		}
+	}
+}
+
+// ReasonStock is why an inbound nobody used yet left the site every installation starts with.
+const ReasonStock = "default_site"
+
+// stockRetry is how often a site next to the server is looked for again for an inbound that
+// stays on the stock site because none was found: a search is some 250 connections to the
+// node's neighbors, not something to repeat every round.
+const stockRetry = 24 * time.Hour
+
+// leaveStockSite moves x off presets.DefaultDest to a site next to its server while no
+// client has reached x: every fresh installation starts on that one site, and its
+// certificate on a hoster's address is a mark of its own. Nobody uses x yet, so nobody
+// loses a connection to the change; an inbound that has clients keeps its site ("Check
+// node" says so), as a change would cut them off until their subscription is read again.
+// Nothing found is no trouble: the stock site works, and the search is tried again later.
+func (t *Tuner) leaveStockSite(ctx context.Context, w *world, n db.Node, x db.Inbound, tpl proto.Template) {
+	if !w.sniOn || x.AutoSni == 0 || domain.ListenPinsSNI(x.Listen) || w.reached(x.ID) {
+		return
+	}
+	if h := t.history(w, x.ID); !h.lastSNI.IsZero() && w.now.Sub(h.lastSNI) < t.o.Cooldown || h.recent >= t.o.MaxChanges {
+		return
+	}
+	t.mu.Lock()
+	tried, ok := t.stockTried[x.ID]
+	wait := ok && w.now.Sub(tried) < stockRetry
+	if !wait {
+		t.stockTried[x.ID] = w.now
+	}
+	t.mu.Unlock()
+	if wait {
+		return
+	}
+	results, err := t.sitesNear(ctx, w, n)
+	if err != nil {
+		if !errors.Is(err, errNoAddress) {
+			t.log.Warn("autotune: scan targets", "node", n.ID, "err", err)
+		}
+		return
+	}
+	oldDest, oldNames := presets.Dest(tpl)
+	if pick := t.chooseTarget(w, results, oldDest, oldNames, w.siteNames(n.ID, x.ID)); pick != nil {
+		t.moveTarget(ctx, w, n, x, oldDest, oldNames, pick, ReasonStock)
 	}
 }
 
@@ -773,15 +847,40 @@ func (t *Tuner) noteTarget(inbound int64, dest string, r nodeapi.TargetResult) {
 // never the panel's or a node's own name, never a target that failed lately, preferably
 // one the node's other inbounds do not use. It reports whether the target changed.
 func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inbound, tpl proto.Template, reason string) bool {
-	ip, err := t.nodeIP(ctx, w, n)
-	if err != nil {
+	results, err := t.sitesNear(ctx, w, n)
+	if errors.Is(err, errNoAddress) {
+		t.setStuck(x.ID, "no_target")
+		return false
+	} else if err != nil {
+		t.log.Warn("autotune: scan targets", "node", n.ID, "err", err)
+		return false
+	}
+	oldDest, oldNames := presets.Dest(tpl)
+	pick := t.chooseTarget(w, results, oldDest, oldNames, w.siteNames(n.ID, x.ID))
+	if pick == nil {
 		t.setStuck(x.ID, "no_target")
 		return false
 	}
+	return t.moveTarget(ctx, w, n, x, oldDest, oldNames, pick, reason)
+}
+
+// errNoAddress: the node has no address to look for sites around.
+var errNoAddress = errors.New("the node has no public address")
+
+// sitesNear are the sites next to node's server, the search made once a round: several
+// inbounds of a node that need a site in one round share it, and the node is not scanned
+// once for each.
+func (t *Tuner) sitesNear(ctx context.Context, w *world, n db.Node) ([]nodeapi.TargetResult, error) {
+	if found, ok := w.scans[n.ID]; ok {
+		return found, nil
+	}
+	ip, err := t.nodeIP(ctx, w, n)
+	if err != nil {
+		return nil, errNoAddress
+	}
 	wide, err := t.set.On(ctx, settings.WideScan)
 	if err != nil {
-		t.log.Warn("autotune: scan targets: settings", "node", n.ID, "err", err)
-		return false
+		return nil, err
 	}
 	limit := 16
 	if wide {
@@ -789,15 +888,17 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 	}
 	found, err := t.nodes.ScanTargets(ctx, n.ID, nodeapi.TargetScanRequest{IP: ip, Limit: limit, Wide: wide})
 	if err != nil {
-		t.log.Warn("autotune: scan targets", "node", n.ID, "err", err)
-		return false
+		return nil, err
 	}
-	oldDest, oldNames := presets.Dest(tpl)
-	pick := t.chooseTarget(w, found.Results, oldDest, oldNames, w.siteNames(n.ID, x.ID))
-	if pick == nil {
-		t.setStuck(x.ID, "no_target")
-		return false
+	if w.scans == nil {
+		w.scans = map[int64][]nodeapi.TargetResult{}
 	}
+	w.scans[n.ID] = found.Results
+	return found.Results, nil
+}
+
+// moveTarget points x at pick and writes the change down.
+func (t *Tuner) moveTarget(ctx context.Context, w *world, n db.Node, x db.Inbound, oldDest string, oldNames []string, pick *nodeapi.TargetResult, reason string) bool {
 	w.took(n.ID, pick.SNI)
 	// The scan above took minutes at most; the admin may have edited the inbound meanwhile.
 	// Update applies the new target to the row as it is now, not to the round's snapshot.

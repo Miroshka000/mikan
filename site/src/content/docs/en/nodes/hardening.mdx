@@ -11,7 +11,7 @@ Two settings in **Nodes → the node → Configure** make a node's server less v
 
 ## Node API from the panel's IP only
 
-The **Node API from the panel's IP only** switch. The node's API port is needed only by the panel, but scanners find any open port. The pinned certificate and the key keep them out, yet they still reach the TLS handshake. With this setting the node answers on the API port to the panel's addresses only.
+The **Node API from the panel's IP only** switch. On a node added since 0.5.2.1 it is on from the start; on one added earlier it stays as it was. The node's API port is needed only by the panel, but scanners find any open port. The pinned certificate and the key keep them out, yet they still reach the TLS handshake. With this setting the node answers on the API port to the panel's addresses only.
 
 It works in two layers:
 

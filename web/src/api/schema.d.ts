@@ -3680,7 +3680,7 @@ export interface components {
             new: string;
             old: string;
             /** @enum {string} */
-            reason: "blocked" | "target_down" | "still_blocked" | "busy";
+            reason: "blocked" | "target_down" | "still_blocked" | "busy" | "default_site";
         };
         AutoView: {
             /**

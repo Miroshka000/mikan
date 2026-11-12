@@ -39,6 +39,8 @@ The same change is repeated at most once every 6 hours, and no more than three a
 
 **The new site** is searched in the same /24 network as the node: up to 16 candidates with TLS 1.3, HTTP/2 and X25519 whose DNS name points to that address. The panel's and nodes' own domains are not used, nor are sites that failed the check in the last day. Of the sites that will do, the panel takes the one the node's other protocols already show, so that all its ports give one certificate; mail and service names (`mail.`, `autoconfig.`) and dynamic DNS (`duckdns.org` and the like) are taken only when there is nothing else. The camouflage site is checked every 15 minutes, and after three failures in a row it is changed.
 
+**A new protocol** does not stay on the default `www.microsoft.com`: while no client has connected to it, the panel moves it at the next check of the sites to a site next to the server, the same one as the node's other such protocols. Microsoft's certificate on a hoster's address is the same on every fresh installation and so stands out. A protocol that already has clients is not touched this way: a change of site would cut them off until their subscription is read again. With no fitting site next to the server the protocol stays as it is, and the search is repeated once a day.
+
 ## Busy port
 
 Separately from blocking, every 15 seconds the panel checks whether another program, such as nginx or Caddy on 443, has taken a connection's port. If so, the connection moves to the first free fallback port, on the panel server and on nodes. This also depends on the "Move to another port" switch but doesn't wait for two networks. A cascade relay moves the same way.

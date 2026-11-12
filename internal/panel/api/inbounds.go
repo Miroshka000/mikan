@@ -100,7 +100,7 @@ type AutoEvent struct {
 	Kind   string    `json:"kind" enum:"port,sni"`
 	Old    string    `json:"old"`
 	New    string    `json:"new"`
-	Reason string    `json:"reason" enum:"blocked,target_down,still_blocked,busy"`
+	Reason string    `json:"reason" enum:"blocked,target_down,still_blocked,busy,default_site"`
 	At     time.Time `json:"at"`
 }
 

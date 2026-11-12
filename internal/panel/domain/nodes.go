@@ -86,6 +86,13 @@ func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeIn
 		if key, err = issueKey(ctx, q, panel, node, in.PanelURL, now); err != nil {
 			return err
 		}
+		// A new node's API answers the panel alone from the start: nobody else has business
+		// on that port, and an open one is how scanners find the server. The node takes the
+		// panel's addresses by itself and lifts the rule when the panel is gone for a while
+		// (apilock.go), so a panel behind NAT or one that moved is not locked out.
+		if err := q.SetNodeAPILockdown(ctx, db.SetNodeAPILockdownParams{ApiLockdown: 1, ApiAllow: []string{}, UpdatedAt: now.Unix(), ID: node.ID}); err != nil {
+			return err
+		}
 		if len(in.Tags) > 0 {
 			tags, err := encodeTags(in.Tags)
 			if err != nil {
