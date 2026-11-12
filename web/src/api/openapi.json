@@ -8862,12 +8862,20 @@
         "properties": {
           "doc": {
             "description": "Документ конструктора (JSON)",
-            "maxLength": 204800,
+            "maxLength": 4194304,
             "type": "string"
           },
+          "files": {
+            "description": "Файлы сайта: страницы, шрифты, картинки",
+            "items": {
+              "$ref": "#/components/schemas/SiteFileBody"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
           "html": {
-            "description": "Готовая страница: один HTML-файл без внешних запросов",
-            "maxLength": 204800,
+            "description": "Первая страница одним файлом без внешних запросов: её показывают протоколы нод и ноды старых версий",
+            "maxLength": 1048576,
             "minLength": 64,
             "type": "string"
           }
@@ -10519,6 +10527,37 @@
         ],
         "type": "object"
       },
+      "SiteFileBody": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "contentEncoding": "base64",
+            "description": "Содержимое файла (base64)",
+            "type": "string"
+          },
+          "path": {
+            "description": "Путь внутри сайта: index.html, about.html, fonts/inter-latin.woff2",
+            "maxLength": 96,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text/html",
+              "font/woff2",
+              "image/jpeg",
+              "image/png",
+              "image/webp"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "type",
+          "data"
+        ],
+        "type": "object"
+      },
       "SitePageOutputBody": {
         "additionalProperties": false,
         "properties": {
@@ -10527,16 +10566,21 @@
             "type": "string"
           },
           "max": {
-            "description": "Наибольший размер страницы в байтах",
+            "description": "Наибольший размер всех файлов сайта в байтах",
+            "format": "int64",
+            "type": "integer"
+          },
+          "pages": {
+            "description": "Сколько страниц у сохранённого сайта",
             "format": "int64",
             "type": "integer"
           },
           "seed": {
-            "description": "Зерно установки для конструктора: от него зависят страницы и блоки по умолчанию",
+            "description": "Зерно установки для конструктора: от него зависят сайты и блоки по умолчанию",
             "type": "string"
           },
           "size": {
-            "description": "Размер сохранённой страницы в байтах; 0: её нет",
+            "description": "Размер сохранённого сайта в байтах (все файлы); 0: его нет",
             "format": "int64",
             "type": "integer"
           }
@@ -10545,6 +10589,7 @@
           "doc",
           "size",
           "max",
+          "pages",
           "seed"
         ],
         "type": "object"

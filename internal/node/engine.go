@@ -355,6 +355,11 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	front := ""
 	frontpage.SetSeed(st.FrontSeed)
 	frontpage.SetCustom([]byte(st.FrontHTML))
+	site := make([]frontpage.SiteFile, 0, len(st.FrontFiles))
+	for _, f := range st.FrontFiles {
+		site = append(site, frontpage.SiteFile{Path: f.Path, Type: f.Type, Data: f.Data})
+	}
+	frontpage.SetSite(site)
 	if page := frontpage.Page(st.FrontPage); page != nil {
 		dir := filepath.Join(e.home, "front")
 		front = filepath.Join(dir, frontFile(st.FrontPage, page))

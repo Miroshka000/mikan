@@ -6732,7 +6732,9 @@ export interface components {
         PutSitePageInputBody: {
             /** @description Документ конструктора (JSON) */
             doc: string;
-            /** @description Готовая страница: один HTML-файл без внешних запросов */
+            /** @description Файлы сайта: страницы, шрифты, картинки */
+            files?: components["schemas"]["SiteFileBody"][];
+            /** @description Первая страница одним файлом без внешних запросов: её показывают протоколы нод и ноды старых версий */
             html: string;
         };
         PutSubAppsInputBody: {
@@ -7295,19 +7297,32 @@ export interface components {
             /** Format: int64 */
             up: number;
         };
+        SiteFileBody: {
+            /** @description Содержимое файла (base64) */
+            data: string;
+            /** @description Путь внутри сайта: index.html, about.html, fonts/inter-latin.woff2 */
+            path: string;
+            /** @enum {string} */
+            type: "text/html" | "font/woff2" | "image/jpeg" | "image/png" | "image/webp";
+        };
         SitePageOutputBody: {
             /** @description Документ конструктора (JSON), как он был сохранён; пусто: своей страницы ещё нет */
             doc: string;
             /**
              * Format: int64
-             * @description Наибольший размер страницы в байтах
+             * @description Наибольший размер всех файлов сайта в байтах
              */
             max: number;
-            /** @description Зерно установки для конструктора: от него зависят страницы и блоки по умолчанию */
+            /**
+             * Format: int64
+             * @description Сколько страниц у сохранённого сайта
+             */
+            pages: number;
+            /** @description Зерно установки для конструктора: от него зависят сайты и блоки по умолчанию */
             seed: string;
             /**
              * Format: int64
-             * @description Размер сохранённой страницы в байтах; 0: её нет
+             * @description Размер сохранённого сайта в байтах (все файлы); 0: его нет
              */
             size: number;
         };

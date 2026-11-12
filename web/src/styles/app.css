@@ -70,22 +70,6 @@
   .theme-tile[aria-checked="true"] { border-color: var(--mikan-500); box-shadow: 0 0 0 3px var(--ring); color: var(--ink-900); }
   .theme-tile-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 4px; font-size: 13px; font-weight: 500; }
   .theme-tile-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .site-builder { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 16px; align-items: start; }
-  .site-builder-side { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
-  .site-builder-view { position: sticky; top: 16px; display: flex; min-width: 0; flex-direction: column; gap: 12px; }
-  .site-builder-frame { height: min(72vh, 820px); overflow: hidden; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface-soft); }
-  .site-builder-frame iframe { display: block; width: 100%; height: 100%; margin-inline: auto; border: 0; background: #fff; }
-  .site-builder-frame[data-narrow] iframe { width: min(100%, 390px); border-inline: 1px solid var(--hairline); }
-  @media (max-width: 1080px) { .site-builder { grid-template-columns: minmax(0, 1fr); } .site-builder-view { position: static; order: -1; } .site-builder-frame { height: 56vh; } }
-  .sb-block { border: 1px solid var(--hairline); border-radius: 12px; padding: 8px 8px 8px 12px; background: var(--surface-soft); }
-  .sb-block[open] { padding-bottom: 12px; }
-  .sb-block > summary { display: flex; min-height: 44px; cursor: pointer; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; list-style: none; }
-  .sb-block > summary::-webkit-details-marker { display: none; }
-  .sb-entry { display: flex; align-items: flex-start; gap: 8px; padding-top: 12px; border-top: 1px solid var(--hairline); }
-  .sb-swatch { display: grid; grid-template-columns: repeat(4, 16px); overflow: hidden; height: 36px; padding: 0; border: 1px solid var(--hairline); border-radius: 8px; transition: box-shadow .15s; }
-  .sb-swatch > span { display: block; height: 100%; }
-  .sb-swatch[aria-pressed="true"] { border-color: var(--mikan-500); box-shadow: 0 0 0 3px var(--ring); }
-  .color-input { width: 100%; height: 40px; padding: 4px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--surface); cursor: pointer; }
   .login-part + .login-part { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--hairline); }
   .preset-tile { display: flex; min-width: 0; flex-direction: column; padding: 16px; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface-soft); }
   .preset-tile[data-active] { border-color: var(--leaf-500); background: var(--surface); }

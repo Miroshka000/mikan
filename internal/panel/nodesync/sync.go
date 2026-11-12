@@ -296,6 +296,14 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 			st.FrontPage = frontpage.Pick(s.m.frontSeed)
 		default:
 			st.FrontHTML = string(page)
+			// The site's files go to a node that answers addresses with them; one from
+			// before them shows the first page alone.
+			if s.nodeVersion == "" || !release.Valid(s.nodeVersion) || release.AtLeast(s.nodeVersion, siteFilesSince) {
+				for _, f := range frontpage.Site() {
+					st.FrontFiles = append(st.FrontFiles, nodeapi.FrontFile{Path: f.Path, Type: f.Type, Data: f.Data})
+				}
+				slices.SortFunc(st.FrontFiles, func(a, b nodeapi.FrontFile) int { return strings.Compare(a.Path, b.Path) })
+			}
 		}
 	}
 	if st.FrontPage != "" {
@@ -1187,6 +1195,9 @@ func countSites(ctx context.Context, q *db.Queries, c nodeapi.Counters, owner ma
 
 // customPageSince is the first node version that shows the admin's own front page.
 const customPageSince = "0.5.2.1-rc.10"
+
+// siteFilesSince is the first node version that answers the addresses of a site of several files.
+const siteFilesSince = "0.5.2.1-rc.11"
 
 // sniRouter is the node's SNI router for the inbounds marked for it: each by the names its
 // clients ask for, the first REALITY one taking any other name (it passes a stranger on to

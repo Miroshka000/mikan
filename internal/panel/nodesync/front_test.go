@@ -111,6 +111,18 @@ func TestOwnFrontPageInTheState(t *testing.T) {
 	if d, err := s.desired(ctx); err != nil || d.FrontPage != frontpage.Pick("the-installations-own") || d.FrontHTML != "" || d.FrontSeed == "" {
 		t.Fatalf("a node from before the page: page %q, %d bytes, seed %q, %v", d.FrontPage, len(d.FrontHTML), d.FrontSeed, err)
 	}
+	// The site's files go with the page to a node that knows them, in one order every time.
+	t.Cleanup(func() { frontpage.SetSite(nil) })
+	frontpage.SetSite([]frontpage.SiteFile{{Path: "index.html", Type: "text/html", Data: []byte(page)}, {Path: "about.html", Type: "text/html", Data: []byte("<!doctype html><title>About</title>")}})
+	s.nodeVersion = "0.5.2.1-rc.10"
+	if d, err := s.desired(ctx); err != nil || d.FrontHTML != page || len(d.FrontFiles) != 0 {
+		t.Fatalf("a node from before the sites: %d files, %v", len(d.FrontFiles), err)
+	}
+	s.nodeVersion = "0.5.2.1-rc.11"
+	if d, err := s.desired(ctx); err != nil || d.FrontHTML != page || len(d.FrontFiles) != 2 || d.FrontFiles[0].Path != "about.html" || string(d.FrontFiles[1].Data) != page {
+		t.Fatalf("a node that knows the sites: %+v, %v", d.FrontFiles, err)
+	}
+	frontpage.SetSite(nil)
 	for _, v := range []string{"0.5.2.1-rc.10", "0.5.2.1", "0.6.0", "dev"} {
 		s.nodeVersion = v
 		if d, err := s.desired(ctx); err != nil || d.FrontPage != frontpage.Custom || d.FrontHTML != page {

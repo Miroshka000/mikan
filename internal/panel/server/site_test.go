@@ -94,8 +94,9 @@ func TestOwnSite(t *testing.T) {
 	}
 }
 
-// The admin's own page at the panel's address has an origin of its own and loads nothing:
-// the admin's session lives at this address too. The built-in pages keep their scripts.
+// The admin's own page at the panel's address runs no script and loads nothing from another
+// address: the admin's session lives at this address too. The built-in pages keep their
+// scripts. A site of several files answers each address with its file.
 func TestOwnPageIsSandboxed(t *testing.T) {
 	panel := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, "panel") })
 	s := New(panel, panel)
@@ -113,11 +114,53 @@ func TestOwnPageIsSandboxed(t *testing.T) {
 	}
 	frontpage.SetCustom([]byte("<!doctype html><title>Bakery</title>"))
 	code, body, csp := get()
-	if code != http.StatusOK || body != "<!doctype html><title>Bakery</title>" || csp != CustomPageCSP || !strings.HasPrefix(csp, "sandbox") {
+	if code != http.StatusOK || body != "<!doctype html><title>Bakery</title>" || csp != frontpage.SitePolicy || !strings.HasPrefix(csp, "default-src 'none'") {
 		t.Fatalf("the admin's page: %d %q, policy %q", code, body, csp)
 	}
+	// With the site's files every address has its own; one it has not gets the site's own 404.
+	t.Cleanup(func() { frontpage.SetSite(nil) })
+	frontpage.SetSite([]frontpage.SiteFile{
+		{Path: "index.html", Type: "text/html", Data: []byte("<!doctype html><title>Home</title>")},
+		{Path: "about.html", Type: "text/html", Data: []byte("<!doctype html><title>About</title>")},
+		{Path: "404.html", Type: "text/html", Data: []byte("<!doctype html><title>No such page</title>")},
+		{Path: "fonts/inter-latin.woff2", Type: "font/woff2", Data: []byte("wOF2")},
+	})
+	at := func(p, method string) (int, string, http.Header) {
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, httptest.NewRequest(method, p, nil))
+		return rec.Code, rec.Body.String(), rec.Header()
+	}
+	for p, want := range map[string]struct {
+		code int
+		body string
+		kind string
+	}{
+		"/":                        {200, "<!doctype html><title>Home</title>", "text/html; charset=utf-8"},
+		"/about":                   {200, "<!doctype html><title>About</title>", "text/html; charset=utf-8"},
+		"/about/":                  {200, "<!doctype html><title>About</title>", "text/html; charset=utf-8"},
+		"/fonts/inter-latin.woff2": {200, "wOF2", "font/woff2"},
+		"/about.html":              {404, "<!doctype html><title>No such page</title>", "text/html; charset=utf-8"},
+		"/404":                     {404, "<!doctype html><title>No such page</title>", "text/html; charset=utf-8"},
+		"/nope":                    {404, "<!doctype html><title>No such page</title>", "text/html; charset=utf-8"},
+		"/fonts/../index.html":     {404, "<!doctype html><title>No such page</title>", "text/html; charset=utf-8"},
+		"/.env":                    {404, "<!doctype html><title>No such page</title>", "text/html; charset=utf-8"},
+	} {
+		code, body, h := at(p, http.MethodGet)
+		if code != want.code || body != want.body || h.Get("Content-Type") != want.kind {
+			t.Errorf("%s: %d %q %s", p, code, body, h.Get("Content-Type"))
+		}
+		if page := strings.HasPrefix(want.kind, "text/html"); page != (h.Get("Content-Security-Policy") == frontpage.SitePolicy) {
+			t.Errorf("%s: policy %q", p, h.Get("Content-Security-Policy"))
+		}
+	}
+	if code, body, _ := at("/about", http.MethodPost); code != http.StatusNotFound || strings.Contains(body, "About") {
+		t.Fatalf("a post to a page: %d %q", code, body)
+	}
+	if code, body, _ := at("/about", http.MethodHead); code != http.StatusOK || body != "" {
+		t.Fatalf("a head of a page: %d %q", code, body)
+	}
 	kind = "cats"
-	if code, _, csp := get(); code != http.StatusOK || strings.HasPrefix(csp, "sandbox") {
+	if code, _, csp := get(); code != http.StatusOK || csp == frontpage.SitePolicy {
 		t.Fatalf("a built-in page: %d, policy %q", code, csp)
 	}
 }

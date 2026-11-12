@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -211,6 +212,14 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 		return err
 	}
 	frontpage.SetCustom([]byte(own))
+	var siteFiles []frontpage.SiteFile
+	if raw, err := set.String(ctx, settings.KeySiteFiles); err != nil {
+		return err
+	} else if raw != "" {
+		// Files that do not read are no site: the first page alone is shown, as before them.
+		_ = json.Unmarshal([]byte(raw), &siteFiles)
+	}
+	frontpage.SetSite(siteFiles)
 	if p.Nodes != nil {
 		p.Nodes.SetFrontSeed(seed)
 	}

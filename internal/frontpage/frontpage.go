@@ -22,8 +22,9 @@ var Templates = []string{"maintenance", "cats"}
 // installation's own from its first byte, so the seed does not touch it.
 const Custom = "custom"
 
-// MaxCustom bounds the admin's page: it travels to every node with the node's state.
-const MaxCustom = 200 << 10
+// MaxCustom bounds the admin's page in one file, pictures inside: it travels to every node
+// with the node's state.
+const MaxCustom = 1 << 20
 
 // seed is the installation's own (SetSeed); nil: the pages as written.
 var seed atomic.Pointer[string]

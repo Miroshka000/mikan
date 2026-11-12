@@ -279,7 +279,7 @@ func TestSecurityPresetApply(t *testing.T) {
 func TestSitePage(t *testing.T) {
 	ctx := context.Background()
 	f := newHostFixture(t, false, func(d *Deps) { d.Nodes = nil })
-	t.Cleanup(func() { frontpage.SetCustom(nil) })
+	t.Cleanup(func() { frontpage.SetCustom(nil); frontpage.SetSite(nil) })
 	code, body := f.do(http.MethodGet, "/api/v1/settings/site-page", "")
 	if code != http.StatusOK || !strings.Contains(body, `"size":0`) || !strings.Contains(body, `"seed":"`) {
 		t.Fatalf("before a page: %d %s", code, body)
@@ -299,6 +299,7 @@ func TestSitePage(t *testing.T) {
 		"not a page":     {`{}`, strings.Repeat("just some words, no markup at all. ", 4)},
 		"a broken doc":   {`{"v":`, page},
 		"a page too big": {`{}`, page + strings.Repeat("<!-- padding -->", frontpage.MaxCustom/16)},
+		"not a page ":    {`{}`, strings.Repeat("x", 80)},
 	} {
 		if code, body := put(bad[0], bad[1]); code != http.StatusUnprocessableEntity {
 			t.Errorf("%s: %d %s", name, code, body)
@@ -321,6 +322,41 @@ func TestSitePage(t *testing.T) {
 	}
 	if code, body := f.send(http.MethodPatch, "/api/v1/nodes/2", `{"front_page":"custom"}`); code != http.StatusOK {
 		t.Fatalf("a node's page: %d %s", code, body)
+	}
+	// A site of several files: each path once and one a site may have, pages that are pages,
+	// a first page among them.
+	files := func(list ...SiteFileBody) (int, string) {
+		req, _ := json.Marshal(map[string]any{"doc": `{"v":2}`, "html": page, "files": list})
+		return f.send(http.MethodPut, "/api/v1/settings/site-page", string(req))
+	}
+	index := SiteFileBody{Path: "index.html", Type: "text/html", Data: []byte(page)}
+	about := SiteFileBody{Path: "about.html", Type: "text/html", Data: []byte(page)}
+	font := SiteFileBody{Path: "fonts/inter-latin.3f9a2c.woff2", Type: "font/woff2", Data: []byte("wOF2")}
+	for name, bad := range map[string][]SiteFileBody{
+		"no first page":      {about, font},
+		"a path twice":       {index, index},
+		"a path that climbs": {index, {Path: "../etc/passwd", Type: "font/woff2", Data: []byte("x")}},
+		"a hidden file":      {index, {Path: ".env", Type: "font/woff2", Data: []byte("x")}},
+		"a page not a page":  {index, {Path: "about.html", Type: "text/html", Data: []byte("just words")}},
+		"a font named html":  {index, {Path: "x.html", Type: "font/woff2", Data: []byte("wOF2")}},
+		"an empty file":      {index, {Path: "img/a.png", Type: "image/png"}},
+	} {
+		if code, body := files(bad...); code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: %d %s", name, code, body)
+		}
+	}
+	if code, body := files(index, about, font); code != http.StatusOK || !strings.Contains(body, `"pages":2`) {
+		t.Fatalf("a site of three files: %d %s", code, body)
+	}
+	if got := frontpage.Site(); len(got) != 3 {
+		t.Fatalf("the site the panel shows: %d files", len(got))
+	}
+	if raw, _ := f.deps.Settings.String(ctx, settings.KeySiteFiles); !strings.Contains(raw, "fonts/inter-latin.3f9a2c.woff2") {
+		t.Fatalf("the files as kept: %.80s", raw)
+	}
+	// Saved again as one page, the files of before are gone.
+	if code, body := put(`{"v":2}`, page); code != http.StatusOK || !strings.Contains(body, `"pages":1`) || frontpage.HasSite() {
+		t.Fatalf("back to one page: %d %s, a site left: %v", code, body, frontpage.HasSite())
 	}
 	// An API key reads nothing it could not already, and writes no page.
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/settings/site-page", strings.NewReader(`{"doc":"","html":"`+strings.Repeat("x", 80)+`"}`))

@@ -125,6 +125,9 @@ const (
 	// KeySiteDoc what the builder made it of, to open it again.
 	KeySiteHTML = "site_html"
 	KeySiteDoc  = "site_doc"
+	// KeySiteFiles are the files of the site when it has several pages ([]frontpage.SiteFile
+	// as JSON); KeySiteHTML is then its first page in one file.
+	KeySiteFiles = "site_files"
 	// KeyFrontSeed is the installation's seed of the built-in front pages and of the plain
 	// 404 (frontpage.SetSeed): made once and kept, so the pages stay what they are.
 	KeyFrontSeed = "front_seed"

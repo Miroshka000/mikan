@@ -24,6 +24,8 @@ type frontPage struct {
 	ln   *handover
 	srv  *http.Server
 	page atomic.Pointer[[]byte]
+	// site: the page is the admin's own, which may have files for more addresses than "/".
+	site atomic.Bool
 	cert atomic.Pointer[tls.Certificate]
 }
 
@@ -57,6 +59,10 @@ func (f *frontPage) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	// Browsers come back over https only, as to any site that has it for good.
 	w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+	// The admin's own site answers each of its addresses; any other page is one page.
+	if f.site.Load() && frontpage.ServeSite(w, r) {
+		return
+	}
 	frontpage.Serve(w, r, *page)
 }
 
@@ -64,6 +70,7 @@ func (f *frontPage) serve(w http.ResponseWriter, r *http.Request) {
 // either missing, or a certificate that does not load, turns the page off (on says which).
 func (f *frontPage) set(kind string, tlsState *nodeapi.TLSFiles) {
 	page := frontpage.Page(kind)
+	f.site.Store(kind == frontpage.Custom)
 	if page == nil || tlsState == nil || tlsState.CertPEM == "" {
 		f.page.Store(nil)
 		return

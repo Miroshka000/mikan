@@ -64,6 +64,10 @@ type DesiredState struct {
 	// FrontHTML is the page itself when FrontPage is frontpage.Custom, the one the admin made
 	// in the panel. Nodes older than it are sent a built-in page instead.
 	FrontHTML string `json:"front_html,omitempty"`
+	// FrontFiles are the files of the admin's own site, when it is one of several pages:
+	// the names of Router.Stub answer each address with its file, and FrontHTML (the first
+	// page alone) stays what the inbounds' fallback page shows. Nodes older than it ignore it.
+	FrontFiles []FrontFile `json:"front_files,omitempty"`
 	// APIAllow: the node's API answers only these networks ("203.0.113.5/32"), loopback and
 	// the addresses the panel has reached it from; nil: anyone (the panel's certificate
 	// still guards it). Empty but not nil is on too, with the panel's addresses alone. The
@@ -87,6 +91,13 @@ type DesiredState struct {
 // API to everyone again: a panel that moved to an address the rule does not know gets in
 // within this time, and the rule comes back with its new address.
 const APILockStale = 15 * time.Minute
+
+// FrontFile is a file of the admin's own site (frontpage.SiteFile).
+type FrontFile struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+	Data []byte `json:"data"`
+}
 
 // SNIRouter: the node listens on Listen (":443" when empty) and hands each connection to
 // the inbound whose Names hold the ClientHello's SNI, with a PROXY v2 header; any other
