@@ -6502,7 +6502,7 @@ export interface components {
              * @description Что меняется; у строки manual: что остаётся сделать самому
              * @enum {string}
              */
-            code: "panel_page" | "front_page" | "site" | "port" | "through_443" | "direct" | "router_on" | "router_off" | "api_lockdown" | "port_443_busy" | "port_443_panel" | "same_name" | "no_site" | "no_port" | "ssh_open";
+            code: "panel_page" | "front_page" | "site" | "port" | "through_443" | "direct" | "router_on" | "router_off" | "api_lockdown" | "port_443_busy" | "port_443_panel" | "same_name" | "no_site" | "stranger_site" | "no_port" | "ssh_open";
             /** @description После применения: почему не получилось */
             error?: string;
             inbound?: string;
@@ -12893,7 +12893,10 @@ export interface operations {
     };
     "plan-security-preset": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Протоколам, которым не хватило собственных имён панели, подобрать чужие сайты рядом с сервером */
+                neighbors?: boolean;
+            };
             header?: never;
             path: {
                 preset: "standard" | "secure";

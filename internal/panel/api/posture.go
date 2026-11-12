@@ -26,10 +26,12 @@ import (
 //
 // "standard" is how the panel sets itself up: every protocol on a port of its own. "secure"
 // is the least a server can show: one TCP port 443 a node, its protocols behind it told
-// apart by the name a client asks for, every REALITY protocol with a site of its own (the
-// panel's own names first, then sites next to the server), the node's API closed to
-// anyone but the panel and a front page everywhere. What a preset cannot do for the admin
-// (no site left, a port another program holds) is a line of its own, never a silent skip.
+// apart by the name a client asks for, every REALITY protocol with a name of its own, the
+// node's API closed to anyone but the panel and a front page everywhere. The names are the
+// panel's own (its domain, the subscriptions' domain): the server then shows its own
+// certificate and nobody else's. A stranger's site next to the server is taken only when the
+// admin asks for it in the plan (neighbors). What a preset cannot do for the admin (no name
+// left, a port another program holds) is a line of its own, never a silent skip.
 
 const (
 	postureStandard = "standard"
@@ -43,7 +45,7 @@ type PostureChange struct {
 	NodeName  string            `json:"node_name,omitempty"`
 	InboundID int64             `json:"inbound_id,omitempty"`
 	Inbound   string            `json:"inbound,omitempty"`
-	Code      string            `json:"code" enum:"panel_page,front_page,site,port,through_443,direct,router_on,router_off,api_lockdown,port_443_busy,port_443_panel,same_name,no_site,no_port,ssh_open" doc:"Что меняется; у строки manual: что остаётся сделать самому"`
+	Code      string            `json:"code" enum:"panel_page,front_page,site,port,through_443,direct,router_on,router_off,api_lockdown,port_443_busy,port_443_panel,same_name,no_site,stranger_site,no_port,ssh_open" doc:"Что меняется; у строки manual: что остаётся сделать самому"`
 	Params    map[string]string `json:"params,omitempty"`
 	Manual    bool              `json:"manual" doc:"Пресет этого сделать не может: строка для админа"`
 	Error     string            `json:"error,omitempty" doc:"После применения: почему не получилось"`
@@ -65,6 +67,9 @@ type posture struct {
 	panelPort int
 	page      string // the panel's front page, "" none
 	pagePick  string // the page for where there is none
+	// neighbors: a protocol the panel's own names do not cover may take a stranger's site
+	// next to the server. Off, it stays as it is and the admin is told.
+	neighbors bool
 }
 
 // standard is what turns the installation back to the panel's own setup.
@@ -130,29 +135,56 @@ func (p posture) secure() []PostureChange {
 		} else if holder != "" {
 			add(PostureChange{Inbound: holder, Code: "port_443_busy", Manual: true})
 		} else if len(routable) > 0 {
+			var own []string
+			if local && p.panelPort > 0 {
+				own = p.own
+			}
 			// The names that stay: an inbound keeps its site while no other has it and it
-			// is a site worth showing.
+			// is a site worth showing. One that keeps a stranger's site is noted apart:
+			// it moves to a name of the panel's own while there is one free.
+			const (
+				needs    = iota // no name it can keep
+				keeps           // its name stays
+				stranger        // its name stays, and is somebody else's site
+			)
 			taken := map[string]bool{}
-			keep := make([]bool, len(routable))
+			state := make([]int, len(routable))
 			for i, e := range routable {
 				names := lowerNames(proto.SNINames(e.t, n.Domain))
-				ok := true
+				ok, foreign := true, false
 				if proto.Reality(e.t) {
 					dest, _ := presets.Dest(e.t)
 					ok = len(names) > 0 && dest != presets.DefaultDest
 				}
 				for _, name := range names {
 					ok = ok && !taken[name] && !(proto.Reality(e.t) && scan.Weak(name))
+					foreign = foreign || !slices.Contains(own, name)
 				}
-				if keep[i] = ok; ok {
-					for _, name := range names {
-						taken[name] = true
-					}
+				if !ok {
+					continue
+				}
+				for _, name := range names {
+					taken[name] = true
+				}
+				if state[i] = keeps; proto.Reality(e.t) && foreign {
+					state[i] = stranger
 				}
 			}
-			var own []string
-			if local && p.panelPort > 0 {
-				own = p.own
+			// The panel's own names nobody has yet: first to the protocols with no name to
+			// keep, then to those on a stranger's site, in the order of the list.
+			picks := map[int]string{}
+			for _, want := range []int{needs, stranger} {
+				for i, e := range routable {
+					if state[i] != want || !proto.Reality(e.t) {
+						continue
+					}
+					for _, name := range own {
+						if !taken[name] {
+							picks[i], taken[name] = name, true
+							break
+						}
+					}
+				}
 			}
 			spare := pn.spare
 			behind, blocked := 0, false
@@ -166,19 +198,29 @@ func (p posture) secure() []PostureChange {
 					add(m)
 					blocked = blocked || e.in.Port == "443"
 				}
-				if !keep[i] {
-					names := lowerNames(proto.SNINames(e.t, n.Domain))
+				names := lowerNames(proto.SNINames(e.t, n.Domain))
+				if name, ok := picks[i]; ok {
+					s := c
+					s.Code, s.Params = "site", map[string]string{"from": strings.Join(names, ", "), "dest": net.JoinHostPort("127.0.0.1", strconv.Itoa(p.panelPort)), "sni": name}
+					add(s)
+				} else if state[i] == stranger && len(own) > 0 {
+					// It keeps somebody else's site only because the panel's own names ran
+					// out: said, so the admin can add one more.
+					m := c
+					m.Code, m.Params, m.Manual = "stranger_site", map[string]string{"sni": strings.Join(names, ", ")}, true
+					add(m)
+				} else if state[i] == needs {
 					if !proto.Reality(e.t) {
 						stays("same_name", map[string]string{"name": strings.Join(names, ", ")})
 						continue
 					}
-					dest, sni := "", ""
-					for _, name := range own {
-						if !taken[name] {
-							dest, sni = net.JoinHostPort("127.0.0.1", strconv.Itoa(p.panelPort)), name
-							break
-						}
+					// No name of the panel's own is left for it. A stranger's site is the
+					// admin's call: without it the protocol stays where it is.
+					if !p.neighbors {
+						stays("no_site", map[string]string{"from": strings.Join(names, ", ")})
+						continue
 					}
+					dest, sni := "", ""
 					for _, r := range pn.sites {
 						if name := strings.ToLower(r.SNI); dest == "" && r.OK && name != "" && !scan.Weak(name) && !taken[name] {
 							dest, sni = r.Dest, name
@@ -331,7 +373,8 @@ type postureOutput struct {
 }
 
 type posturePlanInput struct {
-	Preset string `path:"preset" enum:"standard,secure"`
+	Preset    string `path:"preset" enum:"standard,secure"`
+	Neighbors bool   `query:"neighbors" doc:"Протоколам, которым не хватило собственных имён панели, подобрать чужие сайты рядом с сервером"`
 }
 
 type posturePlanOutput struct {
@@ -363,8 +406,8 @@ func (h *handlers) getPosture(ctx context.Context, _ *struct{}) (*postureOutput,
 	return out, nil
 }
 
-// planPosture is the preset's list of changes. For "secure" a node whose REALITY protocols
-// need sites the panel's own names do not cover is scanned for sites next to it.
+// planPosture is the preset's list of changes. For "secure" with neighbors, a node whose
+// REALITY protocols the panel's own names do not cover is scanned for sites next to it.
 func (h *handlers) planPosture(ctx context.Context, in *posturePlanInput) (*posturePlanOutput, error) {
 	if err := requireSession(ctx, "preset"); err != nil {
 		return nil, err
@@ -378,6 +421,7 @@ func (h *handlers) planPosture(ctx context.Context, in *posturePlanInput) (*post
 		out.Body.Changes = changesOrNone(p.standard())
 		return out, nil
 	}
+	p.neighbors = in.Neighbors
 	need := map[int64]bool{}
 	for _, c := range p.secure() {
 		if c.Code == "site" && c.Params["dest"] == "" {

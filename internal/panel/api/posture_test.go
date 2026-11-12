@@ -83,8 +83,9 @@ func TestSecurePresetOfThePanelsNode(t *testing.T) {
 			{Dest: "shop.example.net:443", SNI: "shop.example.net", OK: true},
 		},
 	}}}
-	// The two on the stock site take the panel's own names; of the two that share a site the
-	// first keeps it and the second gets the neighbour that is neither weak nor broken.
+	// The two on the stock site take the panel's own names. Of the two that share a stranger's
+	// site the first keeps it; the second has no name of the panel's own left, and the preset
+	// takes no stranger's site by itself: it stays on its port and the admin is told.
 	got := postureLines(p.secure())
 	want := []string{
 		"panel_page cats",
@@ -93,9 +94,9 @@ func TestSecurePresetOfThePanelsNode(t *testing.T) {
 		"xhttp through_443",
 		"vision site sub.example.com@127.0.0.1:21355",
 		"vision through_443",
+		"grpc stranger_site (manual)",
 		"grpc through_443",
-		"pq site shop.example.net@shop.example.net:443",
-		"pq through_443",
+		"pq no_site (manual)",
 		"router_on",
 		"front_page cats",
 		"ssh_open (manual)",
@@ -103,11 +104,34 @@ func TestSecurePresetOfThePanelsNode(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("the secure preset:\n got  %s\n want %s", strings.Join(got, "\n      "), strings.Join(want, "\n      "))
 	}
-	if name, secure, standard := p.current(); name != postureStandard || secure != 11 || standard != 0 {
+	if name, secure, standard := p.current(); name != postureStandard || secure != 9 || standard != 0 {
 		t.Fatalf("a fresh node is on the standard preset: %s, %d to secure, %d to standard", name, secure, standard)
 	}
 
-	// With no site left the protocol stays on its port, and the rest still share 443.
+	// With more names of the panel's own, the one without a name gets the next, and the one on
+	// a stranger's site moves to the last: the server shows its own certificate only.
+	more := p
+	more.own = []string{"my.example.com", "sub.example.com", "third.example.com", "fourth.example.com"}
+	got = postureLines(more.secure())
+	for _, line := range []string{"pq site third.example.com@127.0.0.1:21355", "pq through_443", "grpc site fourth.example.com@127.0.0.1:21355", "grpc through_443"} {
+		if !slices.Contains(got, line) {
+			t.Fatalf("four names of the panel's own: no %q in %v", line, got)
+		}
+	}
+	if slices.ContainsFunc(got, func(l string) bool {
+		return strings.Contains(l, "no_site") || strings.Contains(l, "stranger_site") || strings.Contains(l, "example.net")
+	}) {
+		t.Fatalf("four names of the panel's own: %v", got)
+	}
+
+	// The admin asked for the sites next to the server: the one left takes the neighbour that
+	// is neither weak nor broken, and goes behind 443 with the rest.
+	p.neighbors = true
+	got = postureLines(p.secure())
+	if !slices.Contains(got, "pq site shop.example.net@shop.example.net:443") || !slices.Contains(got, "pq through_443") || slices.Contains(got, "pq no_site (manual)") {
+		t.Fatalf("with the neighbours: %v", got)
+	}
+	// With no site found the protocol stays on its port, and the rest still share 443.
 	p.nodes[0].sites = nil
 	got = postureLines(p.secure())
 	if !slices.Contains(got, "pq no_site (manual)") || slices.Contains(got, "pq through_443") || !slices.Contains(got, "router_on") {

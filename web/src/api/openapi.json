@@ -8256,6 +8256,7 @@
               "port_443_panel",
               "same_name",
               "no_site",
+              "stranger_site",
               "no_port",
               "ssh_open"
             ],
@@ -19761,6 +19762,16 @@
                 "secure"
               ],
               "type": "string"
+            }
+          },
+          {
+            "description": "Протоколам, которым не хватило собственных имён панели, подобрать чужие сайты рядом с сервером",
+            "explode": false,
+            "in": "query",
+            "name": "neighbors",
+            "schema": {
+              "description": "Протоколам, которым не хватило собственных имён панели, подобрать чужие сайты рядом с сервером",
+              "type": "boolean"
             }
           }
         ],

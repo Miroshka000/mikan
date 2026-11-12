@@ -173,7 +173,29 @@ function AuthorityForm({ s, focus }: { s: Schemas["SettingsView"]; focus: number
   );
 }
 
-export function PasswordCard() {
+/** A card of its own, or a part of the login block (bare). */
+function Part({ bare, i, children }: { bare?: boolean; i: number; children: React.ReactNode }) {
+  return bare ? (
+    <div className="login-part">{children}</div>
+  ) : (
+    <section className="card glass reveal" style={{ "--i": i } as React.CSSProperties}>
+      {children}
+    </section>
+  );
+}
+
+/** How the admin gets in: the password, the second factor and the passkeys, in one block. */
+export function LoginCard({ s }: { s: Schemas["SettingsView"] }) {
+  return (
+    <section className="card glass reveal" style={{ "--i": 4 } as React.CSSProperties}>
+      <PasswordCard bare />
+      <TwoFactorCard bare />
+      <PasskeysCard s={s} bare />
+    </section>
+  );
+}
+
+export function PasswordCard({ bare }: { bare?: boolean }) {
   const qc = useQueryClient();
   const toast = useToast();
   const [current, setCurrent] = useState("");
@@ -194,7 +216,7 @@ export function PasswordCard() {
   });
   const errors = fieldErrors(change.error);
   return (
-    <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
+    <Part bare={bare} i={2}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -217,11 +239,11 @@ export function PasswordCard() {
         </label>
         <FormActions saving={change.isPending} disabled={!current || next.length < 12} label={t("settings.changePassword")} />
       </form>
-    </section>
+    </Part>
   );
 }
 
-export function TwoFactorCard() {
+export function TwoFactorCard({ bare }: { bare?: boolean }) {
   const me = useQuery(meQuery);
   const qc = useQueryClient();
   const toast = useToast();
@@ -262,7 +284,7 @@ export function TwoFactorCard() {
   });
 
   return (
-    <section className="card glass reveal" style={{ "--i": 3 } as React.CSSProperties}>
+    <Part bare={bare} i={3}>
       <CardHead title={t("settings.twoFactor")} sub={enabled ? t("settings.twoFactorOn") : t("settings.twoFactorOff")} aside={<ShieldCheck size={20} className={enabled ? "text-[var(--leaf-500)]" : "text-[var(--ink-300)]"} aria-hidden />} />
       {codes ? (
         <div>
@@ -346,7 +368,7 @@ export function TwoFactorCard() {
           <FormActions saving={start.isPending} disabled={!startPw} label={t("settings.twoFactorEnable")} />
         </form>
       )}
-    </section>
+    </Part>
   );
 }
 
@@ -354,7 +376,7 @@ export function TwoFactorCard() {
  * Passkeys: a way in beside the password. Adding one asks for the password (and the code when
  * 2FA is on) before the browser makes the key; the panel needs its domain for them.
  */
-export function PasskeysCard({ s }: { s: Schemas["SettingsView"] }) {
+export function PasskeysCard({ s, bare }: { s: Schemas["SettingsView"]; bare?: boolean }) {
   const me = useQuery(meQuery);
   const qc = useQueryClient();
   const toast = useToast();
@@ -397,7 +419,7 @@ export function PasskeysCard({ s }: { s: Schemas["SettingsView"] }) {
   });
   const errors = fieldErrors(add.error);
   return (
-    <section className="card glass reveal" style={{ "--i": 3 } as React.CSSProperties}>
+    <Part bare={bare} i={3}>
       <CardHead title={t("settings.passkeys")} sub={t("settings.passkeysSub")} aside={<Fingerprint size={20} className="text-[var(--ink-300)]" aria-hidden />} />
       <QueryBoundary query={list} pending={<Skeleton style={{ height: 48 }} />}>
         {(keys) =>
@@ -462,7 +484,7 @@ export function PasskeysCard({ s }: { s: Schemas["SettingsView"] }) {
         loading={remove.isPending}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
-    </section>
+    </Part>
   );
 }
 

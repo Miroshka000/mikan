@@ -265,7 +265,12 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
               <Field label={t("tags.label")} htmlFor="ed-tags" hint={t("tags.inboundHint")} error={errors.tags}>
                 <input id="ed-tags" className="input" value={tags} onChange={(e) => set.tags(e.target.value)} placeholder={t("tags.placeholder")} aria-invalid={!!errors.tags} autoComplete="off" />
               </Field>
-              <Field label={t("inbounds.portLabel")} htmlFor="ed-port" error={errors.port} hint={inbound?.type === "hysteria2" ? t("inbounds.portHopHint", { max: MAX_HOP_PORTS }) : undefined}>
+              <Field
+                label={sni443 && nodeRouter ? t("inbounds.portInner") : t("inbounds.portLabel")}
+                htmlFor="ed-port"
+                error={errors.port}
+                hint={sni443 && nodeRouter ? t("inbounds.portSharedHint") : inbound?.type === "hysteria2" ? t("inbounds.portHopHint", { max: MAX_HOP_PORTS }) : undefined}
+              >
                 <input id="ed-port" className="input max-w-[200px]" inputMode="numeric" value={port} onChange={(e) => set.port(e.target.value)} aria-invalid={!!errors.port} />
               </Field>
               {hopPorts(port) > MAX_HOP_PORTS && !errors.port ? (

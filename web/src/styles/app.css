@@ -86,6 +86,7 @@
   .sb-swatch > span { display: block; height: 100%; }
   .sb-swatch[aria-pressed="true"] { border-color: var(--mikan-500); box-shadow: 0 0 0 3px var(--ring); }
   .color-input { width: 100%; height: 40px; padding: 4px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--surface); cursor: pointer; }
+  .login-part + .login-part { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--hairline); }
   .preset-tile { display: flex; min-width: 0; flex-direction: column; padding: 16px; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface-soft); }
   .preset-tile[data-active] { border-color: var(--leaf-500); background: var(--surface); }
   .preset-tile > p { flex: 1; }

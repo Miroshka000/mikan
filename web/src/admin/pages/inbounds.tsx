@@ -149,7 +149,8 @@ export function InboundsPage() {
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-500)]">
                         <span>{i.preset === "custom" ? t("inbounds.customOf", { type: i.type }) : i.title}</span>
                         <span>·</span>
-                        <span>{t("inbounds.port", { port: i.listen ? hostPort(i.listen, i.port) : i.port, network: i.network })}</span>
+                        {/* Behind the node's shared 443 clients connect to 443; the inbound's own port is an inner one. */}
+                        <span>{i.sni443 && node?.sni_router ? t("inbounds.portShared", { port: i.port }) : t("inbounds.port", { port: i.listen ? hostPort(i.listen, i.port) : i.port, network: i.network })}</span>
                         <span>·</span>
                         <span className="mono">{i.name}</span>
                       </div>

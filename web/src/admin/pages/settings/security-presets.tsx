@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ListChecks, ShieldCheck, SlidersHorizontal, TriangleAlert, XCircle } from "lucide-react";
+import { Check, ListChecks, Search, ShieldCheck, SlidersHorizontal, TriangleAlert, XCircle } from "lucide-react";
 import { useState } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk } from "../../../api/hooks";
@@ -80,9 +80,11 @@ export function SecurityPresetsCard() {
 function PlanDrawer({ preset, onClose }: { preset: Preset; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
+  // The panel's own names first and only; sites next to the server are the admin's call.
+  const [neighbors, setNeighbors] = useState(false);
   const plan = useQuery({
-    queryKey: [...presetKey, "plan", preset],
-    queryFn: () => unwrap(api.POST("/api/v1/security/presets/{preset}/plan", { params: { path: { preset } } })),
+    queryKey: [...presetKey, "plan", preset, neighbors],
+    queryFn: () => unwrap(api.POST("/api/v1/security/presets/{preset}/plan", { params: { path: { preset }, query: { neighbors } } })),
     gcTime: 0,
     staleTime: Infinity,
     retry: false,
@@ -164,6 +166,14 @@ function PlanDrawer({ preset, onClose }: { preset: Preset; onClose: () => void }
               </ul>
             </section>
           ))}
+          {!done && preset === "secure" && !neighbors && manual.some((c) => c.code === "no_site") ? (
+            <div className="mt-6 flex flex-col items-start gap-2">
+              <Button size="sm" onClick={() => setNeighbors(true)}>
+                <Search size={16} aria-hidden /> {t("settings.presets.neighbors")}
+              </Button>
+              <p className="text-xs text-[var(--ink-500)]">{t("settings.presets.neighborsHint")}</p>
+            </div>
+          ) : null}
           {manual.length > 0 ? (
             <section className="mt-6">
               <h3 className="text-[13px] font-semibold text-[var(--ink-700)]">{t("settings.presets.manual")}</h3>

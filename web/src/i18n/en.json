@@ -1584,6 +1584,9 @@
     "newMeta": "Keys, passwords and paths are generated automatically",
     "protocol": "Protocol",
     "portLabel": "Port",
+    "portShared": "shared port 443 (inner {port})",
+    "portInner": "Inner port",
+    "portSharedHint": "The protocol is behind the shared port 443: clients connect to 443, and this port is an inner one, closed from outside.",
     "portHint": "Default {port}/{network}, or a free spare one (2053, 2083…) when it is taken. Hysteria2 accepts a range, e.g. 20000-20100.",
     "saved": "Saved. Clients get the changes when their subscription updates",
     "inAuto": "In auto select",
@@ -2193,9 +2196,11 @@
       },
       "secure": {
         "name": "Secure",
-        "text": "One port 443 a node is left outside: the protocols behind it are told apart by the name a client asks for. Every REALITY protocol has a site of its own (your domains first, then sites next to the server), the nodes' API answers only the panel, a front page stands everywhere."
+        "text": "One port 443 a node is left outside: the protocols behind it are told apart by the name a client asks for. Every REALITY protocol gets one of your own names (the panel's domain, the subscriptions' domain); the preset takes no stranger's site by itself. The nodes' API answers only the panel, a front page stands everywhere."
       },
       "show": "Show the changes",
+      "neighbors": "Find sites next to the server",
+      "neighborsHint": "For the protocols your own domains did not cover, the panel finds strangers' sites next to the server. Your own domain is the safer one: a stranger's site may change its certificate or go away.",
       "left": "{n, plural, one {# change} other {# changes}} away",
       "count": "{n, plural, one {# change} other {# changes}}",
       "planning": "Working out the changes. If protocols need new sites, the panel looks for them next to the server: it takes up to a minute.",
@@ -2219,7 +2224,8 @@
         "port_443_busy": "Port 443 is held by a protocol that cannot work behind the shared port. Move it to another port, and the preset gathers the rest behind 443.",
         "port_443_panel": "Port 443 of this server is taken by the panel itself, so the shared port 443 cannot be turned on for its node. Move the panel to another port, and the preset gathers the protocols behind 443.",
         "same_name": "The name {name} belongs to another protocol behind the shared 443. Give the protocol a name of its own for clients (SNI) or turn it off.",
-        "no_site": "No site was found that the node's other protocols do not have yet. The protocol stays on its port: give it a site by hand or turn it off.",
+        "no_site": "Your own domains did not cover every protocol. The protocol stays on its port: add one more domain of yours (the subscriptions' domain, say), turn the protocol off or find it a site next to the server.",
+        "stranger_site": "The protocol shows a stranger's site, {sni}: your own domains did not cover it. Add one more domain of yours, and the preset moves the protocol to it.",
         "no_port": "No free port was found to move the protocol off 443.",
         "ssh_open": "Port 22 (SSH) is open to everyone in \"Open ports of the server\". The preset leaves it, so as not to cut your own way in: close it yourself when it is not needed, or limit it by IP at the hosting."
       }
