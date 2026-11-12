@@ -91,6 +91,8 @@ func (h *handlers) applyPosture(ctx context.Context, in *postureApplyInput) (*po
 				continue
 			}
 			p.SNIRouter = &on
+		case "router_by_key":
+			p.SNIByKey = &on
 		case "router_off":
 			p.SNIRouter = &off
 		case "api_lockdown":

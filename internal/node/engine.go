@@ -461,15 +461,11 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 		listener.PatchInboundListeners(listening, e.tun, true)
 	}
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
-	ports := make(map[string]string, len(st.Inbounds))
-	for _, in := range st.Inbounds {
-		ports[in.Name] = in.Port
-	}
 	if e.front == nil {
 		e.front = newFrontPage()
 	}
 	e.front.set(st.FrontPage, st.TLS)
-	e.setRouter(st.Router, ports)
+	e.setRouter(st.Router, st.Inbounds)
 	recreated := make([]string, 0, len(started))
 	for name := range started {
 		recreated = append(recreated, name)

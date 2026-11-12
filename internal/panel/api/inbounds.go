@@ -59,6 +59,9 @@ type InboundView struct {
 	// SNI443: behind the node's SNI router, clients reach it on 443.
 	SNI443         bool `json:"sni443" doc:"Подключение делит порт 443 ноды с другими по имени TLS (SNI-роутер ноды); клиенты подключаются на 443"`
 	SNI443Possible bool `json:"sni443_possible" doc:"Можно ли поставить за SNI-роутер: VLESS, Trojan или AnyTLS по TCP с TLS или REALITY"`
+	// SNIClash: others of the node ask for its name behind the shared 443 and the router
+	// cannot tell them apart; absent when it has the name to itself.
+	SNIClash *SNIClashView `json:"sni_clash,omitempty" doc:"То же имя за общим 443 у других подключений ноды, и роутер их не различает: подключения дойдут только до одного из них"`
 
 	// XHTTP is the tuning the form shows; absent for other transports.
 	XHTTP *proto.XHTTPTuning `json:"xhttp,omitempty" doc:"Тонкая настройка XHTTP; у других транспортов поля нет"`
@@ -423,12 +426,18 @@ func (h *handlers) listInbounds(ctx context.Context, in *listInboundsInput) (*in
 	if err != nil {
 		return nil, err
 	}
+	clashes, err := h.sniClashes(ctx, 0)
+	if err != nil {
+		return nil, err
+	}
 	out := &inboundsOutput{Body: make([]InboundView, 0, len(rows))}
 	for _, row := range rows {
 		if in.Tag != "" && !domain.HasTag(row.Tags, in.Tag) {
 			continue
 		}
-		out.Body = append(out.Body, h.viewInbound(ctx, row, last))
+		v := h.viewInbound(ctx, row, last)
+		v.SNIClash = clashes[row.ID]
+		out.Body = append(out.Body, v)
 	}
 	return out, nil
 }
@@ -478,6 +487,7 @@ func (h *handlers) createInbound(ctx context.Context, in *createInboundInput) (*
 		return nil, inboundError(err, false)
 	}
 	v := h.viewInbound(ctx, row, nil)
+	h.withSNIClash(ctx, &v)
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "inbound.create", "inbound", row.Name, map[string]any{"preset": row.Preset, "type": v.Type, "port": row.Port})
 	return &inboundOutput{Body: v}, nil
@@ -525,10 +535,16 @@ func (h *handlers) setInboundExits(ctx context.Context, in *setExitsInput) (*inb
 	if err != nil {
 		return nil, err
 	}
+	clashes, err := h.sniClashes(ctx, 0)
+	if err != nil {
+		return nil, err
+	}
 	out := &inboundsOutput{Body: make([]InboundView, 0, len(rows))}
 	names := make([]string, 0, len(rows))
 	for _, row := range rows {
-		out.Body = append(out.Body, h.viewInbound(ctx, row, last))
+		v := h.viewInbound(ctx, row, last)
+		v.SNIClash = clashes[row.ID]
+		out.Body = append(out.Body, v)
 		names = append(names, row.Name)
 	}
 	h.d.Changes.SlotsChanged()
@@ -544,6 +560,7 @@ func (h *handlers) copyInbound(ctx context.Context, in *copyInboundInput) (*inbo
 		return nil, inboundError(err, b.Dest != "")
 	}
 	v := h.viewInbound(ctx, row, nil)
+	h.withSNIClash(ctx, &v)
 	h.d.Changes.SlotsChanged()
 	if row.PoolID.Valid {
 		h.d.Changes.PoliciesChanged()
@@ -612,7 +629,9 @@ func (h *handlers) updateInbound(ctx context.Context, in *patchInboundInput) (*i
 	if err != nil {
 		return nil, err
 	}
-	return &inboundOutput{Body: h.viewInbound(ctx, row, last)}, nil
+	v := h.viewInbound(ctx, row, last)
+	h.withSNIClash(ctx, &v)
+	return &inboundOutput{Body: v}, nil
 }
 
 // inboundError maps the domain's refusals of an inbound change to the API's codes. dest:

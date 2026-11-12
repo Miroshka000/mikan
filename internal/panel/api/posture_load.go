@@ -32,7 +32,7 @@ func (h *handlers) posture(ctx context.Context, probe bool) (posture, error) {
 		if err != nil {
 			return p, err
 		}
-		pn := postureNode{node: n, inbounds: ins}
+		pn := postureNode{node: n, inbounds: ins, byKey: h.routesByKey(n)}
 		m, err := domain.NodePorts(ctx, h.d.Store.Q, n)
 		if err != nil {
 			return p, err

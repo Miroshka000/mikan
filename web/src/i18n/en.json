@@ -409,6 +409,7 @@
       "dest_unresolved": "The panel cannot find this name in DNS: name a site that opens from the internet",
       "reality_key": "private-key must be an X25519 key in base64",
       "reality_sni": "server-names cannot be empty",
+      "reality_sni_name": "The name for clients (SNI) is a domain without spaces, such as www.example.com",
       "reality_sid": "short-id must be hex, even length, up to 16 characters",
       "vless_decryption": "decryption must be mlkem768x25519plus.<native|xorpub|random>.<seconds>s.<X25519 or ML-KEM-768 key in base64url>",
       "jls_upstream": "Set the camouflage site in jls-upstream: addr like www.google.com:443, plus sni for an IP",
@@ -1818,6 +1819,11 @@
     },
     "cutOff": "Devices that cannot reach it: {n}",
     "cutOffOf": "Devices that cannot reach it: {n} of {total}",
+    "sniClash": {
+      "by_key": "{with} asks for the same name behind the shared 443: the router gives it to one inbound only, and clients do not reach the rest. Turn on “One name for REALITY protocols” on the node or give this inbound another name.",
+      "update": "{with} asks for the same name behind the shared 443, and the node is older than “One name for REALITY protocols”: it gives the name to one inbound only. Update the node.",
+      "name": "{with} asks for the same name behind the shared 443, and the router cannot tell them apart: it knows only REALITY protocols by their key. Give one of them another name for clients (SNI)."
+    },
     "stuck": {
       "off": "Automatic fixes are off for this protocol.",
       "waiting": "The port or site was just changed. Waiting for clients to update their subscription.",
@@ -2303,6 +2309,7 @@
         "through_443": "{inbound}: clients connect to 443 in place of {port}",
         "direct": "{inbound}: clients connect to port {port} in place of 443",
         "router_on": "Turn on the shared port 443 (SNI router)",
+        "router_by_key": "One name for REALITY protocols: they share your domains, and the node knows each one's clients by their key",
         "router_off": "Turn off the shared port 443 (SNI router)",
         "api_lockdown": "The node's API answers only the panel",
         "auto_off": "{inbound}: turn off the automatic change of the port and of the camouflage site",
@@ -3475,6 +3482,8 @@
     "httpRedirectBusy": "Port 80 cannot be taken: {error}",
     "sniRouter": "Shared port 443 (SNI router)",
     "sniRouterHint": "The node listens on 443 and hands each connection to the inbound by the TLS name in its ClientHello. Turn on “Through shared 443” for protocols (VLESS, Trojan, AnyTLS with TLS or REALITY): they move to loopback behind the router, clients connect to 443, and the node still sees the client's real IP. An unknown name goes to the first REALITY one and on to its masking site.",
+    "sniByKey": "One name for REALITY protocols",
+    "sniByKeyHint": "Several REALITY protocols behind the shared 443 may mask as one name: the node knows each one's clients by the key they connect with and sends strangers to the first of them. Without it a name goes to one protocol only, and the others get no connections. Protocols without REALITY are still told apart by the name alone.",
     "sniRouterBusy": "Port 443 cannot be taken: {error}",
     "apiLockdown": "Node API from the panel's IP only",
     "apiLockdownHint": "The node's API port answers the panel's addresses only: scanners that find the port do not even reach TLS. The node closes the port itself and puts an nftables rule on its server. If the panel moves to another IP, the rule lifts itself after 15 minutes without the panel, the panel connects from its new address, and the rule comes back with it. To lift it at once: mikan api-lockdown off on the node's server.",

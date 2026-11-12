@@ -4270,6 +4270,10 @@
             "description": "Можно ли поставить за SNI-роутер: VLESS, Trojan или AnyTLS по TCP с TLS или REALITY",
             "type": "boolean"
           },
+          "sni_clash": {
+            "$ref": "#/components/schemas/SNIClashView",
+            "description": "То же имя за общим 443 у других подключений ноды, и роутер их не различает: подключения дойдут только до одного из них"
+          },
           "status": {
             "enum": [
               "ok",
@@ -5771,6 +5775,10 @@
             "description": "IP или имя сервера, как его задали: по нему панель ходит в API ноды; пусто у своей ноды",
             "type": "string"
           },
+          "sni_by_key": {
+            "description": "Протоколы REALITY за общим 443 могут маскироваться под одно имя: нода узнаёт клиента каждого по его ключу",
+            "type": "boolean"
+          },
           "sni_router": {
             "description": "Порт 443 ноды делят подключения по имени TLS (SNI-роутер)",
             "type": "boolean"
@@ -5837,6 +5845,7 @@
           "balance_group",
           "http_redirect",
           "sni_router",
+          "sni_by_key",
           "front_page",
           "in_auto",
           "billing",
@@ -7341,6 +7350,10 @@
             "maxLength": 80,
             "type": "string"
           },
+          "sni_by_key": {
+            "description": "Протоколы REALITY за общим 443 могут делить одно имя: нода узнаёт клиента каждого по его ключу",
+            "type": "boolean"
+          },
           "sni_router": {
             "description": "SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним",
             "type": "boolean"
@@ -8250,6 +8263,7 @@
               "through_443",
               "direct",
               "router_on",
+              "router_by_key",
               "router_off",
               "api_lockdown",
               "auto_off",
@@ -9919,6 +9933,32 @@
           "verdict",
           "probes",
           "cached"
+        ],
+        "type": "object"
+      },
+      "SNIClashView": {
+        "additionalProperties": false,
+        "properties": {
+          "fix": {
+            "description": "Что поможет: by_key — включить у ноды «Одно имя для протоколов REALITY», update — обновить ноду (она старше этой настройки), name — дать подключению другое имя",
+            "enum": [
+              "by_key",
+              "update",
+              "name"
+            ],
+            "type": "string"
+          },
+          "with": {
+            "description": "Подключения ноды, которые спрашивают то же имя за общим 443",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "with",
+          "fix"
         ],
         "type": "object"
       },

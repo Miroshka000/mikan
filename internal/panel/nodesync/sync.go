@@ -311,6 +311,9 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	}
 	if n.SniRouter != 0 {
 		st.Router = sniRouter(st.Inbounds, n.Domain, st.FrontPage != "")
+		if st.Router != nil && n.SniByKey != 0 {
+			st.Router.ByKey = true
+		}
 	}
 	if n.FairShare != 0 && n.ChannelMbps.Valid {
 		st.Shaping = &nodeapi.Shaping{ChannelMbps: int(n.ChannelMbps.Int64)}
@@ -1198,6 +1201,17 @@ const customPageSince = "0.5.2.1-rc.10"
 
 // siteFilesSince is the first node version that answers the addresses of a site of several files.
 const siteFilesSince = "0.5.2.1-rc.11"
+
+// byKeySince is the first node version whose SNI router tells REALITY inbounds that share a
+// name apart by key (nodeapi.SNIRouter.ByKey).
+const byKeySince = "0.5.2.1-rc.12"
+
+// RoutesByKey says whether a node that reported version v tells REALITY inbounds that share a
+// name apart by key: a build with no release number (a developer's) does, a node that has not
+// reported yet is not counted on.
+func RoutesByKey(v string) bool {
+	return v != "" && (!release.Valid(v) || release.AtLeast(v, byKeySince))
+}
 
 // sniRouter is the node's SNI router for the inbounds marked for it: each by the names its
 // clients ask for, the first REALITY one taking any other name (it passes a stranger on to

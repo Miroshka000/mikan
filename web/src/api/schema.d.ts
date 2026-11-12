@@ -5010,6 +5010,8 @@ export interface components {
             sni443: boolean;
             /** @description Можно ли поставить за SNI-роутер: VLESS, Trojan или AnyTLS по TCP с TLS или REALITY */
             sni443_possible: boolean;
+            /** @description То же имя за общим 443 у других подключений ноды, и роутер их не различает: подключения дойдут только до одного из них */
+            sni_clash?: components["schemas"]["SNIClashView"];
             /** @enum {string} */
             status: "ok" | "error" | "unknown";
             /** @description Имя, которое увидит клиент */
@@ -5608,6 +5610,8 @@ export interface components {
             router_error?: string;
             /** @description IP или имя сервера, как его задали: по нему панель ходит в API ноды; пусто у своей ноды */
             server_host: string;
+            /** @description Протоколы REALITY за общим 443 могут маскироваться под одно имя: нода узнаёт клиента каждого по его ключу */
+            sni_by_key: boolean;
             /** @description Порт 443 ноды делят подключения по имени TLS (SNI-роутер) */
             sni_router: boolean;
             /** @enum {string} */
@@ -6146,6 +6150,8 @@ export interface components {
             own_ports?: number[];
             /** @description Публичное имя ноды; пустое — не публиковать её в канале */
             public_name?: string;
+            /** @description Протоколы REALITY за общим 443 могут делить одно имя: нода узнаёт клиента каждого по его ключу */
+            sni_by_key?: boolean;
             /** @description SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним */
             sni_router?: boolean;
             /** @description Метки ноды целиком; пустой список снимает все */
@@ -6502,7 +6508,7 @@ export interface components {
              * @description Что меняется; у строки manual: что остаётся сделать самому
              * @enum {string}
              */
-            code: "panel_page" | "front_page" | "site" | "port" | "through_443" | "direct" | "router_on" | "router_off" | "api_lockdown" | "auto_off" | "disable" | "port_443_busy" | "port_443_panel" | "same_name" | "no_site" | "stranger_site" | "no_port" | "udp_ports" | "ssh_open";
+            code: "panel_page" | "front_page" | "site" | "port" | "through_443" | "direct" | "router_on" | "router_by_key" | "router_off" | "api_lockdown" | "auto_off" | "disable" | "port_443_busy" | "port_443_panel" | "same_name" | "no_site" | "stranger_site" | "no_port" | "udp_ports" | "ssh_open";
             /** @description После применения: почему не получилось */
             error?: string;
             inbound?: string;
@@ -7064,6 +7070,15 @@ export interface components {
             probes: components["schemas"]["ReachProbe"][];
             /** @enum {string} */
             verdict: "ok" | "partial" | "blocked" | "down";
+        };
+        SNIClashView: {
+            /**
+             * @description Что поможет: by_key — включить у ноды «Одно имя для протоколов REALITY», update — обновить ноду (она старше этой настройки), name — дать подключению другое имя
+             * @enum {string}
+             */
+            fix: "by_key" | "update" | "name";
+            /** @description Подключения ноды, которые спрашивают то же имя за общим 443 */
+            with: string[];
         };
         ScanTargetsOutputBody: {
             /** @description Адрес сервера, вокруг которого искали */

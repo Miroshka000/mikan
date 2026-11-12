@@ -25,6 +25,9 @@ UPDATE nodes SET http_redirect = $1, updated_at = $2 WHERE id = $3;
 -- name: SetNodeSNIRouter :exec
 UPDATE nodes SET sni_router = $1, updated_at = $2 WHERE id = $3;
 
+-- name: SetNodeSNIByKey :exec
+UPDATE nodes SET sni_by_key = $1, updated_at = $2 WHERE id = $3;
+
 -- name: SetNodeFrontPage :exec
 UPDATE nodes SET front_page = $1, updated_at = $2 WHERE id = $3;
 

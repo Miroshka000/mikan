@@ -127,7 +127,7 @@ export function KeyDrawer({ joined, onClose, actions }: { joined: Joined | null;
 export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, front_page: "", in_auto: true, api_lockdown: false, api_allow: "", own_ports: "", tags: "" });
+  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, sni_by_key: false, front_page: "", in_auto: true, api_lockdown: false, api_allow: "", own_ports: "", tags: "" });
   const balance = useBalance();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [billing, setBilling] = useState<BillingForm | null>(null);
@@ -137,7 +137,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
       // The server as it was given, not the address for clients (its domain when it has one):
       // the field saves the server.
       setForm({ name: node.name, public_name: node.public_name, host: node.server_host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "",
-        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, front_page: node.front_page, in_auto: node.in_auto, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", "), own_ports: node.own_ports.join(", "), tags: node.tags.join(", ") });
+        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, sni_by_key: node.sni_by_key, front_page: node.front_page, in_auto: node.in_auto, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", "), own_ports: node.own_ports.join(", "), tags: node.tags.join(", ") });
       setErrors({});
     }
   }, [node]);
@@ -207,6 +207,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
     }
     body.own_ports = ownPorts.map(Number);
     body.sni_router = form.sni_router;
+    body.sni_by_key = form.sni_by_key;
     if (billing) {
       const b = billingBody(billing);
       if ("errors" in b) {
@@ -312,6 +313,9 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
             <p className="text-xs text-[var(--berry-600)]" role="alert">
               {t("nodes.sniRouterBusy", { error: node.router_error })}
             </p>
+          ) : null}
+          {form.sni_router ? (
+            <SwitchRow label={t("nodes.sniByKey")} sub={t("nodes.sniByKeyHint")} checked={form.sni_by_key} onChange={(v) => setForm((f) => ({ ...f, sni_by_key: v }))} />
           ) : null}
         </div>
         <div className="dr-sec">

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -142,6 +143,91 @@ func TestSecurePresetOfThePanelsNode(t *testing.T) {
 	p.nodes[0].scanned = false
 	if got = postureLines(p.secure()); !slices.Contains(got, "pq site @") {
 		t.Fatalf("a site still to find: %v", got)
+	}
+}
+
+// panelSite gives a REALITY inbound one of the panel's own names, as the preset's "site"
+// change leaves it: the panel's HTTPS on loopback, asked for by that name.
+func panelSite(t *testing.T, in db.Inbound, panelPort int, name string) db.Inbound {
+	t.Helper()
+	tpl, err := proto.Parse(in.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc, ok := tpl["reality-config"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s: no REALITY", in.Name)
+	}
+	rc["dest"], rc["server-names"] = "127.0.0.1:"+strconv.Itoa(panelPort), []string{name}
+	in.Config = string(tpl.JSON())
+	return in
+}
+
+// The panel's own node of TestSecurePresetOfThePanelsNode, with a router that tells REALITY
+// protocols apart by key: the four share the panel's two names, none stays on its port or on
+// a stranger's site, and the router is told to tell them apart. A node the preset went through
+// that way has nothing left but the admin's own lines.
+func TestSecurePresetSharesThePanelsNames(t *testing.T) {
+	p := posture{own: []string{"my.example.com", "sub.example.com"}, panelPort: 21355, pagePick: "cats", nodes: []postureNode{{
+		node: db.Node{ID: 1, Name: "main", Enabled: 1, OwnPorts: []int64{22}},
+		inbounds: []db.Inbound{
+			postureInbound(t, 1, "xhttp", "vless_reality_xhttp", "443", presets.DefaultDest),
+			postureInbound(t, 2, "vision", "vless_reality_vision", "8443", presets.DefaultDest),
+			postureInbound(t, 3, "grpc", "vless_reality_grpc", "2053", "news.example.org:443"),
+			postureInbound(t, 4, "pq", "vless_reality_xhttp_pq", "2096", "news.example.org:443"),
+			postureInbound(t, 5, "hy", "hysteria2", "2083", ""),
+		},
+		spare:   []string{"20000", "20001"},
+		scanned: true,
+		byKey:   true,
+	}}}
+	got := postureLines(p.secure())
+	want := []string{
+		"panel_page cats",
+		"xhttp site my.example.com@127.0.0.1:21355",
+		"xhttp port 20000",
+		"xhttp through_443",
+		"vision site sub.example.com@127.0.0.1:21355",
+		"vision through_443",
+		"grpc site my.example.com@127.0.0.1:21355",
+		"grpc through_443",
+		"pq site my.example.com@127.0.0.1:21355",
+		"pq through_443",
+		"router_on",
+		"router_by_key",
+		"udp_ports (manual)",
+		"front_page cats",
+		"ssh_open (manual)",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("the secure preset, names shared:\n got  %s\n want %s", strings.Join(got, "\n      "), strings.Join(want, "\n      "))
+	}
+
+	site := func(id int64, name, preset, port, sni string) db.Inbound {
+		return behind(t, panelSite(t, postureInbound(t, id, name, preset, port, presets.DefaultDest), 21355, sni))
+	}
+	done := posture{own: p.own, panelPort: 21355, page: "cats", pagePick: "cats", nodes: []postureNode{{
+		node: db.Node{ID: 1, Name: "main", Enabled: 1, OwnPorts: []int64{22}, SniRouter: 1, SniByKey: 1, FrontPage: "cats"},
+		inbounds: []db.Inbound{
+			site(1, "xhttp", "vless_reality_xhttp", "20000", "my.example.com"),
+			site(2, "vision", "vless_reality_vision", "8443", "sub.example.com"),
+			site(3, "grpc", "vless_reality_grpc", "2053", "my.example.com"),
+			site(4, "pq", "vless_reality_xhttp_pq", "2096", "my.example.com"),
+			postureInbound(t, 5, "hy", "hysteria2", "2083", ""),
+		},
+		byKey: true,
+	}}}
+	if got := postureLines(done.secure()); !slices.Equal(got, []string{"udp_ports (manual)", "ssh_open (manual)"}) {
+		t.Fatalf("after the preset: %v", got)
+	}
+	if name, _, _ := done.current(); name != postureSecure {
+		t.Fatalf("after the preset the node is on %s", name)
+	}
+	// The router of a node that cannot tell them apart gives a shared name to one of them:
+	// the others are left to the admin, as before.
+	done.nodes[0].byKey = false
+	if got := postureLines(done.secure()); !slices.Contains(got, "grpc no_site (manual)") || !slices.Contains(got, "pq no_site (manual)") {
+		t.Fatalf("names shared on a node that cannot tell them apart: %v", got)
 	}
 }
 

@@ -18,8 +18,10 @@ import (
 //
 // "standard" is how the panel sets itself up: every protocol on a port of its own. "secure"
 // is the least a server can show: one TCP port 443 a node, its protocols behind it told
-// apart by the name a client asks for, every REALITY protocol with a name of its own, the
-// node's API closed to anyone but the panel and a front page everywhere. The names are the
+// apart by the name a client asks for, every REALITY protocol with a name of its own or, on a
+// node whose router tells them apart by key (router_by_key, which the preset turns on), with
+// one of the panel's names it shares, the node's API closed to anyone but the panel and a
+// front page everywhere. The names are the
 // panel's own (its domain, the subscriptions' domain): the server then shows its own
 // certificate and nobody else's. A stranger's site next to the server is taken only when the
 // admin asks for it in the plan (neighbors). What a preset cannot do for the admin (no name
@@ -37,7 +39,7 @@ type PostureChange struct {
 	NodeName  string            `json:"node_name,omitempty"`
 	InboundID int64             `json:"inbound_id,omitempty"`
 	Inbound   string            `json:"inbound,omitempty"`
-	Code      string            `json:"code" enum:"panel_page,front_page,site,port,through_443,direct,router_on,router_off,api_lockdown,auto_off,disable,port_443_busy,port_443_panel,same_name,no_site,stranger_site,no_port,udp_ports,ssh_open" doc:"Что меняется; у строки manual: что остаётся сделать самому"`
+	Code      string            `json:"code" enum:"panel_page,front_page,site,port,through_443,direct,router_on,router_by_key,router_off,api_lockdown,auto_off,disable,port_443_busy,port_443_panel,same_name,no_site,stranger_site,no_port,udp_ports,ssh_open" doc:"Что меняется; у строки manual: что остаётся сделать самому"`
 	Params    map[string]string `json:"params,omitempty"`
 	Manual    bool              `json:"manual" doc:"Пресет этого сделать не может: строка для админа"`
 	Optional  bool              `json:"optional,omitempty" doc:"Изменение по желанию: применяется, только если админ его отметил"`
@@ -51,6 +53,9 @@ type postureNode struct {
 	spare    []string      // free TCP ports for an inbound that leaves 443 to the router
 	sites    []scan.Result // the sites next to the server, the best first
 	scanned  bool          // sites were looked for: none left means none
+	// byKey: the node's router can tell REALITY protocols that share a name apart by key,
+	// so they may share the panel's names (domain.SNIClashes).
+	byKey bool
 }
 
 // posture is the installation as a preset reads it.
@@ -140,42 +145,74 @@ func (p posture) secure() []PostureChange {
 				keeps           // its name stays
 				stranger        // its name stays, and is somebody else's site
 			)
-			taken := map[string]bool{}
+			// With the router telling REALITY protocols apart by key (router_by_key) they
+			// share names: a REALITY one is never in another's way, and one that is no
+			// REALITY one only of another such.
+			share := pn.byKey
+			taken := map[string]bool{} // the names protocols keep or get
+			plain := map[string]bool{} // of them, the names a protocol that is no REALITY one holds
+			inWay := func(name string, reality bool) bool {
+				switch {
+				case !share:
+					return taken[name]
+				case reality:
+					return false
+				}
+				return plain[name]
+			}
+			hold := func(name string, reality bool) {
+				taken[name] = true
+				if !reality {
+					plain[name] = true
+				}
+			}
 			state := make([]int, len(routable))
 			for i, e := range routable {
 				names := lowerNames(proto.SNINames(e.t, n.Domain))
+				reality := proto.Reality(e.t)
 				ok, foreign := true, false
-				if proto.Reality(e.t) {
+				if reality {
 					dest, _ := presets.Dest(e.t)
 					ok = len(names) > 0 && dest != presets.DefaultDest
 				}
 				for _, name := range names {
-					ok = ok && !taken[name] && !(proto.Reality(e.t) && scan.Weak(name))
+					ok = ok && !inWay(name, reality) && !(reality && scan.Weak(name))
 					foreign = foreign || !slices.Contains(own, name)
 				}
 				if !ok {
 					continue
 				}
 				for _, name := range names {
-					taken[name] = true
+					hold(name, reality)
 				}
-				if state[i] = keeps; proto.Reality(e.t) && foreign {
+				if state[i] = keeps; reality && foreign {
 					state[i] = stranger
 				}
 			}
 			// The panel's own names nobody has yet: first to the protocols with no name to
-			// keep, then to those on a stranger's site, in the order of the list.
+			// keep, then to those on a stranger's site, in the order of the list. When they
+			// run out and the protocols share names, the first that no other kind holds.
 			picks := map[int]string{}
 			for _, want := range []int{needs, stranger} {
 				for i, e := range routable {
 					if state[i] != want || !proto.Reality(e.t) {
 						continue
 					}
+					pick := ""
 					for _, name := range own {
 						if !taken[name] {
-							picks[i], taken[name] = name, true
+							pick = name
 							break
 						}
+					}
+					for _, name := range own {
+						if pick == "" && share && !plain[name] {
+							pick = name
+						}
+					}
+					if pick != "" {
+						picks[i] = pick
+						hold(pick, true)
 					}
 				}
 			}
@@ -250,6 +287,9 @@ func (p posture) secure() []PostureChange {
 			}
 			if behind > 0 && !blocked && n.SniRouter == 0 {
 				add(PostureChange{Code: "router_on"})
+			}
+			if behind > 0 && !blocked && share && n.SniByKey == 0 {
+				add(PostureChange{Code: "router_by_key"})
 			}
 		}
 		// What cannot go behind 443. A protocol with no handshake to read keeps a TCP port

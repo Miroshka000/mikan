@@ -201,6 +201,7 @@ export function InboundsPage() {
                     </p>
                   ) : null}
                   <AutoInfo i={i} />
+                  <SNIClashInfo i={i} />
                   <div className="flex-1" aria-hidden />
                   <div className="mt-4 flex gap-2 border-t border-[var(--hairline)] pt-4">
                     <Button size="sm" onClick={() => setEditing(i)}>
@@ -235,6 +236,17 @@ export function InboundsPage() {
         onConfirm={() => removing && remove.mutate(removing.id)}
       />
     </>
+  );
+}
+
+/** Others of the node that ask for this connection's name behind the shared 443 where the router cannot tell them apart. */
+function SNIClashInfo({ i }: { i: Inbound }) {
+  const c = i.sni_clash;
+  if (!i.enabled || !c) return null;
+  return (
+    <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
+      {t(`inbounds.sniClash.${c.fix}`, { with: c.with.join(", ") })}
+    </p>
   );
 }
 

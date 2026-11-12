@@ -145,6 +145,9 @@ type NodePatch struct {
 	HTTPRedirect *bool
 	// SNIRouter shares the node's TCP 443 between the inbounds marked for it.
 	SNIRouter *bool
+	// SNIByKey: REALITY inbounds behind the router may share a name; the router tells their
+	// clients apart by key (nodeapi.SNIRouter.ByKey).
+	SNIByKey *bool
 	// FrontPage is the built-in page (frontpage.Templates) strangers get on the node's own
 	// domain through the shared 443; "" none.
 	FrontPage *string
@@ -271,6 +274,11 @@ func UpdateNode(ctx context.Context, st *store.Store, id int64, p NodePatch, now
 		}
 		if p.SNIRouter != nil {
 			if err := q.SetNodeSNIRouter(ctx, db.SetNodeSNIRouterParams{SniRouter: Flag(*p.SNIRouter), UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
+				return err
+			}
+		}
+		if p.SNIByKey != nil {
+			if err := q.SetNodeSNIByKey(ctx, db.SetNodeSNIByKeyParams{SniByKey: Flag(*p.SNIByKey), UpdatedAt: now.Unix(), ID: cur.ID}); err != nil {
 				return err
 			}
 		}

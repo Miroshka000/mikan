@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
-	"strings"
 	"sync"
 	"time"
 
@@ -23,7 +22,9 @@ import (
 // TLS ClientHello, picks the inbound by the name it asks for and hands the connection over
 // with a PROXY v2 header carrying the client's address, so devices, limits and filters see
 // the client and not 127.0.0.1. A name no route has goes to the default inbound (a REALITY
-// one passes it to its target, as any stranger's).
+// one passes it to its target, as any stranger's). Several REALITY inbounds may share a name
+// when the router tells them apart by key (SNIRouter.ByKey, sni_route.go): it reads the
+// whole ClientHello and hands it to the inbound whose key made it.
 
 const (
 	// helloWait bounds the wait for the ClientHello; helloMax what is read of it (a
@@ -37,11 +38,11 @@ type sniRouter struct {
 	ln     net.Listener
 	log    *slog.Logger
 	mu     sync.RWMutex
-	routes map[string]string // name (lowercase) → backend address
-	def    string            // backend for any other name; "": closed
-	stub   map[string]bool   // names that get the front page instead ("": no name)
-	front  *frontPage        // the node's front page; nil: none
-	gate   helloGate         // how many connections wait for their ClientHello
+	routes map[string]nameRoute // name (lowercase) → where it goes
+	def    string               // backend for any other name; "": closed
+	stub   map[string]bool      // names that get the front page instead ("": no name)
+	front  *frontPage           // the node's front page; nil: none
+	gate   helloGate            // how many connections wait for their ClientHello
 	wg     sync.WaitGroup
 	err    error
 }
@@ -102,13 +103,13 @@ func gateKey(a netip.Addr) netip.Addr {
 }
 
 // route is where a name goes.
-func (r *sniRouter) route(name string) string {
+func (r *sniRouter) route(name string) nameRoute {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if to, ok := r.routes[strings.ToLower(strings.TrimSuffix(name, "."))]; ok {
-		return to
+	if rt, ok := r.routes[sniName(name)]; ok {
+		return rt
 	}
-	return r.def
+	return nameRoute{to: r.def}
 }
 
 // stubbed says whether name gets the front page: a name of the stub's, or with no default
@@ -119,32 +120,26 @@ func (r *sniRouter) stubbed(name string) bool {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	n := strings.ToLower(strings.TrimSuffix(name, "."))
+	n := sniName(name)
 	if _, ok := r.routes[n]; ok {
 		return false
 	}
 	return r.stub[n] || r.def == "" && len(r.stub) > 0
 }
 
-// set replaces the routes: names to inbound ports on loopback, by the ports the inbounds run.
-func (r *sniRouter) set(rt *nodeapi.SNIRouter, ports map[string]string) {
-	routes := map[string]string{}
-	for _, x := range rt.Routes {
-		p, ok := ports[x.Inbound]
-		if !ok {
-			continue
-		}
-		for _, n := range x.Names {
-			routes[strings.ToLower(strings.TrimSuffix(n, "."))] = net.JoinHostPort("127.0.0.1", p)
-		}
-	}
+// set replaces the routes: names to inbound ports on loopback, by the ports and configs the
+// inbounds run.
+func (r *sniRouter) set(rt *nodeapi.SNIRouter, inbounds []nodeapi.Inbound) {
+	routes := routesOf(rt, inbounds)
 	stub := map[string]bool{}
 	for _, n := range rt.Stub {
-		stub[strings.ToLower(strings.TrimSuffix(n, "."))] = true
+		stub[sniName(n)] = true
 	}
 	def := ""
-	if p, ok := ports[rt.Default]; ok {
-		def = net.JoinHostPort("127.0.0.1", p)
+	for _, in := range inbounds {
+		if in.Name == rt.Default {
+			def = net.JoinHostPort("127.0.0.1", in.Port)
+		}
 	}
 	r.mu.Lock()
 	r.routes, r.def = routes, def
@@ -183,12 +178,21 @@ func (r *sniRouter) handle(c net.Conn, admit func(netip.Addr) bool) {
 		return
 	}
 	hello, name := readHello(c)
+	stub := r.stubbed(name)
+	var rt nameRoute
+	if !stub {
+		// A name REALITY inbounds share needs the whole ClientHello for the key check: what
+		// came with the name may be a part of it.
+		if rt = r.route(name); len(rt.keyed) > 0 {
+			hello = moreHello(c, hello)
+		}
+	}
 	r.gate.leave(key)
-	if r.stubbed(name) {
+	if stub {
 		r.front.take(c, hello)
 		return
 	}
-	to := r.route(name)
+	to := rt.pick(hello)
 	if to == "" {
 		return
 	}
@@ -221,24 +225,42 @@ func readHello(c net.Conn) ([]byte, string) {
 		if name, serr := sniffer.SniffTLS(buf); serr == nil && name != nil {
 			return buf, *name
 		}
-		// A whole ClientHello with no name in it is done with at once, not waited on for
-		// the rest of helloWait.
-		if err != nil || helloWhole(buf) {
+		// A ClientHello split over several records has its name read once it is whole; a
+		// whole one with no name in it is done with at once, not waited on for the rest of
+		// helloWait.
+		switch msg, st := joinHello(buf); st {
+		case helloDone:
+			if h, ok := parseHello(msg); ok {
+				return buf, h.serverName
+			}
+			return buf, ""
+		case helloBad:
+			return buf, ""
+		}
+		if err != nil {
 			return buf, ""
 		}
 	}
 	return buf, ""
 }
 
-// helloWhole says whether buf holds a whole ClientHello in its first record: the record's
-// length and the handshake message's both fit.
-func helloWhole(buf []byte) bool {
-	if len(buf) < 9 || buf[0] != 0x16 || buf[5] != 0x01 {
-		return false
+// moreHello reads on until buf holds the whole ClientHello, over as many records as the
+// client split it into, within helloWait and helloMax.
+func moreHello(c net.Conn, buf []byte) []byte {
+	_ = c.SetReadDeadline(time.Now().Add(helloWait))
+	defer c.SetReadDeadline(time.Time{})
+	tmp := make([]byte, 4096)
+	for len(buf) < helloMax {
+		if _, st := joinHello(buf); st != helloPart {
+			return buf
+		}
+		n, err := c.Read(tmp[:min(len(tmp), helloMax-len(buf))])
+		buf = append(buf, tmp[:n]...)
+		if err != nil {
+			return buf
+		}
 	}
-	rec := int(buf[3])<<8 | int(buf[4])
-	msg := int(buf[6])<<16 | int(buf[7])<<8 | int(buf[8])
-	return 4+msg <= rec && len(buf) >= 5+rec
+	return buf
 }
 
 // proxyV2 is a PROXY protocol v2 header for a TCP connection from src to dst.
@@ -296,9 +318,10 @@ func (r *sniRouter) close() {
 	_ = r.ln.Close()
 }
 
-// setRouter starts, changes or stops the router as the state says. ports are the inbounds'
-// ports as rendered. An error to bind is kept for Health and tried again at the next Apply.
-func (e *Engine) setRouter(rt *nodeapi.SNIRouter, ports map[string]string) {
+// setRouter starts, changes or stops the router as the state says, by the inbounds' ports
+// and configs as rendered. An error to bind is kept for Health and tried again at the next
+// Apply.
+func (e *Engine) setRouter(rt *nodeapi.SNIRouter, inbounds []nodeapi.Inbound) {
 	e.routerMu.Lock()
 	defer e.routerMu.Unlock()
 	if rt == nil {
@@ -314,7 +337,7 @@ func (e *Engine) setRouter(rt *nodeapi.SNIRouter, ports map[string]string) {
 		listen = ":443"
 	}
 	if e.router != nil && e.router.ln.Addr().String() != "" && e.routerAddr == listen {
-		e.router.set(rt, ports)
+		e.router.set(rt, inbounds)
 		return
 	}
 	if e.router != nil {
@@ -328,7 +351,7 @@ func (e *Engine) setRouter(rt *nodeapi.SNIRouter, ports map[string]string) {
 		return
 	}
 	r := &sniRouter{ln: ln, log: e.log, front: e.front}
-	r.set(rt, ports)
+	r.set(rt, inbounds)
 	e.router, e.routerAddr = r, listen
 	e.routerStatus.Store(&nodeapi.PortStatus{OK: true})
 	go r.serve(e.Reg.admitFrom)

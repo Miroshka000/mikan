@@ -305,6 +305,7 @@ type Node struct {
 	TrafficAlert    int64
 	Tags            string
 	OwnPorts        []int64
+	SniByKey        int64
 }
 
 type NodeAssignment struct {

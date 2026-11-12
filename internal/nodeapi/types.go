@@ -110,6 +110,11 @@ type SNIRouter struct {
 	// for a ClientHello with no name; with no Default it takes any other name too. Nodes
 	// older than it ignore it.
 	Stub []string `json:"stub,omitempty"`
+	// ByKey: REALITY inbounds may share a name. The router hands a client to the one whose
+	// key made its ClientHello, as that inbound's REALITY checks it, and anyone else to the
+	// name's inbound that is no REALITY one, or to its first REALITY one. Without it a name
+	// goes to one inbound, the last that has it. Nodes older than it ignore it.
+	ByKey bool `json:"by_key,omitempty"`
 }
 
 type SNIRoute struct {
