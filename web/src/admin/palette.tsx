@@ -15,7 +15,7 @@ import { t, type Key } from "../i18n";
 import { useDebounced } from "../lib/debounce";
 import { nodeLabel } from "../lib/node-label";
 import { isPaletteKey, matches, onMac, step, userIdOf } from "../lib/palette";
-import { NAV } from "./nav";
+import { useNav } from "./use-nav";
 
 /** How many clients the search shows: the palette is a way to one of them, not the list. */
 const USERS_SHOWN = 8;
@@ -71,6 +71,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
 
 /** What the palette holds while it is open: a new search each time it opens. */
 function PaletteBody({ close }: { close: () => void }) {
+  const nav = useNav();
   const navigate = useNavigate();
   const operator = useSupportMode();
   // An operator the admin did not let see the subscribers may not search them (the API says
@@ -121,7 +122,7 @@ function PaletteBody({ close }: { close: () => void }) {
   }
   items.push(...actions.filter((a) => matches(a.label, query)));
   // A section is found by its name in the language in use and by its English key ("users").
-  for (const n of NAV) {
+  for (const n of nav) {
     const label = t(`nav.${n.key}`);
     if (matches(`${label} ${n.key}`, query)) items.push({ id: `section-${n.key}`, group: "sections", icon: n.icon, label, run: go(() => navigate({ to: n.to })) });
   }

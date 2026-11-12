@@ -17,6 +17,7 @@ import { GoalsCard } from "./goals";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { ROUTING_PARTS, RoutingSection, type RoutingPart } from "./routing";
 import { AccessCard, ApiCard, CertificateCard, LoginCard, SessionsCard } from "./security";
+import { SalesCard } from "./sales";
 import { SecurityPresetsCard } from "./security-presets";
 import { SupportCard } from "./support";
 import { AppsCard, DevicesCard, InactiveCard, SubPortCard, SubscriptionCard, XrayJSONCard } from "./subscription";
@@ -96,6 +97,7 @@ export function SettingsPage() {
               tab === "general" ? (
                 <>
                   <ServiceCard s={s} />
+                  {operator ? null : <SalesCard />}
                   <LanguageCard s={s} />
                   <ThemeCard />
                   <AppCard s={s} />

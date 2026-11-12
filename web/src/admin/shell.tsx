@@ -12,7 +12,7 @@ import { useToast } from "../components/toast";
 import { Avatar, Bar, Pill } from "../components/ui";
 import { t, useLocale } from "../i18n";
 import { num, uptime } from "../lib/format";
-import { NAV } from "./nav";
+import { useNav } from "./use-nav";
 import { CommandPalette, paletteKeyLabel, usePaletteKey } from "./palette";
 import { SupportBar } from "./support-bar";
 
@@ -28,6 +28,7 @@ function readFolded(): boolean {
 }
 
 export function Shell() {
+  const nav = useNav();
   useLocale(); // the sidebar and the bar read their texts at render time
   const overview = useOverview({ poll: false });
   const [folded, setFolded] = useState(readFolded);
@@ -63,7 +64,7 @@ export function Shell() {
               <span className="nav-label">{t("palette.open")}</span>
               <kbd className="nav-count">{paletteKeyLabel().text}</kbd>
             </button>
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <Link key={n.to} to={n.to} className="nav-item" activeProps={{ className: "active", "aria-current": "page" }} activeOptions={{ exact: n.to === "/" }} title={t(`nav.${n.key}`)}>
                 <n.icon size={18} aria-hidden />
                 <span className="nav-label">{t(`nav.${n.key}`)}</span>
@@ -97,11 +98,12 @@ const isIn = (path: string, to: string) => path.endsWith(to) || path.includes(`$
 function MobileNav({ onSearch }: { onSearch: () => void }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
-  const more = NAV.slice(MOBILE_MAIN);
+  const nav = useNav();
+  const more = nav.slice(MOBILE_MAIN);
   const inMore = more.some((n) => isIn(path, n.to));
   return (
     <nav className="mnav glass" aria-label={t("shell.sections")}>
-      {NAV.slice(0, MOBILE_MAIN).map((n) => (
+      {nav.slice(0, MOBILE_MAIN).map((n) => (
         <Link key={n.to} to={n.to} activeProps={{ className: "active", "aria-current": "page" }} activeOptions={{ exact: n.to === "/" }}>
           <n.icon size={20} aria-hidden />
           <span>{t(`navShort.${n.key}`)}</span>

@@ -1,4 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSellingSwitch } from "../../api/selling";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { Coins, HandCoins, History as HistoryIcon, ListChecks, Megaphone, Ticket, TriangleAlert, Undo2, Wallet } from "lucide-react";
 import { useState, type FormEvent, type ReactNode } from "react";
@@ -111,16 +112,7 @@ export function PaymentsPage() {
 
 /** Selling on or off for the whole panel: the bot and the Mini App sell only while it is on. */
 function SellingSwitch({ s }: { s?: Settings }) {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const save = useMutation({
-    mutationFn: (enabled: boolean) => unwrap(api.PATCH("/api/v1/payments/settings", { body: { enabled } })),
-    onSuccess: (v) => {
-      qc.setQueryData(qk.paymentSettings, v);
-      toast.ok(v.enabled ? t("settings.salesOnToast") : t("settings.salesOffToast"));
-    },
-    onError: (e) => toast.error(errorText(e)),
-  });
+  const save = useSellingSwitch();
   if (!s) return <Skeleton style={{ width: 160, height: 40, borderRadius: 12 }} />;
   return (
     <div className="flex h-10 items-center gap-3 rounded-[var(--r-md)] border border-[var(--hairline)] bg-[var(--surface)] px-3">
