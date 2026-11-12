@@ -21,8 +21,9 @@ use crate::doctor::{self, JsonReport};
 use crate::ops::{self, Install};
 use crate::{docker, redact};
 
-/// Where the report goes: the support desk's port, the one the bot's Tribute webhook has.
-const SUPPORT_URL: &str = "https://vpn.aurausa.me:8790/support/report";
+/// Where the report goes: the support desk, under the name the panel's support access and the
+/// bot's Tribute webhook have too (the panel's `support.DefaultBotURL`).
+const SUPPORT_URL: &str = "https://mikanpanel.dpdns.org/support/report";
 
 /// Overrides SUPPORT_URL (a self-hosted desk, a test).
 const URL_ENV: &str = "MIKAN_SUPPORT_URL";
@@ -207,7 +208,7 @@ mod tests {
         for bad in ["ftp://x/y", "file:///etc/passwd", "desk.example.com", "https://a b/c", "javascript:alert(1)"] {
             assert!(endpoint(Some(bad)).is_err(), "{bad}");
         }
-        assert!(SUPPORT_URL.starts_with("https://vpn.aurausa.me:8790/"));
+        assert!(SUPPORT_URL.starts_with("https://mikanpanel.dpdns.org/"));
     }
 
     // The document names its parts as the desk reads them, and nothing else.
