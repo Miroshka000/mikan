@@ -37,7 +37,7 @@ The same change is repeated at most once every 6 hours, and no more than three a
 
 **The new port** is a random free one from the fallback list: 2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 11443, 12443. Ports the node's connections left in the last 7 days are skipped. A Hysteria2 port range is not moved automatically.
 
-**The new site** is searched in the same /24 network as the node: up to 16 candidates with TLS 1.3, HTTP/2 and X25519 whose DNS name points to that address. The panel's and nodes' own domains are not used, nor are sites that failed the check in the last day. The camouflage site is checked every 15 minutes, and after three failures in a row it is changed.
+**The new site** is searched in the same /24 network as the node: up to 16 candidates with TLS 1.3, HTTP/2 and X25519 whose DNS name points to that address. The panel's and nodes' own domains are not used, nor are sites that failed the check in the last day. Of the sites that will do, the panel takes the one the node's other protocols already show, so that all its ports give one certificate; mail and service names (`mail.`, `autoconfig.`) and dynamic DNS (`duckdns.org` and the like) are taken only when there is nothing else. The camouflage site is checked every 15 minutes, and after three failures in a row it is changed.
 
 ## Busy port
 

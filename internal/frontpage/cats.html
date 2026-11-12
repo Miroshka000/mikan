@@ -3,67 +3,67 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cat Clicker</title>
+<title>[[t "title"]]</title>
 <style>
-  :root { color-scheme: light dark; --bg: #fff7ef; --card: #fff; --ink: #2b211b; --muted: #7a6a5e; --line: #f0e2d4; --accent: #f08a24; --accent-ink: #fff; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #17120e; --card: #1f1914; --ink: #f3e9df; --muted: #b3a294; --line: #2e251d; --accent: #f59a3c; --accent-ink: #1b130c; } }
+  :root { color-scheme: light dark; --bg: [[c "#fff7ef"]]; --card: [[c "#fff"]]; --ink: [[c "#2b211b"]]; --muted: [[c "#7a6a5e"]]; --line: [[c "#f0e2d4"]]; --accent: [[c "#f08a24"]]; --accent-ink: [[c "#fff"]]; }
+  @media (prefers-color-scheme: dark) { :root { --bg: [[c "#17120e"]]; --card: [[c "#1f1914"]]; --ink: [[c "#f3e9df"]]; --muted: [[c "#b3a294"]]; --line: [[c "#2e251d"]]; --accent: [[c "#f59a3c"]]; --accent-ink: [[c "#1b130c"]]; } }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; user-select: none; }
-  main { width: min(440px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 24px; padding: 24px; text-align: center; }
+  main { width: min([[n "width"]]px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: [[n "radius"]]px; padding: 24px; text-align: center; }
   h1 { margin: 0; font-size: 24px; line-height: 32px; font-weight: 700; }
-  .count { margin: 8px 0 0; font-size: 40px; line-height: 48px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .rate { margin: 0; color: var(--muted); font-size: 13px; }
-  .cat { position: relative; display: block; margin: 16px auto; width: 192px; height: 192px; border: 0; border-radius: 50%; background: var(--bg); font-size: 120px; line-height: 192px; cursor: pointer; transition: transform 0.08s; }
-  .cat:hover { transform: scale(1.04); }
-  .cat:active { transform: scale(0.94); }
-  .cat:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
-  .pop { position: absolute; left: 50%; top: 24px; font-size: 20px; font-weight: 700; color: var(--accent); pointer-events: none; animation: up 0.8s ease-out forwards; }
-  @keyframes up { to { transform: translate(-50%, -64px); opacity: 0; } }
-  @media (prefers-reduced-motion: reduce) { .pop { animation-duration: 0.01s; } .cat { transition: none; } }
-  .shop { display: grid; gap: 8px; margin-top: 8px; }
-  .shop button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 8px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-  .shop button:hover:not(:disabled) { border-color: var(--accent); }
-  .shop button:disabled { opacity: 0.48; cursor: not-allowed; }
-  .shop b { white-space: nowrap; color: var(--accent); }
-  .shop span small { display: block; color: var(--muted); font-size: 12px; }
+  .[[id "count"]] { margin: 8px 0 0; font-size: 40px; line-height: 48px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .[[id "rate"]] { margin: 0; color: var(--muted); font-size: 13px; }
+  .[[id "cat"]] { position: relative; display: block; margin: 16px auto; width: [[n "size"]]px; height: [[n "size"]]px; border: 0; border-radius: 50%; background: var(--bg); font-size: 120px; line-height: [[n "size"]]px; cursor: pointer; transition: transform 0.08s; }
+  .[[id "cat"]]:hover { transform: scale(1.04); }
+  .[[id "cat"]]:active { transform: scale(0.94); }
+  .[[id "cat"]]:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+  .[[id "pop"]] { position: absolute; left: 50%; top: 24px; font-size: 20px; font-weight: 700; color: var(--accent); pointer-events: none; animation: [[id "up"]] 0.8s ease-out forwards; }
+  @keyframes [[id "up"]] { to { transform: translate(-50%, -64px); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .[[id "pop"]] { animation-duration: 0.01s; } .[[id "cat"]] { transition: none; } }
+  .[[id "shop"]] { display: grid; gap: 8px; margin-top: 8px; }
+  .[[id "shop"]] button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 8px 16px; border: 1px solid var(--line); border-radius: [[n "radius.small"]]px; background: var(--card); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  .[[id "shop"]] button:hover:not(:disabled) { border-color: var(--accent); }
+  .[[id "shop"]] button:disabled { opacity: 0.48; cursor: not-allowed; }
+  .[[id "shop"]] b { white-space: nowrap; color: var(--accent); }
+  .[[id "shop"]] span small { display: block; color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Cat Clicker</h1>
-  <p class="count" id="count" aria-live="polite">0</p>
-  <p class="rate" id="rate">pet the cat to earn treats</p>
-  <button class="cat" id="cat" type="button" aria-label="Pet the cat"><span id="face">🐱</span></button>
-  <div class="shop" id="shop"></div>
+  <h1>[[t "title"]]</h1>
+  <p class="[[id "count"]]" id="[[id "count"]]" aria-live="polite">0</p>
+  <p class="[[id "rate"]]" id="[[id "rate"]]">[[t "hint"]]</p>
+  <button class="[[id "cat"]]" id="[[id "cat"]]" type="button" aria-label="[[t "pet"]]"><span id="[[id "face"]]">🐱</span></button>
+  <div class="[[id "shop"]]" id="[[id "shop"]]"></div>
 </main>
 <script>
 (function () {
   var items = [
-    { id: "paw", name: "Soft paw", note: "+1 treat per pet", cost: 15, per: 1, auto: 0 },
-    { id: "yarn", name: "Ball of yarn", note: "+1 treat every second", cost: 50, per: 0, auto: 1 },
-    { id: "kitten", name: "Kitten", note: "+5 treats every second", cost: 300, per: 0, auto: 5 },
-    { id: "tower", name: "Cat tower", note: "+25 treats every second", cost: 1500, per: 0, auto: 25 }
+    { id: "paw", name: "[[t "paw"]]", note: "+1 treat per pet", cost: [[n "cost.a"]], per: 1, auto: 0 },
+    { id: "yarn", name: "[[t "yarn"]]", note: "+1 treat every second", cost: [[n "cost.b"]], per: 0, auto: 1 },
+    { id: "kitten", name: "[[t "kitten"]]", note: "+5 treats every second", cost: [[n "cost.c"]], per: 0, auto: 5 },
+    { id: "tower", name: "[[t "tower"]]", note: "+25 treats every second", cost: [[n "cost.d"]], per: 0, auto: 25 }
   ];
   var cats = ["🐱", "😺", "😸", "😻", "😽"];
   var s = { treats: 0, have: {} };
-  try { s = JSON.parse(localStorage.getItem("cat-clicker")) || s; } catch (e) {}
+  try { s = JSON.parse(localStorage.getItem("[[t "store"]]")) || s; } catch (e) {}
   s.have = s.have || {};
-  function save() { try { localStorage.setItem("cat-clicker", JSON.stringify(s)); } catch (e) {} }
-  function owned(id) { return s.have[id] || 0; }
-  function price(it) { return Math.ceil(it.cost * Math.pow(1.15, owned(it.id))); }
-  function perPet() { return 1 + items.reduce(function (a, it) { return a + it.per * owned(it.id); }, 0); }
-  function perSec() { return items.reduce(function (a, it) { return a + it.auto * owned(it.id); }, 0); }
-  var face = document.getElementById("face"), count = document.getElementById("count"), rate = document.getElementById("rate"), cat = document.getElementById("cat"), shop = document.getElementById("shop");
-  function render() {
+  function [[id "save"]]() { try { localStorage.setItem("[[t "store"]]", JSON.stringify(s)); } catch (e) {} }
+  function [[id "owned"]](id) { return s.have[id] || 0; }
+  function [[id "price"]](it) { return Math.ceil(it.cost * Math.pow([[n "growth"]], [[id "owned"]](it.id))); }
+  function [[id "perPet"]]() { return 1 + items.reduce(function (a, it) { return a + it.per * [[id "owned"]](it.id); }, 0); }
+  function [[id "perSec"]]() { return items.reduce(function (a, it) { return a + it.auto * [[id "owned"]](it.id); }, 0); }
+  var face = document.getElementById("[[id "face"]]"), count = document.getElementById("[[id "count"]]"), rate = document.getElementById("[[id "rate"]]"), cat = document.getElementById("[[id "cat"]]"), shop = document.getElementById("[[id "shop"]]");
+  function [[id "render"]]() {
     count.textContent = Math.floor(s.treats).toLocaleString();
-    var ps = perSec();
-    rate.textContent = ps ? ps + " treats per second · " + perPet() + " per pet" : "pet the cat to earn treats";
+    var ps = [[id "perSec"]]();
+    rate.textContent = ps ? ps + " treats per second · " + [[id "perPet"]]() + " per pet" : "[[t "hint"]]";
     face.textContent = cats[Math.min(cats.length - 1, Math.floor(Math.log10(1 + s.treats)))];
     Array.prototype.forEach.call(shop.children, function (b, i) {
       var it = items[i];
-      b.disabled = s.treats < price(it);
-      b.querySelector("b").textContent = price(it).toLocaleString();
-      b.querySelector("small").textContent = it.note + (owned(it.id) ? " · own " + owned(it.id) : "");
+      b.disabled = s.treats < [[id "price"]](it);
+      b.querySelector("b").textContent = [[id "price"]](it).toLocaleString();
+      b.querySelector("small").textContent = it.note + ([[id "owned"]](it.id) ? " · own " + [[id "owned"]](it.id) : "");
     });
   }
   items.forEach(function (it) {
@@ -71,29 +71,29 @@
     b.type = "button";
     b.innerHTML = "<span>" + it.name + "<small></small></span><b></b>";
     b.addEventListener("click", function () {
-      var p = price(it);
+      var p = [[id "price"]](it);
       if (s.treats < p) return;
       s.treats -= p;
-      s.have[it.id] = owned(it.id) + 1;
-      save();
-      render();
+      s.have[it.id] = [[id "owned"]](it.id) + 1;
+      [[id "save"]]();
+      [[id "render"]]();
     });
     shop.appendChild(b);
   });
   cat.addEventListener("click", function () {
-    var n = perPet();
+    var n = [[id "perPet"]]();
     s.treats += n;
     var pop = document.createElement("span");
-    pop.className = "pop";
+    pop.className = "[[id "pop"]]";
     pop.textContent = "+" + n;
     cat.appendChild(pop);
     setTimeout(function () { pop.remove(); }, 800);
-    save();
-    render();
+    [[id "save"]]();
+    [[id "render"]]();
   });
-  setInterval(function () { var ps = perSec(); if (ps) { s.treats += ps / 4; render(); } }, 250);
-  setInterval(save, 5000);
-  render();
+  setInterval(function () { var ps = [[id "perSec"]](); if (ps) { s.treats += ps / [[n "tick.per"]]; [[id "render"]](); } }, [[n "tick"]]);
+  setInterval([[id "save"]], [[n "keep"]]);
+  [[id "render"]]();
 })();
 </script>
 </body>

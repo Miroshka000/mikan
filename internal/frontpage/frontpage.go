@@ -6,6 +6,8 @@ import (
 	"embed"
 	"net/http"
 	"slices"
+	"sync"
+	"sync/atomic"
 )
 
 //go:embed *.html
@@ -14,16 +16,51 @@ var pages embed.FS
 // Templates are the names of the built-in pages.
 var Templates = []string{"maintenance", "cats"}
 
-// Page is the built-in page called name; nil for none ("" included).
+// seed is the installation's own (SetSeed); nil: the pages as written.
+var seed atomic.Pointer[string]
+
+// made are the pages rendered so far, by name and seed.
+var made sync.Map
+
+// SetSeed makes the pages and the plain 404 the installation's own (vary.go): the panel
+// sets its seed at start and sends it to its nodes with their state. "" is the pages as
+// written.
+func SetSeed(s string) {
+	if s == "" {
+		seed.Store(nil)
+		return
+	}
+	seed.Store(&s)
+}
+
+func currentSeed() string {
+	if s := seed.Load(); s != nil {
+		return *s
+	}
+	return ""
+}
+
+// Page is the built-in page called name as the installation shows it; nil for none (""
+// included). The bytes are shared: a caller does not change them.
 func Page(name string) []byte {
 	file := File(name)
 	if file == "" {
 		return nil
 	}
-	b, err := pages.ReadFile(file)
+	s := currentSeed()
+	key := name + "\x00" + s
+	if b, ok := made.Load(key); ok {
+		return b.([]byte)
+	}
+	src, err := pages.ReadFile(file)
 	if err != nil {
 		return nil
 	}
+	b, err := render(name, src, s)
+	if err != nil {
+		return nil
+	}
+	made.Store(key, b)
 	return b
 }
 
@@ -61,11 +98,12 @@ func Write(w http.ResponseWriter, r *http.Request, page []byte) {
 	}
 }
 
-// NotFound is a plain 404: the one of the panel's server, its sites and the nodes' pages.
+// NotFound is a plain 404: the one of the panel's server, its sites and the nodes' pages,
+// in the installation's own words (SetSeed).
 func NotFound(w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("Content-Type", "text/plain; charset=utf-8")
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write([]byte("404 Not Found\n"))
+	_, _ = w.Write([]byte(notFoundBody(currentSeed())))
 }

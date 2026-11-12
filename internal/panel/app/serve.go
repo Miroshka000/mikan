@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"mikan/internal/frontpage"
 	"mikan/internal/logbuf"
 	"mikan/internal/nodeapi"
 	"mikan/internal/nodetls"
@@ -190,6 +191,16 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	p, err := NewPanel(st, opts)
 	if err != nil {
 		return err
+	}
+	// The front pages and the plain 404 are this installation's own, on the panel and on its
+	// nodes alike: a page every installation serves the same is a mark to find them all by.
+	seed, err := set.FrontSeed(ctx)
+	if err != nil {
+		return err
+	}
+	frontpage.SetSeed(seed)
+	if p.Nodes != nil {
+		p.Nodes.SetFrontSeed(seed)
 	}
 	// A certificate issued, renewed or uploaded later goes to the nodes at once: they get it
 	// only with their state, which is sent again on a change.

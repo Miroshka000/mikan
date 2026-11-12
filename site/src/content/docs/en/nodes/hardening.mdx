@@ -77,3 +77,25 @@ If clients need a service on the node's server, such as your own DNS, put its po
 The core learns the server's addresses from its network interfaces. On a server behind NAT the public address is not on an interface, and this protection does not refuse those connections: they go out into the hoster's network and come back from outside, like any other.
 
 A node older than 0.5.2.1, or a node under a panel older than 0.5.2.1, does not turn this protection on.
+
+## How the server looks from outside
+
+:::note[New in 0.5.2.1]
+The line "How the server looks from outside" is in the check of every node.
+:::
+
+**Nodes → Check node** ends with what in the node's setup makes its server stand out to someone who looks at it from outside: a scanner that connects to its ports, a network that sees where its clients go. These are warnings, not errors: everything works, but the server is easier to tell from an ordinary site.
+
+| Warning | What to do |
+|---|---|
+| Several camouflage sites on the node | Keep one site for all the REALITY protocols: an ordinary server does not hold the certificates of several other sites |
+| A camouflage site that is a mail name or dynamic DNS | Take an ordinary site: "Find near the server" lists those first |
+| A protocol on the default `www.microsoft.com` | Pick a site next to the server: Microsoft's certificate on a hoster's address stands out |
+| TLS protocols on three or more ports of their own | Turn on the [shared port 443](/mikan/en/nodes/shared-443/): one port is left to see, as a site has |
+| A server behind a CDN takes direct connections too | Keep the protocols behind a CDN on a node of their own: direct connections give away the address the CDN hides |
+| The node's API port is open to anyone | Turn on "Node API from the panel's IP only", see above |
+| A domain has "vpn", "proxy" or a protocol's name in it | Take a neutral name: it is seen in every connection and stands in the certificate |
+
+The check reads the panel's settings alone and does not connect to the node for it, so the line is there for a node that does not answer too.
+
+What the panel cannot check, but is worth keeping in mind: a CDN knows the address of the server it hides from its own settings; one subscription, a trial one too, names the addresses of all the servers in it.

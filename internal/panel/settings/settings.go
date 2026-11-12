@@ -2,7 +2,9 @@ package settings
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,6 +121,9 @@ const (
 	// KeySiteTemplate is the built-in front page a stranger sees at the panel's address
 	// (frontpage.Templates); "" for none.
 	KeySiteTemplate = "site_template"
+	// KeyFrontSeed is the installation's seed of the built-in front pages and of the plain
+	// 404 (frontpage.SetSeed): made once and kept, so the pages stay what they are.
+	KeyFrontSeed = "front_seed"
 	// KeyTrafficDetail: the nodes sum each subscription's bytes by site (user_sites), kept
 	// KeyTrafficDetailDays days.
 	KeyTrafficDetail     = "traffic_detail"
@@ -319,6 +324,24 @@ func (s *Settings) String(ctx context.Context, key string) (string, error) {
 }
 
 // On reads a switch; its default when it was never set.
+// FrontSeed is the installation's seed of the front pages (KeyFrontSeed), made at the
+// first call.
+func (s *Settings) FrontSeed(ctx context.Context) (string, error) {
+	seed, err := s.String(ctx, KeyFrontSeed)
+	if err != nil || seed != "" {
+		return seed, err
+	}
+	raw := make([]byte, 18)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	seed = base64.RawURLEncoding.EncodeToString(raw)
+	if err := Set(ctx, s, KeyFrontSeed, seed); err != nil {
+		return "", err
+	}
+	return seed, nil
+}
+
 func (s *Settings) On(ctx context.Context, sw Switch) (bool, error) {
 	v, ok, err := Get[bool](ctx, s, sw.Key)
 	if err != nil || !ok {

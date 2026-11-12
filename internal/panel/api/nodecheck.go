@@ -150,10 +150,12 @@ func (h *handlers) checkNode(ctx context.Context, in *nodeIDInput) (*checkOutput
 		add(h.helloItem(n.ID))
 	}
 	if !hv.OK {
-		// Nothing more is known of a node that does not answer, but whether its ports open.
+		// Nothing more is known of a node that does not answer, but whether its ports open
+		// and how its setup looks from outside.
 		if !local {
 			add(h.portItems(ctx, n)...)
 		}
+		add(h.exposureItems(ctx, n)...)
 		return h.checkResult(ctx, n, items, hv)
 	}
 	add(h.versionItem(n, hv))
@@ -178,6 +180,7 @@ func (h *handlers) checkNode(ctx context.Context, in *nodeIDInput) (*checkOutput
 	add(relayIt...)
 	add(cascade...)
 	add(nodeDiag...)
+	add(h.exposureItems(ctx, n)...)
 	return h.checkResult(ctx, n, items, hv)
 }
 

@@ -168,6 +168,39 @@ type world struct {
 	panelHost    string
 	panelPort    int
 	eventsWindow time.Duration
+	// picked are the sites this round moved an inbound or a relay to, by node id: the next
+	// one of the node to need a site takes the same, before the snapshot shows the first move.
+	picked map[int64]string
+}
+
+// siteNames are the names node's other enabled inbounds show to a stranger, and the site
+// this round already picked for the node: a node keeps to one site, so that all its ports
+// show one certificate and not a neighbor's each. skip is the inbound being moved (0: none).
+func (w *world) siteNames(node, skip int64) map[string]bool {
+	used := map[string]bool{}
+	for _, in := range w.inbounds[node] {
+		if in.ID == skip || in.Enabled == 0 {
+			continue
+		}
+		if other, err := proto.Parse(in.Config); err == nil {
+			_, names := presets.Dest(other)
+			for _, name := range names {
+				used[strings.ToLower(name)] = true
+			}
+		}
+	}
+	if name := w.picked[node]; name != "" {
+		used[name] = true
+	}
+	return used
+}
+
+// took notes the site node was moved to in this round.
+func (w *world) took(node int64, sni string) {
+	if w.picked == nil {
+		w.picked = map[int64]string{}
+	}
+	w.picked[node] = strings.ToLower(sni)
 }
 
 // roundTimeout is the most a round may take: a node that does not answer holds a check for
@@ -760,23 +793,12 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 		return false
 	}
 	oldDest, oldNames := presets.Dest(tpl)
-	used := map[string]bool{}
-	for _, in := range w.inbounds[n.ID] {
-		if in.ID == x.ID || in.Enabled == 0 {
-			continue
-		}
-		if other, err := proto.Parse(in.Config); err == nil {
-			_, names := presets.Dest(other)
-			for _, name := range names {
-				used[strings.ToLower(name)] = true
-			}
-		}
-	}
-	pick := t.chooseTarget(w, found.Results, oldDest, oldNames, used)
+	pick := t.chooseTarget(w, found.Results, oldDest, oldNames, w.siteNames(n.ID, x.ID))
 	if pick == nil {
 		t.setStuck(x.ID, "no_target")
 		return false
 	}
+	w.took(n.ID, pick.SNI)
 	// The scan above took minutes at most; the admin may have edited the inbound meanwhile.
 	// Update applies the new target to the row as it is now, not to the round's snapshot.
 	_, next, err := t.inbounds.Update(ctx, x.ID, domain.InboundPatch{Dest: &pick.Dest, ServerName: &pick.SNI})
@@ -794,10 +816,19 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 
 // chooseTarget is the site of a scan to move to: one that works and whose name leads to
 // where it was found, not the panel's or a node's own name, not the site being left, not
-// one that failed lately, preferably one used (the names the node's other inbounds show)
-// does not hold. Results come fastest first; nil when none will do.
+// one that failed lately. Of those it takes, in this order: a site used (the names the
+// node's other inbounds show) already holds, so that the node's ports show one certificate
+// and not several strangers'; a site people open; a weak name (scan.Weak), used or not.
+// Results come fastest first within each; nil when none will do.
 func (t *Tuner) chooseTarget(w *world, results []nodeapi.TargetResult, oldDest string, oldNames []string, used map[string]bool) *nodeapi.TargetResult {
+	const (
+		shared = iota // the node's site already, and a site people open
+		plain         // a site people open
+		weak          // a weak name
+		none
+	)
 	var pick *nodeapi.TargetResult
+	best := none
 	for i := range results {
 		c := &results[i]
 		sni := strings.ToLower(c.SNI)
@@ -807,8 +838,15 @@ func (t *Tuner) chooseTarget(w *world, results []nodeapi.TargetResult, oldDest s
 		if at, ok := t.failed[strings.ToLower(c.Dest)]; ok && w.now.Sub(at) < 24*time.Hour {
 			continue
 		}
-		if pick == nil || used[strings.ToLower(pick.SNI)] && !used[sni] {
-			pick = c
+		rank := plain
+		switch {
+		case scan.Weak(sni):
+			rank = weak
+		case used[sni]:
+			rank = shared
+		}
+		if rank < best {
+			pick, best = c, rank
 		}
 	}
 	return pick

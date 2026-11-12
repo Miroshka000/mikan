@@ -2,17 +2,21 @@ package singbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"go.yaml.in/yaml/v3"
 
+	"mikan/internal/netaddr"
 	"mikan/internal/sub/model"
 	"mikan/internal/sub/routing"
 )
@@ -247,6 +251,54 @@ var listCache = struct {
 	m map[string]listEntry
 }{m: map[string]listEntry{}}
 
+// errListAddress: a list's link led to an address that is not a public one.
+var errListAddress = errors.New("a rule list is fetched from public addresses only")
+
+// listRedirect lets a list's link move a few times, over https alone: the saved link was
+// checked to be https, and a redirect must not take the request off it.
+func listRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 3 || req.URL.Scheme != "https" {
+		return http.ErrUseLastResponse
+	}
+	return nil
+}
+
+// listAddressOK says whether a rule list may be fetched from a: a public address. Tests that
+// serve lists from loopback replace it.
+var listAddressOK = netaddr.IsPublic
+
+// publicDial refuses a connection to an address that is not public, as it is dialled: the
+// name was resolved by then, so a name or a redirect that leads into this server or its
+// network (loopback, a private range, the cloud's metadata address) is caught too.
+var publicDial = (&net.Dialer{Timeout: 10 * time.Second, Control: func(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	if a, err := netip.ParseAddr(host); err != nil || !listAddressOK(a.Unmap()) {
+		return errListAddress
+	}
+	return nil
+}}).DialContext
+
+var guardedLists = &http.Client{CheckRedirect: listRedirect, Transport: &http.Transport{
+	DialContext: publicDial, ForceAttemptHTTP2: true, MaxIdleConns: 8, IdleConnTimeout: 30 * time.Second,
+	TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 10 * time.Second,
+}}
+
+var proxiedLists = &http.Client{CheckRedirect: listRedirect}
+
+// listClient is the client that fetches req, a rule list the admin named. The panel itself
+// makes the request, so it must not be led inside: the connection goes to public addresses
+// only. Behind a proxy of the environment the proxy makes the connection, and what it may
+// reach is its own to say.
+func listClient(req *http.Request) *http.Client {
+	if p, err := http.ProxyFromEnvironment(req); err == nil && p != nil {
+		return proxiedLists
+	}
+	return guardedLists
+}
+
 func fetchList(ctx context.Context, src string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -254,7 +306,7 @@ func fetchList(ctx context.Context, src string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := listClient(req).Do(req)
 	if err != nil {
 		return nil, err
 	}

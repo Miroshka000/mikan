@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -85,7 +86,7 @@ type Config struct {
 	// address, and the request's own address is taken.
 	SubBase string
 	Nodes   []model.Node // enabled nodes in display order
-	Direct  []string     // the panel's and nodes' hosts: kept out of the tunnel
+	Direct  []string     // the panel's hosts: kept out of the tunnel; a node adds its own (Profile)
 	Groups  model.GroupNames
 	Mode    routing.Mode
 	Rules   []routing.Rule // the admin's own Clash rules, checked (routing.ServedRules)
@@ -118,7 +119,25 @@ type Config struct {
 // as they are saved, the routes, the nodes and the hosts kept out of the tunnel. The App
 // and the rules its core parses (mihomo.RulesFor) are the Clash profile's to set.
 func (cfg Config) Profile(ps []model.Proxy) profile.Profile {
-	return profile.Profile{Proxies: ps, Nodes: cfg.Nodes, Direct: cfg.Direct, Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang}
+	return profile.Profile{Proxies: ps, Nodes: cfg.Nodes, Direct: cfg.direct(ps), Rules: cfg.Rules, Routes: cfg.Routes, Lang: cfg.Lang}
+}
+
+// direct are the hosts ps' profile keeps out of the tunnel: the panel's, and those of the
+// nodes ps has a proxy on. The hosts of the other nodes stay out of it: a subscription
+// must not list servers its client has no access to (a node of another tariff, the server
+// behind a CDN), or one trial account would give away them all.
+func (cfg Config) direct(ps []model.Proxy) []string {
+	on := map[int64]bool{}
+	for _, p := range ps {
+		on[p.Node] = true
+	}
+	out := slices.Clone(cfg.Direct)
+	for _, n := range cfg.Nodes {
+		if on[n.ID] {
+			out = append(out, n.Hosts...)
+		}
+	}
+	return out
 }
 
 // User is what a subscription's headers and texts say of its user.

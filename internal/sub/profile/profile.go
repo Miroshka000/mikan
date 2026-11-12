@@ -12,7 +12,7 @@ import (
 type Profile struct {
 	Proxies []model.Proxy // the user's (build.Proxies)
 	Nodes   []model.Node  // enabled nodes in display order
-	Direct  []string      // hosts that bypass the tunnel: the panel and every node
+	Direct  []string      // hosts that bypass the tunnel: the panel and the nodes of Proxies
 	// Rules are the admin's own rules (routing.ServedRules) that the app's core parses
 	// (RulesFor), before the built-in routing.
 	Rules []routing.Rule

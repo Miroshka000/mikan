@@ -353,6 +353,7 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	// The front page as a file for the inbounds on an HTTP transport (fallback-page); the
 	// router's names get it from the page held in memory (front.go).
 	front := ""
+	frontpage.SetSeed(st.FrontSeed)
 	if page := frontpage.Page(st.FrontPage); page != nil {
 		front = filepath.Join(e.home, "front", frontpage.File(st.FrontPage))
 		if err := os.MkdirAll(filepath.Dir(front), 0o755); err != nil {

@@ -37,6 +37,7 @@ func TestParseList(t *testing.T) {
 
 // A list is fetched and read; a status other than 200 is an error, not an empty list.
 func TestFetchList(t *testing.T) {
+	localLists(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/ru.yaml" {
 			http.NotFound(w, r)
@@ -86,6 +87,7 @@ func (l *listServer) count() int {
 // cachedSrc is the address of a new server of l, out of the cache when the test ends,
 // and age moves its cache entry d back in time.
 func cachedSrc(t *testing.T, l *listServer) (src string, age func(d time.Duration)) {
+	localLists(t)
 	srv := httptest.NewServer(l)
 	t.Cleanup(srv.Close)
 	src = srv.URL + "/ru.yaml"
@@ -140,6 +142,7 @@ func TestCachedList(t *testing.T) {
 
 // A fetch that fails does not undo one that ended while it ran: the new list stays.
 func TestCachedListFailureAfterFetch(t *testing.T) {
+	localLists(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		listCache.Lock()
 		listCache.m["http://"+r.Host+r.URL.Path] = listEntry{payload: []string{"vk.com"}, at: time.Now()}

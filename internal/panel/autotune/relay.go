@@ -286,11 +286,12 @@ func (t *Tuner) pickRelayTarget(ctx context.Context, w *world, n db.Node, oldDes
 		t.log.Warn("autotune: relay target: scan", "node", n.ID, "err", err)
 		return
 	}
-	pick := t.chooseTarget(w, found.Results, oldDest, []string{oldSNI}, nil)
+	pick := t.chooseTarget(w, found.Results, oldDest, []string{oldSNI}, w.siteNames(n.ID, 0))
 	if pick == nil {
 		t.log.Info("autotune: relay target: no site next to the server", "node", n.ID, "scanned", found.Scanned)
 		return
 	}
+	w.took(n.ID, pick.SNI)
 	t.setRelayTarget(ctx, w, n, oldSNI, pick.Dest, pick.SNI, reason)
 }
 

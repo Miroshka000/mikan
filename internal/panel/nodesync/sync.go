@@ -283,6 +283,9 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	// The front page: what the inbounds on an HTTP transport give a stranger's request, and
 	// with the shared 443 what the node's own domain gives.
 	st.FrontPage = n.FrontPage
+	if n.FrontPage != "" {
+		st.FrontSeed = s.m.frontSeed
+	}
 	if n.SniRouter != 0 {
 		st.Router = sniRouter(st.Inbounds, n.Domain, n.FrontPage != "")
 	}

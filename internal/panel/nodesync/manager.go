@@ -59,6 +59,7 @@ type Manager struct {
 
 	nodesDirty chan struct{}
 	hub        *events.Hub // woken after a node was told down or up (liveness.go); nil: no one waits
+	frontSeed  string      // the installation's seed of the front pages (SetFrontSeed); "": none
 
 	mu        sync.Mutex
 	running   map[int64]*running
@@ -116,6 +117,10 @@ func NewManager(st *store.Store, set *settings.Settings, pool *domain.Pool, conn
 
 // SetEvents connects the hub that wakes the addons reading the feed; call it before Run.
 func (m *Manager) SetEvents(h *events.Hub) { m.hub = h }
+
+// SetFrontSeed gives the nodes the installation's seed of the front pages
+// (DesiredState.FrontSeed); call it before Run. Without it they show the pages as written.
+func (m *Manager) SetFrontSeed(seed string) { m.frontSeed = seed }
 
 func (m *Manager) Run(ctx context.Context) {
 	m.reconcile(ctx)

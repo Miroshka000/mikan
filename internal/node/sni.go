@@ -41,8 +41,64 @@ type sniRouter struct {
 	def    string            // backend for any other name; "": closed
 	stub   map[string]bool   // names that get the front page instead ("": no name)
 	front  *frontPage        // the node's front page; nil: none
+	gate   helloGate         // how many connections wait for their ClientHello
 	wg     sync.WaitGroup
 	err    error
+}
+
+// How many connections may wait for their ClientHello at once: all of them, and from one
+// source (an IPv4 address, an IPv6 /64). A client's hello comes with its first packet, so
+// only connections that say nothing pile up here; without a bound each would hold a
+// goroutine and a descriptor for helloWait, and enough of them the whole of 443.
+const (
+	helloSlots  = 4096
+	helloPerSrc = 64
+)
+
+// helloGate counts the connections waiting for a ClientHello. The zero value is ready.
+type helloGate struct {
+	mu    sync.Mutex
+	total int
+	by    map[netip.Addr]int
+}
+
+// enter takes a place for a connection from src and says whether there was one.
+func (g *helloGate) enter(src netip.Addr) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.total >= helloSlots || g.by[src] >= helloPerSrc {
+		return false
+	}
+	if g.by == nil {
+		g.by = map[netip.Addr]int{}
+	}
+	g.total++
+	g.by[src]++
+	return true
+}
+
+// leave gives the place of a connection from src back.
+func (g *helloGate) leave(src netip.Addr) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.total--
+	if g.by[src]--; g.by[src] <= 0 {
+		delete(g.by, src)
+	}
+}
+
+// gateKey is the source a connection counts under: an IPv4 address itself, the /64 of an
+// IPv6 one, as one subscriber holds the whole of it.
+func gateKey(a netip.Addr) netip.Addr {
+	a = a.Unmap()
+	if a.Is4() {
+		return a
+	}
+	p, err := a.Prefix(64)
+	if err != nil {
+		return a
+	}
+	return p.Addr()
 }
 
 // route is where a name goes.
@@ -120,7 +176,14 @@ func (r *sniRouter) handle(c net.Conn, admit func(netip.Addr) bool) {
 	if !ok || admit != nil && !admit(src.Addr()) {
 		return
 	}
+	// A stranger is held for its ClientHello only while there is room: a flood of opened
+	// and silent connections is turned away at once, and the clients' hellos keep theirs.
+	key := gateKey(src.Addr())
+	if !r.gate.enter(key) {
+		return
+	}
 	hello, name := readHello(c)
+	r.gate.leave(key)
 	if r.stubbed(name) {
 		r.front.take(c, hello)
 		return

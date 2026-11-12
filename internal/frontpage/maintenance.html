@@ -4,32 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Scheduled maintenance</title>
+<title>[[t "title"]]</title>
 <style>
-  :root { color-scheme: light dark; --bg: #f6f7f9; --card: #fff; --ink: #1b1f24; --muted: #5d6673; --line: #e3e6ea; --accent: #2f6fde; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #111418; --card: #181c21; --ink: #e8eaed; --muted: #9aa3ad; --line: #262b31; --accent: #6b9cf0; } }
+  :root { color-scheme: light dark; --bg: [[c "#f6f7f9"]]; --card: [[c "#fff"]]; --ink: [[c "#1b1f24"]]; --muted: [[c "#5d6673"]]; --line: [[c "#e3e6ea"]]; --accent: [[c "#2f6fde"]]; }
+  @media (prefers-color-scheme: dark) { :root { --bg: [[c "#111418"]]; --card: [[c "#181c21"]]; --ink: [[c "#e8eaed"]]; --muted: [[c "#9aa3ad"]]; --line: [[c "#262b31"]]; --accent: [[c "#6b9cf0"]]; } }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { width: min(480px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 32px; text-align: center; }
-  .gear { width: 48px; height: 48px; margin: 0 auto 16px; color: var(--accent); animation: spin 6s linear infinite; }
-  @media (prefers-reduced-motion: reduce) { .gear { animation: none; } }
-  @keyframes spin { to { transform: rotate(360deg); } }
+  main { width: min([[n "width"]]px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: [[n "radius"]]px; padding: [[n "pad"]]px; text-align: center; }
+  .[[id "gear"]] { width: [[n "gear"]]px; height: [[n "gear"]]px; margin: 0 auto 16px; color: var(--accent); animation: [[id "spin"]] [[n "turn"]]s linear infinite; }
+  @media (prefers-reduced-motion: reduce) { .[[id "gear"]] { animation: none; } }
+  @keyframes [[id "spin"]] { to { transform: rotate(360deg); } }
   h1 { margin: 0 0 8px; font-size: 24px; line-height: 32px; font-weight: 600; }
   p { margin: 0; color: var(--muted); }
-  .bar { height: 4px; margin: 24px 0 0; border-radius: 4px; background: var(--line); overflow: hidden; }
-  .bar span { display: block; height: 100%; width: 40%; border-radius: 4px; background: var(--accent); animation: slide 2.4s ease-in-out infinite; }
-  @media (prefers-reduced-motion: reduce) { .bar span { animation: none; width: 64%; } }
-  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+  .[[id "bar"]] { height: 4px; margin: 24px 0 0; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .[[id "bar"]] span { display: block; height: 100%; width: 40%; border-radius: 4px; background: var(--accent); animation: [[id "slide"]] [[n "glide"]]s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .[[id "bar"]] span { animation: none; width: 64%; } }
+  @keyframes [[id "slide"]] { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
   small { display: block; margin-top: 16px; color: var(--muted); font-size: 13px; }
 </style>
 </head>
 <body>
 <main>
-  <svg class="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-  <h1>Scheduled maintenance</h1>
-  <p>We are upgrading our servers to serve you better. The site will be back shortly.</p>
-  <div class="bar" role="progressbar" aria-label="Maintenance in progress"><span></span></div>
-  <small>Thank you for your patience.</small>
+  <svg class="[[id "gear"]]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  <h1>[[t "title"]]</h1>
+  <p>[[t "body"]]</p>
+  <div class="[[id "bar"]]" role="progressbar" aria-label="[[t "label"]]"><span></span></div>
+  <small>[[t "thanks"]]</small>
 </main>
 </body>
 </html>

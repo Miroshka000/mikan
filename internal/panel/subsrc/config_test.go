@@ -116,16 +116,19 @@ func TestLoadConfig(t *testing.T) {
 	if o.Endpoint.PinSHA256 != "picked-old" || f.Endpoint.PinSHA256 != "served" {
 		t.Errorf("pins: old %q, fresh %q", o.Endpoint.PinSHA256, f.Endpoint.PinSHA256)
 	}
-	want := []string{"203.0.113.10", "panel.example.com", "sub.example.com"}
-	for _, n := range cfg.Nodes {
-		if n.Name == "old" {
-			want = append(want, "198.51.100.1", "old.example.com")
-		} else if n.Name == "fresh" {
-			want = append(want, "198.51.100.2", "")
-		}
-	}
-	if !reflect.DeepEqual(cfg.Direct, want) {
+	// The panel's hosts are every profile's; a node's own go only with the node (Config.Profile).
+	if want := []string{"203.0.113.10", "panel.example.com", "sub.example.com"}; !reflect.DeepEqual(cfg.Direct, want) {
 		t.Errorf("direct %q, want %q", cfg.Direct, want)
+	}
+	if want := []string{"198.51.100.1", "old.example.com"}; !reflect.DeepEqual(o.Hosts, want) {
+		t.Errorf("the old node's hosts %q, want %q", o.Hosts, want)
+	}
+	if want := []string{"198.51.100.2", ""}; !reflect.DeepEqual(f.Hosts, want) {
+		t.Errorf("the fresh node's hosts %q, want %q", f.Hosts, want)
+	}
+	onFresh := cfg.Profile([]submodel.Proxy{{Node: f.ID}}).Direct
+	if want := []string{"203.0.113.10", "panel.example.com", "sub.example.com", "198.51.100.2", ""}; !reflect.DeepEqual(onFresh, want) {
+		t.Errorf("a client of the fresh node alone keeps %q out of the tunnel, want %q: the other node is not its to know", onFresh, want)
 	}
 
 	if len(cfg.Templates) != 1 || cfg.Templates[0].ID != tpl.ID {

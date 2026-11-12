@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math/big"
 	"net"
 	"strconv"
@@ -145,7 +144,12 @@ func issueKey(ctx context.Context, q *db.Queries, panel nodetls.Pair, n db.Node,
 	if err != nil {
 		return "", err
 	}
-	cert, err := nodetls.Generate(fmt.Sprintf("node-%d.mikan", n.ID), x509.ExtKeyUsageServerAuth, now)
+	// The name says nothing of mikan or of the node: a scanner that finds the API port reads it.
+	name, err := nodetls.HostName()
+	if err != nil {
+		return "", err
+	}
+	cert, err := nodetls.Generate(name, x509.ExtKeyUsageServerAuth, now)
 	if err != nil {
 		return "", err
 	}

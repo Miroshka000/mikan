@@ -156,3 +156,33 @@ func TestSignVerify(t *testing.T) {
 		t.Fatal("SamePin")
 	}
 }
+
+// A node's certificate name gives away neither mikan nor the node, is a name a certificate
+// may carry, and differs from node to node.
+func TestHostName(t *testing.T) {
+	seen := map[string]bool{}
+	for range 200 {
+		name, err := HostName()
+		if err != nil {
+			t.Fatal(err)
+		}
+		label, zone, ok := strings.Cut(name, ".")
+		if !ok || len(label) < 6 || len(label) > 12 || label[0] < 'a' || label[0] > 'z' || strings.Trim(label, "abcdefghijklmnopqrstuvwxyz0123456789") != "" {
+			t.Fatalf("label of %q", name)
+		}
+		known := false
+		for _, z := range hostZones {
+			known = known || zone == z
+		}
+		if !known || strings.Contains(name, "mikan") || strings.Contains(name, "node") {
+			t.Fatalf("name %q", name)
+		}
+		if _, err := Generate(name, x509.ExtKeyUsageServerAuth, time.Now()); err != nil {
+			t.Fatalf("%q does not make a certificate: %v", name, err)
+		}
+		seen[name] = true
+	}
+	if len(seen) < 190 {
+		t.Fatalf("%d different names of 200", len(seen))
+	}
+}

@@ -183,7 +183,7 @@ func LoadConfig(ctx context.Context, d ConfigDeps) (Config, error) {
 		sn := submodel.Node{ID: n.ID, Name: n.Name, Endpoint: submodel.Endpoint{Host: ep.Host, SNI: domainName}}
 		if n.Address != "" {
 			sn.Endpoint = submodel.Endpoint{Host: domain.NodeHost(n), SNI: n.Domain}
-			cfg.Direct = append(cfg.Direct, n.PublicHost, n.Domain)
+			sn.Hosts = []string{n.PublicHost, n.Domain}
 		}
 		sn.Endpoint.SNIRouter = n.SniRouter != 0
 		var hv NodeHealth

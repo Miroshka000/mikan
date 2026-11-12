@@ -57,6 +57,10 @@ type DesiredState struct {
 	// on the names of Router.Stub over TLS with the node's certificate (TLS); "": none. Nodes
 	// older than it ignore it.
 	FrontPage string `json:"front_page,omitempty"`
+	// FrontSeed makes the page and the plain 404 the installation's own (frontpage.SetSeed):
+	// the panel's seed, so its nodes and the panel show one page and no other installation
+	// shows the same; "": the page as written. Nodes older than it ignore it.
+	FrontSeed string `json:"front_seed,omitempty"`
 	// APIAllow: the node's API answers only these networks ("203.0.113.5/32"), loopback and
 	// the addresses the panel has reached it from; nil: anyone (the panel's certificate
 	// still guards it). Empty but not nil is on too, with the panel's addresses alone. The

@@ -26,6 +26,10 @@ type Node struct {
 	// leading flag (or the whole name) prefixes proxy names.
 	Name     string
 	Endpoint Endpoint
+	// Hosts are the node's own address and domain, kept out of the tunnel in the profiles
+	// of the clients the node serves, and of those alone: a client learns no server it has
+	// no proxy on. Empty for the panel's own node, whose hosts are the panel's.
+	Hosts []string
 	// SSOneKey: the node is older than the Shadowsocks-2022 key per user (build.Input).
 	SSOneKey bool
 	// NoAuto keeps the node's servers out of the automatic choice: the admin's word (a
