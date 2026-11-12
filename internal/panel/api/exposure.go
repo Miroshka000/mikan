@@ -58,6 +58,7 @@ func (e exposure) items() []CheckItem {
 		ports  []string // TCP ports the node takes TLS connections on, each its own
 		cdn    []string // inbounds clients reach through a CDN
 		direct int      // inbounds clients reach at the node's own address
+		silent []string // inbounds on a TCP port that answers nothing
 	)
 	for _, in := range e.inbounds {
 		if in.Enabled == 0 {
@@ -66,6 +67,9 @@ func (e exposure) items() []CheckItem {
 		t, err := proto.Parse(in.Config)
 		if err != nil {
 			continue
+		}
+		if proto.Silent(t) {
+			silent = append(silent, in.Name+" ("+in.Port+")")
 		}
 		if t.Ext().Client.Server != "" || in.Preset == presets.PresetCDNXHTTP || in.Preset == presets.PresetCDNGet {
 			cdn = append(cdn, in.Name)
@@ -120,6 +124,11 @@ func (e exposure) items() []CheckItem {
 	// The server a CDN hides is found again when clients also connect to it straight.
 	if len(cdn) > 0 && direct > 0 {
 		warn("cdn_and_direct", map[string]string{"inbounds": strings.Join(cdn, ", ")})
+	}
+	// A port that takes a connection and says nothing to anything: what a scanner knows
+	// Shadowsocks and its kin by.
+	if len(silent) > 0 {
+		warn("silent_port", map[string]string{"inbounds": strings.Join(silent, ", ")})
 	}
 	if e.node.Address != "" && e.node.ApiLockdown == 0 {
 		warn("api_open", nil)

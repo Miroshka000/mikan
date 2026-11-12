@@ -98,6 +98,7 @@ func TestSecurePresetOfThePanelsNode(t *testing.T) {
 		"grpc through_443",
 		"pq no_site (manual)",
 		"router_on",
+		"udp_ports (manual)",
 		"front_page cats",
 		"ssh_open (manual)",
 	}
@@ -158,7 +159,8 @@ func TestPresetsOnASecureNode(t *testing.T) {
 			postureInbound(t, 3, "hy", "hysteria2", "443", ""),
 		},
 	}}}
-	if got := postureLines(p.secure()); len(got) != 0 {
+	// Hysteria2 over UDP is named, and is not a change: nothing puts it behind a TCP port.
+	if got := postureLines(p.secure()); !slices.Equal(got, []string{"udp_ports (manual)"}) {
 		t.Fatalf("nothing left to do: %v", got)
 	}
 	if name, _, standard := p.current(); name != postureSecure || standard != 3 {
@@ -169,9 +171,16 @@ func TestPresetsOnASecureNode(t *testing.T) {
 	}
 	// A remote node with its API open and no page gets both; one switched off is left alone.
 	p.nodes[0].node.ApiLockdown, p.nodes[0].node.FrontPage = 0, ""
-	if got, want := postureLines(p.secure()), []string{"api_lockdown", "front_page maintenance"}; !slices.Equal(got, want) {
+	if got, want := postureLines(p.secure()), []string{"udp_ports (manual)", "api_lockdown", "front_page maintenance"}; !slices.Equal(got, want) {
 		t.Fatalf("a remote node: %v", got)
 	}
+	// The automatic moves of a port and of a site are turned off, for every protocol that has them.
+	p.nodes[0].node.ApiLockdown, p.nodes[0].node.FrontPage = 1, "maintenance"
+	p.nodes[0].inbounds[0].AutoSni, p.nodes[0].inbounds[2].AutoPort = 1, 1
+	if got, want := postureLines(p.secure()), []string{"xhttp auto_off", "hy auto_off", "udp_ports (manual)"}; !slices.Equal(got, want) {
+		t.Fatalf("the automatic moves: %v", got)
+	}
+	p.nodes[0].inbounds[0].AutoSni, p.nodes[0].inbounds[2].AutoPort = 0, 0
 	p.nodes[0].node.Enabled = 0
 	if got := postureLines(p.secure()); len(got) != 0 {
 		t.Fatalf("a node switched off: %v", got)
@@ -187,8 +196,12 @@ func TestSecurePresetWithPort443Held(t *testing.T) {
 		inbounds: []db.Inbound{ss, postureInbound(t, 2, "vision", "vless_reality_vision", "8443", "news.example.org:443")},
 		spare:    []string{"20000"},
 	}}}
-	if got, want := postureLines(p.secure()), []string{"ss port_443_busy (manual)"}; !slices.Equal(got, want) {
+	if got, want := postureLines(p.secure()), []string{"ss port_443_busy (manual)", "ss disable"}; !slices.Equal(got, want) {
 		t.Fatalf("443 held by Shadowsocks: %v", got)
+	}
+	// Turning the silent protocol off is offered, never counted: the admin decides.
+	if all := p.secure(); !all[1].Optional || pending(all) != 0 {
+		t.Fatalf("an offer counted as a change: %+v", all)
 	}
 	// The same when the panel itself listens on 443 of its own server.
 	p.nodes[0].inbounds = p.nodes[0].inbounds[1:]
@@ -221,8 +234,14 @@ func TestSecurityPresetApply(t *testing.T) {
 	if own.InboundID == 0 {
 		t.Fatal("the panel's node has no REALITY inbound to start with")
 	}
+	auto := own
+	auto.Code = "auto_off"
+	if _, _, err := f.deps.Inbounds.Update(ctx, own.InboundID, domain.InboundPatch{AutoPort: ptrTo(true), AutoSNI: ptrTo(true)}); err != nil {
+		t.Fatal(err)
+	}
 	req, _ := json.Marshal(map[string]any{"changes": []PostureChange{
 		own,
+		auto,
 		{Node: 1, Code: "router_on"},
 		{Node: 1, Code: "front_page", Params: map[string]string{"page": "cats"}},
 		{Node: 2, Code: "front_page", Params: map[string]string{"page": "nope"}},
@@ -252,6 +271,9 @@ func TestSecurityPresetApply(t *testing.T) {
 	}
 	tpl, _ := proto.Parse(row.Config)
 	page, _ := f.deps.Settings.String(ctx, settings.KeySiteTemplate)
+	if row.AutoPort != 0 || row.AutoSni != 0 {
+		t.Fatalf("the automatic moves stayed on: port %d, site %d", row.AutoPort, row.AutoSni)
+	}
 	if node.SniRouter == 0 || node.FrontPage != "cats" || !proto.SNI443(tpl) || page != "cats" {
 		t.Fatalf("after the preset: router %d, page %q, behind 443 %v, the panel's page %q", node.SniRouter, node.FrontPage, proto.SNI443(tpl), page)
 	}
@@ -368,3 +390,5 @@ func TestSitePage(t *testing.T) {
 		t.Fatalf("an API key wrote the page: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func ptrTo[T any](v T) *T { return &v }

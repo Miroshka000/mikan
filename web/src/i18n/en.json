@@ -2278,7 +2278,7 @@
       },
       "secure": {
         "name": "Secure",
-        "text": "One port 443 a node is left outside: the protocols behind it are told apart by the name a client asks for. Every REALITY protocol gets one of your own names (the panel's domain, the subscriptions' domain); the preset takes no stranger's site by itself. The nodes' API answers only the panel, a front page stands everywhere."
+        "text": "One port 443 a node is left outside: the protocols behind it are told apart by the name a client asks for. Every REALITY protocol gets one of your own names (the panel's domain, the subscriptions' domain); the preset takes no stranger's site by itself. The automatic changes of ports and sites are turned off, the nodes' API answers only the panel, a front page stands everywhere."
       },
       "show": "Show the changes",
       "neighbors": "Find sites next to the server",
@@ -2292,6 +2292,8 @@
       "applied": "The preset is applied",
       "partly": "Not applied: {n, plural, one {# change} other {# changes}}. The reasons are in the list.",
       "manual": "Left for you to do",
+      "offers": "If you wish",
+      "offersHint": "The preset only offers these: tick what you want applied.",
       "change": {
         "panel_page": "Front page at the panel's address: {page}",
         "front_page": "Front page on the node: {page}",
@@ -2303,6 +2305,9 @@
         "router_on": "Turn on the shared port 443 (SNI router)",
         "router_off": "Turn off the shared port 443 (SNI router)",
         "api_lockdown": "The node's API answers only the panel",
+        "auto_off": "{inbound}: turn off the automatic change of the port and of the camouflage site",
+        "disable": "{inbound}: turn off. The protocol {type} on port {port} looks like nothing: the port takes a connection and stays silent to any probe, which is how it is known. It cannot go behind the shared 443. Clients that use it lose it.",
+        "udp_ports": "The protocols {inbounds} work over UDP on ports of their own: they cannot go behind the shared port 443. A TCP scan does not find them, but the UDP stream itself is seen. Keep them if clients need them on poor links, or turn them off in the Protocols section.",
         "port_443_busy": "Port 443 is held by a protocol that cannot work behind the shared port. Move it to another port, and the preset gathers the rest behind 443.",
         "port_443_panel": "Port 443 of this server is taken by the panel itself, so the shared port 443 cannot be turned on for its node. Move the panel to another port, and the preset gathers the protocols behind 443.",
         "same_name": "The name {name} belongs to another protocol behind the shared 443. Give the protocol a name of its own for clients (SNI) or turn it off.",
@@ -4857,6 +4862,7 @@
         "many_ports": "The TLS protocols take ports of their own: {n} ({ports}). An ordinary site listens on 443 alone. Turn on \"Shared port 443 (SNI router)\" on the node and on its protocols, and one port is left to see.",
         "cdn_and_direct": "Clients reach this server both through a CDN ({inbounds}) and straight. The straight connections give away the address the CDN is there to hide, and the CDN knows it from its own settings. Keep the protocols behind a CDN on a node of their own.",
         "api_open": "The node's API port is open to anyone: scanners find the server by it. Turn on \"Node API from the panel's IP only\" in the node's settings.",
+        "silent_port": "The port of {inbounds} takes a connection and answers nothing to any probe: a scanner knows Shadowsocks and its kin by that. Such a protocol cannot go behind the shared 443. Keep it only where clients need it, or turn it off.",
         "telling_name": "The name {name} has the word \"{word}\" in it. The name goes in the clear in every connection to the server and stands in its certificate. Take a neutral name: the old one keeps working for the links already handed out."
       },
       "skew": {

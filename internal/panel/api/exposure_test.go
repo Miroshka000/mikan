@@ -184,3 +184,20 @@ func TestExposureBehindTheSharedPort(t *testing.T) {
 		t.Fatalf("a stranger's site and the panel's own: %v", got)
 	}
 }
+
+// A protocol with no handshake to read is named with its port; the ones over UDP are not a
+// TCP scanner's to find.
+func TestExposureOfASilentPort(t *testing.T) {
+	e := exposure{inbounds: []db.Inbound{
+		exposureInbound(t, "vless-xhttp", "vless_reality_xhttp", "443", "news.example.org:443"),
+		exposureInbound(t, "shadowsocks", "shadowsocks_2022", "6443", ""),
+		exposureInbound(t, "hysteria2", "hysteria2", "2083", ""),
+	}}
+	items := e.items()
+	if got := exposureCodes(items); !slices.Equal(got, []string{"silent_port"}) {
+		t.Fatalf("a silent port: %v", got)
+	}
+	if got := items[0].Params["inbounds"]; got != "shadowsocks (6443)" {
+		t.Fatalf("named: %q", got)
+	}
+}

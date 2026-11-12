@@ -101,7 +101,11 @@ function PlanDrawer({ preset, onClose }: { preset: Preset; onClose: () => void }
   });
   const done = apply.data?.changes;
   const changes = done ?? plan.data?.changes ?? [];
-  const todo = changes.filter((c) => !c.manual);
+  // What the preset does by itself, and what it only offers: an offer is applied when its box is ticked.
+  const todo = changes.filter((c) => !c.manual && !c.optional);
+  const offers = changes.filter((c) => c.optional);
+  const [picked, setPicked] = useState<number[]>([]);
+  const toApply = [...todo, ...offers.filter((c) => c.inbound_id !== undefined && picked.includes(c.inbound_id))];
   const manual = changes.filter((c) => c.manual);
   const moves = todo.some((c) => c.code === "through_443" || c.code === "direct" || c.code === "site");
   const groups = groupByNode(todo);
@@ -118,7 +122,7 @@ function PlanDrawer({ preset, onClose }: { preset: Preset; onClose: () => void }
             {done ? t("common.close") : t("common.cancel")}
           </Button>
           {done ? null : (
-            <Button variant="primary" loading={apply.isPending} disabled={!plan.isSuccess || todo.length === 0} onClick={() => apply.mutate(todo)}>
+            <Button variant="primary" loading={apply.isPending} disabled={!plan.isSuccess || toApply.length === 0} onClick={() => apply.mutate(toApply)}>
               {t("settings.presets.apply")}
             </Button>
           )}
@@ -166,6 +170,39 @@ function PlanDrawer({ preset, onClose }: { preset: Preset; onClose: () => void }
               </ul>
             </section>
           ))}
+          {offers.length > 0 ? (
+            <section className="mt-6">
+              <h3 className="text-[13px] font-semibold text-[var(--ink-700)]">{t("settings.presets.offers")}</h3>
+              <p className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.presets.offersHint")}</p>
+              <ul className="row-list">
+                {offers.map((c, i) => (
+                  <li key={i} className="py-3">
+                    <label className="flex items-start gap-3 text-[13px]">
+                      {done ? (
+                        c.error ? (
+                          <XCircle size={18} aria-hidden className="mt-0.5 shrink-0 text-[var(--berry-600)]" />
+                        ) : (
+                          <Check size={18} aria-hidden className="mt-0.5 shrink-0 text-[var(--leaf-500)]" />
+                        )
+                      ) : (
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 shrink-0"
+                          checked={c.inbound_id !== undefined && picked.includes(c.inbound_id)}
+                          onChange={(e) => setPicked((p) => (e.target.checked ? [...p, c.inbound_id!] : p.filter((id) => id !== c.inbound_id)))}
+                        />
+                      )}
+                      <span className="min-w-0">
+                        <span className="font-medium">{c.node_name || t("nodes.localName")}</span>
+                        <span className="mt-1 block text-[var(--ink-600)]">{changeText(c)}</span>
+                        {c.error ? <span className="mt-1 block text-xs text-[var(--berry-600)]">{tMaybe(`errors.api.${c.error}`) ?? c.error}</span> : null}
+                      </span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {!done && preset === "secure" && !neighbors && manual.some((c) => c.code === "no_site") ? (
             <div className="mt-6 flex flex-col items-start gap-2">
               <Button size="sm" onClick={() => setNeighbors(true)}>

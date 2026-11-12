@@ -8252,12 +8252,15 @@
               "router_on",
               "router_off",
               "api_lockdown",
+              "auto_off",
+              "disable",
               "port_443_busy",
               "port_443_panel",
               "same_name",
               "no_site",
               "stranger_site",
               "no_port",
+              "udp_ports",
               "ssh_open"
             ],
             "type": "string"
@@ -8284,6 +8287,10 @@
           },
           "node_name": {
             "type": "string"
+          },
+          "optional": {
+            "description": "Изменение по желанию: применяется, только если админ его отметил",
+            "type": "boolean"
           },
           "params": {
             "additionalProperties": {

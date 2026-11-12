@@ -6502,7 +6502,7 @@ export interface components {
              * @description Что меняется; у строки manual: что остаётся сделать самому
              * @enum {string}
              */
-            code: "panel_page" | "front_page" | "site" | "port" | "through_443" | "direct" | "router_on" | "router_off" | "api_lockdown" | "port_443_busy" | "port_443_panel" | "same_name" | "no_site" | "stranger_site" | "no_port" | "ssh_open";
+            code: "panel_page" | "front_page" | "site" | "port" | "through_443" | "direct" | "router_on" | "router_off" | "api_lockdown" | "auto_off" | "disable" | "port_443_busy" | "port_443_panel" | "same_name" | "no_site" | "stranger_site" | "no_port" | "udp_ports" | "ssh_open";
             /** @description После применения: почему не получилось */
             error?: string;
             inbound?: string;
@@ -6516,6 +6516,8 @@ export interface components {
              */
             node: number;
             node_name?: string;
+            /** @description Изменение по желанию: применяется, только если админ его отметил */
+            optional?: boolean;
             params?: {
                 [key: string]: string;
             };

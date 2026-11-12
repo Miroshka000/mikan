@@ -10,8 +10,8 @@ import { useEditor, type EditorStore } from "./store";
 export type View = { preview: boolean; narrow: boolean };
 
 /** The bar over the canvas: the way back, undo and redo, how the canvas shows the page, a random site and saving. */
-export function TopBar({ store, view, onView, max, savedDoc }: { store: EditorStore; view: View; onView: (v: View) => void; max: number; savedDoc: string }) {
-  const { doc, canUndo, canRedo } = useEditor(store);
+export function TopBar({ store, view, onView, max }: { store: EditorStore; view: View; onView: (v: View) => void; max: number }) {
+  const { doc, canUndo, canRedo, dirty } = useEditor(store);
   const settings = useSettings();
   const nodes = useNodes();
   const save = useSaveSite(store);
@@ -21,7 +21,6 @@ export function TopBar({ store, view, onView, max, savedDoc }: { store: EditorSt
     panelHas: settings.data?.site_template === "custom",
     nodes: (nodes.data ?? []).map((n) => ({ id: n.id, name: n.name, has: n.front_page === "custom" })),
   });
-  const dirty = JSON.stringify(doc) !== savedDoc;
   return (
     <header className="sb-top">
       <Link to="/settings" search={{ tab: "security" }} className="btn btn-ghost btn-sm" title={t("siteBuilder.back")}>

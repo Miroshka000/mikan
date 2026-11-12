@@ -12,6 +12,8 @@ export type EditorState = {
   drawn: number;
   canUndo: boolean;
   canRedo: boolean;
+  /** The document differs from the one the panel keeps. */
+  dirty: boolean;
 };
 
 const HISTORY = 80;
@@ -29,13 +31,24 @@ export class EditorStore {
   private typing = "";
   private readonly listeners = new Set<() => void>();
   private readonly generator = new SiteGenerator();
+  /** The document as the panel keeps it; undefined: nothing of this editor is saved yet. */
+  private saved?: SiteDoc;
 
   constructor(
     doc: SiteDoc,
     /** The installation's seed: every fresh seed of this editor starts with it. */
     private readonly installation: string,
+    /** The document came from the panel: it is the saved one until something changes. */
+    fromPanel: boolean,
   ) {
-    this.state = { doc, pageId: doc.pages[0]!.id, selected: null, drawn: 0, canUndo: false, canRedo: false };
+    if (fromPanel) this.saved = doc;
+    this.state = { doc, pageId: doc.pages[0]!.id, selected: null, drawn: 0, canUndo: false, canRedo: false, dirty: !fromPanel };
+  }
+
+  /** The panel keeps this document now. */
+  markSaved(doc: SiteDoc) {
+    this.saved = doc;
+    this.emit({});
   }
 
   subscribe = (f: () => void) => {
@@ -53,6 +66,7 @@ export class EditorStore {
 
   private emit(patch: Partial<EditorState>) {
     this.state = { ...this.state, ...patch, canUndo: this.past.length > 0, canRedo: this.future.length > 0 };
+    this.state.dirty = this.state.doc !== this.saved;
     this.listeners.forEach((f) => f());
   }
 

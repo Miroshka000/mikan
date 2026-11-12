@@ -192,14 +192,22 @@ Protocols without HTTP (REALITY, Vision, Trojan over TCP, Hysteria2 and the othe
 
 ### Your own site from the builder
 
-Since 0.5.2.1, **Settings** → **Security** → **Front page for strangers** has a **Front page builder** button. It makes a site of blocks (first screen, list, text, table, gallery, code) and shows it beside them in a frame as a stranger will get it.
+Since 0.5.2.1, **Settings** → **Security** → **Front page for strangers** has a **Front page builder** button. It is an editor over the whole window:
 
-- **Random site** makes a whole page: the kind of site (a blog, a utility's page, recipes, a board game club, a ceramics workshop, a gallery of drawings), its name, words, palette and drawings. The site's language switches between Russian and English.
-- **Another look** keeps the words and changes the markup, the spacing and the drawings.
-- The name, the texts, the colours, the fonts, the corners, the width and the blocks can be changed by hand.
-- **Save and set everywhere** sets the page on the panel and on every node; **Save** only keeps it, to be chosen later with the "Your own site" tile.
+- **at the left** the tabs "Blocks" (what to add to the page), "Outline" (the page's blocks and their order), "Pages" (the pages of the site, their names and addresses) and "Site" (the kind, the language and "Random site");
+- **in the middle** the page itself: a click selects a block, a text is typed in place, the menu's items open the pages;
+- **at the right** the selected block's fields and, with nothing selected, the site's design: its name, palette, fonts and layout.
 
-The page is one file of up to 200 KB with no scripts, no fonts and no outside requests. Every installation has its own: the markup, the names of the classes and the drawings depend on the panel's seed, so one hash of a page does not find other installations. A node older than 0.5.2.1 shows a built-in page in its place until it is updated.
+Above them are undo and redo, the "Editor / Preview" and "Computer / Phone" switches, and saving.
+
+**Random site** makes a whole site of three pages: its kind (a blog, a utility's page, recipes, a board game club, a ceramics workshop, a gallery of drawings), its name, words, palette and fonts, in Russian or in English. It writes no reviews and no numbers: those blocks are in the library, and the words in them are yours. **Another look** keeps the words and changes the markup and the spacing.
+
+A site is pages at addresses of their own (`/`, `/about`), fonts and your pictures, up to 2 MB together. The pages run no script and ask nothing of another host. Every installation has its own: the markup, the names of the classes and of the files depend on the panel's seed, so one hash of a page does not find other installations.
+
+**Save and set everywhere** sets the site on the panel and on every node; **Save** only keeps it, to be chosen later with the "Your own site" tile. What is seen where:
+
+- at the panel's address and on the shared port 443 of a node of this version: the whole site, each page at its address;
+- on the ports of protocols with XHTTP, WebSocket or gRPC and on nodes older than 0.5.2.1: the first page alone.
 
 ## Speed check
 

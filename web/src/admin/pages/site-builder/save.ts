@@ -31,11 +31,13 @@ export function useSaveSite(store: EditorStore) {
   const toast = useToast();
   return useMutation({
     mutationFn: async (target: SaveTarget) => {
-      const doc = pruneImages(store.doc);
+      const editing = store.doc;
+      const doc = pruneImages(editing);
       const { files, single } = await new SiteBundle(doc).build();
       const size = bundleSize(files);
       if (size > target.max) throw new TooLarge(size, target.max);
       await unwrap(api.PUT("/api/v1/settings/site-page", { body: { doc: JSON.stringify(doc), html: single, files } }));
+      store.markSaved(editing);
       const failed: string[] = [];
       if (!target.everywhere) return failed;
       if (!target.panelHas) await unwrap(api.PATCH("/api/v1/settings", { body: { site_template: "custom" } }));

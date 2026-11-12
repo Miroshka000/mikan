@@ -17,7 +17,7 @@ import "./site-builder.css";
 export function SiteBuilderPage() {
   const operator = !!useSupportMode();
   const saved = useQuery({ queryKey: sitePageKey, queryFn: () => unwrap(api.GET("/api/v1/settings/site-page")), enabled: !operator, staleTime: Infinity });
-  if (saved.isSuccess && !operator) return <Editor key={saved.dataUpdatedAt} saved={saved.data} />;
+  if (saved.isSuccess && !operator) return <Editor saved={saved.data} />;
   return (
     <>
       <Link to="/settings" search={{ tab: "security" }} className="mb-2 inline-flex items-center gap-1 rounded-lg text-[13px] font-medium text-[var(--ink-500)] hover:text-[var(--ink-900)]">
