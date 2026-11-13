@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"mikan/internal/proto"
@@ -107,5 +108,21 @@ func TestHostOverTLSFallsBack(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("proxies:\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// A Hysteria2 host that sets a port, the range's first one too, gets that port alone: the
+// proxy in front of the node may forward no other. One with no port keeps the hopping.
+func TestHostPortStopsHopping(t *testing.T) {
+	hy2 := proto.Marshal(proto.Template{"type": "hysteria2", "alpn": []any{"h3"}})
+	in := model.Inbound{ID: 1, Node: 1, Name: "H", Named: true, Port: 20000, PortSpec: "20000-20099", Config: hy2,
+		Hosts: []model.Host{{}, {Address: "relay.example.com", Port: 20000}, {Address: "relay.example.com", Port: 30000}, {Address: "other.example.com"}}}
+	var got []string
+	for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{in}, Nodes: []model.Node{hostsNode}}) {
+		got = append(got, p.Server+":"+strconv.Itoa(p.Port)+" "+p.Ports)
+	}
+	want := []string{"nl.example.com:20000 20000-20099", "relay.example.com:20000 ", "relay.example.com:30000 ", "other.example.com:20000 20000-20099"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("proxies:\n%q\nwant\n%q", got, want)
 	}
 }

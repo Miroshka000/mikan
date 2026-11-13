@@ -187,8 +187,11 @@ func keys(p *model.Proxy, t proto.Template, ext proto.Ext, in Input) error {
 		p.Password = s.Secret
 	case "hysteria2":
 		p.Password, p.ALPN, p.UDP = s.Secret, strs(t["alpn"]), true
-		// A port of the inbound's own (a proxy in front) replaces the node's hopping range.
-		if in.PortSpec != "" && in.PortSpec != strconv.Itoa(in.Port) && p.Port == in.Port {
+		// A port of the inbound's own (a proxy in front) replaces the node's hopping range,
+		// and so does any port a host sets, the first one of the range too: a proxy in
+		// front of the node may forward that one alone.
+		ownPort := in.OwnClient && in.Client.Port > 0
+		if in.PortSpec != "" && in.PortSpec != strconv.Itoa(in.Port) && p.Port == in.Port && !ownPort {
 			p.Ports = in.PortSpec
 		}
 		if obfs := str(t["obfs"]); obfs != "" {
