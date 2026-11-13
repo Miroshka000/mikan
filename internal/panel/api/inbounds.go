@@ -194,8 +194,8 @@ func (h *handlers) registerInbounds() {
 
 // HostView is one place clients reach an inbound at. The default host (default: true) is
 // the client endpoint of the inbound (InboundView.client and fingerprint): subscriptions
-// use it, and changing one changes the other. The other hosts are kept in their order for
-// the subscriptions to come and change nothing clients get yet.
+// use it, and changing one changes the other. Every other host is one more proxy of the
+// inbound in the subscriptions, in their order.
 type HostView struct {
 	ID          int64  `json:"id"`
 	Default     bool   `json:"default" doc:"Адрес по умолчанию: тот же, что client и fingerprint подключения; удаляется только с подключением"`

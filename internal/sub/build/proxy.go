@@ -31,6 +31,9 @@ type Input struct {
 	// Client is what the apps get in place of the template's mikan.client: a field left
 	// empty keeps the template's.
 	Client proto.ClientOverrides
+	// OwnClient: Client is the whole of what the apps get, as a host other than the
+	// default one is; an empty field is what they get without it, not the template's.
+	OwnClient bool
 }
 
 // Proxy is the client side of the template t for in: what the apps of the user dial.
@@ -42,7 +45,9 @@ func Proxy(t proto.Template, in Input) (model.Proxy, error) {
 	}
 	ext := t.Ext()
 	// From here on in.Client is the one the apps get; nothing else reads mikan.client.
-	in.Client = overrides(in.Client, ext.Client)
+	if !in.OwnClient {
+		in.Client = overrides(in.Client, ext.Client)
+	}
 	p := model.Proxy{Name: in.Name, Type: t.Type(), Server: in.Host, Port: in.Port}
 	if in.Client.Server != "" {
 		p.Server = in.Client.Server

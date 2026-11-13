@@ -13,11 +13,11 @@ import (
 
 // The hosts of an inbound (#01) are the places its clients reach it at: an address, a port,
 // a TLS name, an HTTP Host and a fingerprint, each empty (port 0) for what clients get
-// without it. They go in the order of their position. Position 0 is the default host: until
-// subscriptions read the hosts, they read the template's mikan.client, so that host is the
-// template's, written only through it. Every write of a template writes it too, in the same
+// without it. They go in the order of their position. Position 0 is the default host:
+// subscriptions read it from the template's mikan.client, so that host is the template's,
+// written only through it. Every write of a template writes it too, in the same
 // transaction (syncDefaultHost); a change of the default host is a change of the template
-// (UpdateHost). The other hosts are kept for the subscriptions to come and change nothing yet.
+// (UpdateHost). Every other host is one more proxy of the inbound in the subscriptions.
 
 var (
 	ErrUnknownHost = errors.New("host_not_found")

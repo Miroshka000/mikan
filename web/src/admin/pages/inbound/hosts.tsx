@@ -24,7 +24,7 @@ const hostsKey = (id: number) => [...qk.inbounds, id, "hosts"] as const;
 /**
  * The hosts of an inbound: the places its clients reach it at. The default one is the
  * inbound's own address for clients (the proxy block above), shown here and changed there;
- * the others are kept in their order for subscriptions to come.
+ * each other one is one more server in the subscriptions, in their order.
  */
 export function HostsSettings({ inbound, defaultFingerprint }: { inbound: Inbound; defaultFingerprint: string }) {
   const hosts = useQuery({

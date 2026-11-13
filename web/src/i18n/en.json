@@ -1928,7 +1928,7 @@
     "hosts": {
       "title": "Addresses for clients",
       "sub": "Several places clients can reach this protocol at",
-      "note": "The default address is the one clients get now. Other addresses are saved in their order; subscriptions do not give them out yet, a coming version will.",
+      "note": "The default address is the one clients get now. Every other address is one more server in the subscription, named as the protocol with a number; a field left empty there is the node's, not the default address's.",
       "default": "Default:",
       "defaultHint": "Changed in \"Behind another server\" or \"Behind a CDN\" above, and with the fingerprint.",
       "nodeAddress": "node address",
