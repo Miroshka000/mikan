@@ -52,7 +52,7 @@ func TemplateIDs(ctx context.Context, q *db.Queries) ([]int64, error) {
 // *submodel.TemplateError for what would break the profiles, submodel.ErrNoProxies when
 // the panel has no inbound to check it with.
 func (h *Handler) CheckTemplate(ctx context.Context, core submodel.Core, src string) error {
-	prof, _, err := h.sample(ctx)
+	prof, _, err := h.sample(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ type TemplatePreview struct {
 // PreviewTemplate is the profile a user given every inbound gets of the template (its keys
 // are placeholders), and, of a Clash one, what sing-box and xray make of it (previewNotes).
 func (h *Handler) PreviewTemplate(ctx context.Context, req TemplatePreview) (Preview, error) {
-	prof, cfg, err := h.sample(ctx)
+	prof, cfg, err := h.sample(ctx, nil)
 	if err != nil {
 		return Preview{}, err
 	}
