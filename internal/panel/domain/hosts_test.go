@@ -190,3 +190,140 @@ func TestOtherHosts(t *testing.T) {
 		t.Fatalf("order %q", order)
 	}
 }
+
+// A host's own fields (ALPN, IP version, multiplexing, CDN) are saved trimmed, held to what
+// the inbound's protocol can use, and the default host's stay through every write of the
+// template, which does not hold them, and go with a copy of the inbound.
+func TestHostOwnFields(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	_, s := inbounds(t, &now, nil)
+	ctx := context.Background()
+	ws, err := s.Create(ctx, NewInbound{Preset: "vless_tls_ws"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := s.AddHost(ctx, ws.ID, Host{Address: "edge.example.com", ALPN: []string{" H2 ", "h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(h.Alpn, ",") != "h2,http/1.1" || h.IpVersion != "ipv4-prefer" || !h.Mux || h.MuxProtocol != "smux" || !h.MuxPadding || !h.Cdn {
+		t.Fatalf("added: %+v", h)
+	}
+	// A multiplexing that is off keeps no protocol or padding; no ALPN is an empty list.
+	h, err = s.UpdateHost(ctx, ws.ID, h.ID, Host{Address: "edge.example.com", MuxProtocol: "yamux", MuxPadding: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn {
+		t.Fatalf("cleared: %+v", h)
+	}
+
+	reality, err := s.Create(ctx, NewInbound{Preset: "trojan_reality"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vision, err := s.Create(ctx, NewInbound{Preset: "vless_tls_vision"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	xhttp, err := s.Create(ctx, NewInbound{Preset: "vless_tls_xhttp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hy2, err := s.Create(ctx, NewInbound{Preset: "hysteria2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var edit *EditError
+	for _, c := range []struct {
+		in          db.Inbound
+		h           Host
+		field, code string
+	}{
+		{ws, Host{ALPN: []string{"spdy/3"}}, "alpn", "host_alpn"},
+		{reality, Host{ALPN: []string{"h2"}}, "alpn", "host_alpn_no_tls"}, // the target's TLS
+		{hy2, Host{ALPN: []string{"h2"}}, "alpn", "host_alpn_quic"},       // the node answers h3 alone
+		{ws, Host{ALPN: []string{"h3", "http/1.1"}}, "alpn", "host_alpn_h3_tcp"},
+		{ws, Host{ALPN: []string{"h2"}}, "alpn", "host_alpn_transport"}, // WebSocket needs HTTP/1.1
+		{ws, Host{IPVersion: "ipv5"}, "ip_version", "host_ip_version"},
+		{ws, Host{Mux: true, MuxProtocol: "mplex"}, "mux.protocol", "host_mux_protocol"},
+		{hy2, Host{Mux: true}, "mux", "host_mux_type"}, // QUIC has streams of its own
+		{xhttp, Host{Mux: true}, "mux", "host_mux_type"},
+		{vision, Host{Mux: true}, "mux", "host_mux_flow"},
+		{reality, Host{CDN: true}, "cdn", "cdn_type"},
+		{vision, Host{CDN: true}, "cdn", "cdn_transport"},
+	} {
+		if _, err := s.AddHost(ctx, c.in.ID, c.h); !errors.As(err, &edit) || edit.Field != c.field || edit.Err.Code != c.code {
+			t.Errorf("%s %+v: %v, want %s %s", c.in.Preset, c.h, err, c.field, c.code)
+		}
+	}
+	// What each can use passes: ALPN on QUIC, multiplexing on REALITY's Trojan.
+	if _, err := s.AddHost(ctx, hy2.ID, Host{ALPN: []string{"h3"}, IPVersion: "ipv6"}); err != nil {
+		t.Fatalf("Hysteria2's ALPN: %v", err)
+	}
+	if _, err := s.AddHost(ctx, reality.ID, Host{Mux: true, MuxProtocol: "h2mux"}); err != nil {
+		t.Fatalf("REALITY's multiplexing: %v", err)
+	}
+
+	// The default host: its own fields through the hosts, beside the template's five.
+	hosts, err := s.Hosts(ctx, ws.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := hosts[0]
+	own := func(when string) {
+		t.Helper()
+		hosts, err := s.Hosts(ctx, ws.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := hosts[0]
+		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn {
+			t.Fatalf("%s: the default host %+v", when, d)
+		}
+	}
+	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true}); err != nil {
+		t.Fatal(err)
+	}
+	own("the hosts")
+	if d, _ := s.Hosts(ctx, ws.ID); d[0].Address != "front.example.com" {
+		t.Fatalf("the default host's address: %+v", d[0])
+	}
+	if _, _, err := s.Update(ctx, ws.ID, InboundPatch{Client: &ClientEndpoint{Server: "other.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+	own("the form's client")
+	fp := "firefox"
+	if _, _, err := s.Update(ctx, ws.ID, InboundPatch{Fingerprint: &fp}); err != nil {
+		t.Fatal(err)
+	}
+	own("the form's fingerprint")
+	cur, err := s.st.Q.GetInbound(ctx, ws.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Update(ctx, ws.ID, InboundPatch{Config: &cur.Config}); err != nil {
+		t.Fatal(err)
+	}
+	own("the YAML")
+	// A refusal of the default host's own field writes nothing, the template neither.
+	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "never.example.com", IPVersion: "ipv5"}); !errors.As(err, &edit) || edit.Field != "ip_version" {
+		t.Fatalf("a bad default host: %v", err)
+	}
+	own("the refusal")
+	if d, _ := s.Hosts(ctx, ws.ID); d[0].Address != "other.example.com" {
+		t.Fatalf("the refused default host's address: %+v", d[0])
+	}
+
+	copied, err := s.Copy(ctx, ws.ID, CopyInbound{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, err := s.Hosts(ctx, copied.ID)
+	if err != nil || len(ch) != 2 {
+		t.Fatalf("the copy's hosts: %+v %v", ch, err)
+	}
+	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn {
+		t.Fatalf("the copy's default host: %+v", ch[0])
+	}
+}

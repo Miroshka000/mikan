@@ -12,9 +12,10 @@ import (
 )
 
 const addInboundHost = `-- name: AddInboundHost :one
-INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint)
-VALUES ($1, (SELECT COALESCE(max(position), 0) + 1 FROM inbound_hosts WHERE inbound_id = $1), $2, $3, $4, $5, $6)
-RETURNING id, inbound_id, position, address, port, sni, host, fingerprint
+INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn)
+VALUES ($1, (SELECT COALESCE(max(position), 0) + 1 FROM inbound_hosts WHERE inbound_id = $1), $2, $3, $4, $5, $6,
+  COALESCE($7::text[], '{}'), $8, $9, $10, $11, $12)
+RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn
 `
 
 type AddInboundHostParams struct {
@@ -24,6 +25,12 @@ type AddInboundHostParams struct {
 	Sni         string
 	Host        string
 	Fingerprint string
+	Alpn        []string
+	IpVersion   string
+	Mux         bool
+	MuxProtocol string
+	MuxPadding  bool
+	Cdn         bool
 }
 
 // A new host goes after the others; position 0 stays the default one's.
@@ -35,6 +42,12 @@ func (q *Queries) AddInboundHost(ctx context.Context, arg AddInboundHostParams) 
 		arg.Sni,
 		arg.Host,
 		arg.Fingerprint,
+		pq.Array(arg.Alpn),
+		arg.IpVersion,
+		arg.Mux,
+		arg.MuxProtocol,
+		arg.MuxPadding,
+		arg.Cdn,
 	)
 	var i InboundHost
 	err := row.Scan(
@@ -46,13 +59,39 @@ func (q *Queries) AddInboundHost(ctx context.Context, arg AddInboundHostParams) 
 		&i.Sni,
 		&i.Host,
 		&i.Fingerprint,
+		pq.Array(&i.Alpn),
+		&i.IpVersion,
+		&i.Mux,
+		&i.MuxProtocol,
+		&i.MuxPadding,
+		&i.Cdn,
 	)
 	return i, err
 }
 
+const copyDefaultHostOptions = `-- name: CopyDefaultHostOptions :exec
+UPDATE inbound_hosts dst SET alpn = src.alpn, ip_version = src.ip_version, mux = src.mux, mux_protocol = src.mux_protocol,
+  mux_padding = src.mux_padding, cdn = src.cdn
+FROM inbound_hosts src
+WHERE src.inbound_id = $1 AND src.position = 0 AND dst.inbound_id = $2 AND dst.position = 0
+`
+
+type CopyDefaultHostOptionsParams struct {
+	FromInbound int64
+	ToInbound   int64
+}
+
+// The default host of a copy takes the original's own fields: the template, which gives it
+// the others, does not hold them.
+func (q *Queries) CopyDefaultHostOptions(ctx context.Context, arg CopyDefaultHostOptionsParams) error {
+	_, err := q.db.ExecContext(ctx, copyDefaultHostOptions, arg.FromInbound, arg.ToInbound)
+	return err
+}
+
 const copyInboundHosts = `-- name: CopyInboundHosts :exec
-INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint)
-SELECT $1, src.position, src.address, src.port, src.sni, src.host, src.fingerprint FROM inbound_hosts src
+INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn)
+SELECT $1, src.position, src.address, src.port, src.sni, src.host, src.fingerprint,
+  src.alpn, src.ip_version, src.mux, src.mux_protocol, src.mux_padding, src.cdn FROM inbound_hosts src
 WHERE src.inbound_id = $2 AND src.position > 0
 `
 
@@ -86,7 +125,7 @@ func (q *Queries) DeleteInboundHost(ctx context.Context, arg DeleteInboundHostPa
 }
 
 const getInboundHost = `-- name: GetInboundHost :one
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint FROM inbound_hosts WHERE id = $1 AND inbound_id = $2
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn FROM inbound_hosts WHERE id = $1 AND inbound_id = $2
 `
 
 type GetInboundHostParams struct {
@@ -106,12 +145,18 @@ func (q *Queries) GetInboundHost(ctx context.Context, arg GetInboundHostParams) 
 		&i.Sni,
 		&i.Host,
 		&i.Fingerprint,
+		pq.Array(&i.Alpn),
+		&i.IpVersion,
+		&i.Mux,
+		&i.MuxProtocol,
+		&i.MuxPadding,
+		&i.Cdn,
 	)
 	return i, err
 }
 
 const listHostsOfInbounds = `-- name: ListHostsOfInbounds :many
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint FROM inbound_hosts WHERE inbound_id = ANY($1::bigint[]) ORDER BY inbound_id, position
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn FROM inbound_hosts WHERE inbound_id = ANY($1::bigint[]) ORDER BY inbound_id, position
 `
 
 func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]InboundHost, error) {
@@ -132,6 +177,12 @@ func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]Inbou
 			&i.Sni,
 			&i.Host,
 			&i.Fingerprint,
+			pq.Array(&i.Alpn),
+			&i.IpVersion,
+			&i.Mux,
+			&i.MuxProtocol,
+			&i.MuxPadding,
+			&i.Cdn,
 		); err != nil {
 			return nil, err
 		}
@@ -147,7 +198,7 @@ func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]Inbou
 }
 
 const listInboundHosts = `-- name: ListInboundHosts :many
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint FROM inbound_hosts WHERE inbound_id = $1 ORDER BY position
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn FROM inbound_hosts WHERE inbound_id = $1 ORDER BY position
 `
 
 func (q *Queries) ListInboundHosts(ctx context.Context, inboundID int64) ([]InboundHost, error) {
@@ -168,6 +219,12 @@ func (q *Queries) ListInboundHosts(ctx context.Context, inboundID int64) ([]Inbo
 			&i.Sni,
 			&i.Host,
 			&i.Fingerprint,
+			pq.Array(&i.Alpn),
+			&i.IpVersion,
+			&i.Mux,
+			&i.MuxProtocol,
+			&i.MuxPadding,
+			&i.Cdn,
 		); err != nil {
 			return nil, err
 		}
@@ -210,6 +267,7 @@ type SetDefaultInboundHostParams struct {
 	Fingerprint string
 }
 
+// The template's five fields only: the host's own (alpn and the rest) stay as they are.
 func (q *Queries) SetDefaultInboundHost(ctx context.Context, arg SetDefaultInboundHostParams) error {
 	_, err := q.db.ExecContext(ctx, setDefaultInboundHost,
 		arg.InboundID,
@@ -222,31 +280,76 @@ func (q *Queries) SetDefaultInboundHost(ctx context.Context, arg SetDefaultInbou
 	return err
 }
 
+const setInboundHostOptions = `-- name: SetInboundHostOptions :exec
+UPDATE inbound_hosts SET alpn = COALESCE($1::text[], '{}'), ip_version = $2, mux = $3, mux_protocol = $4, mux_padding = $5, cdn = $6
+WHERE id = $7 AND inbound_id = $8
+`
+
+type SetInboundHostOptionsParams struct {
+	Alpn        []string
+	IpVersion   string
+	Mux         bool
+	MuxProtocol string
+	MuxPadding  bool
+	Cdn         bool
+	ID          int64
+	InboundID   int64
+}
+
+// The host's own fields, those the template does not hold: of the default host, next to the
+// template's write of the others.
+func (q *Queries) SetInboundHostOptions(ctx context.Context, arg SetInboundHostOptionsParams) error {
+	_, err := q.db.ExecContext(ctx, setInboundHostOptions,
+		pq.Array(arg.Alpn),
+		arg.IpVersion,
+		arg.Mux,
+		arg.MuxProtocol,
+		arg.MuxPadding,
+		arg.Cdn,
+		arg.ID,
+		arg.InboundID,
+	)
+	return err
+}
+
 const updateInboundHost = `-- name: UpdateInboundHost :one
-UPDATE inbound_hosts SET address = $3, port = $4, sni = $5, host = $6, fingerprint = $7
-WHERE id = $1 AND inbound_id = $2
-RETURNING id, inbound_id, position, address, port, sni, host, fingerprint
+UPDATE inbound_hosts SET address = $1, port = $2, sni = $3, host = $4, fingerprint = $5,
+  alpn = COALESCE($6::text[], '{}'), ip_version = $7, mux = $8, mux_protocol = $9, mux_padding = $10, cdn = $11
+WHERE id = $12 AND inbound_id = $13
+RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn
 `
 
 type UpdateInboundHostParams struct {
-	ID          int64
-	InboundID   int64
 	Address     string
 	Port        int64
 	Sni         string
 	Host        string
 	Fingerprint string
+	Alpn        []string
+	IpVersion   string
+	Mux         bool
+	MuxProtocol string
+	MuxPadding  bool
+	Cdn         bool
+	ID          int64
+	InboundID   int64
 }
 
 func (q *Queries) UpdateInboundHost(ctx context.Context, arg UpdateInboundHostParams) (InboundHost, error) {
 	row := q.db.QueryRowContext(ctx, updateInboundHost,
-		arg.ID,
-		arg.InboundID,
 		arg.Address,
 		arg.Port,
 		arg.Sni,
 		arg.Host,
 		arg.Fingerprint,
+		pq.Array(arg.Alpn),
+		arg.IpVersion,
+		arg.Mux,
+		arg.MuxProtocol,
+		arg.MuxPadding,
+		arg.Cdn,
+		arg.ID,
+		arg.InboundID,
 	)
 	var i InboundHost
 	err := row.Scan(
@@ -258,6 +361,12 @@ func (q *Queries) UpdateInboundHost(ctx context.Context, arg UpdateInboundHostPa
 		&i.Sni,
 		&i.Host,
 		&i.Fingerprint,
+		pq.Array(&i.Alpn),
+		&i.IpVersion,
+		&i.Mux,
+		&i.MuxProtocol,
+		&i.MuxPadding,
+		&i.Cdn,
 	)
 	return i, err
 }

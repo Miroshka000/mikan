@@ -121,6 +121,9 @@ type InboundPatch struct {
 	// automatic move decided on what a node reported never lands on a row moved since
 	// (ErrInboundChanged).
 	FromPort *string
+
+	// defaultHost: the default host's own fields, written with the template (UpdateHost).
+	defaultHost *defaultHost
 }
 
 // EditsTemplate: the patch changes the listener's template.
@@ -444,6 +447,11 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 			// The default host is the template's: it changes with it (hosts.go).
 			if err := syncDefaultHost(ctx, q, row); err != nil {
 				return err
+			}
+			if p.defaultHost != nil {
+				if err := p.defaultHost.write(ctx, q, id); err != nil {
+					return err
+				}
 			}
 		}
 		next, err = q.GetInbound(ctx, id)

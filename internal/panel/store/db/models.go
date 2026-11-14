@@ -240,6 +240,12 @@ type InboundHost struct {
 	Sni         string
 	Host        string
 	Fingerprint string
+	Alpn        []string
+	IpVersion   string
+	Mux         bool
+	MuxProtocol string
+	MuxPadding  bool
+	Cdn         bool
 }
 
 type InboundReach struct {

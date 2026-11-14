@@ -62,13 +62,22 @@ type Inbound struct {
 
 // Host is one place clients reach an inbound at; an empty field (port 0) keeps what they get
 // without it: the node's address, the inbound's port, the usual TLS name, the server's HTTP
-// Host, the panel's fingerprint.
+// Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing. The host's
+// own fields (ALPN to CDN) are the default host's too, and no template holds them; the
+// panel saves them, and the build does not read them yet.
 type Host struct {
 	Address     string
 	Port        int
 	SNI         string
 	Host        string // HTTP Host of WebSocket and XHTTP
 	Fingerprint string // uTLS profile
+	ALPN        []string
+	IPVersion   string // ipv4, ipv6, ipv4-prefer, ipv6-prefer (mihomo's ip-version)
+	Mux         bool   // sing-mux
+	MuxProtocol string // smux, yamux, h2mux; "": the app's own
+	MuxPadding  bool
+	// CDN: a CDN in front shows its own certificate, so the node's is not pinned.
+	CDN bool
 }
 
 // GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.
