@@ -272,6 +272,17 @@ func TestHostChoices(t *testing.T) {
 			t.Fatalf("seed %s: %q after a host before it, %q before", seed, got[2], want)
 		}
 	}
+	// The address and the TLS name are picked apart: with one more of each, every pair comes.
+	pair := in
+	pair.Hosts = []model.Host{{ID: 7}, {ID: 8, Address: "p.example.com", Addresses: []string{"q.example.com"}, SNI: "p.example.com", SNIs: []string{"q.example.com"}}}
+	pairs := map[[2]string]bool{}
+	for i := range 100 {
+		ps := Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{pair}, Nodes: []model.Node{hostsNode}, Seed: "token-" + strconv.Itoa(i)})
+		pairs[[2]string{ps[1].Server, ps[1].TLS.SNI}] = true
+	}
+	if len(pairs) != 4 {
+		t.Fatalf("pairs of address and SNI: %v", pairs)
+	}
 	// A template that takes no TLS name of clients' any more leaves the saved ones out.
 	reality := in
 	reality.Config = "type: vless\nreality-config: {dest: www.microsoft.com:443, private-key: " + realityKey(t) + ", short-id: [ab], server-names: [www.microsoft.com]}\n"

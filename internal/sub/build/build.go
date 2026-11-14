@@ -1,8 +1,9 @@
 package build
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
-	"hash/fnv"
 	"strconv"
 	"strings"
 	"unicode"
@@ -168,9 +169,10 @@ func pick(seed, kind string, host int64, own string, more []string) string {
 	if seed == "" || len(more) == 0 {
 		return own
 	}
-	h := fnv.New64a()
-	fmt.Fprintf(h, "%s|%s|%d", seed, kind, host)
-	if i := h.Sum64() % uint64(len(more)+1); i > 0 {
+	// SHA-256, whose every bit is mixed: FNV's lowest one is only the parity of the bytes,
+	// so with two values each the address and the TLS name would always go together.
+	sum := sha256.Sum256([]byte(seed + "|" + kind + "|" + strconv.FormatInt(host, 10)))
+	if i := binary.BigEndian.Uint64(sum[:8]) % uint64(len(more)+1); i > 0 {
 		return more[i-1]
 	}
 	return own
