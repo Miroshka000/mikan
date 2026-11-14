@@ -12,6 +12,7 @@ import { period } from "../../../lib/format";
 import { ReissueRules, TimesPerPeriod } from "./reissue-rules";
 import { useSaveSettings } from "./shared";
 import { LimitPicker } from "../user/limit-picker";
+import { TITLE_VARS, unknownVars } from "../../../lib/title-vars";
 
 // Ports the installer opens in the firewall (443 and the HTTPS pool): a subscription
 // port among them needs nothing else on the server.
@@ -145,19 +146,6 @@ export function SubscriptionCard({ s }: { s: Schemas["SettingsView"] }) {
       </form>
     </section>
   );
-}
-
-// The variables the title and the announcement take (subs.titleValues fills them).
-const TITLE_VARS = ["brand", "name", "tariff", "date", "days", "used", "left", "total", "devices"] as const;
-
-// The {words} of a text that are no variable: they stay as text in the apps, so this only
-// warns (same case-sensitive match as the panel's substitution).
-function unknownVars(text: string): string[] {
-  const found = new Set<string>();
-  for (const m of text.matchAll(/\{([A-Za-z0-9_-]+)\}/g)) {
-    if (!(TITLE_VARS as readonly string[]).includes(m[1] ?? "")) found.add(m[0]);
-  }
-  return [...found];
 }
 
 // A subscription that cannot connect (its term or traffic over, turned off) gets one notice

@@ -133,6 +133,17 @@ func TestInboundHostsAPI(t *testing.T) {
 		!strings.Contains(body, "body.mux.protocol") || !strings.Contains(body, "host_mux_protocol") {
 		t.Fatalf("a bad mux protocol: %d %s", code, body)
 	}
+	// A host's name, with variables, is held to an inbound's rules.
+	for name, refusal := range map[string]string{"direct": "name_reserved", "NL, {days}": "name_bad_char"} {
+		if code, body := f.send(http.MethodPut, addedPath, `{"address": "", "port": 0, "sni": "", "host": "", "fingerprint": "", "name": "`+name+`"}`); code != http.StatusUnprocessableEntity ||
+			!strings.Contains(body, "body.name") || !strings.Contains(body, refusal) {
+			t.Fatalf("name %q: %d %s", name, code, body)
+		}
+	}
+	if code, body := f.send(http.MethodPut, addedPath, `{"address": "", "port": 0, "sni": "", "host": "", "fingerprint": "", "name": " NL · {left} "}`); code != http.StatusOK ||
+		!strings.Contains(body, `"name":"NL · {left}"`) {
+		t.Fatalf("a name: %d %s", code, body)
+	}
 
 	if code, body := f.send(http.MethodDelete, defPath, ""); code != http.StatusConflict || !strings.Contains(body, "default_host") {
 		t.Fatalf("deleting the default host: %d %s", code, body)
@@ -146,7 +157,7 @@ func TestInboundHostsAPI(t *testing.T) {
 	if code, _ := f.do(http.MethodGet, "/api/v1/inbounds/999/hosts", ""); code != http.StatusNotFound {
 		t.Fatalf("the hosts of no inbound: %d", code)
 	}
-	for action, want := range map[string]int{"inbound.host_add": 1, "inbound.host_update": 4, "inbound.host_delete": 1} {
+	for action, want := range map[string]int{"inbound.host_add": 1, "inbound.host_update": 5, "inbound.host_delete": 1} {
 		if got := f.audited(action); got != want {
 			t.Errorf("%s audited %d times, want %d", action, got, want)
 		}

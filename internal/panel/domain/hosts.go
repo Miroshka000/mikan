@@ -21,7 +21,7 @@ import (
 // (UpdateHost). Every other host is one more proxy of the inbound in the subscriptions.
 //
 // A host also has fields of its own that no template holds (ALPN, the IP version,
-// multiplexing, a CDN in front): the default host has them too, written only through the
+// multiplexing, a CDN in front, its name): the default host has them too, written only through the
 // hosts, and a write of the template leaves them as they are.
 
 var (
@@ -47,6 +47,9 @@ type Host struct {
 	// CDN: a CDN in front of the host shows clients its own certificate, so the node's
 	// self-signed one is not to be pinned for them.
 	CDN bool
+	// Name is the host's proxy name in subscriptions, with the variables of the profile
+	// title filled for each user; "": the inbound's, numbered after the default host's.
+	Name string
 }
 
 // The values of a host's own fields, as mihomo names them.
@@ -94,7 +97,7 @@ func (s *Inbounds) AddHost(ctx context.Context, id int64, h Host) (db.InboundHos
 			return err
 		}
 		row, err = q.AddInboundHost(ctx, db.AddInboundHostParams{InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name})
 		return err
 	})
 	return row, err
@@ -140,7 +143,7 @@ func (s *Inbounds) UpdateHost(ctx context.Context, id, hostID int64, h Host) (db
 			return err
 		}
 		row, err = q.UpdateInboundHost(ctx, db.UpdateInboundHostParams{ID: hostID, InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrUnknownHost
 		}
@@ -194,13 +197,14 @@ type defaultHost struct {
 
 func (d defaultHost) write(ctx context.Context, q *db.Queries, inboundID int64) error {
 	return q.SetInboundHostOptions(ctx, db.SetInboundHostOptionsParams{ID: d.id, InboundID: inboundID,
-		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN})
+		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name})
 }
 
 // trimmed is h as it is saved: each ALPN once, in the order given, and no protocol or
 // padding of a multiplexing that is off.
 func (h Host) trimmed() Host {
 	h.Address, h.SNI, h.Host, h.Fingerprint = strings.TrimSpace(h.Address), strings.TrimSpace(h.SNI), strings.TrimSpace(h.Host), strings.TrimSpace(h.Fingerprint)
+	h.Name = strings.TrimSpace(h.Name)
 	h.IPVersion, h.MuxProtocol = strings.TrimSpace(h.IPVersion), strings.TrimSpace(h.MuxProtocol)
 	alpn := []string{}
 	for _, a := range h.ALPN {

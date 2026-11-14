@@ -62,8 +62,8 @@ type Inbound struct {
 
 // Host is one place clients reach an inbound at; an empty field (port 0) keeps what they get
 // without it: the node's address, the inbound's port, the usual TLS name, the server's HTTP
-// Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing. The host's
-// own fields (ALPN to CDN) are the default host's too, and no template holds them.
+// Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing, the inbound's name. The host's
+// own fields (ALPN to Name) are the default host's too, and no template holds them.
 type Host struct {
 	Address     string
 	Port        int
@@ -77,6 +77,9 @@ type Host struct {
 	MuxPadding  bool
 	// CDN: a CDN in front shows its own certificate, so the node's is not pinned.
 	CDN bool
+	// Name is the proxy's name, the variables of the profile title in it ({days}, {left}…)
+	// filled for the user (build.Profile.Vars); "": the inbound's.
+	Name string
 }
 
 // GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.
@@ -132,7 +135,7 @@ func ValidName(s string) error {
 		return errors.New("name_blank")
 	case utf8.RuneCountInString(s) > 48:
 		return errors.New("name_too_long")
-	case strings.ContainsAny(s, ",\"'\\"):
+	case strings.ContainsAny(s, NameBadChars):
 		return errors.New("name_bad_char")
 	}
 	for _, r := range s {
@@ -140,12 +143,23 @@ func ValidName(s string) error {
 			return errors.New("name_bad_char")
 		}
 	}
-	for _, x := range reserved {
-		if strings.EqualFold(s, x) {
-			return errors.New("name_reserved")
-		}
+	if Reserved(s) {
+		return errors.New("name_reserved")
 	}
 	return nil
+}
+
+// NameBadChars are the characters no name has (ValidName).
+const NameBadChars = ",\"'\\"
+
+// Reserved says whether s is one of mihomo's built-in policies, in any case.
+func Reserved(s string) bool {
+	for _, x := range reserved {
+		if strings.EqualFold(s, x) {
+			return true
+		}
+	}
+	return false
 }
 
 // ErrNoProxies: nothing of the profile is left for the app, or for any app.

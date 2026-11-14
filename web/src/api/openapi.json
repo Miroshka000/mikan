@@ -3813,6 +3813,11 @@
             "$ref": "#/components/schemas/HostMux",
             "description": "Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding"
           },
+          "name": {
+            "description": "Имя в подписке; можно с переменными заголовка: «🇳🇱 NL · осталось {left}». Пусто — имя подключения, у доп. адресов с номером",
+            "maxLength": 48,
+            "type": "string"
+          },
           "port": {
             "description": "Порт для клиентов; 0 — порт подключения",
             "format": "int64",
@@ -4011,6 +4016,10 @@
             "$ref": "#/components/schemas/HostMux",
             "description": "Мультиплексирование соединений (sing-mux)"
           },
+          "name": {
+            "description": "Имя в подписке, с переменными заголовка ({days}, {left}…) для каждого пользователя; пусто — имя подключения",
+            "type": "string"
+          },
           "port": {
             "description": "Порт для клиентов; 0 — порт подключения",
             "format": "int64",
@@ -4032,7 +4041,8 @@
           "alpn",
           "ip_version",
           "mux",
-          "cdn"
+          "cdn",
+          "name"
         ],
         "type": "object"
       },

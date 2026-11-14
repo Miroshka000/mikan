@@ -550,16 +550,12 @@ func previewNotes(p profile.Profile, g submodel.GroupNames, m routing.Mode, t su
 // Preview is the built-in profile of a user given every inbound, as req sets it. Its keys
 // are placeholders.
 func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, error) {
-	prof, cfg, err := h.sample(ctx)
+	prof, cfg, err := h.sample(ctx, req.Groups)
 	if err != nil {
 		return Preview{}, err
 	}
 	prof.Routes = req.Routes
-	g := cfg.Groups
-	if req.Groups != nil {
-		g = *req.Groups
-	}
-	g = g.WithDefaults(cfg.Lang)
+	g := groupsOf(cfg, req.Groups)
 	if req.Rules != nil {
 		prof.Rules = routing.ServedRules(*req.Rules, g)
 	}
@@ -571,8 +567,18 @@ func (h *Handler) Preview(ctx context.Context, req PreviewRequest) (Preview, err
 	return Preview{Profile: body, Notes: previewNotes(prof, g, req.Mode, none)}, nil
 }
 
-// sample is the profile of a user given every inbound, with placeholder keys.
-func (h *Handler) sample(ctx context.Context) (profile.Profile, Config, error) {
+// groupsOf are the groups of a profile: over, when set, in place of the saved ones.
+func groupsOf(cfg Config, over *submodel.GroupNames) submodel.GroupNames {
+	g := cfg.Groups
+	if over != nil {
+		g = *over
+	}
+	return g.WithDefaults(cfg.Lang)
+}
+
+// sample is the profile of a user given every inbound, with placeholder keys; its proxies
+// keep off the names of groups (over, when set, in place of the saved ones).
+func (h *Handler) sample(ctx context.Context, groups *submodel.GroupNames) (profile.Profile, Config, error) {
 	cfg, err := h.cfg(ctx)
 	if err != nil {
 		return profile.Profile{}, cfg, err
@@ -586,7 +592,8 @@ func (h *Handler) sample(ctx context.Context) (profile.Profile, Config, error) {
 		return profile.Profile{}, cfg, err
 	}
 	keys := proto.Slot{Name: "preview", UUID: "00000000-0000-0000-0000-000000000000", Secret: "preview"}
-	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds, hosts), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint})
+	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds, hosts), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint,
+		Groups: groupsOf(cfg, groups)})
 	prof := cfg.Profile(ps)
 	// A current mihomo: the preview shows every list, and a template started from it keeps
 	// the ones a younger core reads (an app that does not name its core still gets none).

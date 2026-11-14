@@ -246,6 +246,7 @@ type InboundHost struct {
 	MuxProtocol string
 	MuxPadding  bool
 	Cdn         bool
+	Name        string
 }
 
 type InboundReach struct {

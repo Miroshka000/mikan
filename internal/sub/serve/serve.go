@@ -309,7 +309,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	// The values are worked out only when a title or an announcement can use them.
 	var vars map[string]string
 	if cfg.Title != "" || cfg.Announce != "" || cfg.InactiveServer && cfg.InactiveText != "" {
-		vars = Values(u, bound(cfg, count), cfg, h.now())
+		vars = Values(u, bound(cfg, count, cfg.Title, cfg.Announce), cfg, h.now())
 		if cfg.Announce != "" {
 			cfg.Announce = fillAppAnnounce(cfg.Announce, vars, ua)
 		}
@@ -351,7 +351,12 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	}
 	app := apps.DetectApp(ua)
 	ins = build.ForApp(ins, app, u.State.CanConnect())
-	proxies := build.Proxies(build.Profile{Keys: keys, Inbounds: ins, Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint,
+	// The names of hosts may have the variables too.
+	var names map[string]string
+	if texts := build.HostNames(ins); len(texts) > 0 {
+		names = Values(u, bound(cfg, count, texts...), cfg, h.now())
+	}
+	proxies := build.Proxies(build.Profile{Keys: keys, Inbounds: ins, Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint, Vars: names, Groups: cfg.Groups.WithDefaults(cfg.Lang),
 		Skip: func(in model.Inbound, err error) {
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
 		}})
@@ -429,14 +434,13 @@ func Announcement(ctx context.Context, sub Subscription, u User, cfg Config, now
 	if cfg.Announce == "" {
 		return ""
 	}
-	return FillAnnounce(cfg.Announce, Values(u, bound(cfg, func() (int64, error) { return sub.Bound(ctx) }), cfg, now))
+	return FillAnnounce(cfg.Announce, Values(u, bound(cfg, func() (int64, error) { return sub.Bound(ctx) }, cfg.Announce), cfg, now))
 }
 
-// bound is the count of the devices bound to the subscription for {devices}: -1 when the
-// title and the announcement do not use it or binding is off. count is the Subscription's
-// Bound.
-func bound(cfg Config, count func() (int64, error)) int64 {
-	if !cfg.Binding || !wantsDevices(cfg.Title, cfg.Announce) {
+// bound is the count of the devices bound to the subscription for {devices}: -1 when none
+// of texts uses it or binding is off. count is the Subscription's Bound.
+func bound(cfg Config, count func() (int64, error), texts ...string) int64 {
+	if !cfg.Binding || !wantsDevices(texts...) {
 		return -1
 	}
 	n, err := count()

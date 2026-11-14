@@ -9,6 +9,7 @@ import (
 	"mikan/internal/proto"
 	"mikan/internal/sub/apps"
 	"mikan/internal/sub/model"
+	"mikan/internal/textutil"
 )
 
 // Profile is what the proxies of one user are made of.
@@ -19,10 +20,26 @@ type Profile struct {
 	Nodes []model.Node
 	// Fingerprint is the panel's default uTLS profile (Input.Fingerprint).
 	Fingerprint string
+	// Vars are the user's values of the variables a host's name may have (serve.Values);
+	// nil leaves them as written.
+	Vars map[string]string
+	// Groups are the profile's groups, with their defaults: a proxy never takes the name of
+	// one, nor of PROXY. The groups of countries and routes give way to the proxies.
+	Groups model.GroupNames
 	// Skip, when set, hears of an inbound that is left out because it cannot be rendered
 	// (a port that is no number, a template that no longer parses): one broken inbound must
 	// not empty or fail the subscription of everyone.
 	Skip func(in model.Inbound, err error)
+}
+
+// group says whether name is one of p's groups, in any case, as the apps compare them.
+func (p Profile) group(name string) bool {
+	for _, g := range []string{p.Groups.Main, p.Groups.Auto, model.AliasGroup} {
+		if g != "" && strings.EqualFold(name, g) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p Profile) skip(in model.Inbound, err error) {
@@ -66,11 +83,19 @@ func Proxies(p Profile) []model.Proxy {
 				base = prefix + " " + base
 			}
 			for i, h := range hosts(in) {
-				// mihomo refuses a profile with two proxies of the same name: a second host
-				// of the inbound is "Name 2".
-				name := base
-				for i := 2; used[name]; i++ {
-					name = base + " " + strconv.Itoa(i)
+				// A host's own name is the admin's, as typed: no flag of the node.
+				own := base
+				if h.name != "" {
+					if s := fillName(h.name, p.Vars); s != "" {
+						own = s
+					}
+				}
+				// mihomo refuses a profile with two proxies of the same name, or a proxy named
+				// as a group: a second host of the inbound is "Name 2", a user's {name} that is
+				// the main group's "VPN 2".
+				name := own
+				for i := 2; used[name] || p.group(name); i++ {
+					name = own + " " + strconv.Itoa(i)
 				}
 				tpl := t
 				if i > 0 {
@@ -97,6 +122,7 @@ type host struct {
 	client  proto.ClientOverrides
 	own     bool // client is the whole of it, not over the template's mikan.client
 	options Options
+	name    string // its own, the variables not yet filled
 }
 
 // hosts are the places clients reach in at, one proxy each. The default host is the
@@ -109,13 +135,49 @@ func hosts(in model.Inbound) []host {
 	for i, h := range in.Hosts {
 		o := Options{ALPN: h.ALPN, IPVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.CDN}
 		if i == 0 {
-			out[0].options = o
+			out[0].options, out[0].name = o, h.Name
 			continue
 		}
-		out = append(out, host{own: true, options: o, client: proto.ClientOverrides{Server: h.Address, Port: h.Port,
+		out = append(out, host{own: true, options: o, name: h.Name, client: proto.ClientOverrides{Server: h.Address, Port: h.Port,
 			SNI: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint}})
 	}
 	return out
+}
+
+// HostNames are the names of the hosts of ins that have variables to fill ({…}).
+func HostNames(ins []model.Inbound) []string {
+	var out []string
+	for _, in := range ins {
+		for _, h := range in.Hosts {
+			if strings.Contains(h.Name, "{") {
+				out = append(out, h.Name)
+			}
+		}
+	}
+	return out
+}
+
+// NameMax bounds a host's name filled for a user: the admin's is at most 48 letters
+// (model.ValidName), the values may make it longer.
+const NameMax = 64
+
+// fillName is a host's name with the user's values in it: one line without the marks a name
+// may not have (model.ValidName), at most NameMax letters. "" when it is no name to give a
+// proxy, blank or one of mihomo's own policies: the inbound's is used.
+func fillName(name string, vars map[string]string) string {
+	s := shownName(strings.Map(func(r rune) rune {
+		if strings.ContainsRune(model.NameBadChars, r) {
+			return ' '
+		}
+		return r
+	}, textutil.Fill(name, vars, nil)))
+	if rs := []rune(s); len(rs) > NameMax {
+		s = strings.TrimSpace(string(rs[:NameMax]))
+	}
+	if s == "" || model.Reserved(s) {
+		return ""
+	}
+	return s
 }
 
 // NodePrefix is what precedes proxy names of a node when a subscription has several:

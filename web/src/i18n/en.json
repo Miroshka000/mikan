@@ -1936,8 +1936,10 @@
     "nestedTLSNote": "The TLS of the sites a client opens goes inside this protocol's own TLS (TLS in TLS): DPI can tell a proxy by the sizes of the first packets. Keep a protocol with Vision or AnyTLS next to it: they have no such pattern.",
     "hosts": {
       "title": "Addresses for clients",
+      "name": "Name in the subscription",
+      "nameHint": "Empty: the protocol's name (numbered on other addresses). Variables are filled for each client; an app may lose the chosen server when the name changes.",
       "sub": "Several places clients can reach this protocol at",
-      "note": "The default address is the one clients get now. Every other address is one more server in the subscription, named as the protocol with a number; a field left empty there is the node's, not the default address's. ALPN, the IP version and CDN reach every app, multiplexing the Clash apps and sing-box.",
+      "note": "The default address is the one clients get now. Every other address is one more server in the subscription, named as the protocol with a number or its own name; a field left empty there is the node's, not the default address's. ALPN, the IP version and CDN reach every app, multiplexing the Clash apps and sing-box.",
       "default": "Default:",
       "defaultHint": "The address, port and SNI change in \"Behind another server\" or \"Behind a CDN\" above, and with the fingerprint; the fields below are this address's own.",
       "nodeAddress": "node address",
