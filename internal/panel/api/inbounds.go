@@ -213,6 +213,8 @@ type HostView struct {
 	Name      string   `json:"name" doc:"Имя в подписке, с переменными заголовка ({days}, {left}…) для каждого пользователя; пусто — имя подключения"`
 	Addresses []string `json:"addresses" doc:"Ещё адреса: каждый клиент получает один из address и этих, всегда один и тот же"`
 	SNIs      []string `json:"snis" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же"`
+	States    []string `json:"states" enum:"active,limited,expired,disabled" doc:"Кому адрес выдаётся по статусу подписки (истекающая — активная); пусто — всем"`
+	Trial     string   `json:"trial" doc:"only — только пробным, never — всем, кроме пробных; пусто — всем"`
 }
 
 // HostMux is the multiplexing of a host's clients: sing-mux, over one connection of the
@@ -238,11 +240,13 @@ type HostInput struct {
 	Name        string   `json:"name,omitempty" maxLength:"48" doc:"Имя в подписке; можно с переменными заголовка: «🇳🇱 NL · осталось {left}». Пусто — имя подключения, у доп. адресов с номером"`
 	Addresses   []string `json:"addresses,omitempty" maxItems:"16" doc:"Ещё адреса для клиентов: каждый получает один из address и этих, всегда один и тот же (по токену подписки); пустой address среди них — адрес ноды"`
 	SNIs        []string `json:"snis,omitempty" maxItems:"16" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же; только где можно задать sni"`
+	States      []string `json:"states,omitempty" maxItems:"4" enum:"active,limited,expired,disabled" doc:"Выдавать адрес только подпискам в этих статусах (истекающая — активная); пусто или все — всем. Скрытый адрес по умолчанию тоже не выдаётся"`
+	Trial       string   `json:"trial,omitempty" maxLength:"8" doc:"only — только пробным (пришли с пробного и ничего не оплатили сверх него), never — всем, кроме пробных; пусто — всем"`
 }
 
 func (b HostInput) host() domain.Host {
 	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint,
-		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name, Addresses: b.Addresses, SNIs: b.SNIs}
+		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name, Addresses: b.Addresses, SNIs: b.SNIs, States: b.States, Trial: b.Trial}
 }
 
 type hostsOutput struct{ Body []HostView }
@@ -278,7 +282,7 @@ func viewHost(r db.InboundHost) HostView {
 		alpn = []string{}
 	}
 	return HostView{Addresses: strsOrEmpty(r.Addresses), SNIs: strsOrEmpty(r.Snis), ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint,
-		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Name: r.Name}
+		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Name: r.Name, States: strsOrEmpty(r.States), Trial: r.Trial}
 }
 
 func (h *handlers) listInboundHosts(ctx context.Context, in *userIDInput) (*hostsOutput, error) {

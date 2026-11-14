@@ -17,7 +17,7 @@ import { TITLE_VARS, unknownVars } from "../../../lib/title-vars";
 type Host = Schemas["HostView"];
 
 /** A host's own fields as its inputs hold them: those no template holds, the default host's too. */
-type OwnForm = { name: string; addresses: string; snis: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean };
+type OwnForm = { name: string; addresses: string; snis: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean; states: string[]; trial: string };
 
 /** A host as its inputs hold it; id 0 is one not saved yet. */
 type HostForm = OwnForm & { id: number; address: string; port: string; sni: string; host: string; fingerprint: string };
@@ -38,11 +38,16 @@ const formOf = (h: Host): HostForm => ({
   muxProtocol: h.mux.protocol,
   muxPadding: h.mux.padding,
   cdn: h.cdn,
+  states: h.states,
+  trial: h.trial,
 });
-const emptyForm: HostForm = { id: 0, address: "", port: "", sni: "", host: "", fingerprint: "", name: "", addresses: "", snis: "", alpn: [], ipVersion: "", mux: false, muxProtocol: "", muxPadding: false, cdn: false };
+const emptyForm: HostForm = { id: 0, address: "", port: "", sni: "", host: "", fingerprint: "", name: "", addresses: "", snis: "", alpn: [], ipVersion: "", mux: false, muxProtocol: "", muxPadding: false, cdn: false, states: [], trial: "" };
 
 const IP_VERSIONS = ["ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"] as const;
 const MUX_PROTOCOLS = ["smux", "yamux", "h2mux"];
+/** The states of the subscriptions a host may be shown to; an expiring one is active. */
+const HOST_STATES = ["active", "limited", "expired", "disabled"] as const;
+const HOST_TRIALS = ["only", "never"] as const;
 
 type OwnFieldsCan = { sni: boolean; alpn: boolean; alpnValues: string[]; mux: boolean; cdn: boolean };
 
@@ -64,7 +69,7 @@ function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
 const lines = (s: string) => s.split(/[\s,]+/).filter(Boolean);
 
 /** The own fields of a form as the API takes them. */
-function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "addresses" | "snis" | "alpn" | "ip_version" | "mux" | "cdn"> {
+function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "addresses" | "snis" | "alpn" | "ip_version" | "mux" | "cdn" | "states" | "trial"> {
   return {
     name: f.name.trim(),
     addresses: lines(f.addresses),
@@ -74,6 +79,8 @@ function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "nam
     ip_version: f.ipVersion,
     mux: can.mux && f.mux ? { enabled: true, protocol: f.muxProtocol, padding: f.muxPadding } : { enabled: false, protocol: "", padding: false },
     cdn: can.cdn && f.cdn,
+    states: HOST_STATES.filter((st) => f.states.includes(st)),
+    trial: f.trial,
   };
 }
 
@@ -262,6 +269,31 @@ function OwnFields({ uid, f, set, can, errors, inbound }: { uid: string; f: OwnF
       {can.cdn ? (
         <SwitchRow label={t("inbounds.hosts.cdn")} sub={errors.cdn ?? t("inbounds.hosts.cdnSub")} warn={!!errors.cdn} checked={f.cdn} onChange={(cdn) => set({ cdn })} />
       ) : null}
+      <Field label={t("inbounds.hosts.states")} hint={t("inbounds.hosts.statesHint")} error={errors.states}>
+        <div className="flex flex-wrap gap-4">
+          {HOST_STATES.map((st) => (
+            <label key={st} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="check shrink-0"
+                checked={f.states.includes(st)}
+                onChange={(e) => set({ states: e.target.checked ? [...f.states, st] : f.states.filter((x) => x !== st) })}
+              />
+              <span>{t(`states.${st}`)}</span>
+            </label>
+          ))}
+        </div>
+      </Field>
+      <Field label={t("inbounds.hosts.trial")} htmlFor={`${uid}-trial`} hint={t("inbounds.hosts.trialHint")} error={errors.trial}>
+        <Select id={`${uid}-trial`} className="input max-w-[320px]" value={f.trial} onChange={(e) => set({ trial: e.target.value })}>
+          <option value="">{t("inbounds.hosts.trials.all")}</option>
+          {HOST_TRIALS.map((v) => (
+            <option key={v} value={v}>
+              {t(`inbounds.hosts.trials.${v}`)}
+            </option>
+          ))}
+        </Select>
+      </Field>
     </>
   );
 }

@@ -3845,6 +3845,25 @@
             },
             "maxItems": 16,
             "type": "array"
+          },
+          "states": {
+            "description": "Выдавать адрес только подпискам в этих статусах (истекающая — активная); пусто или все — всем. Скрытый адрес по умолчанию тоже не выдаётся",
+            "items": {
+              "enum": [
+                "active",
+                "limited",
+                "expired",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "type": "array"
+          },
+          "trial": {
+            "description": "only — только пробным (пришли с пробного и ничего не оплатили сверх него), never — всем, кроме пробных; пусто — всем",
+            "maxLength": 8,
+            "type": "string"
           }
         },
         "required": [
@@ -4058,6 +4077,23 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "states": {
+            "description": "Кому адрес выдаётся по статусу подписки (истекающая — активная); пусто — всем",
+            "items": {
+              "enum": [
+                "active",
+                "limited",
+                "expired",
+                "disabled"
+              ],
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "trial": {
+            "description": "only — только пробным, never — всем, кроме пробных; пусто — всем",
+            "type": "string"
           }
         },
         "required": [
@@ -4074,7 +4110,9 @@
           "cdn",
           "name",
           "addresses",
-          "snis"
+          "snis",
+          "states",
+          "trial"
         ],
         "type": "object"
       },

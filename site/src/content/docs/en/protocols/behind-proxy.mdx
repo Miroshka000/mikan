@@ -28,6 +28,8 @@ An address may also have its own **name in the subscription**, up to 48 characte
 
 The **More addresses** and **More SNIs** fields (one per line, up to 16) give an address several options. Each client gets one of the address and that list, and the SNI the same way, apart from the address. The choice follows the subscription's token: a client keeps the same one at every update, and clients spread over the options about evenly. That way clients go over several domains of one CDN or several servers in front of the node. More SNIs is where the SNI is: on protocols with the node's certificate, not REALITY. The subscription preview shows the address itself, with no choice.
 
+The **Shown by status** and **Trial** fields decide who gets the address in the subscription. The statuses are active (expiring too), limit reached, expired and disabled; none or all: everyone. Trial: everyone, trial only, or everyone but the trial; a client on the trial came from the trial and paid for nothing beyond it (the admin lengthening it does not end it). That way the trial gets a server of its own, or expired clients an address with a renewal page. Inactive subscriptions get servers only when the notice in place of servers is off in the subscription settings. The default address can be hidden too: the client then gets the others alone, and a protocol with every address hidden is left out for it. The subscription preview shows every address.
+
 The API is the same: `GET`, `POST /api/v1/inbounds/{id}/hosts` and `PUT`, `DELETE /api/v1/inbounds/{id}/hosts/{host_id}`. Like the address for clients, addresses are changed only in the admin's session, not with an API key.
 
 ## nginx stream example

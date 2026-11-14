@@ -21,8 +21,8 @@ import (
 // (UpdateHost). Every other host is one more proxy of the inbound in the subscriptions.
 //
 // A host also has fields of its own that no template holds (ALPN, the IP version,
-// multiplexing, a CDN in front, its name, more addresses and TLS names): the default host has them too, written only through the
-// hosts, and a write of the template leaves them as they are.
+// multiplexing, a CDN in front, its name, more addresses and TLS names, who it is shown to): the default host has them too,
+// written only through the hosts, and a write of the template leaves them as they are.
 
 var (
 	ErrUnknownHost = errors.New("host_not_found")
@@ -54,6 +54,11 @@ type Host struct {
 	// own and these, always the same one (by its token). At most HostChoicesMax each.
 	Addresses []string
 	SNIs      []string
+	// States are the states of the subscriptions the host is shown to, of HostStates (an
+	// expiring one is active); none: every one. Trial is of HostTrials: only to the trial's
+	// subscriptions, never to them, or "" to both. A user not shown it does not get it.
+	States []string
+	Trial  string
 }
 
 // HostChoicesMax bounds a host's more addresses and TLS names each.
@@ -64,7 +69,32 @@ var (
 	HostALPN         = []string{"h3", "h2", "http/1.1"}
 	HostIPVersions   = []string{"ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"}
 	HostMuxProtocols = []string{"smux", "yamux", "h2mux"}
+	HostStates       = []string{StateActive, StateLimited, StateExpired, StateDisabled}
+	HostTrials       = []string{"only", "never"}
 )
+
+// HostShows says whether a host of states and trial goes to a user in state (State's; an
+// expiring user is an active one) on the trial or not.
+func HostShows(states []string, trialOf string, state string, trial bool) bool {
+	if state == StateExpiring {
+		state = StateActive
+	}
+	if len(states) > 0 && !slices.Contains(states, state) {
+		return false
+	}
+	return trialOf == "" || trialOf == "only" && trial || trialOf == "never" && !trial
+}
+
+// OnTrial says whether u is on the trial: it came of the trial (users.source) and paid for
+// nothing besides it. A trial the admin lengthened is still one; a user who bought a plan or
+// more traffic since is not.
+func OnTrial(ctx context.Context, q *db.Queries, u db.User) (bool, error) {
+	if u.Source != UserFromTrial {
+		return false, nil
+	}
+	paid, err := q.UserPaidBeyondTrial(ctx, u.ID)
+	return !paid, err
+}
 
 // createInbound adds an inbound with its default host.
 func createInbound(ctx context.Context, q *db.Queries, p db.CreateInboundParams) (db.Inbound, error) {
@@ -104,7 +134,7 @@ func (s *Inbounds) AddHost(ctx context.Context, id int64, h Host) (db.InboundHos
 			return err
 		}
 		row, err = q.AddInboundHost(ctx, db.AddInboundHostParams{InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial})
 		return err
 	})
 	return row, err
@@ -150,7 +180,7 @@ func (s *Inbounds) UpdateHost(ctx context.Context, id, hostID int64, h Host) (db
 			return err
 		}
 		row, err = q.UpdateInboundHost(ctx, db.UpdateInboundHostParams{ID: hostID, InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrUnknownHost
 		}
@@ -204,7 +234,7 @@ type defaultHost struct {
 
 func (d defaultHost) write(ctx context.Context, q *db.Queries, inboundID int64) error {
 	return q.SetInboundHostOptions(ctx, db.SetInboundHostOptionsParams{ID: d.id, InboundID: inboundID,
-		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name, Addresses: d.h.Addresses, Snis: d.h.SNIs})
+		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name, Addresses: d.h.Addresses, Snis: d.h.SNIs, States: d.h.States, Trial: d.h.Trial})
 }
 
 // trimmed is h as it is saved: each ALPN once, in the order given, and no protocol or
@@ -214,6 +244,23 @@ func (h Host) trimmed() Host {
 	h.Name = strings.TrimSpace(h.Name)
 	h.Addresses, h.SNIs = choices(h.Addresses, h.Address), choices(h.SNIs, h.SNI)
 	h.IPVersion, h.MuxProtocol = strings.TrimSpace(h.IPVersion), strings.TrimSpace(h.MuxProtocol)
+	// The states in HostStates' order, each once; an unknown one stays for hostOptions to refuse.
+	states := []string{}
+	for _, st := range HostStates {
+		if slices.Contains(h.States, st) {
+			states = append(states, st)
+		}
+	}
+	for _, st := range h.States {
+		if !slices.Contains(states, st) {
+			states = append(states, st)
+		}
+	}
+	// Every state is no state at all: the host goes to everyone.
+	if len(states) == len(HostStates) && !slices.ContainsFunc(states, func(st string) bool { return !slices.Contains(HostStates, st) }) {
+		states = []string{}
+	}
+	h.States, h.Trial = states, strings.TrimSpace(h.Trial)
 	alpn := []string{}
 	for _, a := range h.ALPN {
 		if a = strings.ToLower(strings.TrimSpace(a)); a != "" && !slices.Contains(alpn, a) {
@@ -323,6 +370,14 @@ func hostOptions(t proto.Template, h Host) error {
 		if err := proto.SetClientEndpoint(t.Clone(), "", 0, n, ""); err != nil {
 			return refuse("snis", "config_client_sni")
 		}
+	}
+	for _, st := range h.States {
+		if !slices.Contains(HostStates, st) {
+			return refuse("states", "host_state")
+		}
+	}
+	if h.Trial != "" && !slices.Contains(HostTrials, h.Trial) {
+		return refuse("trial", "host_trial")
 	}
 	for _, a := range h.ALPN {
 		if !slices.Contains(HostALPN, a) {

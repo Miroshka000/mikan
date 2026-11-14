@@ -4842,6 +4842,10 @@ export interface components {
             sni: string;
             /** @description Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же; только где можно задать sni */
             snis?: string[];
+            /** @description Выдавать адрес только подпискам в этих статусах (истекающая — активная); пусто или все — всем. Скрытый адрес по умолчанию тоже не выдаётся */
+            states?: ("active" | "limited" | "expired" | "disabled")[];
+            /** @description only — только пробным (пришли с пробного и ничего не оплатили сверх него), never — всем, кроме пробных; пусто — всем */
+            trial?: string;
         };
         HostItem: {
             detail: string;
@@ -4914,6 +4918,10 @@ export interface components {
             sni: string;
             /** @description Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же */
             snis: string[];
+            /** @description Кому адрес выдаётся по статусу подписки (истекающая — активная); пусто — всем */
+            states: ("active" | "limited" | "expired" | "disabled")[];
+            /** @description only — только пробным, never — всем, кроме пробных; пусто — всем */
+            trial: string;
         };
         ImportRunInputBody: {
             /** @enum {string} */

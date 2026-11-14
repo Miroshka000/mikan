@@ -300,3 +300,33 @@ func TestHostChoices(t *testing.T) {
 		}
 	}
 }
+
+// A host the user is not shown is left out, the default one too: the next one takes the
+// inbound's name, and an inbound whose hosts are all hidden gives nothing. Its name's
+// variables are not asked for.
+func TestHiddenHosts(t *testing.T) {
+	ins := []model.Inbound{
+		{ID: 1, Node: 1, Name: "Fast", Named: true, Port: 443, PortSpec: "443", Config: tuicBehindCDN(), Hosts: []model.Host{
+			{ID: 10, Address: "cdn.example.com", Hidden: true, Name: "{days}"},
+			{ID: 11, Address: "direct.example.com"},
+			{ID: 12, Address: "trial.example.com", Hidden: true},
+			{ID: 13, Address: "last.example.com"},
+		}},
+		{ID: 2, Node: 1, Name: "Slow", Named: true, Port: 8443, PortSpec: "8443", Config: tuicBehindCDN(), Hosts: []model.Host{
+			{ID: 20, Hidden: true},
+			{ID: 21, Address: "x.example.com", Hidden: true},
+		}},
+	}
+	type seen struct{ Name, Server string }
+	var got []seen
+	for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: ins, Nodes: []model.Node{hostsNode}}) {
+		got = append(got, seen{p.Name, p.Server})
+	}
+	want := []seen{{"Fast", "direct.example.com"}, {"Fast 2", "last.example.com"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("proxies:\n%+v\nwant\n%+v", got, want)
+	}
+	if got := HostNames(ins); len(got) != 0 {
+		t.Fatalf("names of hidden hosts asked for: %q", got)
+	}
+}

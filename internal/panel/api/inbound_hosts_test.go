@@ -142,6 +142,20 @@ func TestInboundHostsAPI(t *testing.T) {
 		!strings.Contains(body, "body.addresses") {
 		t.Fatalf("a bad more address: %d %s", code, body)
 	}
+	// Who a host is shown to: the states in their order, each once; a state or trial unknown
+	// is refused by the field.
+	if code, body := f.send(http.MethodPut, addedPath, `{"address": "", "port": 0, "sni": "", "host": "", "fingerprint": "", "states": ["expired", "active", "expired"], "trial": "only"}`); code != http.StatusOK ||
+		!strings.Contains(body, `"states":["active","expired"]`) || !strings.Contains(body, `"trial":"only"`) {
+		t.Fatalf("states: %d %s", code, body)
+	}
+	if code, body := f.send(http.MethodPut, addedPath, `{"address": "", "port": 0, "sni": "", "host": "", "fingerprint": "", "states": ["banned"]}`); code != http.StatusUnprocessableEntity ||
+		!strings.Contains(body, "body.states") {
+		t.Fatalf("a bad state: %d %s", code, body)
+	}
+	if code, body := f.send(http.MethodPut, addedPath, `{"address": "", "port": 0, "sni": "", "host": "", "fingerprint": "", "trial": "maybe"}`); code != http.StatusUnprocessableEntity ||
+		!strings.Contains(body, "body.trial") || !strings.Contains(body, "host_trial") {
+		t.Fatalf("a bad trial: %d %s", code, body)
+	}
 	// A host's name, with variables, is held to an inbound's rules.
 	for name, refusal := range map[string]string{"direct": "name_reserved", "NL, {days}": "name_bad_char"} {
 		if code, body := f.send(http.MethodPut, addedPath, `{"address": "", "port": 0, "sni": "", "host": "", "fingerprint": "", "name": "`+name+`"}`); code != http.StatusUnprocessableEntity ||
@@ -166,7 +180,7 @@ func TestInboundHostsAPI(t *testing.T) {
 	if code, _ := f.do(http.MethodGet, "/api/v1/inbounds/999/hosts", ""); code != http.StatusNotFound {
 		t.Fatalf("the hosts of no inbound: %d", code)
 	}
-	for action, want := range map[string]int{"inbound.host_add": 1, "inbound.host_update": 6, "inbound.host_delete": 1} {
+	for action, want := range map[string]int{"inbound.host_add": 1, "inbound.host_update": 7, "inbound.host_delete": 1} {
 		if got := f.audited(action); got != want {
 			t.Errorf("%s audited %d times, want %d", action, got, want)
 		}

@@ -249,6 +249,8 @@ type InboundHost struct {
 	Name        string
 	Addresses   []string
 	Snis        []string
+	States      []string
+	Trial       string
 }
 
 type InboundReach struct {
