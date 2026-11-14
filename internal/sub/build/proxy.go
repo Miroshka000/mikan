@@ -4,6 +4,7 @@ package build
 
 import (
 	"net"
+	"slices"
 	"strconv"
 
 	"mikan/internal/proto"
@@ -34,6 +35,23 @@ type Input struct {
 	// OwnClient: Client is the whole of what the apps get, as a host other than the
 	// default one is; an empty field is what they get without it, not the template's.
 	OwnClient bool
+	// Options are what an address for clients adds to how the apps connect; the zero
+	// value adds nothing.
+	Options Options
+}
+
+// Options are an address for clients' own fields, which no template holds. The panel
+// checks them against the template when they are saved; one the template no longer takes
+// is left out here, never a broken proxy.
+type Options struct {
+	ALPN        []string // h3, h2, http/1.1, in the order the app offers them
+	IPVersion   string   // ipv4, ipv6, ipv4-prefer, ipv6-prefer
+	Mux         bool     // sing-mux over the connection
+	MuxProtocol string   // smux, yamux, h2mux; "": the app's own
+	MuxPadding  bool
+	// CDN: a CDN in front shows the apps its own certificate, so the node's self-signed
+	// one is not pinned.
+	CDN bool
 }
 
 // Proxy is the client side of the template t for in: what the apps of the user dial.
@@ -55,6 +73,9 @@ func Proxy(t proto.Template, in Input) (model.Proxy, error) {
 	if in.Client.Port > 0 {
 		p.Port = in.Client.Port
 	}
+	if in.Options.CDN {
+		in.PinSHA256 = ""
+	}
 	if err := security(&p, t, ext, in); err != nil {
 		return model.Proxy{}, err
 	}
@@ -62,7 +83,59 @@ func Proxy(t proto.Template, in Input) (model.Proxy, error) {
 	if err := keys(&p, t, ext, in); err != nil {
 		return model.Proxy{}, err
 	}
+	options(&p, in.Options)
 	return p, nil
+}
+
+// options puts an address's own fields on p, those p can carry.
+func options(p *model.Proxy, o Options) {
+	p.IPVersion = o.IPVersion
+	if alpn := hostALPN(*p, o.ALPN); alpn != nil {
+		p.ALPN = alpn
+	}
+	// sing-mux rides one TCP stream; XHTTP multiplexes its own requests, and Vision's
+	// flow reads the bare TLS stream.
+	if o.Mux && p.Smux == nil && p.Flow == "" && (p.Transport == nil || p.Transport.Network != "xhttp") {
+		switch p.Type {
+		case "vless", "trojan", "shadowsocks":
+			p.Smux = &model.Smux{Protocol: o.MuxProtocol, Padding: o.MuxPadding}
+		}
+	}
+}
+
+// hostALPN is the ALPN of an address that p's node answers, nil for none: over QUIC of
+// the listener's own (h3 when it names none), over VLESS, Trojan and AnyTLS on the node's
+// certificate h2 and HTTP/1.1, the one its WebSocket or gRPC runs on kept.
+func hostALPN(p model.Proxy, want []string) []string {
+	if len(want) == 0 {
+		return nil
+	}
+	var allowed []string
+	switch {
+	case p.Type == "hysteria2" || p.Type == "tuic" || p.Type == "shadowquic":
+		allowed = p.ALPN
+		if len(allowed) == 0 {
+			allowed = []string{"h3"}
+		}
+	case (p.Type == "vless" || p.Type == "trojan" || p.Type == "anytls") && p.TLS != nil && p.TLS.Reality == nil:
+		// TrustTunnel picks its HTTP version itself.
+		allowed = []string{"h2", "http/1.1"}
+	default:
+		return nil // REALITY speaks the target site's TLS; no TLS, no ALPN
+	}
+	var out []string
+	for _, a := range want {
+		if slices.Contains(allowed, a) && !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	if p.Transport != nil {
+		need := map[string]string{"ws": "http/1.1", "grpc": "h2"}[p.Transport.Network]
+		if need != "" && !slices.Contains(out, need) {
+			return nil
+		}
+	}
+	return out
 }
 
 // overrides is c with the empty fields taken from the template's own; a fingerprint of the

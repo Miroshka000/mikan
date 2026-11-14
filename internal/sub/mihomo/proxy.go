@@ -106,6 +106,9 @@ func Proxy(p model.Proxy) map[string]any {
 	if p.Smux != nil {
 		y["smux"] = smux(p.Smux)
 	}
+	if p.IPVersion != "" {
+		y["ip-version"] = p.IPVersion
+	}
 	// Hysteria2 and TUIC carry UDP by themselves: mihomo takes no switch for them.
 	if p.Type != "hysteria2" && p.Type != "tuic" {
 		y["udp"] = p.UDP
@@ -157,6 +160,9 @@ func tls(y map[string]any, p model.Proxy) {
 	switch p.Type {
 	case "vless", "trojan", "anytls": // the others are TLS by themselves
 		y["tls"] = true
+		if len(p.ALPN) > 0 {
+			y["alpn"] = p.ALPN // an address for clients' own
+		}
 	}
 	if t.Fingerprint != "" {
 		y["client-fingerprint"] = t.Fingerprint

@@ -203,6 +203,9 @@ func config(pl plan, sets *ruleSets) map[string]any {
 		}
 	}
 	dns, resolver := dnsOf(pl.dns, tags, sets, via)
+	for _, o := range outbounds {
+		resolveWith([]any{o}, resolver)
+	}
 	all := append(append([]map[string]any{}, gs.outbounds...), outbounds...)
 	all = append(all, map[string]any{"type": "direct", "tag": "direct"})
 	route := map[string]any{

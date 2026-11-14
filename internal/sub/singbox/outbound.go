@@ -107,6 +107,11 @@ func singboxOutbound(p model.Proxy) (map[string]any, bool) {
 	if !p.UDP && p.Type != "tuic" && p.Type != "hysteria2" {
 		o["network"] = "tcp"
 	}
+	if s := ipStrategy[p.IPVersion]; s != "" {
+		// sing-box takes the strategy with the DNS server that resolves the address: the
+		// config's default one, which resolveWith names once it is known.
+		o["domain_resolver"] = map[string]any{"strategy": s}
+	}
 	return o, true
 }
 
@@ -292,4 +297,25 @@ func str(v any) string {
 		return ""
 	}
 	return fmt.Sprint(v)
+}
+
+// ipStrategy is sing-box's domain strategy of a dial for mihomo's ip-version.
+var ipStrategy = map[string]string{"ipv4": "ipv4_only", "ipv6": "ipv6_only", "ipv4-prefer": "prefer_ipv4", "ipv6-prefer": "prefer_ipv6"}
+
+// resolveWith names server, the config's default DNS server, in the domain_resolver of the
+// outbounds that set an IP version; sing-box refuses one without a server. With no server
+// the strategy is left out: the address resolves as the config's others do.
+func resolveWith(outbounds []any, server string) {
+	for _, x := range outbounds {
+		o, _ := x.(map[string]any)
+		r, ok := o["domain_resolver"].(map[string]any)
+		if !ok || r["server"] != nil {
+			continue
+		}
+		if server == "" {
+			delete(o, "domain_resolver")
+			continue
+		}
+		r["server"] = server
+	}
 }

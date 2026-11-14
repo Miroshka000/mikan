@@ -246,7 +246,8 @@ func checkHost(config string, h Host) error {
 // HTTP/1.1.
 func HostALPNOf(t proto.Template) []string {
 	if t.Network() != "udp" {
-		if !t.NodeCert() {
+		// TrustTunnel picks its HTTP version itself.
+		if !t.NodeCert() || t.Type() == "trusttunnel" {
 			return []string{}
 		}
 		return []string{"h2", "http/1.1"}
@@ -290,7 +291,7 @@ func hostOptions(t proto.Template, h Host) error {
 	// ALPN is a TLS extension the node answers: the node certificate's protocols and those
 	// on QUIC (Hysteria2, TUIC, ShadowQUIC) have it. A REALITY client speaks the target
 	// site's TLS, and protocols with no TLS have none to offer it in.
-	if len(h.ALPN) > 0 && !t.NodeCert() && t.Network() != "udp" {
+	if len(h.ALPN) > 0 && len(HostALPNOf(t)) == 0 {
 		return refuse("alpn", "host_alpn_no_tls")
 	}
 	// The node answers only the ALPN its listener has: over QUIC the template's (h3 when
