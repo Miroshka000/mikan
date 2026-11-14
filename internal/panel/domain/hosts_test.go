@@ -203,21 +203,25 @@ func TestHostOwnFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := s.AddHost(ctx, ws.ID, Host{Address: "edge.example.com", ALPN: []string{" H2 ", "h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true, Name: " Edge · {days} "})
+	h, err := s.AddHost(ctx, ws.ID, Host{Address: "edge.example.com", ALPN: []string{" H2 ", "h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true, Name: " Edge · {days} ",
+		States: []string{StateExpired, StateActive, StateExpired}, Trial: "only"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(h.Alpn, ",") != "h2,http/1.1" || h.IpVersion != "ipv4-prefer" || !h.Mux || h.MuxProtocol != "smux" || !h.MuxPadding || !h.Cdn || h.Name != "Edge · {days}" {
+	// The states in their own order, each once.
+	if strings.Join(h.Alpn, ",") != "h2,http/1.1" || h.IpVersion != "ipv4-prefer" || !h.Mux || h.MuxProtocol != "smux" || !h.MuxPadding || !h.Cdn || h.Name != "Edge · {days}" ||
+		strings.Join(h.States, ",") != "active,expired" || h.Trial != "only" {
 		t.Fatalf("added: %+v", h)
 	}
 	// A multiplexing that is off keeps no protocol or padding; no ALPN is an empty list.
 	// More addresses and names are saved trimmed, each once, without the host's own.
 	h, err = s.UpdateHost(ctx, ws.ID, h.ID, Host{Address: "edge.example.com", Addresses: []string{" b.example.com ", "", "B.example.com", "Edge.example.com", "c.example.com"},
-		SNI: "s.example.com", SNIs: []string{"t.example.com"}})
+		SNI: "s.example.com", SNIs: []string{"t.example.com"}, States: []string{StateDisabled, StateExpired, StateLimited, StateActive}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(h.Addresses, ",") != "b.example.com,c.example.com" || strings.Join(h.Snis, ",") != "t.example.com" {
+	// Every state is none: the host goes to everyone.
+	if strings.Join(h.Addresses, ",") != "b.example.com,c.example.com" || strings.Join(h.Snis, ",") != "t.example.com" || h.States == nil || len(h.States) != 0 || h.Trial != "" {
 		t.Fatalf("choices: %+v", h)
 	}
 	h, err = s.UpdateHost(ctx, ws.ID, h.ID, Host{Address: "edge.example.com", MuxProtocol: "yamux", MuxPadding: true})
@@ -266,6 +270,8 @@ func TestHostOwnFields(t *testing.T) {
 		{reality, Host{SNIs: []string{"www.bing.com"}}, "snis", "config_client_sni"}, // the target's name
 		{ws, Host{SNIs: []string{"a..b"}}, "snis", "config_client_sni"},
 		{ws, Host{Addresses: manyAddresses(HostChoicesMax + 1)}, "addresses", "host_choices_long"},
+		{ws, Host{States: []string{StateActive, StateExpiring}}, "states", "host_state"}, // an expiring one is active
+		{ws, Host{Trial: "maybe"}, "trial", "host_trial"},
 	} {
 		if _, err := s.AddHost(ctx, c.in.ID, c.h); !errors.As(err, &edit) || edit.Field != c.field || edit.Err.Code != c.code {
 			t.Errorf("%s %+v: %v, want %s %s", c.in.Preset, c.h, err, c.field, c.code)
@@ -292,11 +298,13 @@ func TestHostOwnFields(t *testing.T) {
 			t.Fatal(err)
 		}
 		d := hosts[0]
-		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn || d.Name != "Main {left}" || strings.Join(d.Addresses, ",") != "front2.example.com" {
+		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn || d.Name != "Main {left}" || strings.Join(d.Addresses, ",") != "front2.example.com" ||
+			strings.Join(d.States, ",") != "limited" || d.Trial != "never" {
 			t.Fatalf("%s: the default host %+v", when, d)
 		}
 	}
-	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true, Name: "Main {left}", Addresses: []string{"front2.example.com"}}); err != nil {
+	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true, Name: "Main {left}", Addresses: []string{"front2.example.com"},
+		States: []string{StateLimited}, Trial: "never"}); err != nil {
 		t.Fatal(err)
 	}
 	own("the hosts")
@@ -337,7 +345,8 @@ func TestHostOwnFields(t *testing.T) {
 	if err != nil || len(ch) != 2 {
 		t.Fatalf("the copy's hosts: %+v %v", ch, err)
 	}
-	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn || ch[0].Name != "Main {left}" || strings.Join(ch[0].Addresses, ",") != "front2.example.com" {
+	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn || ch[0].Name != "Main {left}" || strings.Join(ch[0].Addresses, ",") != "front2.example.com" ||
+		strings.Join(ch[0].States, ",") != "limited" || ch[0].Trial != "never" {
 		t.Fatalf("the copy's default host: %+v", ch[0])
 	}
 }
@@ -369,4 +378,69 @@ func manyAddresses(n int) []string {
 		out[i] = "a" + strconv.Itoa(i) + ".example.com"
 	}
 	return out
+}
+
+// A host goes to the states it names (an expiring user is an active one) and to the trial's
+// users or the others as it says.
+func TestHostShows(t *testing.T) {
+	for _, c := range []struct {
+		states      []string
+		trialOf     string
+		state       string
+		trial, want bool
+	}{
+		{nil, "", StateDisabled, true, true},
+		{[]string{StateActive}, "", StateExpiring, false, true},
+		{[]string{StateActive}, "", StateExpired, false, false},
+		{[]string{StateExpired, StateLimited}, "", StateLimited, false, true},
+		{nil, "only", StateActive, true, true},
+		{nil, "only", StateActive, false, false},
+		{nil, "never", StateActive, true, false},
+		{nil, "never", StateActive, false, true},
+		{[]string{StateExpired}, "only", StateExpired, true, true},
+		{[]string{StateExpired}, "only", StateActive, true, false},
+	} {
+		if got := HostShows(c.states, c.trialOf, c.state, c.trial); got != c.want {
+			t.Errorf("%v %q to %s (trial %v): %v", c.states, c.trialOf, c.state, c.trial, got)
+		}
+	}
+}
+
+// On the trial is a user who came of it and paid for nothing besides it: the trial's own
+// payment does not count, a purchase since does, a refunded one too.
+func TestOnTrial(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	st, users, _ := setup(t, &now)
+	ctx := context.Background()
+	tariffs, _ := st.Q.ListTariffs(ctx)
+	mk := func(name, source string) db.User {
+		t.Helper()
+		u, err := users.Create(ctx, CreateInput{Name: name, TariffID: tariffs[1].ID, Source: source})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	pay := func(u db.User, kind, status string) {
+		t.Helper()
+		if _, err := st.DB.ExecContext(ctx, `INSERT INTO payments (provider, payload, tg_id, kind, user_id, tariff_id, tariff_name, amount, currency, status, created_at)
+			VALUES ('stars', $1, 555, $2, $3, $4, 'Standard', 100, 'XTR', $5, $6)`, "p-"+u.Name+"-"+kind+"-"+status, kind, u.ID, tariffs[1].ID, status, now.Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	free, bought, paidTrial, refunded, pending, admin := mk("free", UserFromTrial), mk("bought", UserFromTrial), mk("paid trial", UserFromTrial),
+		mk("refunded", UserFromTrial), mk("pending", UserFromTrial), mk("admin", UserFromAdmin)
+	pay(bought, "renew", "applied")
+	pay(paidTrial, "trial", "applied")
+	pay(refunded, "package", "refunded")
+	pay(pending, "renew", "pending")
+	for _, c := range []struct {
+		u    db.User
+		want bool
+	}{{free, true}, {bought, false}, {paidTrial, true}, {refunded, false}, {pending, true}, {admin, false}} {
+		got, err := OnTrial(ctx, st.Q, c.u)
+		if err != nil || got != c.want {
+			t.Errorf("%s: %v %v, want %v", c.u.Name, got, err, c.want)
+		}
+	}
 }

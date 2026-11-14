@@ -119,7 +119,41 @@ func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error)
 	if err != nil {
 		return nil, err
 	}
-	return inbounds(r.inbounds, hosts), nil
+	hidden, err := s.hidden(ctx, hosts, r.grants)
+	if err != nil {
+		return nil, err
+	}
+	out := inbounds(r.inbounds, hosts)
+	for i := range out {
+		for j := range out[i].Hosts {
+			out[i].Hosts[j].Hidden = hidden[out[i].Hosts[j].ID]
+		}
+	}
+	return out, nil
+}
+
+// hidden are the ids of the hosts the user is not shown (domain.HostShows), by the state of
+// the subscription, whose packages have grants left. Whether the user is on the trial is
+// read only when a host asks it.
+func (s *subscription) hidden(ctx context.Context, hosts map[int64][]db.InboundHost, grants domain.GrantsLeft) (map[int64]bool, error) {
+	state := domain.State(s.u, grants.Main(s.u.ID), s.h.now())
+	var trial *bool
+	out := map[int64]bool{}
+	for _, list := range hosts {
+		for _, h := range list {
+			if h.Trial != "" && trial == nil {
+				t, err := domain.OnTrial(ctx, s.h.st.Q, s.u)
+				if err != nil {
+					return nil, err
+				}
+				trial = &t
+			}
+			if !domain.HostShows(h.States, h.Trial, state, trial != nil && *trial) {
+				out[h.ID] = true
+			}
+		}
+	}
+	return out, nil
 }
 
 // Fetched: the block detector trusts a device only once it took a profile with an

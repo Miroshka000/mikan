@@ -85,6 +85,9 @@ type Host struct {
 	// and these, the same one at every update (build.Profile.Seed).
 	Addresses []string
 	SNIs      []string
+	// Hidden: the host is not for this user (the panel shows it to some states of the
+	// subscriptions, or to the trial's or the others' alone); the profile leaves it out.
+	Hidden bool
 }
 
 // GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.

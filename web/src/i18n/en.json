@@ -899,7 +899,9 @@
       "invalid_passkey": "The passkey was not accepted",
       "passkey_limit": "There are too many passkeys already: delete the ones you do not use",
       "passkey_exists": "This passkey is added already",
-      "default_host": "The default address goes only with its protocol"
+      "default_host": "The default address goes only with its protocol",
+      "host_state": "Status: active, limit reached, expired or disabled",
+      "host_trial": "Trial: trial only or everyone but the trial"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to mikan; otherwise free the port",
@@ -1972,7 +1974,16 @@
       "muxPadding": "Padding",
       "muxPaddingSub": "Pad frames with random data",
       "cdn": "Through a CDN with its own certificate",
-      "cdnSub": "The apps see the CDN's certificate, so the node's self-signed one is not pinned for them"
+      "cdnSub": "The apps see the CDN's certificate, so the node's self-signed one is not pinned for them",
+      "states": "Shown by status",
+      "statesHint": "None or all: to everyone. An expiring subscription counts as active. Expired and other inactive ones get the address only when the notice in place of servers is off in the subscription settings.",
+      "trial": "Trial",
+      "trialHint": "On the trial: came from the trial and paid for nothing beyond it.",
+      "trials": {
+        "all": "Everyone",
+        "only": "Trial only",
+        "never": "Everyone but the trial"
+      }
     }
   },
   "settings": {

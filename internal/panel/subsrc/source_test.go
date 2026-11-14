@@ -304,3 +304,67 @@ func TestInboundsCarryTheirHosts(t *testing.T) {
 		}
 	}
 }
+
+// A host the user is not shown comes hidden: by the subscription's state, an expiring one an
+// active one, and by the trial, which is asked only of a host that names it.
+func TestInboundsHideHosts(t *testing.T) {
+	e := newSourceEnv(t)
+	n := e.node("a", true)
+	in := e.inbound(n, "a1", true)
+	if err := e.st.Q.SetDefaultInboundHost(e.ctx, db.SetDefaultInboundHostParams{InboundID: in.ID}); err != nil {
+		t.Fatal(err)
+	}
+	hosts, err := e.st.Q.ListInboundHosts(e.ctx, in.ID)
+	if err != nil || len(hosts) != 1 {
+		t.Fatal(hosts, err)
+	}
+	def := hosts[0].ID
+	if err := e.st.Q.SetInboundHostOptions(e.ctx, db.SetInboundHostOptionsParams{ID: def, InboundID: in.ID, States: []string{"active"}}); err != nil {
+		t.Fatal(err)
+	}
+	add := func(states []string, trial string) int64 {
+		t.Helper()
+		h, err := e.st.Q.AddInboundHost(e.ctx, db.AddInboundHostParams{InboundID: in.ID, Address: "h.example.com", States: states, Trial: trial})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h.ID
+	}
+	expired, trial, paid := add([]string{"expired"}, ""), add(nil, "only"), add(nil, "never")
+	hidden := func(u db.User) map[int64]bool {
+		t.Helper()
+		got, err := (&subscription{h: e.h, u: u, cfg: e.cfg}).Inbounds(e.ctx)
+		if err != nil || len(got) != 1 {
+			t.Fatal(got, err)
+		}
+		out := map[int64]bool{}
+		for _, h := range got[0].Hosts {
+			if h.Hidden {
+				out[h.ID] = true
+			}
+		}
+		return out
+	}
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := e.st.DB.ExecContext(e.ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	active := newUser(t, e.st, 1)
+	if got, want := hidden(active), map[int64]bool{expired: true, trial: true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("active: hidden %v, want %v", got, want)
+	}
+	// Expiring in a day: still an active one.
+	exec("UPDATE users SET expires_at = $1 WHERE id = $2", e.h.now().Add(24*time.Hour).Unix(), active.ID)
+	active, _ = e.st.Q.GetUser(e.ctx, active.ID)
+	if got, want := hidden(active), map[int64]bool{expired: true, trial: true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("expiring: hidden %v, want %v", got, want)
+	}
+	gone := newUser(t, e.st, 2)
+	exec("UPDATE users SET expires_at = $1, source = 'trial' WHERE id = $2", e.h.now().Add(-time.Hour).Unix(), gone.ID)
+	gone, _ = e.st.Q.GetUser(e.ctx, gone.ID)
+	if got, want := hidden(gone), map[int64]bool{def: true, paid: true}; !reflect.DeepEqual(got, want) {
+		t.Errorf("an expired trial: hidden %v, want %v", got, want)
+	}
+}

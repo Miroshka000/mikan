@@ -128,16 +128,24 @@ type host struct {
 	own     bool // client is the whole of it, not over the template's mikan.client
 	options Options
 	name    string // its own, the variables not yet filled
+	hidden  bool   // the default host, which the user is not shown
 }
 
 // hosts are the places clients reach in at, one proxy each. The default host is the
 // template's mikan.client, which it repeats: that one reads the template, so an inbound
 // gives what it gave before it had hosts, with the default host's own fields. The others
 // are whole, an empty field is what clients get without it. An inbound with no hosts is
-// reached at the default alone.
+// reached at the default alone. A hidden host (model.Host.Hidden) is left out, the default
+// one too: an inbound whose hosts are all hidden gives the user nothing.
 func hosts(in model.Inbound, seed string, sniOK bool) []host {
 	out := []host{{}}
 	for i, h := range in.Hosts {
+		if h.Hidden {
+			if i == 0 {
+				out[0].hidden = true
+			}
+			continue
+		}
 		o := Options{ALPN: h.ALPN, IPVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.CDN}
 		addr := pick(seed, "address", h.ID, h.Address, h.Addresses)
 		sni := h.SNI
@@ -158,6 +166,9 @@ func hosts(in model.Inbound, seed string, sniOK bool) []host {
 		}
 		out = append(out, host{own: true, options: o, name: h.Name, client: proto.ClientOverrides{Server: addr, Port: h.Port,
 			SNI: sni, Host: h.Host, Fingerprint: h.Fingerprint}})
+	}
+	if out[0].hidden {
+		return out[1:]
 	}
 	return out
 }
@@ -183,7 +194,7 @@ func HostNames(ins []model.Inbound) []string {
 	var out []string
 	for _, in := range ins {
 		for _, h := range in.Hosts {
-			if strings.Contains(h.Name, "{") {
+			if !h.Hidden && strings.Contains(h.Name, "{") {
 				out = append(out, h.Name)
 			}
 		}
