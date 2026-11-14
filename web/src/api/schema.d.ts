@@ -5001,6 +5001,8 @@ export interface components {
             exit_node_id?: number;
             /** @description Отпечаток TLS (uTLS) у клиентов; пусто — общий из настроек */
             fingerprint?: string;
+            /** @description ALPN, которые можно задать адресам для клиентов: у QUIC — из ALPN самого подключения, у TLS по TCP — h2 и http/1.1, без TLS ноды — ничего */
+            host_alpn: string[];
             /** Format: int64 */
             id: number;
             /** @description Подключение входит в «Авто» подписки; выключено — только в списке и группе страны (выключенная нода убирает все свои) */

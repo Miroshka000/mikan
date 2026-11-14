@@ -241,6 +241,30 @@ func checkHost(config string, h Host) error {
 	return hostOptions(t, h)
 }
 
+// HostALPNOf is the ALPN a host of t may offer: none without a TLS of the node's, over
+// QUIC the listener's own (h3 when the template names none) of HostALPN, over TCP h2 and
+// HTTP/1.1.
+func HostALPNOf(t proto.Template) []string {
+	if t.Network() != "udp" {
+		if !t.NodeCert() {
+			return []string{}
+		}
+		return []string{"h2", "http/1.1"}
+	}
+	own := []string{}
+	if list, ok := t["alpn"].([]any); ok {
+		for _, a := range list {
+			if s, ok := a.(string); ok && slices.Contains(HostALPN, strings.ToLower(s)) && !slices.Contains(own, strings.ToLower(s)) {
+				own = append(own, strings.ToLower(s))
+			}
+		}
+	}
+	if len(own) == 0 {
+		own = []string{"h3"}
+	}
+	return own
+}
+
 // checkHostOptions holds the host's own fields to the inbound's template (config).
 func checkHostOptions(config string, h Host) error {
 	t, err := proto.Parse(config)
@@ -272,17 +296,7 @@ func hostOptions(t proto.Template, h Host) error {
 	// it names none), and h3 is never a TLS-over-TCP one. A client that offers none of
 	// the node's is turned away in the handshake.
 	if t.Network() == "udp" {
-		var own []string
-		if list, ok := t["alpn"].([]any); ok {
-			for _, a := range list {
-				if s, ok := a.(string); ok {
-					own = append(own, strings.ToLower(s))
-				}
-			}
-		}
-		if len(own) == 0 {
-			own = []string{"h3"}
-		}
+		own := HostALPNOf(t)
 		for _, a := range h.ALPN {
 			if !slices.Contains(own, a) {
 				return refuse("alpn", "host_alpn_quic")

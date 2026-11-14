@@ -46,9 +46,9 @@ type OwnFieldsCan = { alpn: boolean; alpnValues: string[]; mux: boolean; cdn: bo
 function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
   return {
     // TLS on the node's certificate, or QUIC: a REALITY client speaks the target site's TLS.
-    alpn: !!inbound.node_cert || inbound.network === "udp",
-    // h3 is QUIC's alone; TLS over TCP offers h2 and HTTP/1.1.
-    alpnValues: inbound.network === "udp" ? ["h3"] : ["h2", "http/1.1"],
+    alpn: inbound.host_alpn.length > 0,
+    // The panel's word: over QUIC the listener's own ALPN, over TCP h2 and HTTP/1.1.
+    alpnValues: inbound.host_alpn,
     // sing-mux on VLESS, Trojan and Shadowsocks; XHTTP multiplexes its own requests.
     mux: ["vless", "trojan", "shadowsocks"].includes(inbound.type) && !inbound.xhttp,
     cdn: inbound.cdn_possible,
@@ -58,7 +58,8 @@ function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
 /** The own fields of a form as the API takes them. */
 function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "alpn" | "ip_version" | "mux" | "cdn"> {
   return {
-    alpn: can.alpn ? can.alpnValues.filter((a) => f.alpn.includes(a)) : [],
+    // In the order the admin ticked them: the first is what clients prefer.
+    alpn: can.alpn ? f.alpn.filter((a) => can.alpnValues.includes(a)) : [],
     ip_version: f.ipVersion,
     mux: can.mux && f.mux ? { enabled: true, protocol: f.muxProtocol, padding: f.muxPadding } : { enabled: false, protocol: "", padding: false },
     cdn: can.cdn && f.cdn,

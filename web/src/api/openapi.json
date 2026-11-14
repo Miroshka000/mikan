@@ -4270,6 +4270,13 @@
             "description": "Отпечаток TLS (uTLS) у клиентов; пусто — общий из настроек",
             "type": "string"
           },
+          "host_alpn": {
+            "description": "ALPN, которые можно задать адресам для клиентов: у QUIC — из ALPN самого подключения, у TLS по TCP — h2 и http/1.1, без TLS ноды — ничего",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "id": {
             "format": "int64",
             "type": "integer"
@@ -4394,6 +4401,7 @@
           "status",
           "updated_at",
           "apps",
+          "host_alpn",
           "auto_port",
           "auto_sni",
           "auto",

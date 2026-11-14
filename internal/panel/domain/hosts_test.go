@@ -327,3 +327,22 @@ func TestHostOwnFields(t *testing.T) {
 		t.Fatalf("the copy's default host: %+v", ch[0])
 	}
 }
+
+// The ALPN a host may offer is what the node's listener answers, as the admin's form
+// offers it too.
+func TestHostALPNOf(t *testing.T) {
+	for src, want := range map[string]string{
+		"type: hysteria2\n":                              "h3",
+		"type: tuic\nalpn: [H2, h3, spdy/3, h2]\n":       "h2,h3",
+		"type: vless\nws-path: /w\nmikan: {tls: node}\n": "h2,http/1.1",
+		"type: vless\nws-path: /w\n":                     "",
+	} {
+		tpl, err := proto.Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(HostALPNOf(tpl), ","); got != want {
+			t.Errorf("%q: %q, want %q", src, got, want)
+		}
+	}
+}
