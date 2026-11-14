@@ -174,3 +174,35 @@ func TestHostOptionsOnProxies(t *testing.T) {
 		}
 	}
 }
+
+// A host's own name is used as typed, with the user's values in place of the variables; a
+// default host's too. One that fills to no name a proxy can have, blank or a policy of
+// mihomo's, falls back to the inbound's; the marks no name has become spaces.
+func TestHostNames(t *testing.T) {
+	in := model.Inbound{ID: 1, Node: 1, Name: "Fast", Port: 443, PortSpec: "443", Config: tuicBehindCDN(), Hosts: []model.Host{
+		{Name: "🇳🇱 NL · {days} дн."},
+		{Name: "NL · осталось {left}"},
+		{Name: "{name}"},
+		{Name: "{name}"},
+		{Name: "{brand}"},
+		{},
+		{Name: "{unknown} x"},
+	}}
+	other := model.Node{ID: 2, Name: "🇩🇪 DE"}
+	vars := map[string]string{"days": "12", "left": "3.5 ГБ", "name": "a,\"b\"", "brand": "direct"}
+	var got []string
+	for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{in}, Nodes: []model.Node{hostsNode, other}, Vars: vars}) {
+		got = append(got, p.Name)
+	}
+	want := []string{"🇳🇱 NL · 12 дн.", "NL · осталось 3.5 ГБ", "a  b", "a  b 2", "🇳🇱 Fast", "🇳🇱 Fast 2", "{unknown} x"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("names:\n%q\nwant\n%q", got, want)
+	}
+	if got := HostNames([]model.Inbound{in}); len(got) != 6 {
+		t.Fatalf("names with variables: %q", got)
+	}
+	long := fillName(strings.Repeat("я", 40)+"{name}", map[string]string{"name": strings.Repeat("ю", 40)})
+	if n := len([]rune(long)); n != NameMax {
+		t.Fatalf("a long name keeps %d letters", n)
+	}
+}
