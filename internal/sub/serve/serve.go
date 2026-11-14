@@ -356,7 +356,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	if texts := build.HostNames(ins); len(texts) > 0 {
 		names = Values(u, bound(cfg, count, texts...), cfg, h.now())
 	}
-	proxies := build.Proxies(build.Profile{Keys: keys, Inbounds: ins, Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint, Vars: names,
+	proxies := build.Proxies(build.Profile{Keys: keys, Inbounds: ins, Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint, Vars: names, Groups: cfg.Groups.WithDefaults(cfg.Lang),
 		Skip: func(in model.Inbound, err error) {
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
 		}})

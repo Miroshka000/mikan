@@ -198,6 +198,17 @@ func TestHostNames(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("names:\n%q\nwant\n%q", got, want)
 	}
+	// A user's {name} that is a group's: numbered, as the apps refuse a proxy named so.
+	groups := model.GroupNames{}.WithDefaults("")
+	two := model.Inbound{ID: 2, Node: 1, Name: "Fast", Named: true, Port: 443, PortSpec: "443", Config: tuicBehindCDN(),
+		Hosts: []model.Host{{Name: "{name}"}, {Name: "{name}"}, {Name: "proxy"}}}
+	got = nil
+	for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{two}, Nodes: []model.Node{hostsNode}, Vars: map[string]string{"name": "vpn"}, Groups: groups}) {
+		got = append(got, p.Name)
+	}
+	if want := []string{"vpn 2", "vpn 3", "proxy 2"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("names of groups:\n%q\nwant\n%q", got, want)
+	}
 	if got := HostNames([]model.Inbound{in}); len(got) != 6 {
 		t.Fatalf("names with variables: %q", got)
 	}

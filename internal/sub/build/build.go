@@ -23,10 +23,23 @@ type Profile struct {
 	// Vars are the user's values of the variables a host's name may have (serve.Values);
 	// nil leaves them as written.
 	Vars map[string]string
+	// Groups are the profile's groups, with their defaults: a proxy never takes the name of
+	// one, nor of PROXY. The groups of countries and routes give way to the proxies.
+	Groups model.GroupNames
 	// Skip, when set, hears of an inbound that is left out because it cannot be rendered
 	// (a port that is no number, a template that no longer parses): one broken inbound must
 	// not empty or fail the subscription of everyone.
 	Skip func(in model.Inbound, err error)
+}
+
+// group says whether name is one of p's groups, in any case, as the apps compare them.
+func (p Profile) group(name string) bool {
+	for _, g := range []string{p.Groups.Main, p.Groups.Auto, model.AliasGroup} {
+		if g != "" && strings.EqualFold(name, g) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p Profile) skip(in model.Inbound, err error) {
@@ -77,10 +90,11 @@ func Proxies(p Profile) []model.Proxy {
 						own = s
 					}
 				}
-				// mihomo refuses a profile with two proxies of the same name: a second host
-				// of the inbound is "Name 2".
+				// mihomo refuses a profile with two proxies of the same name, or a proxy named
+				// as a group: a second host of the inbound is "Name 2", a user's {name} that is
+				// the main group's "VPN 2".
 				name := own
-				for i := 2; used[name]; i++ {
+				for i := 2; used[name] || p.group(name); i++ {
 					name = own + " " + strconv.Itoa(i)
 				}
 				tpl := t
