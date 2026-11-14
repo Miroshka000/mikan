@@ -29,7 +29,7 @@ func (q *Queries) AddRelayUser(ctx context.Context, arg AddRelayUserParams) erro
 const createNodeRelay = `-- name: CreateNodeRelay :one
 INSERT INTO node_relays (node_id, port, config, created_at) VALUES ($1, $2, $3, $4)
 ON CONFLICT (node_id) DO UPDATE SET node_id = excluded.node_id
-RETURNING node_id, port, config, outbound, exit_node_id, created_at
+RETURNING node_id, port, config, outbound, exit_node_id, created_at, auto_sni, auto_port
 `
 
 type CreateNodeRelayParams struct {
@@ -54,12 +54,14 @@ func (q *Queries) CreateNodeRelay(ctx context.Context, arg CreateNodeRelayParams
 		&i.Outbound,
 		&i.ExitNodeID,
 		&i.CreatedAt,
+		&i.AutoSni,
+		&i.AutoPort,
 	)
 	return i, err
 }
 
 const getNodeRelay = `-- name: GetNodeRelay :one
-SELECT node_id, port, config, outbound, exit_node_id, created_at FROM node_relays WHERE node_id = $1
+SELECT node_id, port, config, outbound, exit_node_id, created_at, auto_sni, auto_port FROM node_relays WHERE node_id = $1
 `
 
 func (q *Queries) GetNodeRelay(ctx context.Context, nodeID int64) (NodeRelay, error) {
@@ -72,6 +74,8 @@ func (q *Queries) GetNodeRelay(ctx context.Context, nodeID int64) (NodeRelay, er
 		&i.Outbound,
 		&i.ExitNodeID,
 		&i.CreatedAt,
+		&i.AutoSni,
+		&i.AutoPort,
 	)
 	return i, err
 }
@@ -93,7 +97,7 @@ func (q *Queries) GetRelayUser(ctx context.Context, arg GetRelayUserParams) (str
 }
 
 const listNodeRelays = `-- name: ListNodeRelays :many
-SELECT node_id, port, config, outbound, exit_node_id, created_at FROM node_relays ORDER BY node_id
+SELECT node_id, port, config, outbound, exit_node_id, created_at, auto_sni, auto_port FROM node_relays ORDER BY node_id
 `
 
 func (q *Queries) ListNodeRelays(ctx context.Context) ([]NodeRelay, error) {
@@ -112,6 +116,8 @@ func (q *Queries) ListNodeRelays(ctx context.Context) ([]NodeRelay, error) {
 			&i.Outbound,
 			&i.ExitNodeID,
 			&i.CreatedAt,
+			&i.AutoSni,
+			&i.AutoPort,
 		); err != nil {
 			return nil, err
 		}
@@ -168,6 +174,20 @@ func (q *Queries) SetInboundExit(ctx context.Context, arg SetInboundExitParams) 
 	return err
 }
 
+const setNodeRelayAutoPort = `-- name: SetNodeRelayAutoPort :exec
+UPDATE node_relays SET auto_port = $1 WHERE node_id = $2
+`
+
+type SetNodeRelayAutoPortParams struct {
+	AutoPort int64
+	NodeID   int64
+}
+
+func (q *Queries) SetNodeRelayAutoPort(ctx context.Context, arg SetNodeRelayAutoPortParams) error {
+	_, err := q.db.ExecContext(ctx, setNodeRelayAutoPort, arg.AutoPort, arg.NodeID)
+	return err
+}
+
 const setNodeRelayPort = `-- name: SetNodeRelayPort :exec
 UPDATE node_relays SET port = $1 WHERE node_id = $2
 `
@@ -194,5 +214,20 @@ type SetNodeRelayRouteParams struct {
 
 func (q *Queries) SetNodeRelayRoute(ctx context.Context, arg SetNodeRelayRouteParams) error {
 	_, err := q.db.ExecContext(ctx, setNodeRelayRoute, arg.Outbound, arg.ExitNodeID, arg.NodeID)
+	return err
+}
+
+const setNodeRelayTarget = `-- name: SetNodeRelayTarget :exec
+UPDATE node_relays SET config = $1, auto_sni = $2 WHERE node_id = $3
+`
+
+type SetNodeRelayTargetParams struct {
+	Config  string
+	AutoSni int64
+	NodeID  int64
+}
+
+func (q *Queries) SetNodeRelayTarget(ctx context.Context, arg SetNodeRelayTargetParams) error {
+	_, err := q.db.ExecContext(ctx, setNodeRelayTarget, arg.Config, arg.AutoSni, arg.NodeID)
 	return err
 }

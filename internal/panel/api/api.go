@@ -34,17 +34,20 @@ import (
 	"mikan/internal/panel/panelimport"
 	"mikan/internal/panel/reach"
 	"mikan/internal/panel/secure"
+	"mikan/internal/panel/selfaddr"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/panel/support"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/panel/tgbackup"
 	"mikan/internal/panel/tlscert"
 	"mikan/internal/panel/updates"
 	"mikan/internal/panel/warp"
+	"mikan/internal/panel/webhooks"
+	submodel "mikan/internal/sub/model"
 )
 
 type Deps struct {
@@ -68,8 +71,14 @@ type Deps struct {
 	Pool      *domain.Pool
 	Changes   domain.Changes
 	Online    func() map[string]nodeapi.Online
-	Cert      func() acme.Status
-	RenewCert func()
+	// NodeOnline is the live view of each node apart, by node id (nodesync.Manager.OnlineByNode);
+	// nil when the panel runs without nodes.
+	NodeOnline func() map[int64]map[string]nodeapi.Online
+	// ResetSlots has a node (0: every node) close the slots' connections and keep their
+	// access (nodesync.Manager.ResetSlots); nil when the panel runs without nodes.
+	ResetSlots func(ctx context.Context, node int64, slots []string) []nodesync.ConnReset
+	Cert       func() acme.Status
+	RenewCert  func()
 	// RenewCertNow tries the panel's certificate now and waits up to wait for the outcome;
 	// done is false when the order still runs then. nil in development.
 	RenewCertNow func(ctx context.Context, wait time.Duration) (st acme.Status, done bool)
@@ -81,12 +90,16 @@ type Deps struct {
 	WakeNodeCerts func()
 	// CheckCerts is «Проверить сертификат»; nil in development.
 	CheckCerts func(ctx context.Context) (certcheck.CertReport, error)
-	// RoutesPreview renders a Clash profile with routing in place of the saved one
-	// (subs.Handler.Preview); nil: no preview.
-	RoutesPreview func(ctx context.Context, req subs.PreviewRequest) ([]byte, error)
-	// CheckTemplate checks an own Clash profile (subs.Handler.CheckTemplate); nil: unchecked.
-	CheckTemplate func(ctx context.Context, src string) error
-	// HappLink is the Happ crypt link of a user's subscription (subs.Handler.HappLink); nil: none.
+	// RoutesPreview renders the built-in Clash profile with routing in place of the saved
+	// one, and what the other cores make of its groups (subsrc.Handler.Preview); nil: no
+	// preview.
+	RoutesPreview func(ctx context.Context, req subsrc.PreviewRequest) (subsrc.Preview, error)
+	// CheckTemplate checks a subscription template of a core (subsrc.Handler.CheckTemplate);
+	// nil: unchecked. TemplatePreview renders one (subsrc.Handler.PreviewTemplate); nil: no
+	// preview.
+	CheckTemplate   func(ctx context.Context, core submodel.Core, src string) error
+	TemplatePreview func(ctx context.Context, req subsrc.TemplatePreview) (subsrc.Preview, error)
+	// HappLink is the Happ crypt link of a user's subscription (subsrc.Handler.HappLink); nil: none.
 	HappLink func(ctx context.Context, u db.User) (string, error)
 	// Nodes is the live side of the nodes; nil when the panel runs without them.
 	Nodes NodeRuntime
@@ -102,6 +115,9 @@ type Deps struct {
 	// Gateway is the panel's side of Telegram: the token, the route, the bot's status, the
 	// admin's chat and the channel.
 	Gateway *tgate.Gateway
+	// Discord checks the Discord webhook of the admin's alerts before it is saved; nil: the
+	// real Discord.
+	Discord DiscordChecker
 	// Backups send the database to the admin's Telegram chat; nil in tests.
 	Backups *tgbackup.Service
 	// Importer brings users over from another panel; nil in tests that do not need it.
@@ -119,6 +135,21 @@ type Deps struct {
 	// SubCerts is that certificate. nil in development and tests.
 	SubDomain func(name string)
 	SubCerts  SubCerts
+	// StageCert gets the certificate for a new name of the panel ready before the name is
+	// saved (acme.Manager.Stage), StageSubCert the subscription domain's; nil in development.
+	StageCert, StageSubCert func(ctx context.Context, id string, wait time.Duration) acme.Staged
+	// AddressChanged follows a change of the panel's address saved just now: the former
+	// names keep their certificates, the panel's node its self-steal site, the bot's button
+	// and the nodes follow; nil in tests.
+	AddressChanged func(ctx context.Context)
+	// Formers are the former names and their certificates (acme.Formers.Status); nil in
+	// development, where the saved list is shown as it is.
+	Formers func() []acme.FormerStatus
+	// FormerRemoved follows a former name the admin let go; nil in tests.
+	FormerRemoved func(ctx context.Context, name string)
+	// AddressCheck is the panel's last look at its server's address (selfaddr.Watcher);
+	// nil where the panel does not look (development, tests).
+	AddressCheck func() selfaddr.AddressStatus
 	// SetCert installs the admin's own certificate for the panel, ClearCert goes back to
 	// Let's Encrypt; nil in development.
 	SetCert   func(ctx context.Context, certPEM, keyPEM []byte) error
@@ -135,6 +166,9 @@ type Deps struct {
 	Addons *addons.Manager
 	// Pages are the addons' own pages in the admin panel; nil: none.
 	Pages *pages.Pages
+	// Webhooks sends the events to the addresses the admin names; nil in tests that do not
+	// need it.
+	Webhooks *webhooks.Service
 	// Resolve looks a name up for what the panel dials on the admin's word (a REALITY
 	// target); nil asks the system's resolver.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
@@ -215,6 +249,12 @@ type handlers struct {
 	pendingMu sync.Mutex
 	pending   map[int64]pendingTOTP
 
+	// passkeyMu guards the passkey ceremonies under way (passkeys.go): adding one, by admin,
+	// and signing in, by the ceremony's id.
+	passkeyMu     sync.Mutex
+	passkeyAdd    map[int64]passkeyCeremony
+	passkeyLogins map[string]passkeyCeremony
+
 	metricsCache metricsCache
 
 	// speedCooldown spaces the speed tests of a node.
@@ -289,22 +329,29 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	h := &handlers{d: d, api: api, dummyHash: dummy, hashSem: make(chan struct{}, 4), pending: map[int64]pendingTOTP{}}
+	h := &handlers{d: d, api: api, dummyHash: dummy, hashSem: make(chan struct{}, 4), pending: map[int64]pendingTOTP{},
+		passkeyAdd: map[int64]passkeyCeremony{}, passkeyLogins: map[string]passkeyCeremony{}}
 	api.UseMiddleware(h.middleware)
 	h.registerAuth()
+	h.registerPasskeys()
 	h.registerUsers()
 	h.registerFolders()
 	h.registerHapp()
 	h.registerCatalog()
 	h.registerInbounds()
 	h.registerTargets()
+	h.registerPosture()
+	h.registerSitePage()
 	h.registerStats()
 	h.registerNodeTraffic()
+	h.registerNodeClients()
 	h.registerMetrics()
 	h.registerBackups()
 	h.registerImport()
 	h.registerSettings()
 	h.registerSubPage()
+	h.registerSubRules()
+	h.registerSubTemplates()
 	h.registerRoutes()
 	h.registerCerts()
 	h.registerSubDomain()
@@ -323,6 +370,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerSpeedTests()
 	h.registerNodeUpdates()
 	h.registerAPIKeys()
+	h.registerWebhooks()
 	h.registerPayments()
 	h.registerPromocodes()
 	h.registerAddons()

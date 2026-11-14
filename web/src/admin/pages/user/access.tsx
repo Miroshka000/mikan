@@ -86,9 +86,9 @@ function HappLink({ id, token }: { id: number; token: string }) {
 
 type Legacy = NonNullable<User["legacy"]>;
 
-const SOURCES = { marzban: "Marzban", pasarguard: "PasarGuard", remnawave: "Remnawave" } as Record<string, string>;
+const SOURCES = { marzban: "Marzban", pasarguard: "PasarGuard", remnawave: "Remnawave", "3xui": "3x-ui" } as Record<string, string>;
 
-/** The link the user had in the panel they came from. Only Remnawave's can be shown whole:
+/** The link the user had in the panel they came from. Only Remnawave's and 3x-ui's can be shown whole:
  * Marzban and PasarGuard sign a new token for every request, so the panel keeps none. */
 function LegacyLink({ legacy }: { legacy: Legacy }) {
   const copyText = useCopy();
@@ -97,7 +97,7 @@ function LegacyLink({ legacy }: { legacy: Legacy }) {
     ? t("userDrawer.legacyOff")
     : legacy.url
       ? t("userDrawer.legacyUrl")
-      : legacy.source === "remnawave"
+      : legacy.source === "remnawave" || legacy.source === "3xui"
         ? t("userDrawer.legacyNoHost")
         : t("userDrawer.legacySigned");
   return (

@@ -57,6 +57,17 @@ type DesiredState struct {
 	// on the names of Router.Stub over TLS with the node's certificate (TLS); "": none. Nodes
 	// older than it ignore it.
 	FrontPage string `json:"front_page,omitempty"`
+	// FrontSeed makes the page and the plain 404 the installation's own (frontpage.SetSeed):
+	// the panel's seed, so its nodes and the panel show one page and no other installation
+	// shows the same; "": the page as written. Nodes older than it ignore it.
+	FrontSeed string `json:"front_seed,omitempty"`
+	// FrontHTML is the page itself when FrontPage is frontpage.Custom, the one the admin made
+	// in the panel. Nodes older than it are sent a built-in page instead.
+	FrontHTML string `json:"front_html,omitempty"`
+	// FrontFiles are the files of the admin's own site, when it is one of several pages:
+	// the names of Router.Stub answer each address with its file, and FrontHTML (the first
+	// page alone) stays what the inbounds' fallback page shows. Nodes older than it ignore it.
+	FrontFiles []FrontFile `json:"front_files,omitempty"`
 	// APIAllow: the node's API answers only these networks ("203.0.113.5/32"), loopback and
 	// the addresses the panel has reached it from; nil: anyone (the panel's certificate
 	// still guards it). Empty but not nil is on too, with the panel's addresses alone. The
@@ -64,12 +75,29 @@ type DesiredState struct {
 	// same rule; both lift by themselves after APILockStale without the panel. Nodes older
 	// than it ignore it.
 	APIAllow []string `json:"api_allow,omitzero"`
+	// OwnPorts: of the node's own public addresses its users reach these ports alone, over TCP
+	// and UDP (the core's egress guard). nil: anything the rules leave them, as an older panel
+	// says nothing of what must stay open. Empty but not nil is on too, with nothing open.
+	// Nodes older than it ignore it.
+	OwnPorts []int `json:"own_ports,omitzero"`
+	// PanelURL is the panel's address as it is now (https://host:port): the node says its
+	// hellos there rather than at the address its join key was issued with, which a change
+	// of the panel's domain or address leaves behind, and with the API lock on it lets in
+	// the addresses the host leads to. "": the key's. Nodes older than it ignore it.
+	PanelURL string `json:"panel_url,omitempty"`
 }
 
 // APILockStale is how long the panel may stay away before a node with APIAllow opens its
 // API to everyone again: a panel that moved to an address the rule does not know gets in
 // within this time, and the rule comes back with its new address.
 const APILockStale = 15 * time.Minute
+
+// FrontFile is a file of the admin's own site (frontpage.SiteFile).
+type FrontFile struct {
+	Path string `json:"path"`
+	Type string `json:"type"`
+	Data []byte `json:"data"`
+}
 
 // SNIRouter: the node listens on Listen (":443" when empty) and hands each connection to
 // the inbound whose Names hold the ClientHello's SNI, with a PROXY v2 header; any other
@@ -82,6 +110,11 @@ type SNIRouter struct {
 	// for a ClientHello with no name; with no Default it takes any other name too. Nodes
 	// older than it ignore it.
 	Stub []string `json:"stub,omitempty"`
+	// ByKey: REALITY inbounds may share a name. The router hands a client to the one whose
+	// key made its ClientHello, as that inbound's REALITY checks it, and anyone else to the
+	// name's inbound that is no REALITY one, or to its first REALITY one. Without it a name
+	// goes to one inbound, the last that has it. Nodes older than it ignore it.
+	ByKey bool `json:"by_key,omitempty"`
 }
 
 type SNIRoute struct {
@@ -178,6 +211,17 @@ type Policy struct {
 type PoliciesRequest struct {
 	Epoch    string   `json:"epoch"`
 	Policies []Policy `json:"policies"`
+}
+
+// ResetRequest names the slots whose open connections the node closes (POST
+// /v1/slots/reset); their access stays, so the clients connect again at once.
+type ResetRequest struct {
+	Slots []string `json:"slots"`
+}
+
+// ResetResult is how many connections the core closed.
+type ResetResult struct {
+	Closed int `json:"closed"`
 }
 
 type AckRequest struct {

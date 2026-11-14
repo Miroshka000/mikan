@@ -32,14 +32,19 @@ func TestAPIAllowInTheState(t *testing.T) {
 		}
 		return []netip.Addr{netip.MustParseAddr("198.51.100.2"), netip.MustParseAddr("::ffff:198.51.100.1"), netip.MustParseAddr("2001:db8::2")}, nil
 	}
-	for _, s := range []*Syncer{local, remote} {
-		got, err := s.desired(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.APIAllow != nil {
-			t.Fatalf("the lock is off by default: %v", got.APIAllow)
-		}
+	// A node joined now has the lock from the start, with the panel's own addresses; the
+	// panel's own node has none; switched off, a node gets none either.
+	if got, err := local.desired(ctx); err != nil || got.APIAllow != nil {
+		t.Fatalf("the panel's own node: %v %v", got.APIAllow, err)
+	}
+	if got, err := remote.desired(ctx); err != nil || !slices.Equal(got.APIAllow, []string{"198.51.100.1/32", "198.51.100.2/32", "2001:db8::2/128"}) {
+		t.Fatalf("a new node's lock: %v %v", got.APIAllow, err)
+	}
+	if err := st.Q.SetNodeAPILockdown(ctx, db.SetNodeAPILockdownParams{ApiLockdown: 0, ApiAllow: []string{}, ID: remote.id}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := remote.desired(ctx); err != nil || got.APIAllow != nil {
+		t.Fatalf("the lock switched off: %v %v", got.APIAllow, err)
 	}
 	for _, id := range []int64{local.id, remote.id} {
 		if err := st.Q.SetNodeAPILockdown(ctx, db.SetNodeAPILockdownParams{ApiLockdown: 1, ApiAllow: []string{"203.0.113.0/24"}, ID: id}); err != nil {

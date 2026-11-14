@@ -35,6 +35,47 @@ type Pair struct {
 	KeyPEM  string
 }
 
+// hostZones end the names HostName makes: the zones of private hosts, as a server's own
+// self-signed certificate commonly carries.
+var hostZones = []string{"local", "lan", "internal", "localdomain", "home.arpa"}
+
+// HostName makes the name of a node's API certificate. Whoever connects to the API port
+// sees the certificate before the panel's pin is asked for, so it names neither mikan nor
+// the node: a random host label in a private zone, different on every node. The panel
+// pins the certificate itself and never reads the name.
+func HostName() (string, error) {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	const digits = "0123456789"
+	pick := func(n int) (int, error) {
+		v, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+		if err != nil {
+			return 0, err
+		}
+		return int(v.Int64()), nil
+	}
+	size, err := pick(7) // 6 to 12 characters
+	if err != nil {
+		return "", err
+	}
+	label := make([]byte, 6+size)
+	for i := range label {
+		set := letters + digits
+		if i == 0 {
+			set = letters
+		}
+		j, err := pick(len(set))
+		if err != nil {
+			return "", err
+		}
+		label[i] = set[j]
+	}
+	z, err := pick(len(hostZones))
+	if err != nil {
+		return "", err
+	}
+	return string(label) + "." + hostZones[z], nil
+}
+
 // Generate creates a self-signed certificate valid for 20 years.
 func Generate(name string, usage x509.ExtKeyUsage, now time.Time) (Pair, error) {
 	pub, key, err := ed25519.GenerateKey(rand.Reader)

@@ -232,7 +232,14 @@ func Neighbors(ctx context.Context, ip string, limit int, o Options) (found []Re
 		f, n := scanBlock(ctx, block, self, o, seen, want)
 		found, scanned = append(found, f...), scanned+n
 	}
-	sort.Slice(found, func(i, j int) bool { return found[i].RTTms < found[j].RTTms })
+	// The sites people open come first, the fastest of them first: a weak name (Weak) is
+	// offered only past them, so a cut at limit drops it before a real site.
+	sort.SliceStable(found, func(i, j int) bool {
+		if wi, wj := Weak(found[i].SNI), Weak(found[j].SNI); wi != wj {
+			return wj
+		}
+		return found[i].RTTms < found[j].RTTms
+	})
 	if limit > 0 && len(found) > limit {
 		found = found[:limit]
 	}
@@ -319,29 +326,48 @@ func scanBlock(ctx context.Context, prefix netip.Prefix, self netip.Addr, o Opti
 // certName asks an IP for its default certificate (no SNI) and returns a concrete name
 // from it; wildcards cannot be sent as SNI.
 func certName(ctx context.Context, ip string) string {
+	return pickName(certNames(ctx, ip))
+}
+
+// pickName is the name of a certificate's to send as SNI: the first concrete one that is
+// not weak (Weak), else the first concrete one; "" when it has none.
+func pickName(names []string) string {
+	first := ""
+	for _, n := range names {
+		if strings.Contains(n, "*") || !strings.Contains(n, ".") || net.ParseIP(n) != nil {
+			continue
+		}
+		n = strings.ToLower(n)
+		if !Weak(n) {
+			return n
+		}
+		if first == "" {
+			first = n
+		}
+	}
+	return first
+}
+
+// certNames are the names of the default certificate of ip, the common name last.
+func certNames(ctx context.Context, ip string) []string {
 	d := net.Dialer{Timeout: 2 * time.Second}
 	c, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, "443"))
 	if err != nil {
-		return ""
+		return nil
 	}
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(3 * time.Second))
 	t := tls.Client(c, &tls.Config{InsecureSkipVerify: true, NextProtos: []string{"h2", "http/1.1"}})
 	if t.HandshakeContext(ctx) != nil {
-		return ""
+		return nil
 	}
 	certs := t.ConnectionState().PeerCertificates
 	if len(certs) == 0 {
-		return ""
+		return nil
 	}
 	names := append([]string{}, certs[0].DNSNames...)
 	if cn := certs[0].Subject.CommonName; cn != "" {
 		names = append(names, cn)
 	}
-	for _, n := range names {
-		if !strings.Contains(n, "*") && strings.Contains(n, ".") && net.ParseIP(n) == nil {
-			return strings.ToLower(n)
-		}
-	}
-	return ""
+	return names
 }

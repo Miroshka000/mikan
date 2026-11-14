@@ -2,21 +2,21 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-en-dark.svg">
-  <img alt="mikan: پنل VPN روی هستهٔ mihomo" src=".github/assets/banner-en-light.svg" width="100%">
+  <img alt="mikan: پنل VPN روی هستهٔ Citrus" src=".github/assets/banner-en-light.svg" width="100%">
 </picture>
 
 <br>
 
 <div dir="rtl">
 
-**یک پنل VPN سریع و زیبا روی هستهٔ [mihomo](https://github.com/MetaCubeX/mihomo): با یک دستور نصب می‌شود و نیازی به مراقبت ندارد.**
+**یک پنل VPN سریع و زیبا روی هستهٔ [Citrus](https://github.com/getmikan/Citrus): با یک دستور نصب می‌شود و نیازی به مراقبت ندارد.**
 
 </div>
 
 [![Release](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=release&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
 [![Image](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
 [![License](https://img.shields.io/badge/license-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
-[![mihomo](https://img.shields.io/badge/core-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
+[![Citrus](https://img.shields.io/badge/core-Citrus-9e8eff?style=flat-square)](https://github.com/getmikan/Citrus)
 [![Telegram](https://img.shields.io/badge/Telegram-channel-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/mikanvpn)
 [![Telegram](https://img.shields.io/badge/Telegram-forum-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/+I2JFR7DbPow1ZmQy)
 
@@ -77,7 +77,7 @@ mikan بررسی می‌کند که کلاینت‌های واقعی هنوز ب
 <td valign="top">
 
 ### 📊 حسابداری در حد بایت
-mihomo به‌صورت کتابخانه تعبیه شده است، پس ترافیک در هر اتصال و برای هر کاربر شمرده می‌شود، نه نمونه‌برداری. پلن‌ها بر اساس زمان و گیگابایت، روزهای صورتحساب، محدودیت دستگاه و اتصال به دستگاه برای جلوگیری از اشتراک‌گذاری کلید.
+[Citrus](https://github.com/getmikan/Citrus) (فورک ما از mihomo) به‌صورت کتابخانه تعبیه شده است، پس ترافیک در هر اتصال و برای هر کاربر شمرده می‌شود، نه نمونه‌برداری. پلن‌ها بر اساس زمان و گیگابایت، روزهای صورتحساب، محدودیت دستگاه و اتصال به دستگاه برای جلوگیری از اشتراک‌گذاری کلید.
 
 </td>
 <td valign="top">
@@ -187,7 +187,7 @@ Go و PostgreSQL، سه کانتینر کوچک. روی یک سرور فعال �
 ```mermaid
 flowchart LR
     A[Browser] -- HTTPS, secret link --> P[mikan panel<br>users · plans · subscriptions]
-    P -- unix socket / pinned TLS --> N1[mikan node<br>mihomo inside]
+    P -- unix socket / pinned TLS --> N1[mikan node<br>Citrus inside]
     P -- pinned TLS --> N2[remote node]
     C[VPN apps] -- REALITY · QUIC · … --> N1
     C --> N2
@@ -258,7 +258,7 @@ cd installer && cargo test                    # the installer (Rust)
 
 ## مجوز
 
-mikan نرم‌افزار آزاد تحت [GNU GPL v3](LICENSE) با شرایط تکمیلی [NOTICE.md](NOTICE.md) است: حفظ نام سازنده، معرفی نکردن نسخه تغییریافته به‌عنوان نسخه اصلی، و عدم اعطای حق بر نام و لوگو. Copyright (C) 2026 Miroshka and Mikan. [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) در آن تعبیه شده و بخش‌هایی از [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) در آن اقتباس شده است. فونت‌ها: Unbounded، Onest، JetBrains Mono (SIL OFL 1.1).
+mikan نرم‌افزار آزاد تحت [GNU GPL v3](LICENSE) با شرایط تکمیلی [NOTICE.md](NOTICE.md) است: حفظ نام سازنده، معرفی نکردن نسخه تغییریافته به‌عنوان نسخه اصلی، و عدم اعطای حق بر نام و لوگو. Copyright (C) 2026 Miroshka and Mikan. [Citrus](https://github.com/getmikan/Citrus) (فورک [mihomo](https://github.com/MetaCubeX/mihomo)) (GPL-3.0) در آن تعبیه شده و بخش‌هایی از [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) در آن اقتباس شده است. فونت‌ها: Unbounded، Onest، JetBrains Mono (SIL OFL 1.1).
 
 </div>
 

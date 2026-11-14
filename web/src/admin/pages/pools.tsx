@@ -18,6 +18,7 @@ import { nodeLabel } from "../../lib/node-label";
 import { parseDecimal } from "../../lib/validate";
 import { byNode, ServersTree } from "./servers-tree";
 import { CardHead } from "../../components/layout";
+import { Select } from "../../components/select";
 
 type Pool = Schemas["PoolView"];
 export type GroupMode = Schemas["PoolSetting"]["mode"];
@@ -124,7 +125,7 @@ function GroupModeRow({
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 max-[520px]:grid-cols-1">
         {children}
         <div className="flex items-center gap-2">
-          <select
+          <Select
             id={id}
             className="input h-9 min-w-[168px] py-0 text-[13px]"
             value={value.mode}
@@ -140,7 +141,7 @@ function GroupModeRow({
                 {t(`pools.mode.${m}`)}
               </option>
             ))}
-          </select>
+          </Select>
           {value.mode === "own" ? (
             <label className="input-unit h-9 w-[112px]">
               <input

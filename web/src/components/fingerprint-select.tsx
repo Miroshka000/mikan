@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { FINGERPRINTS, fingerprintLabel, isKnownFingerprint, validFingerprint } from "../lib/fingerprints";
+import { Select } from "./select";
 
 const OWN = "__own";
 
@@ -47,7 +48,7 @@ export function FingerprintSelect({
   }, [bad]);
   return (
     <div>
-      <select
+      <Select
         id={id}
         className="input max-w-[320px]"
         value={ownMode ? OWN : value}
@@ -70,7 +71,7 @@ export function FingerprintSelect({
           </option>
         ))}
         <option value={OWN}>{t("settings.fpOwn")}</option>
-      </select>
+      </Select>
       {ownMode ? (
         <div className="mt-2">
           <input

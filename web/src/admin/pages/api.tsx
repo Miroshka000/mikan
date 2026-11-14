@@ -15,6 +15,7 @@ import { useCopy } from "../../lib/copy";
 import { fieldErrors } from "../../lib/fields";
 import { ago, dateShort } from "../../lib/format";
 import { CardHead } from "../../components/layout";
+import { Select } from "../../components/select";
 
 // The reference parses the whole OpenAPI spec: loaded only when the page opens.
 const ApiReference = lazy(() => import("./api-reference"));
@@ -189,13 +190,13 @@ function NewKeyDrawer({ open, onOpenChange, onMade }: { open: boolean; onOpenCha
           />
         </Field>
         <Field label={t("apiPage.expiry")} htmlFor="k-exp">
-          <select id="k-exp" className="input max-w-[240px]" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <Select id="k-exp" className="input max-w-[240px]" value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {expiries.map((d) => (
               <option key={d} value={d}>
                 {d === 0 ? t("apiPage.expiryNever") : t("apiPage.expiryDays", { d })}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("apiPage.password")} htmlFor="k-pw" hint={t("apiPage.passwordHint")} error={errors.password}>
           <input id="k-pw" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" aria-invalid={!!errors.password} />

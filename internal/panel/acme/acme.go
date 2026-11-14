@@ -12,7 +12,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"log/slog"
-	"net/netip"
 	"os"
 	"path/filepath"
 	"sync"
@@ -21,7 +20,6 @@ import (
 
 	"mikan/internal/acmechallenge"
 	"mikan/internal/hostname"
-	"mikan/internal/netaddr"
 	"mikan/internal/nodetls"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/settings"
@@ -362,13 +360,16 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 	}
 	certPEM, keyPEM, err := m.iss.obtain(ctx, id, ca, serverProvider{m.challenge})
 	if err == nil {
-		err = savePair(m.dir, certPEM, keyPEM, ca)
+		// The pair of the name the panel had stays aside: that name keeps working (Formers).
+		if err = keepPrevious(m.dir, id); err == nil {
+			err = savePair(m.dir, certPEM, keyPEM, ca)
+		}
 	}
 	if err != nil {
 		host, _ := m.set.String(ctx, settings.KeyPublicHost)
 		p := Classify(err, dnscheck.Own(host), m.now())
 		m.log.Warn("acme: certificate not obtained", "identifier", id, "ca", ca, "code", p.Code, "holder", p.Holder, "err", err)
-		m.journal.Add(Attempt{At: m.now(), CA: ca, Error: p.Code, Detail: p.Detail, Holder: p.Holder})
+		m.journal.Add(Attempt{At: m.now(), CA: ca, Identifier: id, Error: p.Code, Detail: p.Detail, Holder: p.Holder})
 		m.mu.Lock()
 		st := *m.status.Load()
 		if st.Kind == "custom" {
@@ -390,9 +391,109 @@ func (m *Manager) ensure(ctx context.Context) (orderFailed bool) {
 		return true
 	}
 	m.log.Info("acme: certificate installed", "identifier", id, "ca", ca)
-	m.journal.Add(Attempt{At: m.now(), CA: ca})
+	m.journal.Add(Attempt{At: m.now(), CA: ca, Identifier: id})
 	m.settle(ctx) // now on disk: served, unless the admin's own certificate has come in the meantime
 	return false
+}
+
+// Staged is how getting a certificate ready ahead of a change of the panel's name went
+// (Stage).
+type Staged struct {
+	// OK: the certificate is ready, or none is needed.
+	OK bool
+	// Ordering: the order still runs when the wait ended. It goes on, and the change finds
+	// its certificate once it is there.
+	Ordering bool
+	// Code is a Problem's code, or custom_wrong_host: the admin's own certificate, which wins
+	// while it is valid, does not cover the new name. Detail, Holder and RetryAt as Problem's.
+	Code    string
+	Detail  string
+	Holder  string
+	RetryAt *time.Time
+}
+
+// Stage gets a certificate for id ready before the panel's name becomes id, while the one
+// it has is still served: a change of the domain waits for it, so that no link points at a
+// name without a certificate. The certificate waits in <dir>/next until id is the panel's
+// name (promote). It waits up to wait for the order. OK as well when nothing has to be
+// ordered: what the panel has already covers id, or no CA certifies id.
+func (m *Manager) Stage(ctx context.Context, id string, wait time.Duration) Staged {
+	now := m.now()
+	if isPrivate(id) {
+		return Staged{OK: true}
+	}
+	if tlscert.HasCustom(m.customDir) {
+		if cert, err := tlscert.LoadCustom(m.customDir, now); err == nil {
+			if tlscert.Covers(cert.Leaf, id) {
+				return Staged{OK: true}
+			}
+			return Staged{Code: "custom_wrong_host"}
+		}
+	}
+	for _, dir := range []string{m.dir, filepath.Join(m.dir, nextDir)} {
+		if c, _, err := loadPair(dir); err == nil && tlscert.Covers(c.Leaf, id) && !needsRenewal(c.Leaf, now) {
+			return Staged{OK: true}
+		}
+	}
+	done := make(chan Staged, 1)
+	go func() { done <- m.stage(context.WithoutCancel(ctx), id) }()
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case s := <-done:
+		return s
+	case <-t.C:
+	case <-ctx.Done():
+	}
+	return Staged{Ordering: true}
+}
+
+// stage orders the certificate of Stage, one order at a time with the panel's own.
+func (m *Manager) stage(ctx context.Context, id string) Staged {
+	m.orderMu.Lock()
+	defer m.orderMu.Unlock()
+	chosen, err := ChosenCA(ctx, m.set)
+	if err != nil {
+		return Staged{Code: CodeUnknown, Detail: err.Error()}
+	}
+	ca := EffectiveCA(chosen, id)
+	certPEM, keyPEM, err := m.iss.obtain(ctx, id, ca, serverProvider{m.challenge})
+	if err == nil {
+		err = savePair(filepath.Join(m.dir, nextDir), certPEM, keyPEM, ca)
+	}
+	if err != nil {
+		host, _ := m.set.String(ctx, settings.KeyPublicHost)
+		p := Classify(err, dnscheck.Own(host), m.now())
+		m.log.Warn("acme: certificate for the new name not obtained", "identifier", id, "ca", ca, "code", p.Code, "err", err)
+		m.journal.Add(Attempt{At: m.now(), CA: ca, Identifier: id, Error: p.Code, Detail: p.Detail, Holder: p.Holder})
+		return Staged{Code: p.Code, Detail: p.Detail, Holder: p.Holder, RetryAt: p.RetryAt}
+	}
+	m.log.Info("acme: certificate ready for the new name", "identifier", id, "ca", ca)
+	m.journal.Add(Attempt{At: m.now(), CA: ca, Identifier: id})
+	return Staged{OK: true}
+}
+
+// promote serves the certificate Stage got ready once id is the panel's name; the pair it
+// replaces goes to prev. Call with m.mu held.
+func (m *Manager) promote(id string, now time.Time) {
+	next := filepath.Join(m.dir, nextDir)
+	staged, _, err := loadPair(next)
+	if err != nil || !tlscert.Covers(staged.Leaf, id) || !now.Before(staged.Leaf.NotAfter) {
+		return
+	}
+	if cur, _, err := loadPair(m.dir); err == nil && tlscert.Covers(cur.Leaf, id) && !cur.Leaf.NotAfter.Before(staged.Leaf.NotAfter) {
+		return
+	}
+	if err := keepPrevious(m.dir, id); err != nil {
+		m.log.Warn("acme: the certificate of the former name not kept", "err", err)
+		return
+	}
+	if err := copyPair(next, m.dir); err != nil {
+		m.log.Warn("acme: the certificate ready for the new name not served", "err", err)
+		return
+	}
+	_ = removePair(next)
+	m.log.Info("acme: the certificate ready for the new name is served", "identifier", id)
 }
 
 // settle serves the best certificate there already is and says whether a new one has to
@@ -449,6 +550,7 @@ func (m *Manager) settle(ctx context.Context) (id, ca string, order bool) {
 		st.Error = "no_public_host"
 		return id, ca, false
 	}
+	m.promote(id, now)
 	if cert, have, err := loadPair(m.dir); err == nil && tlscert.Covers(cert.Leaf, id) && now.Before(cert.Leaf.NotAfter) {
 		m.holder.Set(cert) // kept serving while it is renewed, or ordered from another CA
 		info := tlscert.Describe(cert, id, now)
@@ -472,10 +574,4 @@ func (m *Manager) useFallback() {
 // isPrivate reports identifiers a CA can never validate: an IP that is not public (a
 // carrier's NAT and Tailscale's 100.64.0.0/10 too: the CA cannot reach it), and what is not
 // a DNS name, such as docker service names in test setups.
-func isPrivate(id string) bool {
-	a, err := netip.ParseAddr(id)
-	if err != nil {
-		return !hostname.Name(id) || hostname.Reserved(id)
-	}
-	return !netaddr.IsPublic(a)
-}
+func isPrivate(id string) bool { return !hostname.Public(id) }

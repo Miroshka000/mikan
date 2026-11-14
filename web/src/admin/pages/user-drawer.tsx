@@ -15,9 +15,11 @@ import { PoolsSection, TariffSection, TrafficSection } from "./user/traffic";
 import { ExpirySection } from "./user/expiry";
 import { NoteSection, ProtocolsSection, SubscriptionSection, TelegramSection } from "./user/access";
 import { DevicesSection } from "./user/devices";
+import { NodesSection } from "./user/nodes";
 import { OrganiseSection } from "./user/organise";
 import { TorrentSection } from "./user/torrent";
 import { SitesSection } from "./user/sites";
+import { SubLogSection } from "./user/sub-log";
 
 export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }) {
   const user = useUser(id);
@@ -165,7 +167,9 @@ function UserBody({ u, onDeleted, onRename }: { u: User; onDeleted: () => void; 
       <ExpirySection u={u} />
       <TrafficSection u={u} />
       <DevicesSection u={u} />
+      <NodesSection u={u} />
       <SitesSection u={u} />
+      <SubLogSection u={u} />
       <TariffSection u={u} />
       <NoteSection u={u} />
       <Disclosure title={t("userDrawer.advanced")} sub={t("userDrawer.advancedSub")}>

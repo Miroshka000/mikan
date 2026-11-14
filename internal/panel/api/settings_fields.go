@@ -6,7 +6,7 @@ import (
 
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
-	"mikan/internal/panel/subs"
+	"mikan/internal/sub/routing"
 )
 
 // settingField is one field of PATCH /settings, declared once: whether only the session
@@ -38,6 +38,13 @@ func value[T any](name, key string, session bool, get func(*patchSettingsBody) *
 		}}
 }
 
+// flag is a switch of the request itself, not a setting: gated like the settings it goes
+// with, nothing written.
+func flag(name string, session bool, get func(*patchSettingsBody) *bool) settingField {
+	return settingField{name, session, func(b *patchSettingsBody) bool { return get(b) != nil },
+		func(context.Context, *settings.Settings, *patchSettingsBody) error { return nil }}
+}
+
 // custom writes a string by its own rule.
 func custom(name string, session bool, get func(*patchSettingsBody) *string, write func(context.Context, *settings.Settings, string) error) settingField {
 	return settingField{name, session, func(b *patchSettingsBody) bool { return get(b) != nil },
@@ -51,23 +58,23 @@ var settingFields = []settingField{
 	text("public_host", settings.KeyPublicHost, true, func(b *patchSettingsBody) *string { return b.PublicHost }),
 	text("domain", settings.KeyDomain, true, func(b *patchSettingsBody) *string { return b.Domain }),
 	text("sub_domain", settings.KeySubDomain, true, func(b *patchSettingsBody) *string { return b.SubDomain }),
+	flag("force_domain", true, func(b *patchSettingsBody) *bool { return b.ForceDomain }),
+	value("auto_public_host", settings.KeyAutoAddress, true, func(b *patchSettingsBody) *bool { return b.AutoAddress }),
+	value("auto_node_address", settings.KeyAutoNodeAddress, true, func(b *patchSettingsBody) *bool { return b.AutoNodeAddress }),
 	value("sub_port", settings.KeySubPort, true, func(b *patchSettingsBody) *int { return b.SubPort }),
 	custom("sub_rules", true, func(b *patchSettingsBody) *string { return b.SubRules }, func(ctx context.Context, set *settings.Settings, v string) error {
 		return settings.Set(ctx, set, settings.KeyRules, strings.TrimRight(v, " \n\r\t"))
 	}),
-	value("sub_routes", settings.KeyRoutes, true, func(b *patchSettingsBody) *subs.Routes { return b.SubRoutes }),
-	custom("sub_template", true, func(b *patchSettingsBody) *string { return b.SubTemplate }, func(ctx context.Context, set *settings.Settings, v string) error {
-		if strings.TrimSpace(v) == "" {
-			v = "" // blank: back to the built-in profile
-		}
-		return settings.Set(ctx, set, settings.KeyTemplate, v)
-	}),
+	value("sub_routes", settings.KeyRoutes, true, func(b *patchSettingsBody) *routing.Routes { return b.SubRoutes }),
 	text("sub_routing", settings.KeyRouting, true, func(b *patchSettingsBody) *string { return b.SubRouting }),
 	text("support_url", settings.KeySupportURL, true, func(b *patchSettingsBody) *string { return b.SupportURL }),
 	// What every subscriber's app shows: text, links and the logo it downloads.
 	text("sub_title", settings.KeySubTitle, true, func(b *patchSettingsBody) *string { return b.SubTitle }),
 	value("sub_inactive_server", settings.KeyInactiveServer, true, func(b *patchSettingsBody) *bool { return b.InactiveServer }),
 	text("sub_inactive_text", settings.KeyInactiveText, true, func(b *patchSettingsBody) *string { return b.InactiveText }),
+	value("sub_xray_json", settings.KeyXrayJSON, true, func(b *patchSettingsBody) *bool { return b.XrayJSON }),
+	// The log keeps addresses and apps of the subscribers: how long, or none at all, is the admin's call.
+	value("sub_log_days", settings.KeySubLogDays, true, func(b *patchSettingsBody) *int { return b.SubLogDays }),
 	text("site_template", settings.KeySiteTemplate, true, func(b *patchSettingsBody) *string { return b.SiteTemplate }),
 	text("sub_announce", settings.KeyAnnounce, true, func(b *patchSettingsBody) *string { return b.Announce }),
 	text("sub_announce_url", settings.KeyAnnounceURL, true, func(b *patchSettingsBody) *string { return b.AnnounceURL }),

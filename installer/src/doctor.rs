@@ -562,19 +562,92 @@ fn firewall(install: &Install) -> Vec<Item> {
     let Some(status) = system::ufw_status() else {
         return vec![Item::ok("Firewall (ufw)", "off; a firewall in the hoster's panel is not checked here")];
     };
-    // The node's container writes the file: read as panelfs reads it, no link, FIFO or huge file.
-    let state: Option<NodeState> = crate::panelfs::Dir::open(Path::new(DIR), "data/node", false)
-        .ok()
-        .flatten()
-        .and_then(|d| d.read("node-state.json", 16 << 20).ok().flatten())
-        .and_then(|raw| serde_json::from_slice(&raw).ok());
     let panel = (!install.node).then(|| install.config.get("PANEL_PORT").and_then(|p| p.parse().ok())).flatten();
-    let mut items = firewall_items(&status, &wants(install.node_port(), panel, state.as_ref()));
+    let mut items = firewall_items(&status, &wants(install.node_port(), panel, node_state().as_ref()));
     if !install.node {
         let bridge = addon::load_state().map(|s| s.panel_api_bridge).unwrap_or_default();
         items.extend(addons_item(&status, &bridge));
     }
     items
+}
+
+/// What the node's container last wrote of its inbounds and relay. The container writes
+/// the file: read as panelfs reads it, no link, FIFO or huge file.
+fn node_state() -> Option<NodeState> {
+    crate::panelfs::Dir::open(Path::new(DIR), "data/node", false)
+        .ok()
+        .flatten()
+        .and_then(|d| d.read("node-state.json", 16 << 20).ok().flatten())
+        .and_then(|raw| serde_json::from_slice(&raw).ok())
+}
+
+/// The public ports mikan's own processes listen on, in the text of `ss -Hlntup`: the
+/// panel's port, its subscription port (no file here names it: it is in the database) and
+/// the inbounds of the panel's node. Loopback sockets are left out.
+fn mikan_listeners(ss: &str) -> Vec<(u16, Proto)> {
+    let mut out = Vec::new();
+    for line in ss.lines() {
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() < 6 {
+            continue;
+        }
+        let proto = match f[0] {
+            "tcp" => Proto::Tcp,
+            "udp" => Proto::Udp,
+            _ => continue,
+        };
+        if !matches!(system::process_name(line).as_deref(), Some("mikan" | "mikan-node")) {
+            continue;
+        }
+        let Some((addr, port)) = f[4].rsplit_once(':') else { continue };
+        let loopback = addr.starts_with("127.") || addr == "[::1]" || addr.contains("%lo");
+        if let (false, Ok(port)) = (loopback, port.parse::<u16>())
+            && !out.contains(&(port, proto))
+        {
+            out.push((port, proto));
+        }
+    }
+    out
+}
+
+/// The ufw rules a move carries to the new server (`mikan move`): the ports mikan uses
+/// here, as doctor knows them and as its processes listen, that this server's ufw lets in
+/// from anywhere (with ufw off here, all of them: nothing closed them). What the install on
+/// the new server opens itself (the panel's port, 80, 443 and the pool) is left out.
+pub fn moved_rules(install: &Install) -> Vec<String> {
+    let panel = install.config.get("PANEL_PORT").and_then(|p| p.parse().ok());
+    let mut wanted = wants(None, panel, node_state().as_ref());
+    let status = if install.ufw() { system::ufw_status() } else { None };
+    let ss = system::output("ss", &["-Hlntup"]).unwrap_or_default();
+    // With ufw off no rule tells the core's own UDP sockets (its outgoing ones, on random
+    // ports) from a listener: only TCP listeners count then.
+    for (port, proto) in mikan_listeners(&ss).into_iter().filter(|(_, p)| status.is_some() || *p == Proto::Tcp) {
+        wanted.push(Want { what: "mikan listens".into(), lo: port, hi: port, proto: Some(proto), anyone: true, level: Level::Warn });
+    }
+    let skip = crate::host::rules(panel, None);
+    carried(status.as_deref(), &wanted).into_iter().filter(|r| !skip.contains(r)).collect()
+}
+
+/// The rules of the wishes that `ufw status` lets through from anywhere (None: ufw is off,
+/// every wish), each once. A port of an unknown protocol goes over each protocol the rules
+/// let it in by.
+fn carried(status: Option<&str>, wanted: &[Want]) -> Vec<String> {
+    let rules = status.map(parse_ufw);
+    let mut out: Vec<String> = Vec::new();
+    for w in wanted {
+        let protos = match w.proto {
+            Some(p) => vec![p],
+            None => vec![Proto::Tcp, Proto::Udp],
+        };
+        for p in protos {
+            let one = Want { proto: Some(p), anyone: true, ..w.clone() };
+            let rule = one.rule();
+            if rules.as_ref().is_none_or(|r| allowed(r, &one)) && !out.contains(&rule) {
+                out.push(rule);
+            }
+        }
+    }
+    out
 }
 
 /// Custom addons call the panel at the bridge's gateway, which ufw's default `deny incoming`
@@ -820,6 +893,46 @@ Anywhere                   ALLOW       10.0.0.0/8
         assert_eq!(parse_ports("20000:20100"), Some((20000, 20100)));
         assert_eq!(parse_ports("20100-20000"), None);
         assert_eq!(parse_ports("0"), None);
+    }
+
+    #[test]
+    fn the_ports_mikan_listens_on() {
+        let ss = r#"tcp LISTEN 0 4096 0.0.0.0:21355 0.0.0.0:* users:(("mikan",pid=901,fd=7))
+tcp LISTEN 0 4096 *:2096 *:* users:(("mikan",pid=901,fd=9))
+tcp LISTEN 0 4096 [::]:443 [::]:* users:(("mikan-node",pid=880,fd=12))
+udp UNCONN 0 0 *:20000 *:* users:(("mikan-node",pid=880,fd=14))
+tcp LISTEN 0 4096 127.0.0.1:18080 0.0.0.0:* users:(("mikan",pid=901,fd=8))
+tcp LISTEN 0 4096 [::1]:9090 [::]:* users:(("mikan-node",pid=880,fd=3))
+udp UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:* users:(("systemd-resolve",pid=500,fd=13))
+tcp LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=700,fd=3))
+tcp LISTEN 0 4096 0.0.0.0:21355 0.0.0.0:* users:(("mikan",pid=901,fd=10))
+"#;
+        let tcp = Proto::Tcp;
+        assert_eq!(mikan_listeners(ss), [(21355, tcp), (2096, tcp), (443, tcp), (20000, Proto::Udp)]);
+        assert!(mikan_listeners("").is_empty());
+    }
+
+    #[test]
+    fn a_move_carries_what_ufw_lets_in() {
+        let tcp = Some(Proto::Tcp);
+        let wanted = [
+            want(2096, 2096, tcp, true),
+            want(20000, 20100, None, true),
+            want(443, 443, None, true),
+            want(31234, 31234, tcp, true),
+            want(9999, 9999, tcp, true),
+            want(2096, 2096, tcp, true),
+        ];
+        // 2096 has no rule here: closed on purpose, it stays closed; 31234 is let in from one address only
+        assert_eq!(carried(Some(UFW), &wanted), ["20000:20100/udp", "443/tcp", "443/udp"]);
+        let open = format!("{UFW}2096/tcp ALLOW Anywhere\n");
+        assert_eq!(carried(Some(&open), &wanted)[0], "2096/tcp");
+        // ufw off: every port was open, every one goes
+        assert_eq!(
+            carried(None, &wanted),
+            ["2096/tcp", "20000:20100/tcp", "20000:20100/udp", "443/tcp", "443/udp", "31234/tcp", "9999/tcp"]
+        );
+        assert!(carried(None, &wanted).iter().all(|r| crate::host::valid_rule(r)));
     }
 
     #[test]

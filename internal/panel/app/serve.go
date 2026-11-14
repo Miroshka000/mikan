@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -19,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"mikan/internal/frontpage"
 	"mikan/internal/logbuf"
 	"mikan/internal/nodeapi"
 	"mikan/internal/nodetls"
@@ -30,6 +32,8 @@ import (
 	"mikan/internal/panel/ipgeo"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/reach"
+	"mikan/internal/panel/selfaddr"
+	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
@@ -84,6 +88,12 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	holder := &tlscert.Holder{}
 	holder.Set(self)
 
+	// Behind a proxy the client's address is read from X-Forwarded-For, of the proxies on
+	// this server and its private networks and of those named in MIKAN_TRUSTED_PROXIES.
+	server.SetTrustedProxies(cfg.TrustedProxies)
+	if cfg.TrustProxy {
+		logger.Info("X-Forwarded-For is read from proxies on this server, on its private networks and in MIKAN_TRUSTED_PROXIES", "networks", len(cfg.TrustedProxies))
+	}
 	opts := Options{Version: version, Web: web, TrustProxy: cfg.TrustProxy, SupportOff: cfg.SupportOff, Log: logger, Now: time.Now,
 		Autotune: autotune.DefaultOptions().Scaled(cfg.AutotuneScale), TelegramAPI: cfg.TelegramAPI,
 		DataDir: cfg.DataDir, Dev: cfg.Dev, Releases: updates.Fetch(release.IndexURL, release.LatestURL), DNS: dnscheck.New(), Reach: reach.New("", nil, time.Now), Geo: ipgeo.New(nil, time.Now), Logs: logs}
@@ -103,6 +113,7 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	var (
 		certs     *acme.Manager
 		subCerts  *acme.Manager
+		formers   *acme.Formers
 		nodesACME *acme.Nodes
 	)
 	// The subscription domain gets its own certificate; clients that name another get the
@@ -121,6 +132,10 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 		certs.Load(ctx)
 		opts.Certs = certs
 		opts.HSTS = certs.Trusted
+		// The names the panel answered at before keep their certificates from the start.
+		formers = certs.Formers(names)
+		formers.Reconcile(ctx, false)
+		opts.Formers = formers
 		// Each remote node's public certificate, the challenge answered on its port 80.
 		nodesACME = certs.Nodes(func(ctx context.Context) ([]acme.NodeTarget, error) {
 			nodes, err := st.Q.ListNodes(ctx)
@@ -147,6 +162,13 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 			return out, nil
 		})
 		opts.NodesACME = nodesACME
+	}
+	opts.Names = names
+	if !cfg.Dev {
+		// The panel saves the address its server has now when the saved one leads elsewhere:
+		// it proves the new one with a token of its own over its HTTPS port.
+		opts.SelfAddr = &selfaddr.Watcher{Set: set, Prober: &selfaddr.Prober{}, DNS: opts.DNS, Egress: selfaddr.Egress,
+			Interfaces: func() []netip.Addr { return dnscheck.Own("") }, Log: logger, Now: time.Now}
 	}
 	opts.TLS = NewNodeTLS(cfg.DataDir, nodeCerts, certs, nodesACME, set, logger, time.Now)
 	opts.PanelCert = func() (nodetls.Pair, error) { return nodetls.LoadOrCreate(nodesDir, time.Now()) }
@@ -177,6 +199,29 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	p, err := NewPanel(st, opts)
 	if err != nil {
 		return err
+	}
+	// The front pages and the plain 404 are this installation's own, on the panel and on its
+	// nodes alike: a page every installation serves the same is a mark to find them all by.
+	seed, err := set.FrontSeed(ctx)
+	if err != nil {
+		return err
+	}
+	frontpage.SetSeed(seed)
+	own, err := set.String(ctx, settings.KeySiteHTML)
+	if err != nil {
+		return err
+	}
+	frontpage.SetCustom([]byte(own))
+	var siteFiles []frontpage.SiteFile
+	if raw, err := set.String(ctx, settings.KeySiteFiles); err != nil {
+		return err
+	} else if raw != "" {
+		// Files that do not read are no site: the first page alone is shown, as before them.
+		_ = json.Unmarshal([]byte(raw), &siteFiles)
+	}
+	frontpage.SetSite(siteFiles)
+	if p.Nodes != nil {
+		p.Nodes.SetFrontSeed(seed)
 	}
 	// A certificate issued, renewed or uploaded later goes to the nodes at once: they get it
 	// only with their state, which is sent again on a change.
@@ -218,6 +263,7 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	if certs != nil {
 		running.Go(func() { certs.Run(workers) })
 		running.Go(func() { subCerts.Run(workers) })
+		running.Go(func() { formers.Run(workers) })
 		running.Go(func() { nodesACME.Run(workers) })
 		// kill -HUP (an external tool's renewal hook) serves a new custom certificate now.
 		hup := make(chan os.Signal, 1)

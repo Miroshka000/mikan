@@ -85,7 +85,7 @@ func (c CDN) check(t Template) error {
 	case typ != "vless" && typ != "trojan", t.Ext().TLS != "node":
 		return fail("cdn_type", field)
 	}
-	switch transport(t) {
+	switch Transport(t) {
 	case "xhttp", "ws", "grpc":
 	default:
 		return fail("cdn_transport", field)

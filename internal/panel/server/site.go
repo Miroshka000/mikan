@@ -53,10 +53,17 @@ func OwnSite(dir string, template func() string) http.Handler {
 // builtIn answers "/" with the chosen template and says whether it did; anything else, or
 // no template, is NotFound.
 func builtIn(w http.ResponseWriter, r *http.Request, name string, template func() string) bool {
+	// The admin's own site has a file for more than one address.
+	if template != nil && path.Base(template()) == frontpage.Custom && frontpage.HasSite() {
+		plain(w.Header())
+		return frontpage.ServeSite(w, r)
+	}
 	var page []byte
-	if t := ""; template != nil && (name == "" || name == "index.html") {
-		if t = template(); t != "" {
-			page = frontpage.Page(path.Base(t))
+	kind := ""
+	if template != nil && (name == "" || name == "index.html") {
+		if t := template(); t != "" {
+			kind = path.Base(t)
+			page = frontpage.Page(kind)
 		}
 	}
 	if page == nil {
@@ -64,6 +71,11 @@ func builtIn(w http.ResponseWriter, r *http.Request, name string, template func(
 		return true
 	}
 	plain(w.Header())
+	if kind == frontpage.Custom {
+		// The admin's own page stands at the panel's address, where the admin's session
+		// lives: it runs no script and loads nothing from another address.
+		w.Header().Set("Content-Security-Policy", frontpage.SitePolicy)
+	}
 	frontpage.Write(w, r, page)
 	return true
 }

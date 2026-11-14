@@ -1,0 +1,107 @@
+---
+title: SDK for TypeScript and Python
+description: The panel's API clients for TypeScript and Python. How to install the version that matches your panel, sign in with an mk_... key, call a method and read an error.
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+:::note[New in 0.5.2.1]
+The TypeScript and Python SDKs are new in 0.5.2.1.
+:::
+
+The panel's API has two ready clients: [`@getmikan/sdk`](https://www.npmjs.com/package/@getmikan/sdk) on npm for TypeScript and [`mikan-sdk`](https://pypi.org/project/mikan-sdk/) on PyPI for Python. A [build](https://github.com/Miroshka000/mikan/tree/main/sdk) makes them from the same OpenAPI file the [methods reference](/mikan/en/api/reference/) is built from, so the methods, the parameters and the answers are the same. Every stable release of the panel gets an SDK of the same number, a beta (`-rc`) a pre-release of the SDK, which `npm install` and `pip install` without a version do not take.
+
+## Version
+
+Take the SDK of the same number as your panel (**Settings → System → Updates**). A panel has four numbers and npm versions have three, so npm joins the third and the fourth into one: the third times 100, plus the fourth.
+
+| Panel | npm | PyPI |
+|---|---|---|
+| `0.5.2.1` | `0.5.201` | `0.5.2.1` |
+| `0.5.3.0` | `0.5.300` | `0.5.3.0` |
+| `0.5.2.1-rc.2` (beta) | `0.5.201-rc.2`, dist-tag `beta` | `0.5.2.1rc2` |
+
+The SDK of a beta is installed on purpose: `npm install @getmikan/sdk@beta` or `pip install --pre mikan-sdk`.
+
+Name the version exactly instead of giving a range (`^`, `~`): the Python client reads answers strictly and can refuse an answer when the SDK does not match the panel: a value of an enumeration the client does not know yet, or a required field the panel does not send. The TypeScript client does not check answers, its types work at build time only.
+
+## Install
+
+<Tabs syncKey="api-client">
+<TabItem label="TypeScript">
+
+```bash
+npm install @getmikan/sdk@<version>
+```
+
+It needs Node 18 or later, or any runtime with `fetch`.
+
+</TabItem>
+<TabItem label="Python">
+
+```bash
+pip install mikan-sdk==<version>
+```
+
+It needs Python 3.11 or later.
+
+</TabItem>
+</Tabs>
+
+## Address and key
+
+The client needs an API key (`mk_...`, [how to make one](/mikan/en/api/#keys)) and the API address as the panel's API page shows it: `https://<panel>:<port>/<secret path>/api/v1`, with `/api/v1` at its end and nothing after. The paths in the SDK are written without `/api/v1`: the method `GET /users` of the reference is called as `"/users"`.
+
+## A call
+
+<Tabs syncKey="api-client">
+<TabItem label="TypeScript">
+
+```ts
+import { createClient } from "@getmikan/sdk";
+
+const mikan = createClient({
+  baseUrl: "https://vpn.example.com:8443/SECRET-PATH/api/v1",
+  apiKey: process.env.MIKAN_API_KEY!,
+});
+
+const { data, error } = await mikan.GET("/users", {
+  params: { query: { state: "active", limit: 10 } },
+});
+if (error) throw new Error(error.detail);
+for (const user of data.items) console.log(user.id, user.name);
+```
+
+Every call returns `{ data, error, response }`: `data` on success, `error` with the problem document on a refusal, and the `response` itself. The compiler checks the path, the method, the parameters and the body of the request, so a misspelled parameter or a value outside its list does not build. The types of the schemas are available as `components["schemas"]["UserView"]`.
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import os
+
+from mikan_sdk import AuthenticatedClient
+from mikan_sdk.api.users import list_users
+from mikan_sdk.models import ListUsersState
+
+client = AuthenticatedClient(
+    base_url="https://vpn.example.com:8443/SECRET-PATH/api/v1",
+    token=os.environ["MIKAN_API_KEY"],
+)
+
+with client as client:
+    response = list_users.sync_detailed(client=client, state=ListUsersState.ACTIVE, limit=10)
+    if response.status_code != 200:
+        raise RuntimeError(response.parsed.detail)
+    for user in response.parsed.items:
+        print(user.id, user.name)
+```
+
+Every method of the API is in the module of its section and is named by the `operationId` of the reference: `list-users` is `mikan_sdk.api.users.list_users`. A module has four functions: `sync`, `sync_detailed`, `asyncio` and `asyncio_detailed`; the "detailed" ones also give the status code, the headers and the body as it is (that is how pictures are read). The bodies of requests are in `mikan_sdk.models`.
+
+</TabItem>
+</Tabs>
+
+## Errors
+
+A refusal comes as an RFC 9457 document (`application/problem+json`): the error code is in the `detail` field and the codes of fields are in `errors[]`, more on the [API](/mikan/en/api/) page. Three refusals matter to the SDK: 401 `unauthorized` (the key is wrong, revoked or expired), 403 `read_only_key` (a "Read" key tries to change data) and 403 `session_only` (the method is for the administrator's session only, and the reference marks it so).

@@ -1,8 +1,9 @@
 # The workflows pin every action to a commit and the Dockerfile every base image to a
 # digest; a pin does not move on its own, so dependabot proposes the new commit or digest
-# (and the version beside it) weekly. The installer's crates, the panel's Go modules and
-# the admin's npm packages are the other dependencies a security fix reaches only by a
-# release (the docs site's npm packages reach it by the next Pages build). Minor and patch updates come grouped, a major one in its own pull request.
+# (and the version beside it) weekly. The installer's crates, the panel's Go modules, the
+# admin's npm packages and the SDKs' packages (sdk/) are the other dependencies a security
+# fix reaches only by a release (the docs site's npm packages reach it by the next Pages
+# build). Minor and patch updates come grouped, a major one in its own pull request.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -54,5 +55,25 @@ updates:
     open-pull-requests-limit: 5
     groups:
       site:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: npm
+    directory: /sdk/typescript
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      sdk-typescript:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: pip
+    directory: /sdk/python
+    target-branch: dev
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      sdk-python:
         patterns: ["*"]
         update-types: ["minor", "patch"]

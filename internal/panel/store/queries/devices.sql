@@ -49,7 +49,7 @@ SELECT id FROM users WHERE id = $1 FOR NO KEY UPDATE;
 
 -- name: ListDeviceSlots :many
 -- Slots of bound devices with an id: keys of their own, profile fetches of their own.
-SELECT s.name AS slot_name, d.user_id, d.last_seen FROM bound_devices d JOIN slots s ON s.id = d.slot_id WHERE d.hwid != '';
+SELECT s.name AS slot_name, d.user_id, d.last_seen, d.last_ip FROM bound_devices d JOIN slots s ON s.id = d.slot_id WHERE d.hwid != '';
 
 -- name: SetBoundDeviceName :execrows
 -- The device's own name; '' goes back to the one its app reports.

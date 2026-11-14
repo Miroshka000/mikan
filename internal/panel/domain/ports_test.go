@@ -208,7 +208,8 @@ func TestPortsWithoutTheNode(t *testing.T) {
 	if _, _, err := s.Update(ctx, find(t, s, 1, "tuic").ID, InboundPatch{Port: ptr("25000")}); !errors.As(err, &busy) || busy.Name != "hopping" {
 		t.Fatalf("move into a hopping range: %v", err)
 	}
-	if _, err := s.Create(ctx, NewInbound{Preset: "tuic_v5", Port: "29000-31000"}); !errors.As(err, &busy) || busy.Name != "hopping" {
+	// The saved range is wider than a new one may be (MaxHopPorts), and still holds its ports.
+	if _, err := s.Create(ctx, NewInbound{Preset: "tuic_v5", Port: "29500-30499"}); !errors.As(err, &busy) || busy.Name != "hopping" {
 		t.Fatalf("a range over a hopping range: %v", err)
 	}
 }

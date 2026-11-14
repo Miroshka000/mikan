@@ -1,6 +1,8 @@
 export type Platform = "ios" | "android" | "windows" | "macos" | "linux";
 
 type App = {
+  /** The id of the panel's list of known apps (apps.Catalog in internal/sub/apps): what the admin blocked is left out of the page. */
+  id: string;
   name: string;
   note: "easiest" | "free" | "stable" | "openSource" | "modern" | "bestWindows" | "tun" | "oneButton" | "allProtocols" | "everything";
   link: (url: string, brand: string, happ?: string) => string;
@@ -19,38 +21,38 @@ const happ = (u: string, _brand: string, crypt?: string) => crypt || `happ://add
 
 export const APPS: Record<Platform, App[]> = {
   ios: [
-    { name: "Happ", note: "easiest", link: happ },
-    { name: "INCY", note: "modern", link: incy },
-    { name: "Streisand", note: "free", link: (u, b) => `streisand://import/${u}#${enc(b)}` },
-    { name: "v2RayTun", note: "stable", link: (u) => `v2raytun://import/${u}` },
+    { id: "happ", name: "Happ", note: "easiest", link: happ },
+    { id: "incy", name: "INCY", note: "modern", link: incy },
+    { id: "streisand", name: "Streisand", note: "free", link: (u, b) => `streisand://import/${u}#${enc(b)}` },
+    { id: "v2raytun", name: "v2RayTun", note: "stable", link: (u) => `v2raytun://import/${u}` },
   ],
   android: [
-    { name: "Mikan", note: "everything", link: mikan },
-    { name: "Happ", note: "easiest", link: happ },
-    { name: "ClashFest", note: "allProtocols", link: (u, b) => `clashfest://install-config?url=${enc(u)}&name=${enc(b)}` },
-    { name: "INCY", note: "modern", link: incy },
-    { name: "v2RayTun", note: "stable", link: (u) => `v2raytun://import/${u}` },
-    { name: "Hiddify", note: "openSource", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
+    { id: "mikan", name: "Mikan", note: "everything", link: mikan },
+    { id: "happ", name: "Happ", note: "easiest", link: happ },
+    { id: "clashfest", name: "ClashFest", note: "allProtocols", link: (u, b) => `clashfest://install-config?url=${enc(u)}&name=${enc(b)}` },
+    { id: "incy", name: "INCY", note: "modern", link: incy },
+    { id: "v2raytun", name: "v2RayTun", note: "stable", link: (u) => `v2raytun://import/${u}` },
+    { id: "hiddify", name: "Hiddify", note: "openSource", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
   ],
   windows: [
-    { name: "Kabosu", note: "tun", link: kabosu },
-    { name: "Koala Clash", note: "bestWindows", link: (u, b) => `koala-clash://install-config?url=${enc(u)}&name=${enc(b)}` },
-    { name: "SlothClash", note: "tun", link: slothClash },
-    { name: "Hiddify", note: "easiest", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
-    { name: "Clash Verge Rev", note: "tun", link: clash },
+    { id: "kabosu", name: "Kabosu", note: "tun", link: kabosu },
+    { id: "koala", name: "Koala Clash", note: "bestWindows", link: (u, b) => `koala-clash://install-config?url=${enc(u)}&name=${enc(b)}` },
+    { id: "slothclash", name: "SlothClash", note: "tun", link: slothClash },
+    { id: "hiddify", name: "Hiddify", note: "easiest", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
+    { id: "verge", name: "Clash Verge Rev", note: "tun", link: clash },
   ],
   macos: [
-    { name: "Kabosu", note: "tun", link: kabosu },
-    { name: "Clash Verge Rev", note: "tun", link: clash },
-    { name: "SlothClash", note: "tun", link: slothClash },
-    { name: "Happ", note: "oneButton", link: happ },
-    { name: "Hiddify", note: "openSource", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
+    { id: "kabosu", name: "Kabosu", note: "tun", link: kabosu },
+    { id: "verge", name: "Clash Verge Rev", note: "tun", link: clash },
+    { id: "slothclash", name: "SlothClash", note: "tun", link: slothClash },
+    { id: "happ", name: "Happ", note: "oneButton", link: happ },
+    { id: "hiddify", name: "Hiddify", note: "openSource", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
   ],
   linux: [
-    { name: "Kabosu", note: "tun", link: kabosu },
-    { name: "SlothClash", note: "tun", link: slothClash },
-    { name: "Clash Verge Rev", note: "tun", link: clash },
-    { name: "Hiddify", note: "openSource", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
+    { id: "kabosu", name: "Kabosu", note: "tun", link: kabosu },
+    { id: "slothclash", name: "SlothClash", note: "tun", link: slothClash },
+    { id: "verge", name: "Clash Verge Rev", note: "tun", link: clash },
+    { id: "hiddify", name: "Hiddify", note: "openSource", link: (u, b) => `hiddify://import/${u}#${enc(b)}` },
   ],
 };
 

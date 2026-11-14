@@ -23,7 +23,10 @@ func (h *handlers) community(ctx context.Context) *addons.Community {
 	}
 	c, err := h.d.Addons.Community(ctx)
 	if err != nil {
-		h.d.Log.Warn("addons: community index", "err", err)
+		// A request the admin left tells nothing of GitHub.
+		if ctx.Err() == nil {
+			h.d.Log.Warn("addons: community index", "err", err)
+		}
 		return nil
 	}
 	return &c

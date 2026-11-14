@@ -2,17 +2,17 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-en-dark.svg">
-  <img alt="mikan: panel VPN sobre el núcleo mihomo" src=".github/assets/banner-en-light.svg" width="100%">
+  <img alt="mikan: panel VPN sobre el núcleo Citrus" src=".github/assets/banner-en-light.svg" width="100%">
 </picture>
 
 <br>
 
-**Un panel VPN rápido y bonito sobre el núcleo [mihomo](https://github.com/MetaCubeX/mihomo): se instala con un solo comando y no hay que vigilarlo.**
+**Un panel VPN rápido y bonito sobre el núcleo [Citrus](https://github.com/getmikan/Citrus): se instala con un solo comando y no hay que vigilarlo.**
 
 [![Versión](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=versión&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
 [![Imagen](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
 [![Licencia](https://img.shields.io/badge/licencia-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
-[![mihomo](https://img.shields.io/badge/núcleo-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
+[![Citrus](https://img.shields.io/badge/núcleo-Citrus-9e8eff?style=flat-square)](https://github.com/getmikan/Citrus)
 [![Telegram](https://img.shields.io/badge/Telegram-canal-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/mikanvpn)
 [![Telegram](https://img.shields.io/badge/Telegram-foro-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/+I2JFR7DbPow1ZmQy)
 
@@ -61,7 +61,7 @@ Las suscripciones detectan la app (Happ, v2RayTun, Koala Clash, SlothClash, Clas
 <td valign="top">
 
 ### 📊 Contabilidad exacta al byte
-mihomo está integrado como biblioteca, así que el tráfico se cuenta por usuario en cada conexión, sin muestreo. Planes por tiempo y por gigabytes, días de facturación, límites de dispositivos y vinculación de dispositivos contra el uso compartido de claves.
+[Citrus](https://github.com/getmikan/Citrus), nuestro fork de mihomo, está integrado como biblioteca, así que el tráfico se cuenta por usuario en cada conexión, sin muestreo. Planes por tiempo y por gigabytes, días de facturación, límites de dispositivos y vinculación de dispositivos contra el uso compartido de claves.
 
 </td>
 <td valign="top">
@@ -165,7 +165,7 @@ Diecisiete protocolos, cada uno un preset con las claves generadas por ti. La su
 ```mermaid
 flowchart LR
     A[Browser] -- HTTPS, secret link --> P[mikan panel<br>users · plans · subscriptions]
-    P -- unix socket / pinned TLS --> N1[mikan node<br>mihomo inside]
+    P -- unix socket / pinned TLS --> N1[mikan node<br>Citrus inside]
     P -- pinned TLS --> N2[remote node]
     C[VPN apps] -- REALITY · QUIC · … --> N1
     C --> N2
@@ -230,7 +230,7 @@ El desarrollo se hace en la rama `dev`; los pull requests hacia `main` se compil
 
 ## Licencia
 
-mikan es software libre bajo la [GNU GPL v3](LICENSE) con los términos adicionales de [NOTICE.md](NOTICE.md): conservar la atribución, no hacer pasar una versión modificada por la original, sin derechos sobre el nombre y el logotipo. Copyright (C) 2026 Miroshka and Mikan. Incluye [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) y adapta partes de [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0). Fuentes: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
+mikan es software libre bajo la [GNU GPL v3](LICENSE) con los términos adicionales de [NOTICE.md](NOTICE.md): conservar la atribución, no hacer pasar una versión modificada por la original, sin derechos sobre el nombre y el logotipo. Copyright (C) 2026 Miroshka and Mikan. Incluye [Citrus](https://github.com/getmikan/Citrus), fork de [mihomo](https://github.com/MetaCubeX/mihomo), (GPL-3.0) y adapta partes de [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0). Fuentes: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
 
 <div align="center">
 <sub>Hecho con 🍊</sub>

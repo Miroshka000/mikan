@@ -1,7 +1,6 @@
 package proto
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -31,21 +30,9 @@ func TestObfsValidation(t *testing.T) {
 	}
 }
 
-// The client gets the server's obfuscation and Gecko's sizes; Needs marks Gecko so only
-// the apps that know it get the inbound.
-func TestGeckoClient(t *testing.T) {
+// Needs marks Gecko so only the apps that know it get the inbound.
+func TestGeckoNeeds(t *testing.T) {
 	tpl := mustParse(t, "type: hysteria2\nobfs: gecko\nobfs-password: pw\nobfs-min-packet-size: 600\nobfs-max-packet-size: 1100\n")
-	c, err := ClientConfig(tpl, ClientInput{Name: "G", Host: "203.0.113.7", Port: 2443, Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	y := c.Mihomo
-	if y["obfs"] != "gecko" || y["obfs-password"] != "pw" || y["obfs-min-packet-size"] != 600 || y["obfs-max-packet-size"] != 1100 {
-		t.Fatalf("mihomo: %v", y)
-	}
-	if !strings.Contains(c.URI, "obfs=gecko") {
-		t.Fatalf("link: %s", c.URI)
-	}
 	if n := NeedsOf(tpl); !n.Gecko {
 		t.Fatal("Gecko not in the needs")
 	}

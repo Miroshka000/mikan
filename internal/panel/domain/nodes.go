@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"errors"
-	"fmt"
 	"math/big"
 	"net"
 	"strconv"
@@ -35,6 +34,8 @@ type NodeInput struct {
 	APIPort int    // 0 picks a free random port
 	// PanelURL is where the node says hello (nodetls.Key.PanelURL); "" leaves it out.
 	PanelURL string
+	// Tags are the admin's labels of the node, as a user's (encodeTags).
+	Tags []string
 	// Rules are what the name and the domain are checked against; the zero value asks
 	// nothing but that the name is not taken.
 	Rules NodeRules
@@ -85,6 +86,22 @@ func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeIn
 		if key, err = issueKey(ctx, q, panel, node, in.PanelURL, now); err != nil {
 			return err
 		}
+		// A new node's API answers the panel alone from the start: nobody else has business
+		// on that port, and an open one is how scanners find the server. The node takes the
+		// panel's addresses by itself and lifts the rule when the panel is gone for a while
+		// (apilock.go), so a panel behind NAT or one that moved is not locked out.
+		if err := q.SetNodeAPILockdown(ctx, db.SetNodeAPILockdownParams{ApiLockdown: 1, ApiAllow: []string{}, UpdatedAt: now.Unix(), ID: node.ID}); err != nil {
+			return err
+		}
+		if len(in.Tags) > 0 {
+			tags, err := encodeTags(in.Tags)
+			if err != nil {
+				return err
+			}
+			if err := q.SetNodeTags(ctx, db.SetNodeTagsParams{Tags: tags, ID: node.ID}); err != nil {
+				return err
+			}
+		}
 		for _, p := range presets.All {
 			if !p.Default {
 				continue
@@ -93,7 +110,7 @@ func AddNode(ctx context.Context, st *store.Store, panel nodetls.Pair, in NodeIn
 			if err != nil {
 				return err
 			}
-			if _, err := q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: p.Name, Preset: p.ID, Port: p.Port, Config: config,
+			if _, err := createInbound(ctx, q, db.CreateInboundParams{NodeID: node.ID, Name: p.Name, Preset: p.ID, Port: p.Port, Config: config,
 				CreatedAt: now.Unix(), UpdatedAt: now.Unix()}); err != nil {
 				return err
 			}
@@ -134,7 +151,12 @@ func issueKey(ctx context.Context, q *db.Queries, panel nodetls.Pair, n db.Node,
 	if err != nil {
 		return "", err
 	}
-	cert, err := nodetls.Generate(fmt.Sprintf("node-%d.mikan", n.ID), x509.ExtKeyUsageServerAuth, now)
+	// The name says nothing of mikan or of the node: a scanner that finds the API port reads it.
+	name, err := nodetls.HostName()
+	if err != nil {
+		return "", err
+	}
+	cert, err := nodetls.Generate(name, x509.ExtKeyUsageServerAuth, now)
 	if err != nil {
 		return "", err
 	}

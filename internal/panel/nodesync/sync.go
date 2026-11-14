@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"mikan/internal/frontpage"
 	"mikan/internal/nodeapi"
 	"mikan/internal/pace"
 	"mikan/internal/panel/domain"
@@ -30,6 +31,9 @@ import (
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/warp"
 	"mikan/internal/proto"
+	"mikan/internal/release"
+	"mikan/internal/sub/build"
+	"mikan/internal/sub/mihomo"
 )
 
 // Node is the subset of the node API the syncer needs.
@@ -70,6 +74,7 @@ type Syncer struct {
 	failedKey   string    // the state key the last failed Apply was for
 	retry       retry     // the pace of attempts at a node that does not answer
 	badInbounds string    // the inbounds left out of the state, as last logged
+	nodeVersion string    // the version the node last reported; "" until it did
 
 	// Only the counters loop touches these.
 	counterFails int       // consecutive failed pulls
@@ -215,10 +220,14 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	}
 	inbounds := snap.inbounds
 	st.Inbounds = []nodeapi.Inbound{}
-	if st.Warp, err = s.warp(ctx, n, inbounds); err != nil {
+	cas, err := domain.LoadCascadeWith(ctx, q, inbounds)
+	if err != nil {
 		return st, "", err
 	}
-	if st.Relay, st.Exits, err = s.cascade(ctx, n, inbounds); err != nil {
+	if st.Relay, st.Exits, err = s.cascade(ctx, n, inbounds, cas); err != nil {
+		return st, "", err
+	}
+	if st.Warp, err = s.warp(ctx, n, inbounds, st.Relay != nil); err != nil {
 		return st, "", err
 	}
 	if s.local {
@@ -264,11 +273,47 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	st.Detail = snap.detail
 	st.HTTPRedirect = n.HttpRedirect != 0 && n.Address != ""
 	st.APIAllow = s.apiAllow(ctx, n)
+	if n.Address != "" {
+		// Where the node says hello: the panel's address now, not the one in its join key.
+		if ep, err := s.m.set.Endpoint(ctx); err == nil {
+			st.PanelURL = ep.URL()
+		}
+	}
+	if st.OwnPorts, err = s.ownPorts(ctx, n); err != nil {
+		return st, "", err
+	}
 	// The front page: what the inbounds on an HTTP transport give a stranger's request, and
 	// with the shared 443 what the node's own domain gives.
 	st.FrontPage = n.FrontPage
+	if n.FrontPage == frontpage.Custom {
+		// The admin's own page goes whole. A node from before it knows only the built-in
+		// ones and would show nothing: it gets the built-in page of this installation.
+		page := frontpage.Page(frontpage.Custom)
+		switch {
+		case page == nil:
+			st.FrontPage = ""
+		case s.nodeVersion != "" && release.Valid(s.nodeVersion) && !release.AtLeast(s.nodeVersion, customPageSince):
+			st.FrontPage = frontpage.Pick(s.m.frontSeed)
+		default:
+			st.FrontHTML = string(page)
+			// The site's files go to a node that answers addresses with them; one from
+			// before them shows the first page alone.
+			if s.nodeVersion == "" || !release.Valid(s.nodeVersion) || release.AtLeast(s.nodeVersion, siteFilesSince) {
+				for _, f := range frontpage.Site() {
+					st.FrontFiles = append(st.FrontFiles, nodeapi.FrontFile{Path: f.Path, Type: f.Type, Data: f.Data})
+				}
+				slices.SortFunc(st.FrontFiles, func(a, b nodeapi.FrontFile) int { return strings.Compare(a.Path, b.Path) })
+			}
+		}
+	}
+	if st.FrontPage != "" {
+		st.FrontSeed = s.m.frontSeed
+	}
 	if n.SniRouter != 0 {
-		st.Router = sniRouter(st.Inbounds, n.Domain, n.FrontPage != "")
+		st.Router = sniRouter(st.Inbounds, n.Domain, st.FrontPage != "")
+		if st.Router != nil && n.SniByKey != 0 {
+			st.Router.ByKey = true
+		}
 	}
 	if n.FairShare != 0 && n.ChannelMbps.Valid {
 		st.Shaping = &nodeapi.Shaping{ChannelMbps: int(n.ChannelMbps.Int64)}
@@ -830,6 +875,8 @@ func (s *Syncer) refreshHealth(ctx context.Context) {
 	if applied != 0 && h.Revision == applied {
 		view.Ports = s.ports
 	}
+	updated := s.nodeVersion != "" && h.Version != s.nodeVersion
+	s.nodeVersion = h.Version
 	s.health.Store(view)
 	// The node is back: what was held off for it goes out now.
 	back := s.retry.down
@@ -843,7 +890,9 @@ func (s *Syncer) refreshHealth(ctx context.Context) {
 		signal(s.policiesDirty)
 	}
 	// A node that lost its state (new volume, crash before saving) reports an older revision.
-	if h.Revision < applied || (applied == 0 && h.Revision == 0) {
+	// One that was updated holds the state as its old version saved it, without the fields
+	// that version did not know, at the same revision.
+	if updated || h.Revision < applied || (applied == 0 && h.Revision == 0) {
 		s.mu.Lock()
 		s.stateKey = ""
 		s.mu.Unlock()
@@ -888,8 +937,9 @@ func limited(n int64) int64 {
 }
 
 // warp is the node's WARP outbound, nil when it has none or it is off. Inbounds set to
-// WARP on a node without it simply leave directly.
-func (s *Syncer) warp(ctx context.Context, n db.Node, inbounds []db.Inbound) (*nodeapi.Warp, error) {
+// WARP on a node without it simply leave directly. relay says whether the node runs its
+// relay listener (cascade).
+func (s *Syncer) warp(ctx context.Context, n db.Node, inbounds []db.Inbound, relay bool) (*nodeapi.Warp, error) {
 	w, err := s.m.st.Q.GetNodeWarp(ctx, n.ID)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && w.Enabled == 0 {
 		return nil, nil
@@ -912,6 +962,9 @@ func (s *Syncer) warp(ctx context.Context, n db.Node, inbounds []db.Inbound) (*n
 		}
 	}
 	// Traffic other nodes relay through this one may leave by WARP too.
+	if !relay {
+		return out, nil
+	}
 	if r, err := s.m.st.Q.GetNodeRelay(ctx, n.ID); err == nil && r.Outbound == "warp" && !r.ExitNodeID.Valid {
 		out.Inbounds = append(out.Inbounds, nodeapi.RelayListener)
 	}
@@ -931,10 +984,11 @@ func (m *Manager) Warp(ctx context.Context, id int64, force bool) (nodeapi.WarpS
 }
 
 // cascade is the node's part in cascades: its relay listener when other nodes leave
-// through it, and the other nodes it sends inbounds (and its own relay) to. Keys and
-// relays are made by the API when an exit is chosen; a missing one leaves that exit out,
-// and the inbounds behind it fail instead of going direct.
-func (s *Syncer) cascade(ctx context.Context, n db.Node, inbounds []db.Inbound) (*nodeapi.Relay, []nodeapi.Exit, error) {
+// through it now (cas), and the other nodes it sends inbounds (and its own relay) to. Keys
+// and relays are made by the API when an exit is chosen; a missing one leaves that exit
+// out, and the inbounds behind it fail instead of going direct. A key of a node that no
+// longer leaves through this one stays in the database, out of the listener.
+func (s *Syncer) cascade(ctx context.Context, n db.Node, inbounds []db.Inbound, cas *domain.Cascade) (*nodeapi.Relay, []nodeapi.Exit, error) {
 	q := s.m.st.Q
 	if n.Enabled == 0 {
 		return nil, nil, nil
@@ -950,7 +1004,7 @@ func (s *Syncer) cascade(ctx context.Context, n db.Node, inbounds []db.Inbound) 
 		if err != nil {
 			return nil, nil, err
 		}
-		if len(users) > 0 {
+		if users = cas.RelaySources(n.ID, users); len(users) > 0 {
 			t, err := proto.Parse(own.Config)
 			if err != nil {
 				return nil, nil, err
@@ -1027,16 +1081,16 @@ func (s *Syncer) exitTo(ctx context.Context, src, id int64) (nodeapi.Exit, error
 	if err != nil {
 		return nodeapi.Exit{}, err
 	}
-	c, err := proto.ClientConfig(t, proto.ClientInput{Name: nodeapi.ExitName(id), Host: host, Port: port, Slot: proto.Slot{Name: domain.RelayUserName(src), UUID: key}})
+	p, err := build.Proxy(t, build.Input{Name: nodeapi.ExitName(id), Host: host, Port: port, Keys: proto.Slot{Name: domain.RelayUserName(src), UUID: key}})
 	if err != nil {
 		return nodeapi.Exit{}, err
 	}
 	// Node to node is Citrus on both ends: the key exchange is post-quantum, said here
 	// rather than left to the core's default (mihomo's was the other way).
-	if ro, ok := c.Mihomo["reality-opts"].(map[string]any); ok {
-		ro["support-x25519mlkem768"] = true
+	if p.TLS != nil && p.TLS.Reality != nil {
+		p.TLS.Reality.MLKEM = true
 	}
-	raw, _ := json.Marshal(c.Mihomo)
+	raw, _ := json.Marshal(mihomo.Proxy(p))
 	return nodeapi.Exit{Name: nodeapi.ExitName(id), Proxy: raw}, nil
 }
 
@@ -1142,15 +1196,40 @@ func countSites(ctx context.Context, q *db.Queries, c nodeapi.Counters, owner ma
 	return nil
 }
 
+// customPageSince is the first node version that shows the admin's own front page.
+const customPageSince = "0.5.2.1-rc.10"
+
+// siteFilesSince is the first node version that answers the addresses of a site of several files.
+const siteFilesSince = "0.5.2.1-rc.11"
+
+// byKeySince is the first node version whose SNI router tells REALITY inbounds that share a
+// name apart by key (nodeapi.SNIRouter.ByKey).
+const byKeySince = "0.5.2.1-rc.12"
+
+// RoutesByKey says whether a node that reported version v tells REALITY inbounds that share a
+// name apart by key: a build with no release number (a developer's) does, a node that has not
+// reported yet is not counted on.
+func RoutesByKey(v string) bool {
+	return v != "" && (!release.Valid(v) || release.AtLeast(v, byKeySince))
+}
+
 // sniRouter is the node's SNI router for the inbounds marked for it: each by the names its
 // clients ask for, the first REALITY one taking any other name (it passes a stranger on to
 // its target, as on a port of its own). With front, the node's front page takes the node's
 // own domain, unless an inbound asks for it, and a ClientHello with no name. nil when no
 // inbound is marked, and with only the page when an inbound of its own holds TCP 443.
+//
+// An inbound behind a CDN or another server (its clients are given that server's address)
+// takes any other name instead, and a ClientHello with no name too: what connects to the
+// node for it is the CDN, which asks for the name its own settings give the origin (the
+// origin's host, the zone's apex, no name at all when the origin is an address), and that
+// name is nothing the panel knows. A stranger with a name of his own gets what the inbound
+// gives a request that is not its client's: the node's certificate and its front page.
 func sniRouter(inbounds []nodeapi.Inbound, nodeDomain string, front bool) *nodeapi.SNIRouter {
 	r := &nodeapi.SNIRouter{}
 	taken := map[string]bool{}
 	busy := false // TCP 443 held by an inbound outside the router
+	origin := ""  // the first inbound behind a CDN or another server
 	for _, in := range inbounds {
 		t, err := proto.Parse(string(in.Config))
 		if err != nil {
@@ -1168,12 +1247,21 @@ func sniRouter(inbounds []nodeapi.Inbound, nodeDomain string, front bool) *nodea
 		if r.Default == "" && proto.Reality(t) {
 			r.Default = in.Name
 		}
+		if origin == "" && !proto.Reality(t) && t.Ext().Client.Server != "" {
+			origin = in.Name
+		}
+	}
+	if origin != "" {
+		r.Default = origin
 	}
 	if front {
 		if d := strings.ToLower(strings.TrimSuffix(nodeDomain, ".")); d != "" && !taken[d] {
 			r.Stub = append(r.Stub, d)
 		}
-		r.Stub = append(r.Stub, "")
+		// With an inbound behind a CDN a ClientHello with no name is the CDN's as well.
+		if origin == "" {
+			r.Stub = append(r.Stub, "")
+		}
 	}
 	if len(r.Routes) == 0 && (len(r.Stub) == 0 || busy) {
 		return nil

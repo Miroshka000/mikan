@@ -64,6 +64,8 @@ func inboundCmd(ctx context.Context, st *store.Store, args []string, stdout, std
 			return fmt.Errorf("no preset %q. Presets: %s", args[1], presetIDs())
 		case errors.Is(err, domain.ErrBadPort):
 			return fmt.Errorf("bad port %q", *port)
+		case errors.Is(err, domain.ErrPortRangeWide):
+			return portRangeWide(*port)
 		case errors.As(err, &busy):
 			return fmt.Errorf("%s, choose another: --port", portHolder(busy.PortHolder))
 		case errors.As(err, &pe):
@@ -103,6 +105,8 @@ func inboundCmd(ctx context.Context, st *store.Store, args []string, stdout, std
 			return fmt.Errorf("node %d has no inbound %q: see mikan admin inbound list", *node, args[1])
 		case errors.Is(err, domain.ErrBadPort):
 			return fmt.Errorf("bad port %q", *port)
+		case errors.Is(err, domain.ErrPortRangeWide):
+			return portRangeWide(*port)
 		case errors.As(err, &busy):
 			return fmt.Errorf("%s, choose another", portHolder(busy.PortHolder))
 		case err != nil:
@@ -116,6 +120,11 @@ func inboundCmd(ctx context.Context, st *store.Store, args []string, stdout, std
 	default:
 		return fmt.Errorf("unknown inbound subcommand %q\n\n%s", args[0], usage)
 	}
+}
+
+// portRangeWide refuses a hopping range wider than the panel takes.
+func portRangeWide(spec string) error {
+	return fmt.Errorf("range %s is %d ports, at most %d: the node runs a server on each of them", spec, domain.HopPorts(spec), domain.MaxHopPorts)
 }
 
 // portHolder says what holds a port the admin asked for.

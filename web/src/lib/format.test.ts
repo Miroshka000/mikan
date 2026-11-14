@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { t } from "../i18n";
-import { bytes, days, daysUntil, expiryText, period, periodLabel } from "./format";
+import { bytes, days, daysUntil, expiryText, period, periodLabel, waitingDays } from "./format";
 
 describe("bytes", () => {
   it("names the unit the number is in", () => {
@@ -45,5 +45,20 @@ describe("daysUntil and expiryText", () => {
   it("calls a past moment expired, even earlier today", () => {
     expect(expiryText(new Date(2026, 9, 21, 11, 0).toISOString(), now).tone).toBe("bad");
     expect(expiryText(new Date(2026, 9, 21, 13, 0).toISOString(), now).tone).not.toBe("bad");
+  });
+});
+
+describe("waitingDays", () => {
+  it("keeps the whole term whatever the time of day, as the clock moves on every ten minutes", () => {
+    // The term was moved on at 23:58; at 00:05 the calendar says 29 days to its end, the term has 30.
+    const moved = new Date(2026, 9, 21, 23, 58).getTime();
+    const end = new Date(moved + 30 * 86_400_000).toISOString();
+    const after = new Date(2026, 9, 22, 0, 5).getTime();
+    expect(daysUntil(end, after)).toBe(29);
+    expect(waitingDays(end, after)).toBe(30);
+    expect(waitingDays(end, moved)).toBe(30);
+  });
+  it("is zero for a term that is over", () => {
+    expect(waitingDays(new Date(2026, 9, 21, 11, 0).toISOString(), new Date(2026, 9, 21, 12, 0).getTime())).toBe(0);
   });
 });

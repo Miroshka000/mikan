@@ -463,13 +463,14 @@ func (q *Queries) ListDeviceBans(ctx context.Context, arg ListDeviceBansParams) 
 }
 
 const listDeviceSlots = `-- name: ListDeviceSlots :many
-SELECT s.name AS slot_name, d.user_id, d.last_seen FROM bound_devices d JOIN slots s ON s.id = d.slot_id WHERE d.hwid != ''
+SELECT s.name AS slot_name, d.user_id, d.last_seen, d.last_ip FROM bound_devices d JOIN slots s ON s.id = d.slot_id WHERE d.hwid != ''
 `
 
 type ListDeviceSlotsRow struct {
 	SlotName string
 	UserID   int64
 	LastSeen int64
+	LastIp   string
 }
 
 // Slots of bound devices with an id: keys of their own, profile fetches of their own.
@@ -482,7 +483,12 @@ func (q *Queries) ListDeviceSlots(ctx context.Context) ([]ListDeviceSlotsRow, er
 	items := []ListDeviceSlotsRow{}
 	for rows.Next() {
 		var i ListDeviceSlotsRow
-		if err := rows.Scan(&i.SlotName, &i.UserID, &i.LastSeen); err != nil {
+		if err := rows.Scan(
+			&i.SlotName,
+			&i.UserID,
+			&i.LastSeen,
+			&i.LastIp,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

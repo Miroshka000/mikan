@@ -370,3 +370,22 @@ function UnbindRules({ s }: { s: Schemas["SettingsView"] }) {
     </div>
   );
 }
+
+// The apps that run whole xray configs (Happ, INCY) get the panel's routing, DNS and
+// automatic choice as xray configs, one per automatic group and per server; off, they get
+// links as the other xray apps do.
+export function XrayJSONCard({ s }: { s: Schemas["SettingsView"] }) {
+  const save = useSaveSettings();
+  return (
+    <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
+      <CardHead title={t("settings.xrayJson.title")} sub={t("settings.xrayJson.sub")} />
+      <SwitchRow
+        label={t("settings.xrayJson.on")}
+        sub={s.sub_xray_json ? t("settings.xrayJson.onSub") : t("settings.xrayJson.offSub")}
+        checked={s.sub_xray_json}
+        disabled={save.isPending}
+        onChange={(v) => save.mutate({ sub_xray_json: v })}
+      />
+    </section>
+  );
+}

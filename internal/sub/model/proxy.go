@@ -1,0 +1,169 @@
+// Package model describes a subscription apart from the format of any core: the
+// connections it carries and what they are made of. Each core's renderer (mihomo,
+// singbox, xray) writes the same model its own way, so a setting reaches every app that
+// can take it, and an app that cannot is told so by its own renderer.
+package model
+
+// Proxy is one connection of a subscription: a user's keys on one inbound of one node, as
+// the apps dial it.
+type Proxy struct {
+	// Name is the proxy's name in the subscription, unique in it: mihomo refuses a profile
+	// with two proxies of one name.
+	Name string
+	Node int64 // the node the inbound is on
+	Pool int64 // the inbound's server group; 0: none, the main servers
+	// NoAuto keeps the server out of the automatic choice: its inbound's word (the node's is
+	// Node.NoAuto).
+	NoAuto bool
+	// Type is the protocol as the inbound's template names it: vless, trojan, hysteria2,
+	// tuic, anytls, shadowsocks, trusttunnel, shadowquic, mieru, sudoku or snell.
+	Type   string
+	Server string
+	Port   int
+	// Ports is the Hysteria2 hopping range the app picks its ports from ("20000-30000");
+	// "": Port alone.
+	Ports string
+	// The user's keys as the protocol takes them: UUID for VLESS and TUIC, Username for
+	// TrustTunnel, ShadowQUIC and Mieru, Password for the others (for Shadowsocks its key).
+	UUID, Username, Password string
+	// TLS is how the connection is secured; nil where the protocol secures it itself.
+	TLS *TLS
+	// Transport is what VLESS and Trojan carry inside TLS; nil for the other protocols.
+	Transport *Transport
+	// UDP: the connection carries UDP too. Hysteria2 and TUIC always do.
+	UDP bool
+	// UDPOverTCP is the version of UDP over TCP the app wraps UDP in, 0: none. Shadowsocks
+	// takes it: the node's listener has no UDP port.
+	UDPOverTCP int
+	Flow       string // VLESS: xtls-rprx-vision; "": none
+	// Encryption is VLESS Encryption as the app sends it, with the public halves of the
+	// server's keys; "": none.
+	Encryption string
+	// ALPN is what the app offers in TLS: Hysteria2's, TUIC's and ShadowQUIC's own, or an
+	// address for clients' (VLESS, Trojan, AnyTLS on the node's certificate); nil: the
+	// core's own.
+	ALPN []string
+	// IPVersion is how the app reaches Server: ipv4, ipv6, ipv4-prefer or ipv6-prefer
+	// (mihomo's names); "": the core's own.
+	IPVersion  string
+	Obfs       *Obfs  // Hysteria2's obfuscation; nil: none
+	Congestion string // TUIC's congestion control
+	// UDPRelay is how TUIC relays UDP: quic; "": native, packet by packet. An own Clash
+	// profile's proxy may ask for quic, the panel's never do.
+	UDPRelay string
+	Cipher   string // Shadowsocks-2022's method
+	// Plugin is the Shadowsocks plugin the connection goes through, as mihomo names it (obfs,
+	// v2ray-plugin, shadow-tls, ...); "": none. An own Clash profile's proxy may have one, the
+	// panel's never do.
+	Plugin string
+	// PluginOpts are the plugin's settings as the template holds them (plugin-opts).
+	PluginOpts map[string]any
+	// Smux is the multiplexing (sing-mux) the app runs over the connection; nil: none. An own
+	// Clash profile's proxy may ask for it, the panel's never do.
+	Smux   *Smux
+	Sudoku *Sudoku
+	Snell  *Snell
+}
+
+// TLS is a connection's TLS as the app sends it.
+type TLS struct {
+	// SNI is the name the app asks for; "" on a node with no domain, reached by address.
+	SNI string
+	// Fingerprint is the uTLS profile the app dials with; "" for the protocols without uTLS
+	// (Hysteria2, TUIC, ShadowQUIC).
+	Fingerprint string
+	// Pin is the hex SHA-256 of the node's self-signed certificate, which the app pins in
+	// place of a CA; "": the certificate is checked as any website's.
+	Pin string
+	// Insecure takes any certificate: a proxy of an admin's own Clash profile may ask for it
+	// (skip-cert-verify), the panel's never do.
+	Insecure bool
+	// Reality is the REALITY the server runs in place of a certificate of its own; nil: TLS
+	// on the node's certificate.
+	Reality *Reality
+}
+
+// Reality is what a REALITY client needs of the server.
+type Reality struct {
+	PublicKey, ShortID string
+	// MLKEM: the server lets in only clients that offer the post-quantum key exchange
+	// (X25519MLKEM768), so the app must offer it.
+	MLKEM bool
+}
+
+// Transport is what VLESS and Trojan carry inside TLS.
+type Transport struct {
+	Network string // tcp, ws, grpc or xhttp
+	Path    string // ws and xhttp; "": none
+	// Host is the HTTP Host the app sends over WebSocket or XHTTP; "": the server's.
+	Host string
+	// Headers are the other HTTP headers the app sends over WebSocket: an own Clash
+	// profile's proxy may give them (a User-Agent a CDN asks for), the panel's never do, and
+	// xray goes without them.
+	Headers map[string]string
+	Service string // grpc: the service name
+	XHTTP   *XHTTP // xhttp
+}
+
+// XHTTP is the client side of an XHTTP transport past its path and host.
+type XHTTP struct {
+	Mode string // stream-one, stream-up or packet-up; "": the core's default
+	// Settings are the server's settings the app must send alike (padding, session ids,
+	// upload) and the app's own over them.
+	Settings []Setting
+	// Reuse is the app's own connection reuse (xmux), which replaces a core's default
+	// whole; nil: the inbound sets none.
+	Reuse []Setting
+}
+
+// Setting is one XHTTP setting, under the name each core that speaks XHTTP gives it.
+type Setting struct {
+	Mihomo, Xray string
+	// Value is as the inbound's template holds it: a string, a number or a bool.
+	Value any
+}
+
+// Obfs is Hysteria2's obfuscation.
+type Obfs struct {
+	Type     string // salamander or gecko
+	Password string
+	// MinPacket and MaxPacket are the server's Gecko packet sizes, which the app sends
+	// alike; 0: the core's default.
+	MinPacket, MaxPacket int
+}
+
+// Smux is sing-mux multiplexing as mihomo's smux holds it.
+type Smux struct {
+	Protocol string // smux, yamux or h2mux; "": the core's default
+	// MaxConnections, MinStreams and MaxStreams are how streams spread over connections;
+	// 0: the core's default.
+	MaxConnections, MinStreams, MaxStreams int
+	Padding                                bool
+	// OnlyTCP keeps UDP out of the multiplexing: it goes as the connection carries it.
+	OnlyTCP bool
+	// Brutal is TCP Brutal at the speeds the template gives (up, down; Mbps when a bare
+	// number); nil: off.
+	Brutal *Brutal
+}
+
+// Brutal is the speeds of TCP Brutal as the template gives them.
+type Brutal struct{ Up, Down string }
+
+// Sudoku is what a Sudoku client sends; one key for everyone. Its settings are as the
+// template holds them: only mihomo speaks Sudoku.
+type Sudoku struct {
+	Key, AEAD, TableType string
+	// PaddingMin and PaddingMax are the template's own; nil: the core's default.
+	PaddingMin, PaddingMax *int
+	// PureDownlink is the server's downlink mode, which the client must match; nil: the
+	// default.
+	PureDownlink *bool
+	HTTPMask     map[string]any // nil: none
+}
+
+// Snell is what a Snell client sends; one key for everyone.
+type Snell struct {
+	PSK      string
+	Version  int
+	ObfsOpts map[string]any // as the template holds them; nil: none
+}

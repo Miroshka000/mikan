@@ -828,13 +828,23 @@ func TestRemoveSubscriptionFromTheBot(t *testing.T) {
 	menu := chat.MenuMsgID
 	uid := strconv.FormatInt(e.user.ID, 10)
 
+	// tap is the screen the tap draws in from's own chat: another account's screen may still
+	// be on its way when the next tap comes.
 	tap := func(from int64, data string) call {
 		t.Helper()
 		e.later()
 		n := e.tg.count()
 		e.press(from, menu, data)
-		calls := e.tg.until(t, n, func(cs []call) bool { _, ok := find(cs, "editMessageText"); return ok })
-		edit, _ := find(calls, "editMessageText")
+		var edit call
+		e.tg.until(t, n, func(cs []call) bool {
+			for _, c := range cs {
+				if c.method == "editMessageText" && c.body["chat_id"] == float64(from) {
+					edit = c
+					return true
+				}
+			}
+			return false
+		})
 		return edit
 	}
 	if got := buttons(tap(anna, "s"))["🗑 Убрать из бота"]; got != "rm" {
@@ -845,10 +855,11 @@ func TestRemoveSubscriptionFromTheBot(t *testing.T) {
 		t.Fatalf("confirm: %q %v", text(confirm), buttons(confirm))
 	}
 
-	// Someone else's tap with the same data changes nothing.
-	e.later()
-	e.press(other, menu, "rd:"+uid)
-	time.Sleep(100 * time.Millisecond)
+	// Someone else's tap with the same data changes nothing: that account is only welcomed,
+	// and the link is checked once its screen is drawn, the tap handled.
+	if welcome := tap(other, "rd:"+uid); !strings.Contains(text(welcome), "Это бот Mikan VPN") {
+		t.Fatalf("another account's tap: %q", text(welcome))
+	}
 	if l, err := e.st.Q.GetTgLink(e.ctx, e.user.ID); err != nil || l.TgID != anna {
 		t.Fatalf("another account removed the link: %+v %v", l, err)
 	}

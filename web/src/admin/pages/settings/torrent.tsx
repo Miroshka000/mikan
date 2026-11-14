@@ -10,6 +10,7 @@ import { Button, Pill, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { dateShort, num, time } from "../../../lib/format";
 import { CardHead } from "../../../components/layout";
+import { Select } from "../../../components/select";
 
 type Hit = Schemas["TorrentHitView"];
 
@@ -51,7 +52,7 @@ export function TorrentCard() {
             <label className="mt-4 block text-[13px] font-medium" htmlFor="torrent-ban">
               {t("settings.torrent.ban")}
             </label>
-            <select
+            <Select
               id="torrent-ban"
               className="input mt-1.5 max-w-[280px]"
               value={v.ban_minutes}
@@ -64,7 +65,7 @@ export function TorrentCard() {
                   {banLabel(m)}
                 </option>
               ))}
-            </select>
+            </Select>
             <p id="torrent-ban-hint" className="mt-1.5 text-xs text-[var(--ink-500)]">
               {t("settings.torrent.banHint")}
             </p>

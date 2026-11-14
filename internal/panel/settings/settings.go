@@ -2,7 +2,9 @@ package settings
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -36,12 +38,11 @@ const (
 	KeyACMECA      = "acme_ca"
 	KeyACMEEABKID  = "acme_eab_kid"
 	KeyACMEEABHMAC = "acme_eab_hmac"
-	KeyGroupMain   = "sub_group_main" // subscription group names, see subs.Groups
+	KeyGroupMain   = "sub_group_main" // subscription group names, see model.GroupNames (internal/sub)
 	KeyGroupAuto   = "sub_group_auto"
-	KeyRouting     = "sub_routing"  // subs.Routing
-	KeyRules       = "sub_rules"    // the admin's own Clash rules, as typed (subs.ParseRules)
-	KeyRoutes      = "sub_routes"   // services, direct apps and DNS of the profiles (subs.Routes)
-	KeyTemplate    = "sub_template" // the admin's own Clash profile (subs.Template); empty: none
+	KeyRouting     = "sub_routing" // routing.Mode (internal/sub)
+	KeyRules       = "sub_rules"   // the admin's own Clash rules, as typed (routing.ParseRules)
+	KeyRoutes      = "sub_routes"  // services, direct apps and DNS of the profiles (routing.Routes)
 	// KeyFingerprint is the uTLS profile clients get where an inbound sets none
 	// (proto.Fingerprints); unset means proto.DefaultFingerprint.
 	KeyFingerprint = "client_fingerprint"
@@ -57,6 +58,13 @@ const (
 	// KeySupportAccess lets the admin open support access (internal/panel/support); off, no
 	// grant can be made and the live one ends.
 	KeySupportAccess = "support_access"
+	// KeyAutoAddress lets the panel save the address its server has now in place of a
+	// saved one that leads elsewhere (internal/panel/selfaddr); on unless switched off.
+	KeyAutoAddress = "auto_public_host"
+	// KeyAutoNodeAddress lets the panel move a remote node it cannot reach to the address
+	// the node's hello came from, once the node answers there (internal/panel/hello); on
+	// unless switched off.
+	KeyAutoNodeAddress = "auto_node_address"
 	// Devices (domain.Devices): bind subscriptions to devices, on unless switched off;
 	// refuse apps that send no device id instead of seating them together, off by default.
 	KeyDeviceBinding = "device_binding"
@@ -93,32 +101,54 @@ const (
 	// for maintenance or news; empty: none.
 	KeyAnnounce    = "sub_announce"
 	KeyAnnounceURL = "sub_announce_url"
-	// KeySubTitle is the profile's name in the apps (subs.Config.Title); empty: the brand.
+	// KeySubTitle is the profile's name in the apps (serve.Config.Title); empty: the brand.
 	KeySubTitle = "sub_title"
 	// A subscription that cannot connect gets one notice in place of its servers
-	// (subs.Config.InactiveServer), with the admin's words or the built-in ones.
+	// (serve.Config.InactiveServer), with the admin's words or the built-in ones.
 	KeyInactiveServer = "sub_inactive_server"
+	// KeyXrayJSON: the apps that run whole xray configs (Happ, INCY) get the xray JSON profile
+	// in place of share links (serve.Config.XrayJSON).
+	KeyXrayJSON = "sub_xray_json"
+	// The response rules of the subscription (internal/sub/apps): KeySubBuiltin switches the
+	// built-in ones, KeySubBlockedText is the words of the entry an app on the list of
+	// blocked ones gets in place of the servers. The rules and the list are in tables
+	// (sub_rules, sub_blocked_apps).
+	KeySubBuiltin     = "sub_builtin_rules"
+	KeySubBlockedText = "sub_blocked_text"
+	// KeySubLogDays is how many days the request log of the subscriptions is kept
+	// (subsrc.LogDays); 0 turns the log off.
+	KeySubLogDays = "sub_log_days"
 	// KeySiteTemplate is the built-in front page a stranger sees at the panel's address
 	// (frontpage.Templates); "" for none.
 	KeySiteTemplate = "site_template"
+	// KeySiteHTML is the front page the admin made in the builder (frontpage.Custom), and
+	// KeySiteDoc what the builder made it of, to open it again.
+	KeySiteHTML = "site_html"
+	KeySiteDoc  = "site_doc"
+	// KeySiteFiles are the files of the site when it has several pages ([]frontpage.SiteFile
+	// as JSON); KeySiteHTML is then its first page in one file.
+	KeySiteFiles = "site_files"
+	// KeyFrontSeed is the installation's seed of the built-in front pages and of the plain
+	// 404 (frontpage.SetSeed): made once and kept, so the pages stay what they are.
+	KeyFrontSeed = "front_seed"
 	// KeyTrafficDetail: the nodes sum each subscription's bytes by site (user_sites), kept
 	// KeyTrafficDetailDays days.
 	KeyTrafficDetail     = "traffic_detail"
 	KeyTrafficDetailDays = "traffic_detail_days"
 	KeyInactiveText      = "sub_inactive_text"
 	// App branding: the brand, logo and accent colour go to the apps that read operator
-	// headers (subs.OperatorHeaders); off by default.
+	// headers (serve.OperatorHeaders); off by default.
 	KeyAppBranding = "app_branding"
 	KeyBrandAccent = "brand_accent"   // #RRGGBB, empty: the app's own
 	KeyBrandLogo   = "brand_logo_url" // https, empty: the app's own
-	// Happ (subs.Happ): a routing profile link, the happ-proxy.com provider id and what
+	// Happ (serve.Happ): a routing profile link, the happ-proxy.com provider id and what
 	// needs it, and how the page's Happ button hides the address ("", "api", "local").
 	KeyHappRouting  = "happ_routing"
 	KeyHappProvider = "happ_provider_id"
 	KeyHappHide     = "happ_hide_settings"
 	KeyHappCrypt    = "happ_crypt"
 	// KeyLegacySubPath is the path of the subscription links of the panel users were
-	// imported from: "sub" for Marzban and PasarGuard, "api/sub" for Remnawave. The old
+	// imported from: "sub" for Marzban, PasarGuard and 3x-ui, "api/sub" for Remnawave. The old
 	// tokens lead to the users (legacy_sub_tokens); empty: off.
 	KeyLegacySubPath = "legacy_sub_path"
 	// KeyLegacySubKind and KeyLegacySubSecret check the links Marzban or PasarGuard signed
@@ -142,20 +172,24 @@ type Switch struct {
 
 // The panel's switches.
 var (
-	AutoPort       = Switch{KeyAutoPort, true}
-	AutoSNI        = Switch{KeyAutoSNI, true}
-	AnyPort        = Switch{KeyAnyPort, false}
-	WideScan       = Switch{KeyWideScan, false}
-	DeviceBinding  = Switch{KeyDeviceBinding, true}
-	RequireHWID    = Switch{KeyRequireHWID, false}
-	AutoUpdate     = Switch{KeyAutoUpdate, false}
-	NodesFollow    = Switch{KeyNodesFollow, true}
-	ShowGoals      = Switch{KeyShowGoals, true}
-	AppBranding    = Switch{KeyAppBranding, false}
-	HappHide       = Switch{KeyHappHide, false}
-	InactiveServer = Switch{KeyInactiveServer, false}
-	TrafficDetail  = Switch{KeyTrafficDetail, false}
-	SupportAccess  = Switch{KeySupportAccess, true}
+	AutoPort        = Switch{KeyAutoPort, true}
+	AutoSNI         = Switch{KeyAutoSNI, true}
+	AnyPort         = Switch{KeyAnyPort, false}
+	WideScan        = Switch{KeyWideScan, false}
+	DeviceBinding   = Switch{KeyDeviceBinding, true}
+	RequireHWID     = Switch{KeyRequireHWID, false}
+	AutoUpdate      = Switch{KeyAutoUpdate, false}
+	NodesFollow     = Switch{KeyNodesFollow, true}
+	ShowGoals       = Switch{KeyShowGoals, true}
+	AppBranding     = Switch{KeyAppBranding, false}
+	HappHide        = Switch{KeyHappHide, false}
+	InactiveServer  = Switch{KeyInactiveServer, false}
+	XrayJSON        = Switch{KeyXrayJSON, true}
+	SubBuiltin      = Switch{KeySubBuiltin, true}
+	TrafficDetail   = Switch{KeyTrafficDetail, false}
+	SupportAccess   = Switch{KeySupportAccess, true}
+	AutoAddress     = Switch{KeyAutoAddress, true}
+	AutoNodeAddress = Switch{KeyAutoNodeAddress, true}
 )
 
 // ValidLang says whether s is a language of the panel.
@@ -297,6 +331,24 @@ func (s *Settings) String(ctx context.Context, key string) (string, error) {
 }
 
 // On reads a switch; its default when it was never set.
+// FrontSeed is the installation's seed of the front pages (KeyFrontSeed), made at the
+// first call.
+func (s *Settings) FrontSeed(ctx context.Context) (string, error) {
+	seed, err := s.String(ctx, KeyFrontSeed)
+	if err != nil || seed != "" {
+		return seed, err
+	}
+	raw := make([]byte, 18)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	seed = base64.RawURLEncoding.EncodeToString(raw)
+	if err := Set(ctx, s, KeyFrontSeed, seed); err != nil {
+		return "", err
+	}
+	return seed, nil
+}
+
 func (s *Settings) On(ctx context.Context, sw Switch) (bool, error) {
 	v, ok, err := Get[bool](ctx, s, sw.Key)
 	if err != nil || !ok {

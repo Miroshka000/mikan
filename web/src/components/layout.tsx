@@ -7,6 +7,7 @@ import { useMediaQuery } from "../lib/media";
 import { Drawer } from "./overlay";
 import { Button } from "./ui";
 import type { LucideIcon } from "lucide-react";
+import { Select } from "./select";
 
 /** The head of a card: its title (id names the card for aria-labelledby), what it is about,
  * and what stands at its right (a mark, a button). */
@@ -110,7 +111,7 @@ export function SectionNav<T extends string>({
       ) : (
         <div className="field !mb-0">
           <label htmlFor={selectId}>{label}</label>
-          <select
+          <Select
             id={selectId}
             className="input"
             value={current?.parts ? `${value}:${part ?? ""}` : value}
@@ -134,7 +135,7 @@ export function SectionNav<T extends string>({
                 </option>
               ),
             )}
-          </select>
+          </Select>
         </div>
       )}
       <section ref={body} className={clsx("section-body", narrow && "narrow")} aria-label={title}>

@@ -165,6 +165,25 @@ func (g *Gateway) Client() *tgapi.Client { return g.client.Load() }
 // Go runs f as work of the gateway's: Run returns only after it has.
 func (g *Gateway) Go(f func()) { g.running.Go(f) }
 
+// MoveMenuButton points the chats' Mini App button at to when it opens a page under from:
+// the subscriptions' address changed, and the bot sets the button only when it starts.
+// moved is false when there was nothing to move, the bot being off included.
+func (g *Gateway) MoveMenuButton(ctx context.Context, from, to string) (moved bool, err error) {
+	c := g.Client()
+	if c == nil || from == "" || to == "" || from == to {
+		return false, nil
+	}
+	text, url, err := c.MenuButton(ctx)
+	if err != nil || url == "" || !strings.HasPrefix(url, from) {
+		return false, err
+	}
+	rest := strings.TrimPrefix(url, from)
+	if rest != "" && !strings.HasPrefix(rest, "/") && !strings.HasPrefix(rest, "?") && !strings.HasPrefix(rest, "#") {
+		return false, nil // another path that only begins like the old one
+	}
+	return true, c.SetMenuButton(ctx, text, to+rest)
+}
+
 // Reload restarts the bot with the settings as they are now.
 func (g *Gateway) Reload() {
 	// The admin may have just made the bot the channel's admin: the page asks again.

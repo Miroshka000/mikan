@@ -6,6 +6,7 @@ import { api, unwrap, type Schemas } from "../../../api/client";
 import { qk, useSpeedTests } from "../../../api/hooks";
 import { Drawer, DrawerFooter } from "../../../components/overlay";
 import { Switch, SwitchRow } from "../../../components/switch";
+import { MAX_TAGS, parseTags } from "../../../components/tags";
 import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented } from "../../../components/ui";
 import { t } from "../../../i18n";
@@ -15,6 +16,7 @@ import { nodeLabel } from "../../../lib/node-label";
 import { JoinProgress, type FixActions } from "../node-check";
 import type { Node } from "../nodes";
 import { BalanceFields, balanceKey, useBalance } from "../nodes-balance";
+import { billingBody, BillingFields, billingForm, type BillingForm } from "./billing";
 
 export type Joined = { id: number; name: string; key: string; command: string };
 
@@ -125,15 +127,17 @@ export function KeyDrawer({ joined, onClose, actions }: { joined: Joined | null;
 export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, front_page: "", api_lockdown: false, api_allow: "" });
+  const [form, setForm] = useState({ name: "", public_name: "", host: "", domain: "", enabled: true, fair_share: false, channel: "", group: "", capacity: "", http_redirect: false, sni_router: false, sni_by_key: false, front_page: "", in_auto: true, api_lockdown: false, api_allow: "", own_ports: "", tags: "" });
   const balance = useBalance();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [billing, setBilling] = useState<BillingForm | null>(null);
   useEffect(() => {
     if (node) {
+      setBilling(billingForm(node.billing));
       // The server as it was given, not the address for clients (its domain when it has one):
       // the field saves the server.
       setForm({ name: node.name, public_name: node.public_name, host: node.server_host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "",
-        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, front_page: node.front_page, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", ") });
+        group: node.balance_group, capacity: node.capacity != null ? String(node.capacity) : "", http_redirect: node.http_redirect, sni_router: node.sni_router, sni_by_key: node.sni_by_key, front_page: node.front_page, in_auto: node.in_auto, api_lockdown: node.api_lockdown, api_allow: node.api_allow.join(", "), own_ports: node.own_ports.join(", "), tags: node.tags.join(", ") });
       setErrors({});
     }
   }, [node]);
@@ -161,10 +165,16 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!node) return;
-    const body: Schemas["PatchNodeInputBody"] = { public_name: form.public_name.trim(), enabled: form.enabled, fair_share: form.fair_share };
+    const body: Schemas["PatchNodeInputBody"] = { public_name: form.public_name.trim(), enabled: form.enabled, in_auto: form.in_auto, fair_share: form.fair_share };
     // A node without a name of its own (the panel's, shown as "Own node") keeps none: an empty
     // field is no new name, and saving the rest must not fail on it.
     if (form.name.trim() || node.name) body.name = form.name.trim();
+    const tags = parseTags(form.tags);
+    if (tags.length > MAX_TAGS) {
+      setErrors({ tags: t("tags.many", { n: MAX_TAGS }) });
+      return;
+    }
+    body.tags = tags;
     const channel = Number(form.channel);
     if (form.channel.trim() || form.fair_share) {
       if (!Number.isInteger(channel) || channel < 1 || channel > 100000) {
@@ -186,7 +196,26 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
       body.api_lockdown = form.api_lockdown;
       body.api_allow = allow;
     }
+    const ownPorts = form.own_ports.split(/[\s,;]+/).filter(Boolean);
+    if (ownPorts.some((p) => !/^\d{1,5}$/.test(p) || Number(p) < 1 || Number(p) > 65535)) {
+      setErrors({ own_ports: t("nodes.ownPortsInvalid") });
+      return;
+    }
+    if (ownPorts.length > 16) {
+      setErrors({ own_ports: t("nodes.ownPortsMany") });
+      return;
+    }
+    body.own_ports = ownPorts.map(Number);
     body.sni_router = form.sni_router;
+    body.sni_by_key = form.sni_by_key;
+    if (billing) {
+      const b = billingBody(billing);
+      if ("errors" in b) {
+        setErrors(b.errors);
+        return;
+      }
+      body.billing = b.body;
+    }
     body.front_page = form.front_page as NonNullable<Schemas["PatchNodeInputBody"]["front_page"]>;
     const group = form.group.trim();
     const capacity = group && form.capacity.trim() ? Number(form.capacity) : undefined;
@@ -197,7 +226,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
     const balanceChanged = group !== node.balance_group || (capacity ?? null) !== (node.capacity ?? null);
     save.mutate({ id: node.id, body, balance: balanceChanged ? { group, capacity } : undefined });
   };
-  const set = (k: "name" | "public_name" | "host" | "domain") => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const set = (k: "name" | "public_name" | "host" | "domain" | "tags") => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setErrors(({ [k]: _, ...rest }) => rest);
   };
@@ -220,6 +249,9 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
         <Field label={t("nodes.publicName")} htmlFor="e-public-name" hint={t("nodes.publicNameHint")} error={errors.public_name}>
           <input id="e-public-name" className="input" value={form.public_name} onChange={set("public_name")} placeholder={t("nodes.publicNamePlaceholder")} maxLength={80} autoComplete="off" aria-invalid={!!errors.public_name} />
         </Field>
+        <Field label={t("tags.label")} htmlFor="e-tags" hint={t("tags.nodeHint")} error={errors.tags}>
+          <input id="e-tags" className="input" value={form.tags} onChange={set("tags")} placeholder={t("tags.placeholder")} autoComplete="off" aria-invalid={!!errors.tags} />
+        </Field>
         {node && !node.local ? (
           <>
             <Field label={t("nodes.host")} htmlFor="e-host" hint={t("nodes.hostHint")} error={errors.host}>
@@ -235,6 +267,9 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
         <Field label={t("nodes.serving")} hint={t("nodes.servingHint")}>
           <Switch checked={form.enabled} onChange={(v) => setForm((f) => ({ ...f, enabled: v }))} label={t("nodes.serving")} />
         </Field>
+        <div className="dr-sec">
+          <SwitchRow className="pt-0" label={t("nodes.inAuto")} sub={t("nodes.inAutoHint")} checked={form.in_auto} onChange={(v) => setForm((f) => ({ ...f, in_auto: v }))} />
+        </div>
         <div className="dr-sec">
           <SwitchRow className="pt-0" label={t("nodes.fairShare")} sub={t("nodes.fairShareHint")} checked={form.fair_share} onChange={(v) => setForm((f) => ({ ...f, fair_share: v }))} />
           <Field label={t("nodes.channel")} htmlFor="e-channel" hint={form.fair_share ? t("nodes.channelHint") : t("nodes.channelHintOff")} error={errors.channel_mbps}>
@@ -279,6 +314,9 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
               {t("nodes.sniRouterBusy", { error: node.router_error })}
             </p>
           ) : null}
+          {form.sni_router ? (
+            <SwitchRow label={t("nodes.sniByKey")} sub={t("nodes.sniByKeyHint")} checked={form.sni_by_key} onChange={(v) => setForm((f) => ({ ...f, sni_by_key: v }))} />
+          ) : null}
         </div>
         <div className="dr-sec">
           <Field label={t("nodes.frontPage")} hint={form.sni_router ? `${t("nodes.frontPageHint")} ${t("nodes.frontPageRouter")}` : t("nodes.frontPageHint")}>
@@ -321,6 +359,23 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
             ) : null}
           </div>
         ) : null}
+        <div className="dr-sec">
+          <Field label={t("nodes.ownPorts")} htmlFor="e-own-ports" hint={node?.local ? t("nodes.ownPortsHintLocal") : t("nodes.ownPortsHint")} error={errors.own_ports}>
+            <input
+              id="e-own-ports"
+              className="input mono"
+              value={form.own_ports}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, own_ports: e.target.value }));
+                setErrors(({ own_ports: _, ...rest }) => rest);
+              }}
+              placeholder="53, 853"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={!!errors.own_ports}
+            />
+          </Field>
+        </div>
         <BalanceFields
           group={form.group}
           capacity={form.capacity}
@@ -332,6 +387,16 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
           error={errors.group}
           groups={(balance.data ?? []).map((g) => g.group)}
         />
+        {billing ? (
+          <BillingFields
+            form={billing}
+            errors={errors}
+            onChange={(patch) => {
+              setBilling((b) => (b ? { ...b, ...patch } : b));
+              setErrors((e) => Object.fromEntries(Object.entries(e).filter(([k]) => !k.startsWith("billing."))));
+            }}
+          />
+        ) : null}
       </form>
     </Drawer>
   );

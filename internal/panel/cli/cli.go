@@ -23,6 +23,7 @@ import (
 	"mikan/internal/panel/audit"
 	"mikan/internal/panel/auth"
 	"mikan/internal/panel/config"
+	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
@@ -35,6 +36,8 @@ Commands:
   serve                         run the panel
   admin bootstrap [flags]       first setup: admin, secret paths, address, language
   admin url                     print the panel's link
+  admin domain [NAME | --clear] the panel's domain: show it, change it (the old one keeps working), or drop it
+  admin address [IP]            the server's address: show it or change it (links use it without a domain)
   admin reset-password          set a new admin password (ends all sessions and revokes all API keys)
   admin reset-path              give the panel a new secret link
   admin disable-2fa             turn off the admin's 2FA
@@ -138,6 +141,10 @@ func adminCmd(ctx context.Context, args []string) error {
 		}
 		printURL(os.Stdout, os.Stderr, u, login)
 		return nil
+	case "domain":
+		return domainCmd(ctx, st, set, args[1:], dnscheck.New(), os.Stdout)
+	case "address":
+		return addressCmd(ctx, st, set, args[1:], dnscheck.New(), os.Stdout)
 	case "reset-password":
 		return resetPassword(ctx, st, args[1:], os.Stdin, os.Stdout)
 	case "reset-path":
@@ -294,7 +301,7 @@ func resetPassword(ctx context.Context, st *store.Store, args []string, stdin io
 	if err != nil {
 		return err
 	}
-	var keys int64
+	var keys, passkeys int64
 	err = st.Tx(ctx, func(q *db.Queries) error {
 		if err := q.SetAdminPassword(ctx, db.SetAdminPasswordParams{PasswordHash: hash, ID: a.ID}); err != nil {
 			return err
@@ -303,18 +310,21 @@ func resetPassword(ctx context.Context, st *store.Store, args []string, stdin io
 			return err
 		}
 		// This is what an owner runs on the server after losing the panel or suspecting a
-		// hijacked session: a key made from that session must not survive it. Scripts get
-		// new keys from the admin panel.
+		// hijacked session: a key or a passkey made from that session must not survive it.
+		// Scripts get new keys from the admin panel, the admin adds the passkeys again.
 		keys, err = q.DeleteAPIKeysOf(ctx, a.ID)
 		if err != nil {
 			return err
 		}
-		return audit.Write(ctx, q, time.Now(), audit.Entry{Action: "cli.reset_password", TargetType: "admin", TargetID: a.Username, Details: map[string]any{"keys_revoked": keys}})
+		if passkeys, err = q.DeleteAdminPasskeysOf(ctx, a.ID); err != nil {
+			return err
+		}
+		return audit.Write(ctx, q, time.Now(), audit.Entry{Action: "cli.reset_password", TargetType: "admin", TargetID: a.Username, Details: map[string]any{"keys_revoked": keys, "passkeys_revoked": passkeys}})
 	})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "The password of %s is changed, all sessions are ended and %d API keys are revoked.\n", a.Username, keys)
+	fmt.Fprintf(stdout, "The password of %s is changed, all sessions are ended, %d API keys and %d passkeys are revoked.\n", a.Username, keys, passkeys)
 	if generated {
 		fmt.Fprintln(stdout, "New password: "+password+"   ← shown once")
 	}

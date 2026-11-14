@@ -263,7 +263,7 @@ func TestAddonPages(t *testing.T) {
 	}
 
 	// Ten minutes later the address is over; a logout ends it sooner.
-	h.now = h.now.Add(10 * time.Minute)
+	h.advance(10 * time.Minute)
 	if resp, _ := h.do(http.MethodGet, file, nil, nil); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("an expired address: %d", resp.StatusCode)
 	}

@@ -8,19 +8,26 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"mikan/internal/frontpage"
 	"mikan/internal/hostname"
 	"mikan/internal/panel/acme"
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/secure"
+	"mikan/internal/panel/selfaddr"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/proto"
+	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
+	"mikan/internal/sub/serve"
+	"mikan/internal/sub/xray"
 	"mikan/internal/textutil"
 )
 
@@ -34,34 +41,42 @@ type SettingsView struct {
 	AppBranding    bool   `json:"app_branding" doc:"Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки"`
 	InactiveServer bool   `json:"sub_inactive_server" doc:"Подписка, которая не может подключиться (кончился срок или трафик, отключена), получает вместо серверов одну запись с объяснением"`
 	InactiveText   string `json:"sub_inactive_text" doc:"Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки"`
-	SiteTemplate   string `json:"site_template" enum:",maintenance,cats" doc:"Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер"`
+	XrayJSON       bool   `json:"sub_xray_json" doc:"Happ и INCY получают полные конфиги Xray (JSON) вместо ссылок: маршрутизация, DNS и «Авто» панели доходят до них; запрос с ?format= получает свой формат в любом случае"`
+	SubLogDays     int    `json:"sub_log_days" doc:"Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен"`
+	SiteTemplate   string `json:"site_template" enum:",maintenance,cats,custom" doc:"Первая страница по адресу панели для посторонних: пусто — ответ 404, maintenance — технические работы, cats — котики-кликер"`
 	SiteOwn        bool   `json:"site_own" doc:"В data/panel/www есть своя страница: шаблон не действует"`
+	SitePage       bool   `json:"site_page" doc:"Своя заглушка из конструктора сохранена: её можно выбрать (custom)"`
 	BrandAccent    string `json:"brand_accent" doc:"Цвет бренда #RRGGBB; пусто — цвет приложения"`
 	BrandLogoURL   string `json:"brand_logo_url" doc:"Логотип: https, PNG, WebP или JPEG до 512 КБ; пусто — значок приложения"`
 	PublicHost     string `json:"public_host"`
 	Domain         string `json:"domain"`
 	SubDomain      string `json:"sub_domain" doc:"Свой домен для ссылок подписки; пусто — адрес панели"`
+	// FormerDomains are the names the panel answered at before (acme.Formers).
+	FormerDomains []acme.FormerStatus `json:"former_domains" doc:"Прежние домены панели и подписок (и адрес панели, у которой не было домена): старые ссылки, вебхуки и ключи нод работают через них, пока имя ведёт на сервер"`
 	// SubCertificate is the subscription domain's own certificate; absent in development.
-	SubCertificate *acme.Status `json:"sub_certificate,omitempty" doc:"Сертификат домена подписки: kind off — домен не задан"`
-	PanelPort      int          `json:"panel_port"`
-	SubPort        int          `json:"sub_port" doc:"Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае"`
-	SubPortError   string       `json:"sub_port_error,omitempty" doc:"sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели"`
-	QuietHourUTC   int          `json:"quiet_hour_utc" doc:"Час (UTC), когда пополняется пул слотов: переподключение QUIC-клиентов"`
-	AdminURL       string       `json:"admin_url"`
-	SubBaseURL     string       `json:"sub_base_url"`
-	SubGroupMain   string       `json:"sub_group_main" doc:"Главная группа в Clash-приложениях"`
-	SubGroupAuto   string       `json:"sub_group_auto" doc:"Группа автовыбора самого быстрого подключения"`
-	SubRules       string       `json:"sub_rules" doc:"Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий"`
-	RuleTargets    []string     `json:"rule_targets" doc:"Куда правило может направить трафик: DIRECT, REJECT, REJECT-DROP, PROXY и группы"`
-	SubRouting     string       `json:"sub_routing" enum:"ru_direct,all,blocked" doc:"Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую"`
-	SubTemplate    string       `json:"sub_template" doc:"Свой профиль Clash (YAML) вместо встроенного для приложений на mihomo; пусто — встроенный. Серверы панель подставляет сама: в proxies и в группы с include-all-proxies или mikan: {nodes, types}"`
-	SubRoutes      subs.Routes  `json:"sub_routes" doc:"Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog"`
-	Fingerprint    string       `json:"client_fingerprint" doc:"Отпечаток TLS (uTLS) у клиентов, если у подключения не задан свой: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized или своё значение"`
-	AutoPort       bool         `json:"auto_port" doc:"Переносить подключение на другой порт, если клиенты перестали до него доходить"`
-	AutoSNI        bool         `json:"auto_sni" doc:"Менять сайт маскировки REALITY, если он перестал подходить"`
-	WideScan       bool         `json:"wide_sni_scan" doc:"Искать сайты маскировки REALITY не только в /24 ноды, но и в соседних /24 её /16, до 20 найденных сайтов или 2 минут. Много подключений: хостер может принять это за сканирование сети"`
-	AnyPort        bool         `json:"any_port" doc:"Когда запасные порты (2053, 2083…) заняты, панель сама берёт любой свободный из 20000-32767: для нового подключения без порта и при автопереносе. Эти порты установщик в файрволе не открывает"`
-	SupportAccess  bool         `json:"support_access" doc:"Разрешить доступ для поддержки (Настройки → Безопасность). Выключено: новый доступ не выдать, действующий закрывается. MIKAN_SUPPORT_ACCESS=off в .env сервера выключает его независимо от этой настройки"`
+	SubCertificate  *acme.Status   `json:"sub_certificate,omitempty" doc:"Сертификат домена подписки: kind off — домен не задан"`
+	PanelPort       int            `json:"panel_port"`
+	SubPort         int            `json:"sub_port" doc:"Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае"`
+	SubPortError    string         `json:"sub_port_error,omitempty" doc:"sub_port_busy — сохранённый порт занят на сервере, подписки пока идут через порт панели"`
+	QuietHourUTC    int            `json:"quiet_hour_utc" doc:"Час (UTC), когда пополняется пул слотов: переподключение QUIC-клиентов"`
+	AdminURL        string         `json:"admin_url"`
+	SubBaseURL      string         `json:"sub_base_url"`
+	SubGroupMain    string         `json:"sub_group_main" doc:"Главная группа в Clash-приложениях"`
+	SubGroupAuto    string         `json:"sub_group_auto" doc:"Группа автовыбора самого быстрого подключения"`
+	SubRules        string         `json:"sub_rules" doc:"Свои правила Clash: по строке TYPE,VALUE,TARGET[,no-resolve]; # — комментарий"`
+	RuleTargets     []string       `json:"rule_targets" doc:"Куда правило может направить трафик: DIRECT, REJECT, REJECT-DROP, PROXY и группы"`
+	SubRouting      string         `json:"sub_routing" enum:"ru_direct,all,blocked" doc:"Маршруты в Clash-приложениях: ru_direct — российские сайты и IP напрямую по геобазам mihomo, all — всё через VPN, blocked — через VPN только заблокированное (списки privWL-clash), остальное напрямую"`
+	SubRoutes       routing.Routes `json:"sub_routes" doc:"Куда идут сервисы (services: id → vpn, direct, block или node:<id>), какие приложения и сайты идут мимо VPN (direct) и свои DNS (dns). Каталог — GET /api/v1/settings/routes/catalog"`
+	Fingerprint     string         `json:"client_fingerprint" doc:"Отпечаток TLS (uTLS) у клиентов, если у подключения не задан свой: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized или своё значение"`
+	AutoPort        bool           `json:"auto_port" doc:"Переносить подключение на другой порт, если клиенты перестали до него доходить"`
+	AutoAddress     bool           `json:"auto_public_host" doc:"Панель сама сохраняет новый «Адрес сервера» (IP), когда сохранённый перестал вести на неё, а новый проверен: хостер сменил IP, панель переехала"`
+	AutoNodeAddress bool           `json:"auto_node_address" doc:"Панель сама переносит удалённую ноду на новый IP, когда не может достучаться до неё по старому, а нода прислала hello с нового и ответила там"`
+	// AddressCheck is the panel's last look at its address; absent where it does not look.
+	AddressCheck  *selfaddr.AddressStatus `json:"address_check,omitempty" doc:"Последняя проверка адреса сервера: ведёт ли он на эту панель"`
+	AutoSNI       bool                    `json:"auto_sni" doc:"Менять сайт маскировки REALITY, если он перестал подходить"`
+	WideScan      bool                    `json:"wide_sni_scan" doc:"Искать сайты маскировки REALITY не только в /24 ноды, но и в соседних /24 её /16, до 20 найденных сайтов или 2 минут. Много подключений: хостер может принять это за сканирование сети"`
+	AnyPort       bool                    `json:"any_port" doc:"Когда запасные порты (2053, 2083…) заняты, панель сама берёт любой свободный из 20000-32767: для нового подключения без порта и при автопереносе. Эти порты установщик в файрволе не открывает"`
+	SupportAccess bool                    `json:"support_access" doc:"Разрешить доступ для поддержки (Настройки → Безопасность). Выключено: новый доступ не выдать, действующий закрывается. MIKAN_SUPPORT_ACCESS=off в .env сервера выключает его независимо от этой настройки"`
 	// Devices: see domain.Devices.
 	DeviceBinding bool `json:"device_binding" doc:"Привязывать подписку к устройствам: у каждого устройства свои ключи"`
 	RequireHWID   bool `json:"device_require_hwid" doc:"Не выдавать подписку приложениям без ID устройства (иначе они вместе занимают одно место)"`
@@ -77,7 +92,7 @@ type SettingsView struct {
 	ACMEEABKID  string `json:"acme_eab_kid" doc:"Google Trust Services: keyId ключа EAB"`
 	ACMEEABHMAC bool   `json:"acme_eab_hmac_set" doc:"Google Trust Services: ключ HMAC сохранён (сам ключ не показывается)"`
 
-	// Happ: see subs.Happ.
+	// Happ: see serve.Happ.
 	HappRouting      string `json:"happ_routing" doc:"Профиль маршрутизации Happ: ссылка happ://routing/onadd/… (добавить и включить), happ://routing/add/… или happ://routing/off; auto — панель собирает его сама из маршрутизации Clash-профиля (Настройки → Маршрутизация); уходит только в Happ заголовком routing"`
 	HappProviderID   string `json:"happ_provider_id" doc:"Provider ID с happ-proxy.com; без него Happ не принимает hide-settings"`
 	HappHideSettings bool   `json:"happ_hide_settings" doc:"Скрыть в Happ настройки серверов подписки (нужен Provider ID)"`
@@ -86,8 +101,7 @@ type SettingsView struct {
 
 type settingsOutput struct{ Body SettingsView }
 
-// The size limits of the body are the huma tags: sub_template takes up to 524288 bytes (512 KiB),
-// the largest template there is, as a full profile with rule lists is a few dozen kilobytes.
+// The size limits of the body are the huma tags.
 type patchSettingsInput struct {
 	Body patchSettingsBody
 }
@@ -95,48 +109,52 @@ type patchSettingsInput struct {
 // patchSettingsBody is the body of PATCH /settings; an alias of the struct, so the API's
 // schema keeps its name (PatchSettingsInputBody). settingFields says how each is written.
 type patchSettingsBody = struct {
-	Brand          *string              `json:"brand,omitempty" maxLength:"40"`
-	PanelAppName   *string              `json:"panel_app_name,omitempty" maxLength:"30" doc:"Пусто — по бренду"`
-	SupportURL     *string              `json:"support_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
-	SubTitle       *string              `json:"sub_title,omitempty" maxLength:"200" doc:"Переменные — см. SettingsView.sub_title"`
-	Announce       *string              `json:"sub_announce,omitempty" maxLength:"1000" doc:"До 10 строк: страница подписки и Mini App показывают их с переносами, приложения получают одну строку до 200 символов"`
-	AnnounceURL    *string              `json:"sub_announce_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
-	AppBranding    *bool                `json:"app_branding,omitempty"`
-	InactiveServer *bool                `json:"sub_inactive_server,omitempty"`
-	InactiveText   *string              `json:"sub_inactive_text,omitempty" maxLength:"120"`
-	SiteTemplate   *string              `json:"site_template,omitempty" enum:",maintenance,cats"`
-	BrandAccent    *string              `json:"brand_accent,omitempty" maxLength:"7" doc:"#RRGGBB или пусто"`
-	BrandLogoURL   *string              `json:"brand_logo_url,omitempty" maxLength:"500" doc:"https://… или пусто"`
-	HappRouting    *string              `json:"happ_routing,omitempty" maxLength:"65536" doc:"happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать"`
-	HappProvider   *string              `json:"happ_provider_id,omitempty" maxLength:"64"`
-	HappHide       *bool                `json:"happ_hide_settings,omitempty"`
-	HappCrypt      *string              `json:"happ_crypt,omitempty" enum:"off,api,local"`
-	PublicHost     *string              `json:"public_host,omitempty" maxLength:"253"`
-	Domain         *string              `json:"domain,omitempty" maxLength:"253"`
-	SubDomain      *string              `json:"sub_domain,omitempty" maxLength:"253" doc:"Домен для ссылок подписки, отдельный от домена панели; пусто — убрать. Старые ссылки продолжают работать"`
-	QuietHourUTC   *int                 `json:"quiet_hour_utc,omitempty" minimum:"0" maximum:"23"`
-	SubGroupMain   *string              `json:"sub_group_main,omitempty" maxLength:"200"`
-	SubGroupAuto   *string              `json:"sub_group_auto,omitempty" maxLength:"200"`
-	SubRouting     *string              `json:"sub_routing,omitempty" enum:"ru_direct,all,blocked"`
-	SubRoutes      *subs.Routes         `json:"sub_routes,omitempty"`
-	SubTemplate    *string              `json:"sub_template,omitempty" maxLength:"524288" doc:"Свой профиль Clash; пусто — вернуть встроенный"`
-	SubRules       *string              `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила Clash, до 500 строк; ошибка указывает номер строки"`
-	Fingerprint    *string              `json:"client_fingerprint,omitempty" pattern:"^[a-z0-9_]{1,32}$" doc:"Из списка или своё: латиница в нижнем регистре, цифры и _, до 32 символов"`
-	AutoPort       *bool                `json:"auto_port,omitempty"`
-	AutoSNI        *bool                `json:"auto_sni,omitempty"`
-	AnyPort        *bool                `json:"any_port,omitempty"`
-	SupportAccess  *bool                `json:"support_access,omitempty"`
-	WideScan       *bool                `json:"wide_sni_scan,omitempty"`
-	DeviceBinding  *bool                `json:"device_binding,omitempty"`
-	RequireHWID    *bool                `json:"device_require_hwid,omitempty"`
-	DeviceUnbind   *domain.UnbindRules  `json:"device_unbind,omitempty"`
-	LinkReissue    *domain.ReissueRules `json:"link_reissue,omitempty"`
-	DefaultLang    *string              `json:"default_lang,omitempty" enum:"auto,ru,en"`
-	SubPort        *int                 `json:"sub_port,omitempty" minimum:"0" maximum:"65535" doc:"Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать"`
-	ACMECA         *string              `json:"acme_ca,omitempty" enum:"letsencrypt,zerossl,google" doc:"Смена центра выпускает сертификаты панели и нод заново"`
-	ACMEEmail      *string              `json:"acme_email,omitempty" maxLength:"254"`
-	ACMEEABKID     *string              `json:"acme_eab_kid,omitempty" maxLength:"256"`
-	ACMEEABHMAC    *string              `json:"acme_eab_hmac,omitempty" maxLength:"512" doc:"Ключ HMAC (base64url); пусто — убрать. Обратно не показывается"`
+	Brand           *string              `json:"brand,omitempty" maxLength:"40"`
+	PanelAppName    *string              `json:"panel_app_name,omitempty" maxLength:"30" doc:"Пусто — по бренду"`
+	SupportURL      *string              `json:"support_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
+	SubTitle        *string              `json:"sub_title,omitempty" maxLength:"200" doc:"Переменные — см. SettingsView.sub_title"`
+	Announce        *string              `json:"sub_announce,omitempty" maxLength:"1000" doc:"До 10 строк: страница подписки и Mini App показывают их с переносами, приложения получают одну строку до 200 символов"`
+	AnnounceURL     *string              `json:"sub_announce_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
+	AppBranding     *bool                `json:"app_branding,omitempty"`
+	InactiveServer  *bool                `json:"sub_inactive_server,omitempty"`
+	InactiveText    *string              `json:"sub_inactive_text,omitempty" maxLength:"120"`
+	XrayJSON        *bool                `json:"sub_xray_json,omitempty"`
+	SubLogDays      *int                 `json:"sub_log_days,omitempty" minimum:"0" maximum:"90"`
+	SiteTemplate    *string              `json:"site_template,omitempty" enum:",maintenance,cats,custom"`
+	BrandAccent     *string              `json:"brand_accent,omitempty" maxLength:"7" doc:"#RRGGBB или пусто"`
+	BrandLogoURL    *string              `json:"brand_logo_url,omitempty" maxLength:"500" doc:"https://… или пусто"`
+	HappRouting     *string              `json:"happ_routing,omitempty" maxLength:"65536" doc:"happ://routing/…, auto — собрать из маршрутизации; пусто — не отдавать"`
+	HappProvider    *string              `json:"happ_provider_id,omitempty" maxLength:"64"`
+	HappHide        *bool                `json:"happ_hide_settings,omitempty"`
+	HappCrypt       *string              `json:"happ_crypt,omitempty" enum:"off,api,local"`
+	PublicHost      *string              `json:"public_host,omitempty" maxLength:"253"`
+	Domain          *string              `json:"domain,omitempty" maxLength:"253"`
+	SubDomain       *string              `json:"sub_domain,omitempty" maxLength:"253" doc:"Домен для ссылок подписки, отдельный от домена панели; пусто — убрать. Старые ссылки продолжают работать"`
+	ForceDomain     *bool                `json:"force_domain,omitempty" doc:"Сохранить новый домен или адрес, не дожидаясь сертификата на него (обычно панель сначала получает сертификат, а старое имя работает дальше)"`
+	QuietHourUTC    *int                 `json:"quiet_hour_utc,omitempty" minimum:"0" maximum:"23"`
+	SubGroupMain    *string              `json:"sub_group_main,omitempty" maxLength:"200"`
+	SubGroupAuto    *string              `json:"sub_group_auto,omitempty" maxLength:"200"`
+	SubRouting      *string              `json:"sub_routing,omitempty" enum:"ru_direct,all,blocked"`
+	SubRoutes       *routing.Routes      `json:"sub_routes,omitempty"`
+	SubRules        *string              `json:"sub_rules,omitempty" maxLength:"65536" doc:"Свои правила Clash, до 500 строк; ошибка указывает номер строки"`
+	Fingerprint     *string              `json:"client_fingerprint,omitempty" pattern:"^[a-z0-9_]{1,32}$" doc:"Из списка или своё: латиница в нижнем регистре, цифры и _, до 32 символов"`
+	AutoPort        *bool                `json:"auto_port,omitempty"`
+	AutoAddress     *bool                `json:"auto_public_host,omitempty"`
+	AutoNodeAddress *bool                `json:"auto_node_address,omitempty"`
+	AutoSNI         *bool                `json:"auto_sni,omitempty"`
+	AnyPort         *bool                `json:"any_port,omitempty"`
+	SupportAccess   *bool                `json:"support_access,omitempty"`
+	WideScan        *bool                `json:"wide_sni_scan,omitempty"`
+	DeviceBinding   *bool                `json:"device_binding,omitempty"`
+	RequireHWID     *bool                `json:"device_require_hwid,omitempty"`
+	DeviceUnbind    *domain.UnbindRules  `json:"device_unbind,omitempty"`
+	LinkReissue     *domain.ReissueRules `json:"link_reissue,omitempty"`
+	DefaultLang     *string              `json:"default_lang,omitempty" enum:"auto,ru,en"`
+	SubPort         *int                 `json:"sub_port,omitempty" minimum:"0" maximum:"65535" doc:"Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать"`
+	ACMECA          *string              `json:"acme_ca,omitempty" enum:"letsencrypt,zerossl,google" doc:"Смена центра выпускает сертификаты панели и нод заново"`
+	ACMEEmail       *string              `json:"acme_email,omitempty" maxLength:"254"`
+	ACMEEABKID      *string              `json:"acme_eab_kid,omitempty" maxLength:"256"`
+	ACMEEABHMAC     *string              `json:"acme_eab_hmac,omitempty" maxLength:"512" doc:"Ключ HMAC (base64url); пусто — убрать. Обратно не показывается"`
 }
 
 type resetPathOutput struct {
@@ -151,6 +169,36 @@ func (h *handlers) registerSettings() {
 	huma.Register(h.api, huma.Operation{OperationID: "reset-admin-path", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/settings/reset-admin-path", Summary: "Выдать новую секретную ссылку на панель", Tags: []string{"settings"}}, h.resetAdminPath)
 	huma.Register(h.api, huma.Operation{OperationID: "renew-certificate", Method: http.MethodPost, Path: "/api/v1/settings/certificate/renew",
 		Summary: "Получить сертификат панели сейчас: ждёт до 90 с и отвечает тем, что вышло (ordering — заказ ещё идёт)", Tags: []string{"settings"}}, h.renewCertificate)
+	huma.Register(h.api, huma.Operation{OperationID: "remove-former-domain", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodDelete,
+		Path: "/api/v1/settings/former-domains/{name}", Summary: "Перестать отвечать по прежнему домену: старые ссылки с ним перестанут работать", Tags: []string{"settings"}}, h.removeFormerDomain)
+}
+
+type formerDomainInput struct {
+	Name string `path:"name" maxLength:"253"`
+}
+
+func (h *handlers) removeFormerDomain(ctx context.Context, in *formerDomainInput) (*settingsOutput, error) {
+	list, err := h.d.Settings.Formers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	next := settings.WithoutFormer(list, in.Name)
+	if len(next) == len(list) {
+		return nil, huma.Error404NotFound("not_found")
+	}
+	if err := settings.Set(ctx, h.d.Settings, settings.KeyFormerDomains, next); err != nil {
+		return nil, err
+	}
+	name := settings.FormerName(in.Name)
+	if h.d.FormerRemoved != nil {
+		h.d.FormerRemoved(ctx, name)
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, "settings.former_domain_remove", "", name, nil)
+	v, err := h.readSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &settingsOutput{Body: v}, nil
 }
 
 type certificateOutput struct{ Body acme.Status }
@@ -190,13 +238,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	get(settings.KeyGroupAuto, &v.SubGroupAuto)
 	get(settings.KeyRouting, &v.SubRouting)
 	get(settings.KeyRules, &v.SubRules)
-	v.SubRouting = string(subs.ParseRouting(v.SubRouting))
+	v.SubRouting = string(routing.ParseMode(v.SubRouting))
 	if err == nil {
-		v.SubRoutes, _, err = settings.Get[subs.Routes](ctx, h.d.Settings, settings.KeyRoutes)
-	}
-	// An own profile may hold the admin's own proxies, a controller secret or DNS tokens.
-	if !hidesSecrets(ctx) {
-		get(settings.KeyTemplate, &v.SubTemplate)
+		v.SubRoutes, _, err = settings.Get[routing.Routes](ctx, h.d.Settings, settings.KeyRoutes)
 	}
 	get(settings.KeyFingerprint, &v.Fingerprint)
 	if !proto.ValidFingerprint(v.Fingerprint) {
@@ -208,9 +252,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if v.DefaultLang, err = h.d.Settings.Lang(ctx); err != nil {
 		return v, err
 	}
-	g := subs.Groups{Main: v.SubGroupMain, Auto: v.SubGroupAuto}.WithDefaults(v.DefaultLang)
+	g := submodel.GroupNames{Main: v.SubGroupMain, Auto: v.SubGroupAuto}.WithDefaults(v.DefaultLang)
 	v.SubGroupMain, v.SubGroupAuto = g.Main, g.Auto
-	v.RuleTargets = subs.RuleTargets(g)
+	v.RuleTargets = routing.RuleTargets(g)
 	if v.DefaultLang == "" {
 		v.DefaultLang = "auto"
 	}
@@ -225,6 +269,16 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	}
 	if v.QuietHourUTC, _, err = settings.Get[int](ctx, h.d.Settings, settings.KeyQuietHour); err != nil {
 		return v, err
+	}
+	if v.AutoAddress, err = h.d.Settings.On(ctx, settings.AutoAddress); err != nil {
+		return v, err
+	}
+	if v.AutoNodeAddress, err = h.d.Settings.On(ctx, settings.AutoNodeAddress); err != nil {
+		return v, err
+	}
+	if h.d.AddressCheck != nil {
+		st := h.d.AddressCheck()
+		v.AddressCheck = &st
 	}
 	if v.AutoPort, err = h.d.Settings.On(ctx, settings.AutoPort); err != nil {
 		return v, err
@@ -256,8 +310,13 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if v.InactiveServer, err = h.d.Settings.On(ctx, settings.InactiveServer); err != nil {
 		return v, err
 	}
+	if v.XrayJSON, err = h.d.Settings.On(ctx, settings.XrayJSON); err != nil {
+		return v, err
+	}
 	get(settings.KeyInactiveText, &v.InactiveText)
+	v.SubLogDays = subsrc.LogDays(ctx, h.d.Settings)
 	get(settings.KeySiteTemplate, &v.SiteTemplate)
+	v.SitePage = frontpage.Page(frontpage.Custom) != nil
 	if h.d.DataDir != "" {
 		v.SiteOwn = server.HasOwnSite(filepath.Join(h.d.DataDir, "www"))
 	}
@@ -296,6 +355,18 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if h.d.Cert != nil {
 		v.Certificate = h.d.Cert()
 	}
+	v.FormerDomains = []acme.FormerStatus{}
+	if h.d.Formers != nil {
+		v.FormerDomains = append(v.FormerDomains, h.d.Formers()...)
+	} else {
+		list, err := h.d.Settings.Formers(ctx)
+		if err != nil {
+			return v, err
+		}
+		for _, f := range list {
+			v.FormerDomains = append(v.FormerDomains, acme.FormerStatus{Name: f.Name, Sub: f.Sub, Since: time.Unix(f.Since, 0), Kind: "none"})
+		}
+	}
 	if h.d.SubCerts != nil {
 		st := h.d.SubCerts.Status()
 		v.SubCertificate = &st
@@ -326,6 +397,10 @@ func (h *handlers) getSettings(ctx context.Context, _ *struct{}) (*settingsOutpu
 }
 
 func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (*settingsOutput, error) {
+	// The admin's own page can be chosen once there is one.
+	if t := in.Body.SiteTemplate; t != nil && *t == frontpage.Custom && frontpage.Page(frontpage.Custom) == nil {
+		return nil, fieldErr("body.site_template", "bad_front_page")
+	}
 	b := &in.Body
 	for _, f := range settingFields {
 		if f.session && f.given(b) {
@@ -359,10 +434,10 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			details = append(details, fieldDetail("body.sub_domain", "sub_domain_invalid", nil))
 		}
 	}
-	if b.SupportURL != nil && strings.TrimSpace(*b.SupportURL) != "" && !textutil.ValidLink(strings.TrimSpace(*b.SupportURL), subs.AppLinks) {
+	if b.SupportURL != nil && strings.TrimSpace(*b.SupportURL) != "" && !textutil.ValidLink(strings.TrimSpace(*b.SupportURL), serve.AppLinks) {
 		details = append(details, fieldDetail("body.support_url", "support_url_invalid", nil))
 	}
-	if b.AnnounceURL != nil && *b.AnnounceURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.AnnounceURL), subs.AppLinks) {
+	if b.AnnounceURL != nil && *b.AnnounceURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.AnnounceURL), serve.AppLinks) {
 		details = append(details, fieldDetail("body.sub_announce_url", "support_url_invalid", nil))
 	}
 	// A {word} that is no variable stays as text: an old announcement may hold one.
@@ -370,19 +445,19 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		details = append(details, fieldDetail("body.sub_title", "one_line", nil))
 	}
 	// The announcement keeps its lines on the page and in the Mini App, a few of them.
-	if b.Announce != nil && strings.Count(*b.Announce, "\n") >= subs.AnnounceLines {
+	if b.Announce != nil && strings.Count(*b.Announce, "\n") >= serve.AnnounceLines {
 		details = append(details, fieldDetail("body.sub_announce", "announce_lines", nil))
 	}
-	if b.BrandAccent != nil && *b.BrandAccent != "" && !subs.ValidAccent(strings.TrimSpace(*b.BrandAccent)) {
+	if b.BrandAccent != nil && *b.BrandAccent != "" && !serve.ValidAccent(strings.TrimSpace(*b.BrandAccent)) {
 		details = append(details, fieldDetail("body.brand_accent", "color_invalid", nil))
 	}
-	if b.BrandLogoURL != nil && *b.BrandLogoURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.BrandLogoURL), subs.LogoLinks) {
+	if b.BrandLogoURL != nil && *b.BrandLogoURL != "" && !textutil.ValidLink(strings.TrimSpace(*b.BrandLogoURL), serve.LogoLinks) {
 		details = append(details, fieldDetail("body.brand_logo_url", "url_invalid", nil))
 	}
-	if b.HappRouting != nil && strings.TrimSpace(*b.HappRouting) != "" && !subs.ValidHappRouting(strings.TrimSpace(*b.HappRouting)) {
+	if b.HappRouting != nil && strings.TrimSpace(*b.HappRouting) != "" && !xray.ValidHappRouting(strings.TrimSpace(*b.HappRouting)) {
 		details = append(details, fieldDetail("body.happ_routing", "happ_routing", nil))
 	}
-	if b.HappProvider != nil && strings.TrimSpace(*b.HappProvider) != "" && !subs.ValidHappProviderID(strings.TrimSpace(*b.HappProvider)) {
+	if b.HappProvider != nil && strings.TrimSpace(*b.HappProvider) != "" && !serve.ValidHappProviderID(strings.TrimSpace(*b.HappProvider)) {
 		details = append(details, fieldDetail("body.happ_provider_id", "happ_provider_id", nil))
 	}
 	if b.HappHide != nil && *b.HappHide {
@@ -398,7 +473,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 	}
 	if b.SubGroupMain != nil || b.SubGroupAuto != nil || b.SubRules != nil {
-		cur, err := subs.LoadGroups(ctx, h.d.Settings)
+		cur, err := subsrc.LoadGroups(ctx, h.d.Settings)
 		if err != nil {
 			return nil, err
 		}
@@ -422,8 +497,8 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			}
 			rules = &saved
 		}
-		if _, err := subs.ParseRules(*rules, next); err != nil {
-			var re *subs.RuleError
+		if _, err := routing.ParseRules(*rules, next); err != nil {
+			var re *routing.RuleError
 			if !errors.As(err, &re) {
 				return nil, err
 			}
@@ -451,16 +526,6 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		if err := b.SubRoutes.Check(exists); err != nil {
 			details = append(details, fieldDetail("body.sub_routes", err.Error(), nil))
-		}
-	}
-	if b.SubTemplate != nil && strings.TrimSpace(*b.SubTemplate) != "" && h.d.CheckTemplate != nil {
-		err := h.d.CheckTemplate(ctx, *b.SubTemplate)
-		var te *subs.TemplateError
-		switch {
-		case errors.As(err, &te):
-			details = append(details, fieldDetail("body.sub_template", te.Code, te.Detail))
-		case err != nil && !errors.Is(err, subs.ErrNoProxies):
-			return nil, err
 		}
 	}
 	if b.ACMECA != nil || b.ACMEEmail != nil || b.ACMEEABKID != nil || b.ACMEEABHMAC != nil {
@@ -502,6 +567,17 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			details = append(details, d)
 		}
 	}
+	// The address before the change: the names it leaves behind keep working (former names).
+	address := b.SubDomain != nil || b.PublicHost != nil || b.Domain != nil
+	prev, err := h.d.Settings.Address(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// A new name gets its certificate before a link points at it, the old one serves
+	// meanwhile; the admin may save without waiting.
+	if address && len(details) == 0 && (b.ForceDomain == nil || !*b.ForceDomain) {
+		details = append(details, h.stageNewNames(ctx, prev, b)...)
+	}
 	if len(details) > 0 {
 		return nil, fieldErrs(details...)
 	}
@@ -523,7 +599,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	// Every setting of the request is written in one transaction: a failure in the middle
 	// leaves the settings as they were, not half changed. The values are written as given,
 	// read from nothing: READ COMMITTED.
-	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+	err = h.d.Store.TxRC(ctx, func(q *db.Queries) error {
 		set := settings.New(q)
 		for _, f := range settingFields {
 			if f.given(b) {
@@ -531,6 +607,9 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 					return err
 				}
 			}
+		}
+		if address {
+			return settings.UpdateFormers(ctx, set, prev, h.d.Now())
 		}
 		return nil
 	})
@@ -542,6 +621,11 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		return nil, err
 	}
+	// What hangs on the address follows it now: the names left behind keep their
+	// certificates before the panel's own move on.
+	if address && h.d.AddressChanged != nil {
+		h.d.AddressChanged(ctx)
+	}
 	// The domain is served at once: its requests, its certificate, ordered now.
 	if b.SubDomain != nil && h.d.SubDomain != nil {
 		h.d.SubDomain(strings.TrimSpace(*b.SubDomain))
@@ -549,6 +633,10 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	// The bot's Mini App button points at the subscription page.
 	if (b.SubPort != nil || b.SubDomain != nil) && h.d.Gateway != nil {
 		h.d.Gateway.Reload()
+	}
+	// The panel's own node keeps the subscription port open to its users (nodesync.ownPorts).
+	if b.SubPort != nil {
+		h.d.Changes.SlotsChanged()
 	}
 	// The certificate is for the domain, or the address without one: a new name gets its
 	// certificate now, not at the next six-hourly check.
@@ -573,6 +661,12 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 	}
 	if b.SubDomain != nil {
 		auditDetails["sub_domain"] = strings.TrimSpace(*b.SubDomain)
+	}
+	if b.Domain != nil && !strings.EqualFold(prev.Domain, strings.TrimSpace(*b.Domain)) {
+		auditDetails["domain"] = map[string]string{"from": prev.Domain, "to": strings.TrimSpace(*b.Domain)}
+	}
+	if b.PublicHost != nil && !strings.EqualFold(prev.PublicHost, strings.TrimSpace(*b.PublicHost)) {
+		auditDetails["public_host"] = map[string]string{"from": prev.PublicHost, "to": strings.TrimSpace(*b.PublicHost)}
 	}
 	if b.SupportAccess != nil {
 		auditDetails["support_access"] = *b.SupportAccess
@@ -633,16 +727,16 @@ func (h *handlers) checkSubPort(ctx context.Context, port int) (*huma.ErrorDetai
 
 // checkGroups: a profile with a group named like a proxy, a built-in policy or the
 // other group does not load in any Clash app.
-func (h *handlers) checkGroups(ctx context.Context, g subs.Groups) []error {
+func (h *handlers) checkGroups(ctx context.Context, g submodel.GroupNames) []error {
 	var out []error
-	if err := subs.ValidName(g.Main); err != nil {
+	if err := submodel.ValidName(g.Main); err != nil {
 		out = append(out, fieldDetail("body.sub_group_main", err.Error(), nil))
 	}
-	if err := subs.ValidName(g.Auto); err != nil {
+	if err := submodel.ValidName(g.Auto); err != nil {
 		out = append(out, fieldDetail("body.sub_group_auto", err.Error(), nil))
 	}
-	if strings.EqualFold(g.Auto, subs.AliasGroup) {
-		out = append(out, fieldDetail("body.sub_group_auto", "group_alias_taken", subs.AliasGroup))
+	if strings.EqualFold(g.Auto, submodel.AliasGroup) {
+		out = append(out, fieldDetail("body.sub_group_auto", "group_alias_taken", submodel.AliasGroup))
 	}
 	if strings.EqualFold(g.Main, g.Auto) {
 		out = append(out, fieldDetail("body.sub_group_auto", "groups_same", nil))
@@ -664,10 +758,10 @@ func (h *handlers) checkGroups(ctx context.Context, g subs.Groups) []error {
 // checkSubName validates an inbound's name in the subscription and returns an error
 // code, "" when the name is fine.
 func (h *handlers) checkSubName(ctx context.Context, name string) string {
-	if err := subs.ValidName(name); err != nil {
+	if err := submodel.ValidName(name); err != nil {
 		return err.Error()
 	}
-	g, err := subs.LoadGroups(ctx, h.d.Settings)
+	g, err := subsrc.LoadGroups(ctx, h.d.Settings)
 	if err != nil {
 		return ""
 	}
@@ -743,4 +837,47 @@ func (h *handlers) checkCA(ctx context.Context, ca, email, kid, hmac *string) ([
 		}
 	}
 	return out, nil
+}
+
+// stageNewNames gets the certificates of the names a change of the address brings ready
+// before it is saved: the panel's new name (its domain, or its address without one) and the
+// new subscription domain. A name that cannot have one yet is a field's error, with the
+// code of the CA's refusal as its value; cert_ordering when the order is still running.
+func (h *handlers) stageNewNames(ctx context.Context, prev settings.Address, b *patchSettingsBody) []error {
+	next := prev
+	if b.Domain != nil {
+		next.Domain = strings.TrimSpace(*b.Domain)
+	}
+	if b.PublicHost != nil {
+		next.PublicHost = strings.TrimSpace(*b.PublicHost)
+	}
+	if b.SubDomain != nil {
+		next.SubDomain = strings.TrimSpace(*b.SubDomain)
+	}
+	var out []error
+	field := "body.domain"
+	if b.Domain == nil {
+		field = "body.public_host"
+	}
+	if h.d.StageCert != nil && next.Identifier() != "" && !strings.EqualFold(prev.Identifier(), next.Identifier()) {
+		if d := stagedDetail(field, h.d.StageCert(ctx, next.Identifier(), renewWait)); d != nil {
+			out = append(out, d)
+		}
+	}
+	if h.d.StageSubCert != nil && next.SubDomain != "" && !strings.EqualFold(prev.SubDomain, next.SubDomain) {
+		if d := stagedDetail("body.sub_domain", h.d.StageSubCert(ctx, next.SubDomain, renewWait)); d != nil {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+func stagedDetail(field string, s acme.Staged) *huma.ErrorDetail {
+	switch {
+	case s.OK:
+		return nil
+	case s.Ordering:
+		return fieldDetail(field, "cert_ordering", nil)
+	}
+	return fieldDetail(field, "cert_not_ready", s.Code)
 }

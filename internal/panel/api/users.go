@@ -1,8 +1,11 @@
 package api
 
 import (
+	"cmp"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"slices"
@@ -59,7 +62,11 @@ type UserView struct {
 	Source        string        `json:"source" enum:"admin,bot,trial,free,import" doc:"Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется"`
 	FolderID      *int64        `json:"folder_id" doc:"Папка пользователя; null — вне папок"`
 	Hidden        bool          `json:"hidden" doc:"Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются"`
-	CreatedAt     time.Time     `json:"created_at"`
+	// StartsOnConnect: the term waits for the first connection (domain/starts.go).
+	StartsOnConnect bool `json:"starts_on_connect" doc:"Срок ждёт первого подключения: до него стоит на месте, expires_at уходит вперёд вместе с часами (обновляется раз в 10 минут), подписка показывает весь срок"`
+	// NextTariff is the tariff the subscription moves to once its term ends.
+	NextTariff *NextTariffView `json:"next_tariff" doc:"Следующий тариф: включится сам, когда кончится срок; null — нет"`
+	CreatedAt  time.Time       `json:"created_at"`
 }
 
 // userEnv is what every user of one response shares, read once for the whole response: a
@@ -69,6 +76,21 @@ type userEnv struct {
 	subBase string // "": no address yet, or the caller may not see links
 	online  map[string]nodeapi.Online
 	bans    map[int64]int64 // user → when the torrent ban ends; nil while the blocker is off
+	// The lifecycle of the answer's users (lifecycleOf): whose term waits for its first
+	// connection, and who has a next tariff.
+	waiting map[int64]bool
+	next    map[int64]domain.NextTariff
+}
+
+// lifecycleOf reads the lifecycle of the users of ids into e: two small tables, one read
+// each for the whole answer.
+func (h *handlers) lifecycleOf(ctx context.Context, e *userEnv, ids []int64) error {
+	var err error
+	if e.waiting, err = domain.WaitingOf(ctx, h.d.Store.Q, ids); err != nil {
+		return err
+	}
+	e.next, err = domain.NextTariffsOf(ctx, h.d.Store.Q, ids)
+	return err
 }
 
 func (h *handlers) userEnv(ctx context.Context) userEnv {
@@ -129,6 +151,9 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 	}
 	v.OnlineIPs = env.liveIPs(slots)
 	v.Online = len(v.OnlineIPs) > 0
+	v.StartsOnConnect = env.waiting[u.ID]
+	n, ok := env.next[u.ID]
+	v.NextTariff = nextView(n, ok)
 	return v
 }
 
@@ -205,6 +230,8 @@ type createUserInput struct {
 		Note     string   `json:"note,omitempty" maxLength:"2000"`
 		Tags     []string `json:"tags,omitempty" maxItems:"20"`
 		TariffID int64    `json:"tariff_id" minimum:"1"`
+		// StartsOnConnect over the tariff's own word; nil: the tariff's.
+		StartsOnConnect *bool `json:"starts_on_connect,omitempty" doc:"Срок начнётся с первого подключения; не задано — как у тарифа"`
 	}
 }
 
@@ -230,6 +257,7 @@ type patchUserInput struct {
 		TariffID         *int64     `json:"tariff_id,omitempty" minimum:"1" doc:"Применить тариф: лимиты из тарифа, срок — от сегодня"`
 		Hidden           *bool      `json:"hidden,omitempty" doc:"Скрыть пользователя из списка или вернуть в него; доступ он не теряет"`
 		FolderID         *int64     `json:"folder_id,omitempty" minimum:"0" doc:"Положить в папку; 0 — убрать из папки"`
+		StartsOnConnect  *bool      `json:"starts_on_connect,omitempty" doc:"true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана"`
 	}
 }
 
@@ -243,16 +271,60 @@ type extendInput struct {
 
 type bulkInput struct {
 	Body struct {
-		IDs    []int64 `json:"ids" minItems:"1" maxItems:"1000"`
-		Action string  `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
-		Days   int64   `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
-		Folder int64   `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`
+		IDs    []int64     `json:"ids,omitempty" maxItems:"1000" doc:"Пользователи по id; задаётся либо ids, либо filter"`
+		Filter *BulkFilter `json:"filter,omitempty" doc:"Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter"`
+		Expect string      `json:"expect,omitempty" pattern:"^[0-9a-f]{64}$" doc:"Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его значение не проверяет"`
+		Action string      `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
+		Days   int64       `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
+		Folder int64       `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`
 	}
+}
+
+// BulkFilter is the users list's filter (listUsersInput without the page) in a bulk body.
+type BulkFilter struct {
+	State  string `json:"state,omitempty" enum:"all,active,expiring,limited,expired,disabled,attention" default:"all"`
+	Query  string `json:"q,omitempty" maxLength:"100" doc:"Оператору поддержки без показа подписчиков закрыт: 403 support_denied"`
+	Folder string `json:"folder,omitempty" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
+	Source string `json:"source,omitempty" enum:"all,admin,bot,trial,free,import" default:"all"`
+	Hidden string `json:"hidden,omitempty" enum:"hide,show,only" default:"show" doc:"Как у списка: по умолчанию вместе со скрытыми"`
 }
 
 type bulkOutput struct {
 	Body struct {
 		Affected int `json:"affected"`
+	}
+}
+
+// BulkSample is one of the users a bulk action would change, as it is and what changes.
+type BulkSample struct {
+	UserID       int64      `json:"user_id"`
+	UserName     string     `json:"user_name"`
+	State        string     `json:"state" enum:"active,expiring,limited,expired,disabled"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	ExpiresAfter *time.Time `json:"expires_after,omitempty" doc:"extend: новый конец срока"`
+	Used         int64      `json:"used" doc:"Израсходовано за период: reset начинает период заново"`
+	FolderID     *int64     `json:"folder_id"`
+}
+
+// BulkAtStake is what the users a deletion reaches hold, as the removal of the inactive
+// counts it: what a deletion takes with them.
+type BulkAtStake struct {
+	Active      int `json:"active" doc:"Ещё работают: срок и трафик не кончились, не отключены"`
+	WithBalance int `json:"with_balance" doc:"С деньгами на балансе привязанного аккаунта"`
+	Paying      int `json:"paying" doc:"С платежом, который ещё не применён, или пополнением на проверке"`
+	Granted     int `json:"granted" doc:"С действующими пакетами трафика"`
+}
+
+type bulkPreviewOutput struct {
+	Body struct {
+		Requested int          `json:"requested" doc:"Сколько разных пользователей в запросе"`
+		Found     int          `json:"found" doc:"Сколько из них есть: к ним действие и применится (affected)"`
+		Missing   int          `json:"missing" doc:"Сколько уже удалены"`
+		Changed   int          `json:"changed" doc:"Скольких действие изменит"`
+		Unchanged int          `json:"unchanged" doc:"Сколько уже такие: например, уже отключены"`
+		Sample    []BulkSample `json:"sample" doc:"Первые 10 изменяемых, по id"`
+		AtStake   *BulkAtStake `json:"at_stake,omitempty" doc:"Только для delete: что удалится вместе с пользователями"`
+		Digest    string       `json:"digest,omitempty" doc:"Только с filter: SHA-256 (hex) списка id подходящих пользователей по возрастанию через запятую; его передают в действие как expect"`
 	}
 }
 
@@ -293,6 +365,8 @@ func (h *handlers) registerUsers() {
 	huma.Register(h.api, huma.Operation{OperationID: "reset-user-traffic", Method: http.MethodPost, Path: "/api/v1/users/{id}/reset-traffic", Summary: "Сбросить трафик", Tags: tags}, h.resetUserTraffic)
 	huma.Register(h.api, huma.Operation{OperationID: "reissue-user", Method: http.MethodPost, Path: "/api/v1/users/{id}/reissue", Summary: "Перевыпустить ссылку", Tags: tags}, h.reissueUser)
 	huma.Register(h.api, huma.Operation{OperationID: "bulk-users", Method: http.MethodPost, Path: "/api/v1/users/bulk", Summary: "Массовое действие", Tags: tags}, h.bulkUsers)
+	huma.Register(h.api, huma.Operation{OperationID: "bulk-users-preview", Method: http.MethodPost, Path: "/api/v1/users/bulk/preview",
+		Summary: "Что сделает массовое действие: без изменений, для подтверждения", Tags: tags}, h.bulkPreview)
 	huma.Register(h.api, huma.Operation{OperationID: "user-traffic", Method: http.MethodGet, Path: "/api/v1/users/{id}/traffic", Summary: "График трафика пользователя", Tags: tags}, h.userTraffic)
 	huma.Register(h.api, huma.Operation{OperationID: "user-devices", Method: http.MethodGet, Path: "/api/v1/users/{id}/devices", Summary: "Адреса, с которых заходил пользователь", Tags: tags}, h.userDevices)
 	huma.Register(h.api, huma.Operation{OperationID: "user-bound-devices", Method: http.MethodGet, Path: "/api/v1/users/{id}/bound-devices", Summary: "Устройства, привязанные к подписке", Tags: tags}, h.boundDevices)
@@ -301,6 +375,8 @@ func (h *handlers) registerUsers() {
 	huma.Register(h.api, huma.Operation{OperationID: "ban-device", Method: http.MethodPost, Path: "/api/v1/users/{id}/bound-devices/{device}/ban", Summary: "Заблокировать устройство: отвязать и не давать привязаться снова по его ID", Tags: tags, DefaultStatus: http.StatusCreated}, h.banDevice)
 	huma.Register(h.api, huma.Operation{OperationID: "device-bans", Method: http.MethodGet, Path: "/api/v1/users/{id}/device-bans", Summary: "Заблокированные устройства пользователя", Tags: tags}, h.deviceBans)
 	huma.Register(h.api, huma.Operation{OperationID: "unban-device", Method: http.MethodDelete, Path: "/api/v1/users/{id}/device-bans/{ban}", Summary: "Разблокировать устройство: оно снова сможет привязаться", Tags: tags, DefaultStatus: http.StatusNoContent}, h.unbanDevice)
+	h.registerUserOnline(tags)
+	h.registerLifecycle()
 }
 
 func mapDomainErr(err error) error {
@@ -338,7 +414,8 @@ type folderFilter struct {
 	id  sql.NullInt64 // invalid: no folder
 }
 
-func parseFolderFilter(s string) (folderFilter, error) {
+// parseFolderFilter reads s; a bad one is refused at location.
+func parseFolderFilter(s, location string) (folderFilter, error) {
 	switch s {
 	case "", "all":
 		return folderFilter{any: true}, nil
@@ -347,7 +424,7 @@ func parseFolderFilter(s string) (folderFilter, error) {
 	}
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || id < 1 {
-		return folderFilter{}, fieldErrValue("query.folder", "bad_folder", s)
+		return folderFilter{}, fieldErrValue(location, "bad_folder", s)
 	}
 	return folderFilter{id: sql.NullInt64{Int64: id, Valid: true}}, nil
 }
@@ -389,16 +466,77 @@ func attentionRank(state string) int {
 	return -1
 }
 
+// userFilter is the users list's filter, and what a bulk action by filter takes its users
+// by: the same code on both sides, so "the users that match" are the same users.
+//
+// The filters stay in Go: the search lowercases as Go does (PostgreSQL's lower() follows the
+// database's locale, and a C locale leaves Cyrillic as it is), and the states are
+// domain.State.
+type userFilter struct {
+	state, source, hidden string
+	query                 string // lowercased and trimmed; empty: no search
+	folder                folderFilter
+}
+
+// newUserFilter reads a filter whose fields are at at ("query." for the list, "body.filter."
+// for a bulk body); what is not given is the list's default. A search by name, contact, note
+// or tag tells with its total and the ids it finds whether the text is in a subscriber,
+// however the answer is masked: an operator who may not see the subscribers does not search
+// them.
+func newUserFilter(ctx context.Context, at, state, query, folder, source, hidden string) (userFilter, error) {
+	f := userFilter{state: cmp.Or(state, "all"), source: cmp.Or(source, "all"), hidden: cmp.Or(hidden, "show"), query: strings.ToLower(strings.TrimSpace(query))}
+	if f.query != "" && hidesPeople(ctx) {
+		return userFilter{}, huma.Error403Forbidden("support_denied")
+	}
+	var err error
+	f.folder, err = parseFolderFilter(folder, at+"folder")
+	return f, err
+}
+
+// facets are the parts of f the list counts users by, each on its own.
+func (f userFilter) facets(u db.User) (okHidden, okFolder, okSource bool) {
+	return hiddenMatches(f.hidden, u), f.folder.matches(u), f.source == "all" || f.source == u.Source
+}
+
+// wants is the rest of f, for a user whose facets match and whose state is st: the state
+// and the search.
+func (f userFilter) wants(u db.User, st string) bool {
+	if f.state == stateAttention {
+		if attentionRank(st) < 0 {
+			return false
+		}
+	} else if f.state != "all" && !(st == f.state || (f.state == domain.StateActive && st == domain.StateExpiring)) {
+		return false
+	}
+	return f.query == "" || strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags), f.query)
+}
+
+// matchingIDs are the ids of the users f matches now: the users the list shows for it,
+// whatever their number.
+func (h *handlers) matchingIDs(ctx context.Context, f userFilter) ([]int64, error) {
+	users, err := h.d.Store.Q.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	now := h.d.Now()
+	grants, err := domain.LoadGrantsLeft(ctx, h.d.Store.Q, now)
+	if err != nil {
+		return nil, err
+	}
+	ids := []int64{}
+	for _, u := range users {
+		if okHidden, okFolder, okSource := f.facets(u); okHidden && okFolder && okSource && f.wants(u, domain.State(u, grants.Main(u.ID), now)) {
+			ids = append(ids, u.ID)
+		}
+	}
+	return ids, nil
+}
+
 func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUsersOutput, error) {
-	// The filters stay in Go: the search lowercases as Go does (PostgreSQL's lower() follows
-	// the database's locale, and a C locale leaves Cyrillic as it is), and the states are
-	// domain.State. Only the page's users get their slots read.
-	//
-	// A search by name, contact, note or tag tells with its total and the ids it finds whether
-	// the text is in a subscriber, however the answer is masked: an operator who may not see
-	// the subscribers does not search them.
-	if strings.TrimSpace(in.Query) != "" && hidesPeople(ctx) {
-		return nil, huma.Error403Forbidden("support_denied")
+	// Only the page's users get their slots read.
+	f, err := newUserFilter(ctx, "query.", in.State, in.Query, in.Folder, in.Source, in.Hidden)
+	if err != nil {
+		return nil, err
 	}
 	users, err := h.d.Store.Q.ListUsers(ctx)
 	if err != nil {
@@ -409,11 +547,6 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 	if err != nil {
 		return nil, err
 	}
-	folder, err := parseFolderFilter(in.Folder)
-	if err != nil {
-		return nil, err
-	}
-	q := strings.ToLower(strings.TrimSpace(in.Query))
 	out := &listUsersOutput{}
 	b := &out.Body
 	b.FolderCounts = map[string]int{"none": 0}
@@ -435,9 +568,7 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 			b.HiddenTotal++
 		}
 		// Each part of the filter on its own; a count leaves out only its own part.
-		okHidden := hiddenMatches(in.Hidden, u)
-		okFolder := folder.matches(u)
-		okSource := in.Source == "all" || in.Source == u.Source
+		okHidden, okFolder, okSource := f.facets(u)
 		if okHidden && okSource {
 			b.FolderCounts[folderKey(u)]++
 		}
@@ -463,19 +594,12 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 		case domain.StateDisabled:
 			c.Disabled++
 		}
-		if in.State == stateAttention {
-			if attentionRank(st) < 0 {
-				continue
-			}
-		} else if in.State != "all" && !(st == in.State || (in.State == domain.StateActive && st == domain.StateExpiring)) {
-			continue
-		}
-		if q != "" && !strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags), q) {
+		if !f.wants(u, st) {
 			continue
 		}
 		matched = append(matched, u)
 	}
-	if in.State == stateAttention {
+	if f.state == stateAttention {
 		slices.SortStableFunc(matched, func(a, b db.User) int {
 			return attentionRank(domain.State(a, grants.Main(a.ID), now)) - attentionRank(domain.State(b, grants.Main(b.ID), now))
 		})
@@ -502,6 +626,9 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 			bound[c.UserID] = c.N
 		}
 		env := h.userEnv(ctx)
+		if err := h.lifecycleOf(ctx, &env, ids); err != nil {
+			return nil, err
+		}
 		for _, u := range page {
 			out.Body.Items = append(out.Body.Items, h.viewUser(u, names[u.ID], bound[u.ID], grants, env))
 		}
@@ -525,11 +652,16 @@ func (h *handlers) userResult(ctx context.Context, u db.User, err error) (*userO
 	if err != nil {
 		return nil, err
 	}
-	return &userOutput{Body: h.viewUser(u, slots, bound, grants, h.userEnv(ctx))}, nil
+	env := h.userEnv(ctx)
+	if err := h.lifecycleOf(ctx, &env, []int64{u.ID}); err != nil {
+		return nil, err
+	}
+	return &userOutput{Body: h.viewUser(u, slots, bound, grants, env)}, nil
 }
 
 func (h *handlers) createUser(ctx context.Context, in *createUserInput) (*userOutput, error) {
-	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID, Source: domain.UserFromAdmin})
+	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID,
+		Source: domain.UserFromAdmin, StartsOnConnect: in.Body.StartsOnConnect})
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, fieldErr("body.tariff_id", "tariff_not_found")
 	}
@@ -565,6 +697,7 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 		DeviceLimit: b.DeviceLimit, ClearDeviceLimit: b.DevicesUnlimited, DeviceMode: b.DeviceMode,
 		SpeedLimit: b.SpeedLimit, ClearSpeedLimit: b.SpeedUnlimited,
 		ExpiresAt: b.ExpiresAt, ClearExpiry: b.NeverExpires, Inbounds: b.Inbounds, TariffID: b.TariffID, Hidden: b.Hidden,
+		StartsOnConnect: b.StartsOnConnect,
 	}
 	if b.FolderID != nil {
 		if *b.FolderID == 0 {
@@ -803,15 +936,124 @@ func (h *handlers) reissueUser(ctx context.Context, in *userIDInput) (*userOutpu
 	return h.userResult(ctx, u, err)
 }
 
-func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, error) {
-	// One transaction for the list: it is applied whole or not at all.
+// bulkOpt is what the action of in needs besides the users.
+func bulkOpt(in *bulkInput) domain.BulkOpt {
 	opt := domain.BulkOpt{Days: in.Body.Days}
-	details := map[string]any{"requested": len(in.Body.IDs)}
 	if in.Body.Action == domain.BulkMove && in.Body.Folder > 0 {
 		opt.Folder = &in.Body.Folder
-		details["folder"] = in.Body.Folder
 	}
-	n, err := h.d.Users.Bulk(ctx, in.Body.IDs, in.Body.Action, opt)
+	return opt
+}
+
+// maxBulkFilterUsers is how many users a bulk action by filter may reach: one transaction
+// locks them all, and a filter that takes more is narrowed (a var for the tests).
+var maxBulkFilterUsers = 20000
+
+// bulkTargets are the users the body names: its ids, or the users its filter matches now
+// (the list's own filter, so they are the users the list shows for it). One of the two;
+// expect goes with a filter only.
+func (h *handlers) bulkTargets(ctx context.Context, in *bulkInput) ([]int64, error) {
+	b := &in.Body
+	switch {
+	case b.Filter != nil && len(b.IDs) > 0:
+		return nil, fieldErr("body.filter", "ids_or_filter")
+	case b.Filter == nil && len(b.IDs) == 0:
+		return nil, fieldErr("body.ids", "ids_or_filter")
+	case b.Filter == nil && b.Expect != "":
+		return nil, fieldErr("body.expect", "expect_with_ids")
+	case b.Filter == nil:
+		return b.IDs, nil
+	}
+	f := b.Filter
+	uf, err := newUserFilter(ctx, "body.filter.", f.State, f.Query, f.Folder, f.Source, f.Hidden)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := h.matchingIDs(ctx, uf)
+	if err == nil && len(ids) > maxBulkFilterUsers {
+		return nil, fieldErrValue("body.filter", "too_many_users", maxBulkFilterUsers)
+	}
+	return ids, err
+}
+
+// bulkDigest names a set of users: the SHA-256 of their ids in order, comma-separated. The
+// preview by filter gives it, the action is done only to the set it names.
+func bulkDigest(ids []int64) string {
+	var b strings.Builder
+	for i, id := range slices.Sorted(slices.Values(ids)) {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatInt(id, 10))
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
+}
+
+// bulkPreview is what bulkUsers would do with the same body, done by nothing: the admin
+// confirms what they see. A folder named is checked as the action checks it.
+func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreviewOutput, error) {
+	ids, err := h.bulkTargets(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	opt := bulkOpt(in)
+	if opt.Folder != nil {
+		if _, err := h.d.Store.Q.GetFolder(ctx, *opt.Folder); errors.Is(err, sql.ErrNoRows) {
+			return nil, fieldErr("body.folder_id", "folder_not_found")
+		} else if err != nil {
+			return nil, err
+		}
+	}
+	plan, err := h.d.Users.BulkPlan(ctx, ids, in.Body.Action, opt)
+	if err != nil {
+		return nil, mapDomainErr(err)
+	}
+	out := &bulkPreviewOutput{}
+	b := &out.Body
+	b.Requested, b.Found, b.Missing, b.Changed, b.Unchanged = plan.Asked, plan.Found, plan.Asked-plan.Found, plan.Changed, plan.Found-plan.Changed
+	b.Sample = make([]BulkSample, 0, len(plan.Sample))
+	for _, c := range plan.Sample {
+		s := BulkSample{UserID: c.User.ID, UserName: c.User.Name, State: c.State, ExpiresAt: store.TimePtr(c.User.ExpiresAt),
+			Used: c.User.UsedUp + c.User.UsedDown, FolderID: store.Int64Ptr(c.User.FolderID)}
+		if in.Body.Action == domain.BulkExtend {
+			s.ExpiresAfter = store.TimePtr(c.Expires)
+		}
+		b.Sample = append(b.Sample, s)
+	}
+	if plan.AtStake != nil {
+		b.AtStake = &BulkAtStake{Active: plan.Active, WithBalance: int(plan.AtStake.WithBalance), Paying: int(plan.AtStake.Paying), Granted: int(plan.AtStake.Granted)}
+	}
+	if in.Body.Filter != nil {
+		b.Digest = bulkDigest(ids)
+	}
+	return out, nil
+}
+
+func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, error) {
+	// By filter, the admin confirmed the set the preview named: without it nothing is done (a
+	// bare filter would reach whoever matches, unseen), and another set now (users came, went
+	// or changed since the preview) is asked again rather than done to users nobody counted.
+	if in.Body.Filter != nil && in.Body.Expect == "" {
+		return nil, fieldErr("body.expect", "expect_required")
+	}
+	ids, err := h.bulkTargets(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+	if in.Body.Filter != nil && bulkDigest(ids) != in.Body.Expect {
+		return nil, huma.Error409Conflict("filter_changed")
+	}
+	// One transaction for the list: it is applied whole or not at all.
+	opt := bulkOpt(in)
+	details := map[string]any{"requested": len(ids)}
+	if f := in.Body.Filter; f != nil {
+		details["filter"] = f
+	}
+	if opt.Folder != nil {
+		details["folder"] = *opt.Folder
+	}
+	n, err := h.d.Users.Bulk(ctx, ids, in.Body.Action, opt)
 	if err != nil {
 		return nil, mapDomainErr(err)
 	}

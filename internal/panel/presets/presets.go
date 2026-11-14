@@ -11,6 +11,7 @@ import (
 	"net"
 	"strings"
 
+	"mikan/internal/hostname"
 	"mikan/internal/panel/secure"
 	"mikan/internal/proto"
 )
@@ -227,6 +228,8 @@ func NewReality(dest string) (map[string]any, error) {
 
 // SetDest points a template's REALITY camouflage at another site. sni is the name
 // clients send; "" means the host of dest (a picked neighbor has dest = its IP instead).
+// A name given with the port of its site (www.example.com:443) is taken without it: a
+// client sends no port in SNI, and a name with one stands out on the way.
 func SetDest(t proto.Template, dest, sni string) error {
 	r, ok := t["reality-config"].(map[string]any)
 	if !ok {
@@ -242,7 +245,28 @@ func SetDest(t proto.Template, dest, sni string) error {
 		}
 		sni = host
 	}
+	if h, _, err := net.SplitHostPort(sni); err == nil && h != "" {
+		sni = h
+	}
+	if !hostname.Name(sni) {
+		return &proto.Error{Code: "reality_sni_name", Field: "reality-config.server-names"}
+	}
 	r["dest"], r["server-names"] = dest, []any{sni}
+	return nil
+}
+
+// SetServerNames keeps a template's REALITY target and changes the names it is shown under:
+// links carry the first, the node lets in clients that send any of them.
+func SetServerNames(t proto.Template, names []string) error {
+	r, ok := t["reality-config"].(map[string]any)
+	if !ok {
+		return &proto.Error{Code: "dest_no_reality", Field: "reality-config"}
+	}
+	list := make([]any, 0, len(names))
+	for _, n := range names {
+		list = append(list, n)
+	}
+	r["server-names"] = list
 	return nil
 }
 

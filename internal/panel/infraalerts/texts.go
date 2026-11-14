@@ -40,6 +40,14 @@ type texts struct {
 	nodeUpdateFailed  string
 	nodeUpdateRollout string
 
+	// A node's payment is near (the node, the date) and its server's plan has carried the
+	// alert percent (the node, the bytes carried, the limit, the percent, the reset date).
+	billingDue     string
+	billingTraffic string
+	// dateLayout writes a day in the billing messages: 02.01.2006 in Russian, 2 Jan 2006 in
+	// English, where 02.01 would read as 1 February.
+	dateLayout string
+
 	// The torrent blocker's message: the title, the ban (the time) and the rest of the catches
 	// (their count).
 	torrentTitle  string
@@ -81,6 +89,10 @@ var ruTexts = texts{
 	nodeUpdateFailed:  "🔴 <b>Ошибка обновления ноды</b> ",
 	nodeUpdateRollout: ". Обновление остальных нод остановлено; ноду можно обновить снова на странице «Ноды».",
 
+	billingDue:     "💳 <b>Скоро оплата сервера</b>: %s, срок %s",
+	billingTraffic: "📶 <b>Трафик сервера на исходе</b>: %s, %s из %s (%d%%), счётчик сбросится %s",
+	dateLayout:     "02.01.2006",
+
 	torrentTitle:  "🧲 <b>Пойман торрент</b>",
 	torrentBanned: "бан до %s UTC",
 	torrentMore:   "и ещё %d",
@@ -117,6 +129,10 @@ var enTexts = texts{
 	updateFailed:      "🔴 <b>Mikan update failed</b>",
 	nodeUpdateFailed:  "🔴 <b>Node update failed</b> ",
 	nodeUpdateRollout: ". The rollout to the other nodes is stopped; the node can be updated again from the Nodes page.",
+
+	billingDue:     "💳 <b>Server payment due</b>: %s, on %s",
+	billingTraffic: "📶 <b>Server traffic running out</b>: %s, %s of %s (%d%%), the counter resets on %s",
+	dateLayout:     "2 Jan 2006",
 
 	torrentTitle:  "🧲 <b>Torrent caught</b>",
 	torrentBanned: "banned until %s UTC",

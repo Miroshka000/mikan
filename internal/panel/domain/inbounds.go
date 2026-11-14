@@ -25,6 +25,7 @@ var (
 	ErrUnknownPreset  = errors.New("unknown_preset")
 	ErrUnknownInbound = errors.New("unknown_inbound")
 	ErrBadPort        = errors.New("bad_port")
+	ErrPortRangeWide  = errors.New("port_range_wide") // a hopping range of more than MaxHopPorts
 	ErrBadListen      = errors.New("bad_listen")
 	ErrAutoPortListen = errors.New("auto_port_listen") // a proxy in front would not learn the new port
 	ErrAutoSNIListen  = errors.New("auto_sni_listen")  // nor the new site, if it routes by SNI
@@ -82,11 +83,12 @@ func NewInbounds(st *store.Store, dry DryRun, now func() time.Time) *Inbounds {
 
 // NewInbound is an inbound to add.
 type NewInbound struct {
-	NodeID int64  // 0: the panel's own node
-	Preset string // presets.Custom takes Config
-	Port   string // "": the preset's
-	Dest   string // a REALITY preset's target; "": the default
-	Config string // the template of presets.Custom
+	NodeID int64    // 0: the panel's own node
+	Preset string   // presets.Custom takes Config
+	Port   string   // "": the preset's
+	Dest   string   // a REALITY preset's target; "": the default
+	Config string   // the template of presets.Custom
+	Tags   []string // the admin's labels, as a user's (encodeTags)
 }
 
 // InboundPatch changes an inbound; a nil field stays as it is.
@@ -110,11 +112,18 @@ type InboundPatch struct {
 	Outbound   *string // direct, warp or node
 	ExitNodeID *int64  // for Outbound node
 	PoolID     *int64  // 0: the main traffic
+	// InAuto: the inbound is in the subscriptions' automatic choice (as a node's switch).
+	InAuto *bool
+	// Tags are the admin's labels (encodeTags): the panel's own, clients see none of them.
+	Tags *[]string
 
 	// FromPort, when set, applies the patch only while the inbound is on this port: an
 	// automatic move decided on what a node reported never lands on a row moved since
 	// (ErrInboundChanged).
 	FromPort *string
+
+	// defaultHost: the default host's own fields, written with the template (UpdateHost).
+	defaultHost *defaultHost
 }
 
 // EditsTemplate: the patch changes the listener's template.
@@ -124,7 +133,7 @@ func (p InboundPatch) EditsTemplate() bool {
 
 // ForClients: the patch changes what clients get.
 func (p InboundPatch) ForClients() bool {
-	return p.EditsTemplate() || p.Port != nil || p.Enabled != nil || p.DisplayName != nil
+	return p.EditsTemplate() || p.Port != nil || p.Enabled != nil || p.DisplayName != nil || p.InAuto != nil
 }
 
 // ClientEndpoint is where clients connect when a TCP proxy or a CDN stands in front of
@@ -153,13 +162,24 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 			return db.Inbound{}, err
 		}
 	}
-	if !ValidPort(port) {
-		return db.Inbound{}, ErrBadPort
+	if err := checkNewPort(port); err != nil {
+		return db.Inbound{}, err
 	}
 	config := in.Config
 	if info.ID != presets.Custom {
-		if config, err = presets.NewConfig(info.ID, in.Dest); err != nil {
+		dest, site := in.Dest, ""
+		if target, name, own, err := s.ownSite(ctx, node, dest); err != nil {
 			return db.Inbound{}, err
+		} else if own {
+			dest, site = target, name
+		}
+		if config, err = presets.NewConfig(info.ID, dest); err != nil {
+			return db.Inbound{}, err
+		}
+		if site != "" {
+			if config, err = editTemplate(config, InboundPatch{Dest: &dest, ServerName: &site}); err != nil {
+				return db.Inbound{}, err
+			}
 		}
 	}
 	t, err := s.CheckTemplate(ctx, node, config, port)
@@ -180,9 +200,15 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 			return err
 		}
 		now := s.now().Unix()
-		row, err = q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, base), Preset: info.ID, Port: port,
+		row, err = createInbound(ctx, q, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, base), Preset: info.ID, Port: port,
 			Config: config, CreatedAt: now, UpdatedAt: now})
-		return err
+		if err != nil || len(in.Tags) == 0 {
+			return err
+		}
+		if row.Tags, err = encodeTags(in.Tags); err != nil {
+			return err
+		}
+		return q.SetInboundTags(ctx, db.SetInboundTagsParams{Tags: row.Tags, ID: row.ID})
 	})
 	return row, err
 }
@@ -277,8 +303,12 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 		}
 	}
 	if p.Port != nil {
-		if !ValidPort(*p.Port) {
-			return fail(ErrBadPort)
+		// A port sent back as it is passes: a range wider than MaxHopPorts saved before
+		// keeps working, and only a new port has to fit.
+		if *p.Port != prev.Port {
+			if err := checkNewPort(*p.Port); err != nil {
+				return fail(err)
+			}
 		}
 		next.Port = *p.Port
 	}
@@ -287,6 +317,22 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 	}
 	if p.Config != nil {
 		next.Config = *p.Config
+	}
+	if p.Dest != nil {
+		node, err := s.node(ctx, prev.NodeID)
+		if err != nil {
+			return fail(err)
+		}
+		target, name, own, err := s.ownSite(ctx, node, *p.Dest)
+		if err != nil {
+			return fail(err)
+		}
+		if own {
+			p.Dest = &target
+			if p.ServerName == nil || strings.TrimSpace(*p.ServerName) == "" {
+				p.ServerName = &name
+			}
+		}
 	}
 	if next.Config, err = editTemplate(next.Config, p); err != nil {
 		return fail(err)
@@ -363,6 +409,20 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 				return err
 			}
 		}
+		if p.Tags != nil {
+			tags, err := encodeTags(*p.Tags)
+			if err != nil {
+				return err
+			}
+			if err := q.SetInboundTags(ctx, db.SetInboundTagsParams{Tags: tags, ID: id}); err != nil {
+				return err
+			}
+		}
+		if p.InAuto != nil {
+			if err := q.SetInboundNoAuto(ctx, db.SetInboundNoAutoParams{NoAuto: Flag(!*p.InAuto), ID: id}); err != nil {
+				return err
+			}
+		}
 		if p.Outbound != nil {
 			if err := q.SetInboundExit(ctx, db.SetInboundExitParams{ExitNodeID: next.ExitNodeID, Outbound: next.Outbound, ID: id}); err != nil {
 				return err
@@ -379,9 +439,19 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 			}
 		}
 		if client {
-			if _, err := q.UpdateInbound(ctx, db.UpdateInboundParams{Port: next.Port, Enabled: next.Enabled, Config: next.Config, DisplayName: next.DisplayName,
-				UpdatedAt: s.now().Unix(), ID: id}); err != nil {
+			row, err := q.UpdateInbound(ctx, db.UpdateInboundParams{Port: next.Port, Enabled: next.Enabled, Config: next.Config, DisplayName: next.DisplayName,
+				UpdatedAt: s.now().Unix(), ID: id})
+			if err != nil {
 				return err
+			}
+			// The default host is the template's: it changes with it (hosts.go).
+			if err := syncDefaultHost(ctx, q, row); err != nil {
+				return err
+			}
+			if p.defaultHost != nil {
+				if err := p.defaultHost.write(ctx, q, id); err != nil {
+					return err
+				}
 			}
 		}
 		next, err = q.GetInbound(ctx, id)
@@ -577,6 +647,37 @@ func (s *Inbounds) dryRun(ctx context.Context, node db.Node, t proto.Template, p
 	return err
 }
 
+// ownSite says whether dest, a REALITY site as the admin gave it, is one of the panel's own
+// names on the panel's own node (the panel's domain, the subscriptions' domain, on any
+// port), and gives what it stands for: the panel's HTTPS on loopback, asked for by that
+// name. "My own domain" typed as a site means the site this server shows, and that is the
+// panel. Taken as written, the name leads to the server's own address: on 443 that is the
+// node itself, whose certificate is for another name ("the certificate does not suit the
+// name"), and behind the shared 443 it is the very inbound that asks, without end.
+func (s *Inbounds) ownSite(ctx context.Context, node db.Node, dest string) (target, name string, own bool, err error) {
+	host, _, splitErr := net.SplitHostPort(strings.TrimSpace(dest))
+	if splitErr != nil || host == "" || node.Address != "" {
+		return "", "", false, nil
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	set := settings.New(s.st.Q)
+	for _, key := range []string{settings.KeyDomain, settings.KeySubDomain} {
+		n, err := set.String(ctx, key)
+		if err != nil {
+			return "", "", false, err
+		}
+		own = own || n != "" && strings.EqualFold(strings.TrimSuffix(n, "."), host)
+	}
+	if !own {
+		return "", "", false, nil
+	}
+	port, err := s.selfStealPort(ctx, node)
+	if err != nil || port == 0 {
+		return "", "", false, err
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), host, true, nil
+}
+
 // selfStealPort is the panel's port for the panel's own node, the only one that may use
 // the panel's HTTPS as its REALITY target; 0 for the others.
 func (s *Inbounds) selfStealPort(ctx context.Context, node db.Node) (int, error) {
@@ -615,10 +716,32 @@ func (s *Inbounds) node(ctx context.Context, id int64) (db.Node, error) {
 	return n, err
 }
 
-// ValidPort accepts a port ("443") or a Hysteria2 hopping range ("20000-30000").
-func ValidPort(spec string) bool {
-	_, _, ok := ParsePort(spec)
-	return ok
+// MaxHopPorts is the widest Hysteria2 hopping range a new port may be. The core gives every
+// port of a range a QUIC server of its own, a socket, five goroutines and about 120 KB, so
+// 20000-30000 held over a gigabyte of a node's memory, and on a small server its
+// processor went to collecting it. A wider range saved before keeps working (ParsePort).
+const MaxHopPorts = 1000
+
+// HopPorts is how many ports spec takes: 1 for a port, every port of a range, 0 when spec
+// is neither.
+func HopPorts(spec string) int {
+	lo, hi, ok := ParsePort(spec)
+	if !ok {
+		return 0
+	}
+	return hi - lo + 1
+}
+
+// checkNewPort accepts a port, or a hopping range of at most MaxHopPorts, for an inbound
+// made, copied or given another port.
+func checkNewPort(spec string) error {
+	switch n := HopPorts(spec); {
+	case n == 0:
+		return ErrBadPort
+	case n > MaxHopPorts:
+		return ErrPortRangeWide
+	}
+	return nil
 }
 
 // ParseListen reads the address an inbound listens on: "" (or 0.0.0.0, ::) for every

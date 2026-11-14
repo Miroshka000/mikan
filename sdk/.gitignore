@@ -1,0 +1,5 @@
+# Made by sdk/build.sh from web/src/api/openapi.json; none of it is kept in git.
+/.build/
+/dist/
+/typescript/dist/
+/typescript/src/schema.ts

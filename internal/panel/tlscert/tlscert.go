@@ -118,11 +118,23 @@ func PEM(dir string) (certPEM, keyPEM, pin string, err error) {
 	return string(c), string(k), nodetls.PinOfDER(block.Bytes), nil
 }
 
-// BySNI serves the subscription domain's certificate to clients that name that domain,
-// and the panel's to the rest, the domain's own clients included while it has none yet.
+// BySNI serves the subscription domain's certificate to clients that name that domain, a
+// former name's own to clients that still name it (links handed out before the domain
+// changed), and the panel's to the rest, the domain's own clients included while it has
+// none yet.
 type BySNI struct {
 	Panel, Sub *Holder
 	name       atomic.Pointer[string]
+	former     atomic.Pointer[Former]
+}
+
+// Former are the names the panel answered at before (acme.Formers), lower-case and without
+// the final dot: Certs has the certificate each keeps ("" for clients that name none, the
+// former address of a panel that had no domain), Sub those that were the subscription
+// domain's.
+type Former struct {
+	Certs map[string]*Holder
+	Sub   map[string]bool
 }
 
 // SetName is the subscription domain now; "" when there is none.
@@ -136,11 +148,38 @@ func (b *BySNI) Name() string {
 	return ""
 }
 
+// SetFormer is the former names now; nil when there are none.
+func (b *BySNI) SetFormer(f *Former) { b.former.Store(f) }
+
+// IsSub says whether a request's host is the subscription domain, now or before it
+// changed: such requests reach the subscriptions alone.
+func (b *BySNI) IsSub(host string) bool {
+	host = sniName(host)
+	if n := b.Name(); n != "" && strings.EqualFold(host, n) {
+		return true
+	}
+	f := b.former.Load()
+	return f != nil && host != "" && f.Sub[host]
+}
+
+func sniName(s string) string { return strings.ToLower(strings.TrimSuffix(s, ".")) }
+
 // Get is tls.Config.GetCertificate.
 func (b *BySNI) Get(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	if n := b.Name(); n != "" && hello != nil && strings.EqualFold(strings.TrimSuffix(hello.ServerName, "."), n) {
+	if hello == nil {
+		return b.Panel.Get(hello)
+	}
+	name := sniName(hello.ServerName)
+	if n := b.Name(); n != "" && strings.EqualFold(name, n) {
 		if c, err := b.Sub.Get(hello); err == nil {
 			return c, nil
+		}
+	}
+	if f := b.former.Load(); f != nil {
+		if h := f.Certs[name]; h != nil {
+			if c, err := h.Get(hello); err == nil {
+				return c, nil
+			}
 		}
 	}
 	return b.Panel.Get(hello)

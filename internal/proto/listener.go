@@ -20,11 +20,13 @@ type Cert struct {
 }
 
 // RealityMaxTimeDiff bounds how far a REALITY client's clock may be from the server's,
-// in milliseconds as the Citrus core reads it, like Xray's maxTimeDiff (2 h, like
-// Hiddify; mihomo took microseconds). Without it a recorded ClientHello replays forever:
-// the reply then shows the REALITY certificate instead of the target's, and the server is
-// exposed. A template may set its own value.
-const RealityMaxTimeDiff = int64(2 * 60 * 60 * 1_000)
+// in milliseconds as the Citrus core reads it, like Xray's maxTimeDiff (mihomo took
+// microseconds). Without it a recorded ClientHello replays forever: the server then answers
+// it itself and not as its target would, and is exposed. Ten minutes: devices keep their
+// clocks by the network to seconds, and the window is how long a recorded ClientHello stays
+// worth replaying and how long the core has to remember the ones it has seen. It was two
+// hours until 0.5.2.1. A template may set its own value.
+const RealityMaxTimeDiff = int64(10 * 60 * 1_000)
 
 // Listener renders the mihomo listener: the template minus mikan's section, plus name,
 // port, listen address, users and, where the protocol needs it, the node certificate.
@@ -89,7 +91,7 @@ func users(t Template, slots []Slot, ext Ext) any {
 		cipher := t.str("cipher")
 		out := make([]map[string]any, 0, len(slots))
 		for _, s := range slots {
-			out = append(out, map[string]any{"name": s.Name, "password": ssUserKey(cipher, s.Secret)})
+			out = append(out, map[string]any{"name": s.Name, "password": SSUserKey(cipher, s.Secret)})
 		}
 		return out
 	case "trojan", "trusttunnel", "shadowquic":

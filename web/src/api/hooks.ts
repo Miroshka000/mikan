@@ -11,6 +11,8 @@ export const qk = {
   devices: (id: number) => ["users", "devices", id] as const,
   boundDevices: (id: number) => ["users", "bound", id] as const,
   deviceBans: (id: number) => ["users", "bans", id] as const,
+  userOnline: (id: number) => ["users", "online", id] as const,
+  userNodes: (id: number) => ["users", "nodes", id] as const,
   tariffs: ["tariffs"] as const,
   inbounds: ["inbounds"] as const,
   presets: ["presets"] as const,
@@ -20,6 +22,7 @@ export const qk = {
   nodes: ["nodes"] as const,
   settings: ["settings"] as const,
   sessions: ["sessions"] as const,
+  passkeys: ["passkeys"] as const,
   telegram: ["telegram"] as const,
   updates: ["updates"] as const,
   apiKeys: ["api-keys"] as const,
@@ -48,9 +51,19 @@ export const qk = {
   speedTests: (node: number) => ["speedtests", node] as const,
   subPage: ["sub-page"] as const,
   subDocs: ["sub-docs"] as const,
+  subApps: ["sub-apps"] as const,
+  subRules: ["sub-rules"] as const,
+  subTemplates: ["sub-templates"] as const,
+  subTemplate: (id: number) => ["sub-templates", "one", id] as const,
+  readySubTemplates: ["sub-templates-ready"] as const,
+  userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
+  lifecycle: ["lifecycle"] as const,
+  // Under the users: a change of any of them may move who the removal reaches.
+  inactive: (days: number) => ["users", "inactive", days] as const,
   nodeTraffic: (node: number, range: string) => ["node-traffic", node, range] as const,
   nodeShares: (range: string) => ["node-shares", range] as const,
+  nodeClients: (node: number, q: string) => ["node-clients", node, q] as const,
 };
 
 export const meQuery = {
@@ -135,6 +148,24 @@ export function useDeviceBans(id: number) {
   return useQuery({
     queryKey: qk.deviceBans(id),
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/device-bans", { params: { path: { id } }, signal })),
+  });
+}
+
+/** Where a user is online now, by node and by device: the nodes report every few seconds. */
+export function useUserOnline(id: number) {
+  return useQuery({
+    queryKey: qk.userOnline(id),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/online", { params: { path: { id } }, signal })),
+    refetchInterval: 15_000,
+  });
+}
+
+/** The nodes a user went through: last seen and traffic on each, and where online now. */
+export function useUserNodes(id: number) {
+  return useQuery({
+    queryKey: qk.userNodes(id),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/nodes", { params: { path: { id } }, signal })),
+    refetchInterval: 60_000,
   });
 }
 
@@ -263,6 +294,21 @@ export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/settings", { signal })) });
 }
 
+/** The rules of the subscriptions' lifecycle: the carry-over of traffic and the removal of the inactive. */
+export function useLifecycle() {
+  return useQuery({ queryKey: qk.lifecycle, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/lifecycle", { signal })) });
+}
+
+/** Whom the removal of the inactive reaches with days (the saved number, or one being tried). */
+export function useInactive(days: number, enabled = true) {
+  return useQuery({
+    queryKey: qk.inactive(days),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/lifecycle/inactive", { params: { query: { days } }, signal })),
+    placeholderData: keepPreviousData,
+    enabled,
+  });
+}
+
 /** Followed every few seconds while the server updates, hourly otherwise. */
 export function useUpdates() {
   return useQuery({
@@ -279,8 +325,8 @@ export function useUpdates() {
 type UserScope = "all" | "devices";
 
 /** The user views a devices mutation changes: the user (its device count), the list (the
- * same count) and the device lists. */
-const DEVICE_VIEWS = new Set(["one", "list", "pages", "devices", "bound", "bans"]);
+ * same count), the device lists and where the user is online. */
+const DEVICE_VIEWS = new Set(["one", "list", "pages", "devices", "bound", "bans", "online"]);
 
 /** Mutations that change a user refresh the user-related views they change. */
 export function useUserMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>, scope: UserScope = "all") {
@@ -309,12 +355,19 @@ export const userActions = {
   reissue: (id: number) => unwrap(api.POST("/api/v1/users/{id}/reissue", { params: { path: { id } } })),
   remove: (id: number) => unwrap(api.DELETE("/api/v1/users/{id}", { params: { path: { id } } })),
   bulk: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk", { body })),
+  bulkPreview: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk/preview", { body })),
+  setNextTariff: ({ id, ...body }: { id: number } & Schemas["NextTariffInputBody"]) =>
+    unwrap(api.PUT("/api/v1/users/{id}/next-tariff", { params: { path: { id } }, body })),
+  clearNextTariff: (id: number) => unwrap(api.DELETE("/api/v1/users/{id}/next-tariff", { params: { path: { id } } })),
   unbindDevice: ({ id, device }: { id: number; device: number }) =>
     unwrap(api.DELETE("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } } })),
   renameDevice: ({ id, device, name }: { id: number; device: number; name: string }) =>
     unwrap(api.PATCH("/api/v1/users/{id}/bound-devices/{device}", { params: { path: { id, device } }, body: { name } })),
   banDevice: ({ id, device }: { id: number; device: number }) => unwrap(api.POST("/api/v1/users/{id}/bound-devices/{device}/ban", { params: { path: { id, device } } })),
   unbanDevice: ({ id, ban }: { id: number; ban: number }) => unwrap(api.DELETE("/api/v1/users/{id}/device-bans/{ban}", { params: { path: { id, ban } } })),
+  /** Close the user's open connections and keep the access: on every node, or one node's of one set of keys. */
+  resetConnections: ({ id, ...body }: { id: number } & Schemas["ResetConnectionsInputBody"]) =>
+    unwrap(api.POST("/api/v1/users/{id}/reset-connections", { params: { path: { id } }, body })),
 };
 
 /** One paid period: a month up to the billing day, or 30 days without one. */
@@ -353,6 +406,23 @@ export function useNodeTraffic(id: number | undefined, range: "24h" | "7d" | "30
     // shows the previous one's.
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === (id ?? 0) ? prev : undefined),
     refetchInterval: 60_000,
+  });
+}
+
+const NODE_CLIENTS_PAGE = 50;
+
+/** Who went through a node, the latest seen first, a page at a time; q is a part of the name. */
+export function useNodeClients(id: number | undefined, q: string) {
+  return useInfiniteQuery({
+    queryKey: qk.nodeClients(id ?? 0, q),
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      unwrap(api.GET("/api/v1/nodes/{id}/clients", { params: { path: { id: id! }, query: { q: q || undefined, limit: NODE_CLIENTS_PAGE, offset: pageParam } }, signal })),
+    getNextPageParam: nextOffset,
+    enabled: !!id,
+    // Another search keeps the last list while it loads; another node never shows the previous one's.
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === (id ?? 0) ? prev : undefined),
+    refetchInterval: (query) => 30_000 * Math.max(1, query.state.data?.pages.length ?? 1),
   });
 }
 
@@ -461,4 +531,38 @@ export function useSpeedTests(node: number | undefined) {
     queryFn: ({ signal }) => unwrap(api.GET("/api/v1/nodes/{id}/speedtests", { params: { path: { id: node! }, query: { limit: SPEEDTESTS_LIMIT } }, signal })),
     enabled: !!node,
   });
+}
+
+/** The known apps and which of them the admin turned away. */
+export function useSubApps() {
+  return useQuery({ queryKey: qk.subApps, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-apps", { signal })) });
+}
+
+/** The response rules of the subscription, and what the editor needs to keep within their limits. */
+export function useSubRules() {
+  return useQuery({ queryKey: qk.subRules, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-rules", { signal })) });
+}
+
+/** The subscription templates of every core, without their texts, and how many a core may have. */
+export function useSubTemplates() {
+  return useQuery({ queryKey: qk.subTemplates, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates", { signal })) });
+}
+
+/** One subscription template with its text; its text is hidden from a key or an operator not shown secrets. */
+export function useSubTemplate(id: number | undefined) {
+  return useQuery({
+    queryKey: qk.subTemplate(id ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/{id}", { params: { path: { id: id! } }, signal })),
+    enabled: id !== undefined,
+  });
+}
+
+/** The catalog of ready subscription templates: mikan's own and the community's, without their texts. */
+export function useReadySubTemplates() {
+  return useQuery({ queryKey: qk.readySubTemplates, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/sub-templates/ready", { signal })), staleTime: Infinity });
+}
+
+/** The latest requests of a user's subscription, newest first. */
+export function useUserSubLog(id: number) {
+  return useQuery({ queryKey: qk.userSubLog(id), queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/sub-log", { params: { path: { id }, query: { limit: 50 } }, signal })) });
 }

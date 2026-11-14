@@ -13,6 +13,7 @@ import { t } from "../../../i18n";
 import { bytes, dateShort, days as daysText, GiB } from "../../../lib/format";
 import { isLifetimeDays, isTrafficGB, LIFETIME_DAYS_PRESETS, parseDecimal } from "../../../lib/validate";
 import { targetName, type Lifetime } from "../packages";
+import { Select } from "../../../components/select";
 
 type Grant = Schemas["GrantView"];
 
@@ -54,7 +55,7 @@ export function GrantsSection({ u }: { u: User }) {
 function GrantRow({ g, pools }: { g: Grant; pools: Schemas["PoolView"][] | undefined }) {
   const expired = !g.active && g.remaining > 0;
   const name = g.package_name || t("grants.package");
-  const source = g.source === "purchase" ? t("grants.bought", { name }) : g.source === "gift" ? t("grants.gift", { name }) : t("grants.byAdmin");
+  const source = g.source === "purchase" ? t("grants.bought", { name }) : g.source === "gift" ? t("grants.gift", { name }) : g.source === "carry" ? t("grants.carried") : t("grants.byAdmin");
   return (
     <li className="py-2">
       <div className="flex items-center justify-between gap-2 text-[13px]">
@@ -117,14 +118,14 @@ function GrantForm({ u, pools, onDone }: { u: User; pools: Schemas["PoolView"][]
           </div>
         </Field>
         <Field label={t("packages.target")} htmlFor="gr-pool" error={errors.pool_id}>
-          <select id="gr-pool" className="input" value={pool} onChange={(e) => setPool(Number(e.target.value))}>
+          <Select id="gr-pool" className="input" value={pool} onChange={(e) => setPool(Number(e.target.value))}>
             <option value={0}>{t("pools.mainTraffic")}</option>
             {pools.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
       </div>
       <Field label={t("packages.lifetimeLabel")} htmlFor={lifetime === "days" ? "gr-days" : undefined} hint={t(`packages.lifetimeHint.${lifetime}`)} error={errors.days}>

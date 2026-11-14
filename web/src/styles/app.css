@@ -70,6 +70,12 @@
   .theme-tile[aria-checked="true"] { border-color: var(--mikan-500); box-shadow: 0 0 0 3px var(--ring); color: var(--ink-900); }
   .theme-tile-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 4px; font-size: 13px; font-weight: 500; }
   .theme-tile-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .login-part + .login-part { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--hairline); }
+  .preset-tile { display: flex; min-width: 0; flex-direction: column; padding: 16px; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface-soft); }
+  .preset-tile[data-active] { border-color: var(--leaf-500); background: var(--surface); }
+  .preset-tile > p { flex: 1; }
+  .preset-icon { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: 12px; background: var(--surface); color: var(--ink-600); }
+  .preset-tile[data-active] .preset-icon { background: var(--leaf-50); color: var(--leaf-700); }
   .theme-tile-name svg { flex: none; color: var(--mikan-600); }
   .theme-mock { position: relative; isolation: isolate; display: flex; gap: 6px; height: 84px; padding: 8px; overflow: hidden; border-radius: 10px; background: var(--bg); box-shadow: inset 0 0 0 1px var(--hairline); color: var(--ink-900); }
   .theme-mock::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: var(--glow-opacity); background: radial-gradient(70% 80% at 10% 0%, var(--glow-a), transparent 70%), radial-gradient(60% 70% at 0% 100%, var(--glow-c), transparent 70%), radial-gradient(70% 80% at 100% 100%, var(--glow-e), transparent 70%), radial-gradient(50% 60% at 95% 10%, var(--glow-d), transparent 70%); }
@@ -364,6 +370,21 @@
   .input { height: 44px; padding: 0 12px; border-radius: var(--r-md); border: 1px solid var(--hairline); background: var(--surface); color: var(--ink-900); outline: 0; width: 100%; transition: border-color 0.2s, box-shadow 0.2s; }
   .input:focus { border-color: var(--mikan-600); box-shadow: 0 0 0 3px var(--ring); }
   .input[aria-invalid="true"] { border-color: var(--berry-600); }
+  /* The select (components/select.tsx): the field shows the choice, its list is a menu as
+     wide as the field, rows highlighted edge to edge, the chosen one ticked. */
+  .select-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; }
+  .select-trigger:disabled { opacity: 0.6; cursor: default; }
+  .select-trigger[data-state="open"] { border-color: var(--mikan-600); box-shadow: 0 0 0 3px var(--ring); }
+  .select-trigger[data-placeholder] .select-value { color: var(--ink-400); }
+  .select-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .select-icon { display: flex; flex: none; color: var(--ink-500); transition: transform 0.2s var(--ease-out); }
+  .select-trigger[data-state="open"] .select-icon { transform: rotate(180deg); }
+  .menu.select-menu { min-width: var(--radix-select-trigger-width); max-width: calc(100vw - 24px); max-height: min(360px, var(--radix-select-content-available-height)); overflow: hidden; }
+  .select-viewport { padding: 0; }
+  .select-item { justify-content: space-between; height: auto; min-height: 36px; padding-block: 8px; line-height: 20px; }
+  .select-item[data-state="checked"] { color: var(--ink-900); }
+  .select-item[data-disabled] { opacity: 0.45; cursor: not-allowed; }
+  .select-check { display: flex; flex: none; color: var(--mikan-600); }
   /* The frame is the wrapper's, and the unit sits beside the field in the flow: a unit of
      any width ("Мбит/с", "мес.") takes its own room and never covers the digits. */
   .input-unit { display: flex; align-items: center; height: 44px; border-radius: var(--r-md); border: 1px solid var(--hairline); background: var(--surface); cursor: text; transition: border-color 0.2s, box-shadow 0.2s; }
@@ -417,6 +438,17 @@
   /* Centred by layout (see .bulk-bar): a transform would be motion's, and gone with reduced motion. */
   .dialog { position: fixed; inset: 0; margin: auto; height: fit-content; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; border-radius: var(--r-xl); padding: 24px; z-index: 60; }
   .dialog h2 { font: 500 18px/24px var(--font-display-stack); letter-spacing: -0.02em; }
+  /* The command palette (Ctrl+K): above the drawers and dialogs it may be opened over. */
+  .palette { position: fixed; left: 0; right: 0; top: max(16px, 12vh); margin: 0 auto; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px - max(16px, 12vh)); display: flex; flex-direction: column; border-radius: var(--r-xl); overflow: hidden; z-index: 66; }
+  .palette-input { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--hairline); flex: none; }
+  .palette-input input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: none; font-size: 15px; color: var(--ink-900); }
+  .palette-list { min-height: 0; overflow-y: auto; padding: 6px; scrollbar-width: thin; }
+  .palette-item { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--ink-700); cursor: pointer; user-select: none; }
+  .palette-item[aria-selected="true"] { background: var(--hover); color: var(--ink-900); }
+  .palette-hint { margin-left: auto; padding-left: 12px; font-size: 12px; font-weight: 400; color: var(--ink-500); flex-shrink: 1; }
+  .palette-note { padding: 14px 10px; font-size: 13px; color: var(--ink-500); text-align: center; }
+  .palette-foot { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 8px 16px; border-top: 1px solid var(--hairline); font-size: 12px; color: var(--ink-500); flex: none; }
+  .palette kbd, .nav-item kbd { font: 500 11px/1 var(--font-mono-stack); padding: 2px 5px; border-radius: 6px; background: var(--ink-50); color: var(--ink-600); }
 
   /* toasts */
   .toast-region { position: fixed; left: 50%; top: calc(16px + env(safe-area-inset-top)); transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 90; align-items: center; pointer-events: none; }

@@ -127,3 +127,37 @@ func TestGatewayWithoutScreens(t *testing.T) {
 		t.Fatalf("sent %q", text(send))
 	}
 }
+
+// The Mini App button follows the subscriptions to a new address; a button that opens
+// something else, and a path that only begins like the old one, stay as they are.
+func TestMoveMenuButton(t *testing.T) {
+	e := setup(t)
+	from, to := "https://old.example.com:2053/s3cret", "https://new.example.com:2053/s3cret"
+	e.tg.mu.Lock()
+	e.tg.menu = map[string]any{"type": "web_app", "text": "Open", "web_app": map[string]any{"url": from + "/app?start=1"}}
+	e.tg.mu.Unlock()
+	if moved, err := e.gate.MoveMenuButton(e.ctx, from, to); err != nil || !moved {
+		t.Fatalf("moved %v: %v", moved, err)
+	}
+	e.tg.mu.Lock()
+	menu, _ := e.tg.menu.(map[string]any)
+	e.tg.mu.Unlock()
+	app, _ := menu["web_app"].(map[string]any)
+	if menu["text"] != "Open" || app["url"] != to+"/app?start=1" {
+		t.Fatalf("the button: %+v", menu)
+	}
+	for _, url := range []string{"https://shop.example.com/app", from + "x/app"} {
+		e.tg.mu.Lock()
+		e.tg.menu = map[string]any{"type": "web_app", "text": "Open", "web_app": map[string]any{"url": url}}
+		e.tg.mu.Unlock()
+		if moved, err := e.gate.MoveMenuButton(e.ctx, from, to); err != nil || moved {
+			t.Fatalf("%s: moved %v, %v", url, moved, err)
+		}
+	}
+	e.tg.mu.Lock()
+	e.tg.menu = nil
+	e.tg.mu.Unlock()
+	if moved, err := e.gate.MoveMenuButton(e.ctx, from, to); err != nil || moved {
+		t.Fatalf("the command list: moved %v, %v", moved, err)
+	}
+}

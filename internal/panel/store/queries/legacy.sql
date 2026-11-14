@@ -11,6 +11,10 @@ SELECT token, source FROM legacy_sub_tokens WHERE user_id = $1 ORDER BY token;
 -- name: CountLegacySubTokens :one
 SELECT count(*) FROM legacy_sub_tokens;
 
+-- name: CountLegacyUsers :one
+-- The users with an old link: a PasarGuard user has two keys (name and id), one person.
+SELECT count(DISTINCT user_id) FROM legacy_sub_tokens;
+
 -- name: DeleteLegacySubTokensOf :exec
 DELETE FROM legacy_sub_tokens WHERE user_id = $1;
 

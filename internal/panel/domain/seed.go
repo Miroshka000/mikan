@@ -29,7 +29,7 @@ func Seed(ctx context.Context, st *store.Store, now time.Time) error {
 			if err != nil {
 				return err
 			}
-			if _, err := st.Q.CreateInbound(ctx, db.CreateInboundParams{NodeID: 1, Name: p.Name, Preset: p.ID, Port: p.Port, Config: config, CreatedAt: now.Unix(), UpdatedAt: now.Unix()}); err != nil {
+			if _, err := createInbound(ctx, st.Q, db.CreateInboundParams{NodeID: 1, Name: p.Name, Preset: p.ID, Port: p.Port, Config: config, CreatedAt: now.Unix(), UpdatedAt: now.Unix()}); err != nil {
 				return err
 			}
 		}

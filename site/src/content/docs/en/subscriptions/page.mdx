@@ -22,10 +22,15 @@ Further down the page: a step-by-step "How to connect" guide, the link itself an
 The subscription recognizes the app by its User-Agent header and serves the matching format:
 
 - **Clash apps on mihomo** (Mikan, Kabosu, Koala Clash, Clash Verge, FlClash, ClashFest, SlothClash and others) and Stash get a Clash YAML profile with groups and routes.
-- **Xray apps** (Happ, v2RayTun, INCY, v2rayNG) and **sing-box apps** (Hiddify, Karing) get a list of links.
+- **Happ and INCY** get whole Xray configs with the panel's routing, DNS and automatic choice, see [the Xray format](/mikan/en/subscriptions/spec/#the-xray-format). The switch is in **Settings → Subscription → Apps**; with it off they get links.
+- **Other Xray apps** (v2RayTun, v2rayNG) and **sing-box apps** (Hiddify, Karing) get a list of links.
 - A browser gets the subscription page.
 
-Each app gets only the protocols it can run, see [the table in presets](/mikan/en/protocols/presets/#who-gets-what). You can also set the format by hand with the parameter `?format=clash`, `uri` or `html`.
+:::note[New in 0.5.2.1]
+Xray configs for Happ and INCY, and the `xray` value of the `?format=` parameter, are new in 0.5.2.1.
+:::
+
+Each app gets only the protocols it can run, see [the table in presets](/mikan/en/protocols/presets/#who-gets-what). You can also set the format by hand with the parameter `?format=clash`, `singbox`, `xray`, `uri` or `html`. Every header and field the subscription reads and sends is described in the [Subscription specification](/mikan/en/subscriptions/spec/).
 
 Apps refresh the subscription hourly, which is how new ports and keys reach clients on their own.
 

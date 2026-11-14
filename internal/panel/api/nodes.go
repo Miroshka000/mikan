@@ -20,7 +20,7 @@ import (
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/panel/tgate"
 	"mikan/internal/release"
 )
@@ -85,17 +85,31 @@ type NodeInfo struct {
 	// RouterError says why it could not take the port.
 	SNIRouter   bool   `json:"sni_router" doc:"Порт 443 ноды делят подключения по имени TLS (SNI-роутер)"`
 	RouterError string `json:"router_error,omitempty" doc:"Почему нода не смогла занять порт 443"`
+	// SNIByKey: REALITY inbounds behind the router may share a name, told apart by key.
+	SNIByKey bool `json:"sni_by_key" doc:"Протоколы REALITY за общим 443 могут маскироваться под одно имя: нода узнаёт клиента каждого по его ключу"`
 	// FrontPage is the built-in page strangers get on the node's own domain through the
 	// shared 443.
-	FrontPage string `json:"front_page" enum:",maintenance,cats" doc:"Заглушка для посторонних: её отдают протоколы VLESS и Trojan с XHTTP, WebSocket или gRPC на чужие запросы вместо пустого 404, а с общим портом 443 и домен ноды; пусто — нет, maintenance — технические работы, cats — котики-кликер"`
+	FrontPage string `json:"front_page" enum:",maintenance,cats,custom" doc:"Заглушка для посторонних: её отдают протоколы VLESS и Trojan с XHTTP, WebSocket или gRPC на чужие запросы вместо пустого 404, а с общим портом 443 и домен ноды; пусто — нет, maintenance — технические работы, cats — котики-кликер"`
+	// InAuto: the node's servers are in the subscriptions' automatic choice.
+	InAuto bool `json:"in_auto" doc:"Серверы ноды входят в «Авто» подписки; выключено — только в списке и группе страны, например сервер для белых списков"`
+	// Billing is the node's server at its provider; NextPayment and VPSTraffic are what the
+	// panel makes of it today.
+	Billing     NodeBilling `json:"billing"`
+	NextPayment string      `json:"next_payment,omitempty" doc:"Ближайшая оплата сегодня или позже, YYYY-MM-DD (UTC); нет — оплата не задана или разовая прошла"`
+	VPSTraffic  *VPSTraffic `json:"vps_traffic,omitempty" doc:"Трафик тарифа сервера за текущий период; только с billing.traffic_limit"`
 	// APILockdown: the node's API answers only the panel's addresses and APIAllow;
 	// APILockError says why the node's server has no firewall rule for it (the node refuses
 	// strangers in its own listener all the same).
 	APILockdown  bool     `json:"api_lockdown" doc:"API ноды отвечает только адресам панели"`
 	APIAllow     []string `json:"api_allow" doc:"Сети и адреса, которые админ добавил к адресам панели"`
 	APILockError string   `json:"api_lock_error,omitempty" doc:"Почему на сервере ноды нет правила файрвола для API"`
-	Capacity     *int64   `json:"capacity" doc:"Мест для клиентов в группе; null — без ограничения"`
-	ChannelMbps  *int64   `json:"channel_mbps" doc:"Ширина канала ноды, Мбит/с в каждую сторону; null — не задана"`
+	// OwnPorts: what the admin leaves open to the node's users on its server's own addresses.
+	OwnPorts    []int  `json:"own_ports" doc:"Порты адреса самого сервера, которые админ открыл клиентам этой ноды, кроме 80, 443 и, на ноде панели, портов панели и подписок: они открыты всегда"`
+	Capacity    *int64 `json:"capacity" doc:"Мест для клиентов в группе; null — без ограничения"`
+	ChannelMbps *int64 `json:"channel_mbps" doc:"Ширина канала ноды, Мбит/с в каждую сторону; null — не задана"`
+
+	// Tags are the admin's labels of the node, as a user's.
+	Tags []string `json:"tags" doc:"Метки ноды: свои слова админа, по ним фильтруют список"`
 }
 
 type nodesOutput struct{ Body []NodeInfo }
@@ -111,10 +125,11 @@ type nodeKeyOutput struct {
 
 type createNodeInput struct {
 	Body struct {
-		Name    string `json:"name" maxLength:"200"`
-		Host    string `json:"host" maxLength:"253" doc:"IP или имя сервера ноды"`
-		Domain  string `json:"domain,omitempty" maxLength:"253" doc:"Домен для Hysteria2/TUIC и ссылок (необязательно)"`
-		APIPort int    `json:"api_port,omitempty" minimum:"1" maximum:"65535" doc:"Порт API ноды; по умолчанию случайный"`
+		Name    string   `json:"name" maxLength:"200"`
+		Host    string   `json:"host" maxLength:"253" doc:"IP или имя сервера ноды"`
+		Domain  string   `json:"domain,omitempty" maxLength:"253" doc:"Домен для Hysteria2/TUIC и ссылок (необязательно)"`
+		APIPort int      `json:"api_port,omitempty" minimum:"1" maximum:"65535" doc:"Порт API ноды; по умолчанию случайный"`
+		Tags    []string `json:"tags,omitempty" maxItems:"20" doc:"Метки ноды, как у пользователя"`
 	}
 }
 
@@ -128,14 +143,24 @@ type patchNodeInput struct {
 		Enabled    *bool   `json:"enabled,omitempty"`
 		FairShare  *bool   `json:"fair_share,omitempty" doc:"Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps"`
 		// The node's channel each way, which the fair share splits.
-		ChannelMbps  *int64  `json:"channel_mbps,omitempty" minimum:"1" maximum:"100000" doc:"Ширина канала ноды, Мбит/с в каждую сторону"`
-		HTTPRedirect *bool   `json:"http_redirect,omitempty" doc:"Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели"`
-		SNIRouter    *bool   `json:"sni_router,omitempty" doc:"SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним"`
-		FrontPage    *string `json:"front_page,omitempty" enum:",maintenance,cats" doc:"Заглушка для посторонних: протоколы с XHTTP, WebSocket или gRPC отдают её на чужие запросы вместо пустого 404, общий порт 443 — на домене ноды и на запросах без имени (сертификат ноды, TLS 1.2+, HSTS); пусто — нет"`
+		ChannelMbps  *int64       `json:"channel_mbps,omitempty" minimum:"1" maximum:"100000" doc:"Ширина канала ноды, Мбит/с в каждую сторону"`
+		HTTPRedirect *bool        `json:"http_redirect,omitempty" doc:"Отвечать на HTTP (порт 80) редиректом 301 на https; не для ноды панели"`
+		SNIRouter    *bool        `json:"sni_router,omitempty" doc:"SNI-роутер на 443: подключения с отметкой «через общий 443» слушают на loopback за ним"`
+		SNIByKey     *bool        `json:"sni_by_key,omitempty" doc:"Протоколы REALITY за общим 443 могут делить одно имя: нода узнаёт клиента каждого по его ключу"`
+		FrontPage    *string      `json:"front_page,omitempty" enum:",maintenance,cats,custom" doc:"Заглушка для посторонних: протоколы с XHTTP, WebSocket или gRPC отдают её на чужие запросы вместо пустого 404, общий порт 443 — на домене ноды и на запросах без имени (сертификат ноды, TLS 1.2+, HSTS); пусто — нет"`
+		InAuto       *bool        `json:"in_auto,omitempty" doc:"Серверы ноды в «Авто» подписки; false — только в списке и группе страны"`
+		Billing      *NodeBilling `json:"billing,omitempty" doc:"Учёт сервера у хостера, целиком"`
 		// The node's API for the panel alone, and the networks added to the panel's own.
 		APILockdown *bool     `json:"api_lockdown,omitempty" doc:"API ноды только с адресов панели; не для ноды панели"`
 		APIAllow    *[]string `json:"api_allow,omitempty" maxItems:"16" doc:"Ещё сети или адреса (203.0.113.5, 198.51.100.0/24), с которых панель ходит к ноде"`
+		// What the node's users reach on its server's own addresses, past the server's firewall.
+		OwnPorts *[]int    `json:"own_ports,omitempty" maxItems:"16" doc:"Порты адреса самого сервера, которые открыть клиентам этой ноды, например свой DNS; файрвол сервера такие подключения не закрывает. Весь список целиком; пустой убирает все"`
+		Tags     *[]string `json:"tags,omitempty" maxItems:"20" doc:"Метки ноды целиком; пустой список снимает все"`
 	}
+}
+
+type listNodesInput struct {
+	Tag string `query:"tag" maxLength:"100" doc:"Только ноды с этой меткой (без учёта регистра)"`
 }
 
 type nodeIDInput struct {
@@ -185,12 +210,17 @@ func (h *handlers) orderNodes(ctx context.Context, in *orderNodesInput) (*struct
 
 func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inbound) NodeInfo {
 	v := NodeInfo{ID: n.ID, Name: n.Name, PublicName: n.PublicName, Local: n.Address == "", Address: n.Address, Host: domain.NodeHost(n), ServerHost: n.PublicHost, Domain: n.Domain,
-		Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
+		Tags: domain.DecodeTags(n.Tags), Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
 		FairShare: n.FairShare != 0, ChannelMbps: store.Int64Ptr(n.ChannelMbps), BalanceGroup: n.BalanceGroup, Capacity: store.Int64Ptr(n.Capacity),
-		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, FrontPage: n.FrontPage, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow}
+		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, SNIByKey: n.SniByKey != 0, FrontPage: n.FrontPage, InAuto: n.NoAuto == 0, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow}
 	if v.APIAllow == nil {
 		v.APIAllow = []string{}
 	}
+	v.OwnPorts = make([]int, 0, len(n.OwnPorts))
+	for _, p := range n.OwnPorts {
+		v.OwnPorts = append(v.OwnPorts, int(p))
+	}
+	h.nodeBilling(&v, n)
 	v.Cascade = []CascadeConns{}
 	if v.Local {
 		// The panel's own node is reached at the panel's address.
@@ -253,7 +283,7 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 	return v
 }
 
-func (h *handlers) listNodes(ctx context.Context, _ *struct{}) (*nodesOutput, error) {
+func (h *handlers) listNodes(ctx context.Context, in *listNodesInput) (*nodesOutput, error) {
 	nodes, err := h.d.Store.Q.ListNodes(ctx)
 	if err != nil {
 		return nil, err
@@ -268,8 +298,14 @@ func (h *handlers) listNodes(ctx context.Context, _ *struct{}) (*nodesOutput, er
 	}
 	out := &nodesOutput{Body: make([]NodeInfo, 0, len(nodes))}
 	for _, n := range nodes {
+		if in.Tag != "" && !domain.HasTag(n.Tags, in.Tag) {
+			continue
+		}
 		v := h.viewNode(ctx, n, inbounds)
 		v.Traffic24h, v.Cascade24h = day[n.ID].users.Up+day[n.ID].users.Down, day[n.ID].relay.Up+day[n.ID].relay.Down
+		if err := h.vpsTraffic(ctx, &v, n); err != nil {
+			return nil, err
+		}
 		out.Body = append(out.Body, v)
 	}
 	return out, nil
@@ -307,7 +343,7 @@ func (h *handlers) createNode(ctx context.Context, in *createNodeInput) (*nodeKe
 	if err != nil {
 		return nil, err
 	}
-	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: b.Name, Host: b.Host, Domain: b.Domain, APIPort: b.APIPort, PanelURL: h.panelURL(ctx), Rules: rules}, h.d.Now())
+	n, key, err := domain.AddNode(ctx, h.d.Store, panel, domain.NodeInput{Name: b.Name, Host: b.Host, Domain: b.Domain, APIPort: b.APIPort, Tags: b.Tags, PanelURL: h.panelURL(ctx), Rules: rules}, h.d.Now())
 	if err != nil {
 		return nil, h.nodeErr(err)
 	}
@@ -343,10 +379,10 @@ func (h *handlers) getNode(ctx context.Context, id int64) (db.Node, error) {
 
 func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInfoOutput, error) {
 	b := in.Body
-	// A node's address and domain are where its clients go: the admin's alone, or an
-	// operator's in the extended mode. The form sends both as they are, so only a change is
-	// refused.
-	if _, ok := supportGrantOf(ctx); ok && (b.Host != nil || b.Domain != nil) {
+	// A node's address and domain are where its clients go, and its open ports what they reach
+	// on the server itself: the admin's alone, or an operator's in the extended mode. The form
+	// sends them as they are, so only a change is refused.
+	if _, ok := supportGrantOf(ctx); ok && (b.Host != nil || b.Domain != nil || b.OwnPorts != nil) {
 		cur, err := h.d.Store.Q.GetNode(ctx, in.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, huma.Error404NotFound("not_found")
@@ -364,27 +400,44 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 				return nil, err
 			}
 		}
+		if b.OwnPorts != nil {
+			ports, err := domain.NormalizeOwnPorts(*b.OwnPorts)
+			if err != nil || !slices.Equal(ports, cur.OwnPorts) {
+				if err := requireSession(ctx, "own_ports"); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
+	var billing *domain.NodeBilling
+	if b.Billing != nil {
+		v, err := billingIn(*b.Billing)
+		if err != nil {
+			return nil, err
+		}
+		billing = &v
 	}
 	rules, err := h.nodeRules(ctx)
 	if err != nil {
 		return nil, err
 	}
 	n, err := domain.UpdateNode(ctx, h.d.Store, in.ID, domain.NodePatch{Name: b.Name, PublicName: b.PublicName, Host: b.Host, Domain: b.Domain,
-		Enabled: b.Enabled, FairShare: b.FairShare, ChannelMbps: b.ChannelMbps, HTTPRedirect: b.HTTPRedirect, SNIRouter: b.SNIRouter, FrontPage: b.FrontPage, APILockdown: b.APILockdown, APIAllow: b.APIAllow, Rules: rules}, h.d.Now())
+		Enabled: b.Enabled, FairShare: b.FairShare, ChannelMbps: b.ChannelMbps, HTTPRedirect: b.HTTPRedirect, SNIRouter: b.SNIRouter, SNIByKey: b.SNIByKey, FrontPage: b.FrontPage, InAuto: b.InAuto, Billing: billing, APILockdown: b.APILockdown, APIAllow: b.APIAllow, OwnPorts: b.OwnPorts, Tags: b.Tags, Rules: rules}, h.d.Now())
 	if err != nil {
 		return nil, h.nodeErr(err)
 	}
 	h.nodesChanged()
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0,
-		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "front_page": n.FrontPage, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow})
+		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "sni_by_key": n.SniByKey != 0, "front_page": n.FrontPage, "in_auto": n.NoAuto == 0, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow, "own_ports": n.OwnPorts, "tags": domain.DecodeTags(n.Tags),
+		"billing": billingView(domain.BillingOf(n))})
 	return h.nodeInfo(ctx, n.ID)
 }
 
 // nodeRules are what a node's name and domain are checked against: the subscription's
 // groups, and public DNS.
 func (h *handlers) nodeRules(ctx context.Context) (domain.NodeRules, error) {
-	g, err := subs.LoadGroups(ctx, h.d.Settings)
+	g, err := subsrc.LoadGroups(ctx, h.d.Settings)
 	if err != nil {
 		return domain.NodeRules{}, err
 	}
@@ -411,6 +464,8 @@ func (h *handlers) nodeErr(err error) error {
 		return refusal("local_node_lockdown")
 	case errors.Is(err, domain.ErrManyAPIAllow):
 		return fieldErr("body.api_allow", "api_allow_many")
+	case errors.Is(err, domain.ErrManyOwnPorts):
+		return fieldErr("body.own_ports", "own_ports_many")
 	}
 	if fe, ok := fieldFromDomain(err); ok {
 		return fe
@@ -418,6 +473,10 @@ func (h *handlers) nodeErr(err error) error {
 	var bad *domain.APIAllowError
 	if errors.As(err, &bad) {
 		return fieldErrValue("body.api_allow", "api_allow_invalid", bad.Value)
+	}
+	var badPort *domain.OwnPortError
+	if errors.As(err, &badPort) {
+		return fieldErrValue("body.own_ports", "own_port_invalid", badPort.Value)
 	}
 	var details []error
 	if errors.Is(err, domain.ErrBadHost) {
@@ -451,6 +510,9 @@ func (h *handlers) nodeInfo(ctx context.Context, id int64) (*nodeInfoOutput, err
 	}
 	v := h.viewNode(ctx, n, inbounds)
 	v.Traffic24h, v.Cascade24h = day[n.ID].users.Up+day[n.ID].users.Down, day[n.ID].relay.Up+day[n.ID].relay.Down
+	if err := h.vpsTraffic(ctx, &v, n); err != nil {
+		return nil, err
+	}
 	return &nodeInfoOutput{Body: v}, nil
 }
 

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -24,6 +26,10 @@ type Config struct {
 	NodeSocket string
 	LogLevel   slog.Level
 	TrustProxy bool
+	// TrustedProxies are the networks of the proxies in front of the panel that are not on
+	// its server or its private network (MIKAN_TRUSTED_PROXIES, addresses and networks split
+	// by commas): with MIKAN_TRUST_PROXY their X-Forwarded-For is believed too.
+	TrustedProxies []netip.Prefix
 	// Dev serves plain HTTP for UI development; only a loopback address is accepted.
 	Dev bool
 	// AutotuneScale shortens the automatic moves' timings (tests: 0.01); 1 in production.
@@ -49,6 +55,9 @@ func FromEnv() (Config, error) {
 	}
 	var err error
 	if c.TrustProxy, err = boolEnv("MIKAN_TRUST_PROXY"); err != nil {
+		return c, err
+	}
+	if c.TrustedProxies, err = prefixesEnv("MIKAN_TRUSTED_PROXIES"); err != nil {
 		return c, err
 	}
 	if c.Dev, err = boolEnv("MIKAN_DEV"); err != nil {
@@ -87,6 +96,29 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// prefixesEnv reads networks split by commas: "203.0.113.0/24, 2001:db8::/32"; an address
+// alone is the network of itself.
+func prefixesEnv(key string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, part := range strings.Split(os.Getenv(key), ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if a, err := netip.ParseAddr(part); err == nil {
+			a = a.Unmap()
+			out = append(out, netip.PrefixFrom(a, a.BitLen()))
+			continue
+		}
+		p, err := netip.ParsePrefix(part)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %q is not an address or a network", key, part)
+		}
+		out = append(out, netip.PrefixFrom(p.Addr().Unmap(), p.Bits()).Masked())
+	}
+	return out, nil
 }
 
 func boolEnv(key string) (bool, error) {

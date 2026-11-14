@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/domain"
 	"mikan/internal/panel/hysteresis"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/settings"
@@ -43,6 +44,7 @@ type world struct {
 	inbounds []db.Inbound
 	warp     map[int64]db.NodeWarp
 	relay    map[int64]db.NodeRelay
+	relays   []db.NodeRelay // every node's, nil until read (nodeRelays)
 }
 
 // loadWorld returns the nodes and the inbounds, read again once worldTTL has passed.
@@ -95,6 +97,25 @@ func (m *Monitor) nodeRelay(ctx context.Context, id int64) (db.NodeRelay, error)
 	return r, nil
 }
 
+// nodeRelays are all the nodes' relays, read once per world.
+func (m *Monitor) nodeRelays(ctx context.Context) ([]db.NodeRelay, error) {
+	if m.world == nil {
+		return m.store.Q.ListNodeRelays(ctx)
+	}
+	if m.world.relays != nil {
+		return m.world.relays, nil
+	}
+	rs, err := m.store.Q.ListNodeRelays(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if rs == nil {
+		rs = []db.NodeRelay{}
+	}
+	m.world.relays = rs
+	return rs, nil
+}
+
 // inboundFailAfter is how many failed samples make an inbound or the cascade relay
 // unavailable: busyFailSamples when another program holds the port and the tuner moves it by
 // itself, inboundFailSamples otherwise.
@@ -119,6 +140,10 @@ func (m *Monitor) round(ctx context.Context) {
 		m.logError("infrastructure alerts: load state", err)
 		return
 	}
+	queued := make(map[string]bool, len(st.Pending))
+	for _, d := range st.Pending {
+		queued[d.Key] = true
+	}
 	cfg := m.config(ctx)
 	lang := "ru"
 	if m.bot != nil {
@@ -137,7 +162,8 @@ func (m *Monitor) round(ctx context.Context) {
 	}
 	levels := make(map[int64]hysteresis.Level, len(nodes))
 	listenerHealth := make(map[int64]map[string]bool, len(nodes))
-	// Whether the tuner moves a busy relay by itself: there is no switch for one relay.
+	// Whether the tuner moves a busy relay by itself: the switch in settings, and the relay's
+	// own (a port the admin set stays, checkRelay).
 	relayMoves := false
 	if m.settings != nil {
 		on, err := m.settings.On(ctx, settings.AutoPort)
@@ -187,7 +213,11 @@ func (m *Monitor) round(ctx context.Context) {
 				nodeLevel = hysteresis.Degraded
 			}
 		}
-		if m.checkRelay(&st, cfg, n, hv, relayMoves, lang) != hysteresis.Healthy {
+		moves := relayMoves
+		if r, err := m.nodeRelay(ctx, n.ID); err == nil && r.AutoPort == 0 {
+			moves = false
+		}
+		if m.checkRelay(&st, cfg, n, hv, moves, lang) != hysteresis.Healthy {
 			nodeLevel = hysteresis.Degraded
 		}
 		levels[n.ID] = nodeLevel
@@ -215,15 +245,22 @@ func (m *Monitor) round(ctx context.Context) {
 	m.checkCertificate(&st, cfg, lang)
 	m.checkUpdate(&st, cfg, lang)
 	m.checkNodeUpdates(ctx, &st, cfg, nodeByID, lang)
+	if now := m.now(); now.Sub(m.billingAt) >= billingEvery || now.Before(m.billingAt) {
+		m.billingAt = now
+		m.checkBilling(ctx, &st, cfg, nodes, lang)
+	}
 	m.publicStatus(ctx, &st, cfg, nodes, byNode, lang)
 	forgetRemoved(&st, nodes, byNode)
 	enabled := m.bot != nil && m.bot.PolledInfrastructure(ctx) // read once per round
+	// What this round queued for the admin goes to the group and Discord too; without the bot
+	// only Discord's copy stays.
+	st.Pending = copyOut(st.Pending, func(k string) bool { return !queued[k] }, cfg, enabled && cfg.GroupChat != "", m.discordHook(ctx) != "")
 	if !enabled {
-		st.Pending = nil
+		dropPending(&st, telegramTargets...)
 	}
 	if err := m.save(ctx, st); err != nil {
 		m.logError("infrastructure alerts: save state", err)
-	} else if enabled && len(st.Pending) > 0 {
+	} else if len(st.Pending) > 0 {
 		dispatch = true
 	}
 }
@@ -429,18 +466,30 @@ func (m *Monitor) probeExits(ctx context.Context, st *persistentState, cfg Alert
 	}
 	var asks []ask
 	seen := map[string]bool{}
+	// An inbound through another node is stored as outbound "direct" with its exit node; a
+	// relay goes on to its exit only while some node leaves through it (nodesync).
+	relays, err := m.nodeRelays(ctx)
+	if err != nil {
+		m.logError("infrastructure alerts: relays", err)
+		return
+	}
+	var all []db.Inbound
+	for _, ins := range inbounds {
+		all = append(all, ins...)
+	}
+	cas := domain.NewCascade(nodes, all, relays)
 	for _, n := range nodes {
 		if n.Enabled == 0 || levels[n.ID] == hysteresis.Unavailable {
 			continue
 		}
 		exits := map[int64]bool{}
 		for _, in := range inbounds[n.ID] {
-			if in.Enabled != 0 && in.Outbound == "node" && in.ExitNodeID.Valid {
+			if in.Enabled != 0 && in.ExitNodeID.Valid {
 				exits[in.ExitNodeID.Int64] = true
 			}
 		}
 		relay, err := m.nodeRelay(ctx, n.ID)
-		if err == nil && relay.Outbound == "node" && relay.ExitNodeID.Valid {
+		if err == nil && relay.ExitNodeID.Valid && cas.RelayLive(n.ID) {
 			exits[relay.ExitNodeID.Int64] = true
 		}
 		for exitID := range exits {

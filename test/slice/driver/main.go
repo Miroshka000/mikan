@@ -14,14 +14,20 @@
 //	                main quota; past the limit the node cuts it while XHTTP keeps going
 //	cascade:        VLESS Vision of the panel's node leaves through node2: the target sees node2's
 //	                address, the user is charged once, node2 off means no way out, not a leak
+//	guard-prepare:  on the stack of guard.sh: log in, create a user, write the client's config
+//	guard:          through the node beside the panel the client opens the panel and refreshes
+//	                its subscription, and of the server's other ports only the listed ones answer
 package main
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"log"
@@ -40,9 +46,17 @@ import (
 )
 
 const (
-	panelURL  = "https://panel:2053/slice-admin-path-0000"
-	subPrefix = "https://panel:2053/slicesub0000/"
+	adminPath = "/slice-admin-path-0000"
+	subPath   = "/slicesub0000/"
 	mib       = 1 << 20
+)
+
+// panelAddr is where the driver reaches the panel: guard.sh's stack has a panel of its own.
+var panelAddr = cmp.Or(os.Getenv("SLICE_PANEL"), "panel:2053")
+
+var (
+	panelURL  = "https://" + panelAddr + adminPath
+	subPrefix = "https://" + panelAddr + subPath
 )
 
 // protos: the four default inbounds of a fresh install, then the ones prepare adds through
@@ -76,6 +90,43 @@ const (
 	clashOnly = 5
 )
 
+// panelCert is the panel's self-signed certificate: the panel makes it in its data directory
+// when it starts, for the public host bootstrap gave it (node.test, guard.test on guard.sh's
+// stack). compose.yaml mounts that volume into the driver read-only.
+const panelCert = "/data/panel/tls/self.crt"
+
+// panelTLS trusts the panel's own certificate and nothing else, for the name it was made for:
+// the driver reaches the panel by its container's name or through a node, never by that name.
+var panelTLS = sync.OnceValue(func() *tls.Config {
+	var raw []byte
+	for try := 0; ; try++ {
+		var err error
+		if raw, err = os.ReadFile(panelCert); err == nil {
+			break
+		} else if try == 120 {
+			log.Fatalf("the panel's certificate: %v", err)
+		}
+		time.Sleep(500 * time.Millisecond) // the panel writes it as it starts
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		log.Fatalf("%s: no certificate", panelCert)
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.Fatalf("%s: %v", panelCert, err)
+	}
+	name := leaf.Subject.CommonName
+	if len(leaf.DNSNames) > 0 {
+		name = leaf.DNSNames[0]
+	} else if len(leaf.IPAddresses) > 0 {
+		name = leaf.IPAddresses[0].String()
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(leaf)
+	return &tls.Config{RootCAs: roots, ServerName: name, MinVersion: tls.VersionTLS12}
+})
+
 type panel struct {
 	hc   *http.Client
 	csrf string
@@ -83,8 +134,7 @@ type panel struct {
 
 func login() *panel {
 	jar, _ := cookiejar.New(nil)
-	// The panel uses its self-signed certificate inside the test network.
-	p := &panel{hc: &http.Client{Jar: jar, Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}}
+	p := &panel{hc: &http.Client{Jar: jar, Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: panelTLS()}}}
 	var me struct {
 		CSRF string `json:"csrf_token"`
 	}
@@ -164,8 +214,36 @@ func main() {
 		autotune()
 	case "autotune-check":
 		autotuneCheck()
+	case "guard-prepare":
+		guardPrepare()
+	case "guard":
+		guardCheck()
+	default:
+		log.Fatalf("no phase %q", os.Args[1])
 	}
 }
+
+// createUser makes a user on the standard tariff.
+func createUser(p *panel) user {
+	var tariffs []struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	}
+	p.call("GET", "/api/v1/tariffs", nil, &tariffs)
+	var tariffID int64
+	for _, t := range tariffs {
+		if t.Name == "Стандарт" {
+			tariffID = t.ID
+		}
+	}
+	var u user
+	p.call("POST", "/api/v1/users", map[string]any{"name": "Slice User", "tariff_id": tariffID}, &u)
+	log.Printf("created user %d, subscription %s", u.ID, u.SubURL)
+	return u
+}
+
+// token is the last part of the user's subscription link.
+func (u user) token() string { return u.SubURL[strings.LastIndex(u.SubURL, "/")+1:] }
 
 func prepare() {
 	p := login()
@@ -198,24 +276,11 @@ func prepare() {
 	// from GitHub on start; the slice checks the tunnel, not the geodata. The automatic
 	// moves run on test timings here: off until the autotune phase blocks a port on purpose.
 	p.call("PATCH", "/api/v1/settings", map[string]any{"sub_routing": "all", "auto_port": false, "auto_sni": false}, nil)
-	var tariffs []struct {
-		ID   int64  `json:"id"`
-		Name string `json:"name"`
-	}
-	p.call("GET", "/api/v1/tariffs", nil, &tariffs)
-	var tariffID int64
-	for _, t := range tariffs {
-		if t.Name == "Стандарт" {
-			tariffID = t.ID
-		}
-	}
-	var u user
-	p.call("POST", "/api/v1/users", map[string]any{"name": "Slice User", "tariff_id": tariffID}, &u)
-	log.Printf("created user %d, subscription %s", u.ID, u.SubURL)
+	u := createUser(p)
 	if !strings.HasPrefix(u.SubURL, "https://node.test:2053/slicesub0000/") {
 		log.Fatalf("unexpected sub_url %q", u.SubURL)
 	}
-	token := u.SubURL[strings.LastIndex(u.SubURL, "/")+1:]
+	token := u.token()
 
 	// Links for apps that read them: every inbound of both nodes with a share-link format.
 	links := fetchSub(token, "Shadowrocket/2592")
@@ -223,12 +288,40 @@ func prepare() {
 	if err != nil || strings.Count(string(decoded), "\n") != localProtos-clashOnly+remoteInbounds-1 {
 		log.Fatalf("uri subscription: %v %q", err, decoded)
 	}
-	// Happ is on Xray: no TUIC or AnyTLS for it, the rest as for everyone.
-	raw, _ := base64.StdEncoding.DecodeString(string(fetchSub(token, "Happ/3.4.1")))
+	// Happ is on Xray: no TUIC or AnyTLS for it, the rest as for everyone. It gets whole
+	// Xray configs, not links: one per automatic group first (a balancer), then one per server.
+	happServers := localProtos - clashOnly - 2 + remoteInbounds - 1
+	var configs []struct {
+		Outbounds []struct {
+			Protocol string `json:"protocol"`
+		} `json:"outbounds"`
+		Routing struct {
+			Balancers []json.RawMessage `json:"balancers"`
+		} `json:"routing"`
+	}
+	if err := json.Unmarshal(fetchSub(token, "Happ/3.4.1"), &configs); err != nil {
+		log.Fatalf("Happ gets Xray configs: %v", err)
+	}
+	groups, servers, protocols := 0, 0, map[string]bool{}
+	for _, c := range configs {
+		if len(c.Routing.Balancers) > 0 {
+			groups++
+			continue
+		}
+		servers++
+		for _, o := range c.Outbounds {
+			protocols[o.Protocol] = true
+		}
+	}
+	if groups == 0 || servers != happServers || protocols["tuic"] || protocols["anytls"] || !protocols["shadowsocks"] {
+		log.Fatalf("Happ gets only what Xray speaks: %d groups, %d servers (want %d), protocols %v", groups, servers, happServers, protocols)
+	}
+	// The link still asks for links: the same servers as share links.
+	raw, _ := base64.StdEncoding.DecodeString(string(fetchSub(token+"?format=uri", "Happ/3.4.1")))
 	happ := string(raw)
 	if strings.Contains(happ, "tuic://") || strings.Contains(happ, "anytls://") || !strings.Contains(happ, "ss://") ||
-		strings.Count(happ, "\n") != localProtos-clashOnly-2+remoteInbounds-1-1 {
-		log.Fatalf("Happ gets only what Xray speaks: %q", happ)
+		strings.Count(happ, "\n") != happServers-1 {
+		log.Fatalf("Happ asking for links gets only what Xray speaks: %q", happ)
 	}
 
 	writeClient(token, nil)
@@ -312,7 +405,7 @@ func fetchSub(token, ua string) []byte { return fetchSubVia(token, ua, "") }
 // fetchSubVia fetches the subscription through a client's SOCKS port ("" = from here):
 // the panel records the device that took the profile by its address.
 func fetchSubVia(token, ua, socks string) []byte {
-	tr := &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	tr := &http.Transport{TLSClientConfig: panelTLS()}
 	if socks != "" {
 		tr.Proxy = http.ProxyURL(&url.URL{Scheme: "socks5", Host: socks})
 	}
@@ -423,7 +516,7 @@ var devProtos = []struct{ name, proxy string }{
 
 // fetchDevice fetches the subscription as a device that sends its id.
 func fetchDevice(token, hwid string) (*http.Response, []byte) {
-	hc := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	hc := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: panelTLS()}}
 	req, _ := http.NewRequest("GET", subPrefix+token, nil)
 	req.Header.Set("User-Agent", "mihomo/1.19.31")
 	req.Header.Set("X-Hwid", hwid)

@@ -36,6 +36,10 @@ type persistentState struct {
 	PublicPinned       bool                       `json:"public_pinned"`
 	PublicPinAttempted bool                       `json:"public_pin_attempted"`
 	Pending            []delivery                 `json:"pending"`
+	// BillingPaid is the payment day each node was last reminded of, BillingTraffic the first
+	// day of the plan's period its traffic was last told in (checkBilling).
+	BillingPaid    map[string]int64 `json:"billing_paid,omitempty"`
+	BillingTraffic map[string]int64 `json:"billing_traffic,omitempty"`
 }
 
 // storedState is the state's text as last read or written, kept in memory so a round does not

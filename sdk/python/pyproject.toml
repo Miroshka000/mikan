@@ -1,0 +1,42 @@
+# The package's project file. sdk/build.sh generates the client into mikan_sdk/ in a copy of
+# this folder and builds the wheel and the sdist there; nothing generated is kept in git.
+[build-system]
+# The same pin as requirements.in: the build runs without isolation, with what that file installs.
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mikan-sdk"
+# The panel's release: sdk/build.sh sets it in the copy it builds from.
+version = "0.0.0"
+description = "Typed Python client for the mikan panel API"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-only"
+license-files = ["LICENSE", "NOTICE.md"]
+keywords = ["mikan", "vpn", "panel", "api", "sdk", "openapi"]
+classifiers = [
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Typing :: Typed",
+]
+dependencies = [
+  "httpx>=0.23.1,<0.29.0",
+  "attrs>=22.2.0",
+]
+
+[project.urls]
+Documentation = "https://miroshka000.github.io/mikan/api/sdk/"
+Source = "https://github.com/Miroshka000/mikan/tree/main/sdk/python"
+Changelog = "https://miroshka000.github.io/mikan/changelog/"
+Issues = "https://github.com/Miroshka000/mikan/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mikan_sdk"]
+
+[tool.hatch.build.targets.sdist]
+include = ["mikan_sdk", "README.md", "LICENSE", "NOTICE.md"]

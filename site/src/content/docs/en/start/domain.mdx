@@ -65,11 +65,27 @@ An unknown error is shown as it is, in the authority's own words, under "More".
 
 ## Change the domain or address
 
-**Settings → General → Server**: the "Server address" and "Domain" fields. On save, the panel checks the domain through public DNS and tells you if there is no record or the domain points to another server. After a change, the panel requests a new certificate right away.
+**Settings → General**: the "Server address" and "Domain" fields. On save, the panel checks the domain through public DNS and tells you if there is no record or the domain points to another server. Then it gets the certificate for the new domain while the old one keeps working: the save waits up to a minute. If the certificate cannot be had, the panel says why and keeps the domain. "Save without the certificate" changes it anyway: apps then see a certificate error until the panel gets one.
+
+The old domain becomes a **former address** and keeps working with a certificate of its own while it leads to the server: the subscription links handed out with it, the webhook addresses at payment providers, the Mini App buttons in old bot messages and the node keys. The list of former addresses is under the fields, each with the date its certificate lasts until. An address with no valid certificate for a week (the domain leads elsewhere now) goes by itself, and "Remove" lets one go at once. A change of the [subscription domain](/mikan/en/subscriptions/domain/) works the same, and so does the first domain of a panel that ran on an IP: the old links by IP keep opening.
+
+What the panel does by itself on a change:
+
+- the protocols of its own node that show the panel's own domain (self-steal) move to the new domain, keeping the old one as a second name for clients that have not updated their subscription;
+- the bot's Mini App button opens the new address;
+- the nodes and the cascades through the panel's node get the new address.
 
 :::caution
-Subscription links are built from this address. If clients already use subscriptions, the old address must keep working until everyone has updated their subscription.
+Passkeys are bound to the domain: after a change, log in with the password and add them again. Better update the webhook addresses at payment providers too: they are on the payments page.
 :::
+
+Without access to the panel, a command on the server does the same: `mikan domain NEW.DOMAIN`, `mikan domain --clear` (drop the domain), `mikan address IP`. The running panel picks the change up within seconds.
+
+## The server's IP changed
+
+The hoster changed the IP or the panel moved to another server: the panel finds the address that leads to it (the domain's DNS, the server's addresses, the address the server goes out from), checks it over the panel's port with its answer to a challenge of its own, keyed by a secret only this panel holds (a copy of the panel left on the old server cannot give it), and after two checks in a row five minutes apart saves it in place of the old one. A Telegram notice comes. Turn it off in **Settings → System → Automatic fixes → Follow the server's address**.
+
+With a domain, clients notice nothing: links go to the domain, point its A record at the new IP. Without one, clients' links lead to the old IP: they have to add the subscription again. So set up a domain beforehand.
 
 ## Own certificate
 

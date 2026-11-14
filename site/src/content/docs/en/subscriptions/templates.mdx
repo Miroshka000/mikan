@@ -1,0 +1,138 @@
+---
+title: Subscription templates
+description: Your own config for Clash, sing-box and Xray apps, a default template for each core, picking a template with a response rule, and how the panel puts the servers in.
+---
+
+:::note[New in 0.5.2.1]
+Subscription templates are new in 0.5.2.1. Before, the panel had one own Clash profile; now it is the default Clash template.
+:::
+
+A subscription template is a whole core config: DNS, TUN, groups, rules. It has no servers: the panel puts the user's servers in itself on every subscription request. Templates live in **Settings → Subscription → Templates**, each core with a list of its own, up to 20 templates of up to 512 KB. The size is counted in bytes: a Cyrillic letter takes two, so a text with comments in Russian reaches the limit sooner.
+
+## Cores and apps
+
+| Core | Text | Who gets it |
+| --- | --- | --- |
+| Clash (mihomo) | YAML | Koala Clash, FlClash, Clash Verge, Mikan, Kabosu and other apps on mihomo. Stash always gets the built-in profile. |
+| sing-box | JSON | The official sing-box apps (SFA, SFI, SFM) and links with `?format=singbox`. |
+| Xray | JSON | Happ and INCY while "Xray configs for Happ and INCY" is on (**Settings → Subscription**), and links with `?format=xray`. |
+
+Apps that get links only (v2RayTun, v2rayNG, Hiddify, Karing and others) get no templates.
+
+## Which template an app gets
+
+1. A response rule picked a template (**Settings → Subscription → Response rules**, the "Give the profile" answer, the "Template" field), and it is a template of the app's core: the profile is made of it.
+2. Otherwise of the core's default template. A core has one, picked with the "Make default" button in the list or with the switch in the editor.
+3. sing-box and Xray have no default of their own: they take the groups and rules of the Clash template picked the same way, by a rule or by default.
+4. There is none of that either: the app gets the profile the panel makes of the routing settings.
+
+The **Check** button on the response rules page shows which template the profile for that User-Agent is made of. A template a rule picks cannot be deleted: take it out of the rule first.
+
+If a template does not build for some user, that user's app gets the built-in profile and the panel log gets a warning.
+
+## Editor
+
+Next to the text you see the profile a user with every connection gets. It updates as you type, and its keys are placeholders. Saving checks the template on such a user, and an error names the line, the group or the tag.
+
+- **Start from the routing settings** (Clash): the current built-in profile as a starting point, with groups that ask for servers themselves.
+- **Insert an example** (sing-box and Xray): a working config with a TUN or local proxies, DNS through the tunnel and local networks direct.
+- **Load a ready template**: a template from the panel's catalog, each with its author, license and source. The text goes into the editor and is saved only when you save the template; the panel never adds ready templates to the list by itself.
+- Ready pieces for Clash add DNS fake-ip, TUN, sniffer, QUIC blocking, and a group by country or by node.
+
+### Ready templates
+
+| Template | Core | What it does |
+| --- | --- | --- |
+| mikan | Clash | The built-in profile with the current **Routing** settings, the same as "Start from the routing settings". |
+| mikan | sing-box, Xray | The same example as "Insert an example". |
+| privWL · only what is blocked | Clash | By Nemu-x, the author of the [privWL-clash](https://github.com/Nemu-x/privWL-clash) lists. The "Only what is blocked" mode plus the address lists of privWL-clash: the slowed-down ranges of Cloudflare, AWS and others, and the addresses of blocked sites. They catch apps that resolve names themselves (their own DoH) and so pass fake-ip by. DNS as in the built-in profile: DoH through the VPN, Russian names through Yandex. |
+| Davoyan · Russia direct | Clash | By Davoyan, the author of the [mihomo-rule-sets](https://github.com/Davoyan/mihomo-rule-sets) lists. Russian sites and addresses go direct, the rest through the VPN, Telegram too, on his lists: Russian domains gathered from several lists (MetaCubeX category-ru, itdoginfo, hydraponique) and the networks of Russia and Belarus from the IPinfo and MaxMind databases, geofeeds and the AS of Russian companies. Wider than the geosite category-ru and GeoIP ru of the default mode, and they need no geo files. DNS as in the built-in profile. |
+
+The "Load a ready template" button shows only when a core has more than mikan's own, which the "Start from the routing settings" and "Insert an example" buttons already give.
+
+The privWL and Davoyan templates link the lists instead of copying them (Davoyan's lists have no license, so mikan holds none of them: the apps download them from his repository), and the links are pinned to a commit, as the built-in routes are: a change in the lists' repository does not reach the apps until you move the commit in the template's text yourself. The Clash templates reach sing-box and Xray too: the panel converts their groups and rules as it does for any Clash template of your own. sing-box gets the lists whole, while the Xray configs (Happ, INCY) get only what the app's geo files have, so the privWL and Davoyan lists do not reach them: in those apps the privWL template sends everything direct, and the Davoyan template sends everything through the VPN, Russian sites too.
+
+Only administrators see a template's text: API keys without full access and support operators get it hidden, as a template may hold your own servers and secrets.
+
+## Clash template
+
+The panel inserts the user's servers itself, so don't write a `proxies` section. A group picks them up like this:
+
+```yaml
+proxy-groups:
+  - name: VPN
+    type: select
+    include-all-proxies: true        # all of the user's servers
+    exclude-filter: "Hysteria"       # filters as in mihomo
+  - name: Germany
+    type: url-test
+    mikan:
+      nodes: [Germany]               # nodes by name or id
+      types: [vless, hysteria2]      # protocol types
+rules:
+  - MATCH,VPN
+```
+
+- A group that ends up with no servers for this app gets REJECT.
+- After your `MATCH,<group>` the panel adds `MATCH,REJECT`, and before your rules it puts direct routes to the addresses of the panel and nodes.
+- While Clash has a default template, the **Routing** settings (mode, services, DNS, custom rules) don't reach Clash apps.
+
+## sing-box template
+
+A sing-box config without servers. The panel adds the user's servers to `outbounds` after yours, tagged by their names, and fills the groups that ask for them:
+
+```json
+{
+  "outbounds": [
+    {"type": "selector", "tag": "VPN", "outbounds": ["Auto"], "mikan": {}},
+    {"type": "urltest", "tag": "Auto", "mikan": {}},
+    {"type": "selector", "tag": "Germany", "mikan": {"nodes": ["Germany"], "types": ["vless", "hysteria2"]}},
+    {"type": "direct", "tag": "direct"}
+  ],
+  "route": {
+    "rules": [
+      {"action": "sniff"},
+      {"protocol": "dns", "action": "hijack-dns"},
+      {"ip_is_private": true, "outbound": "direct"}
+    ],
+    "final": "VPN"
+  }
+}
+```
+
+- `"mikan": {}` is read in a `selector` or an `urltest` only: the group gets every server after the outbounds it lists itself. `nodes` (a node's name or id), `types` (vless, hysteria2, ss…) and `filter` (a regular expression on the server's name) narrow them down.
+- A group without servers gets the `REJECT` outbound: no connection goes through it.
+- An outbound of yours named like a server stays in its place, and that server is not added.
+- Direct routes to the addresses of the panel and nodes go ahead of your `route` rules, right after `sniff` and `hijack-dns`. Without a `direct` outbound the panel adds one.
+- Saving checks the JSON, the tags of outbounds and rule sets, and what groups, rules, `route.final`, `detour` and DNS refer to.
+
+## Xray template
+
+One Xray config without servers. The panel makes a list of it: a config for each of the user's servers, in which the server is the `proxy` outbound and gets whatever the rules leave.
+
+```json
+{
+  "outbounds": [
+    {"tag": "direct", "protocol": "freedom"},
+    {"tag": "block", "protocol": "blackhole"}
+  ],
+  "routing": {
+    "rules": [
+      {"ip": ["geoip:private"], "outboundTag": "direct"},
+      {"network": "tcp,udp", "outboundTag": "proxy"}
+    ],
+    "balancers": [
+      {"tag": "Auto", "mikan": {"choice": true}, "strategy": {"type": "leastPing"}},
+      {"tag": "Germany", "mikan": {"nodes": ["Germany"]}, "strategy": {"type": "random"}}
+    ]
+  },
+  "observatory": {"subjectSelector": ["proxy"], "probeUrl": "https://www.gstatic.com/generate_204"}
+}
+```
+
+- A balancer with `"mikan": {}` gets every server of the user, and `nodes`, `types` and `filter` narrow them down. The servers go into the configs whose rules lead to that balancer, tagged `proxy-1`, `proxy-2`…
+- A balancer with `"choice": true` also gets a config of its own at the head of the list, where it stands in for `proxy`. That is how Happ and INCY get an automatic choice entry.
+- A balancer without servers leads to the `blackhole`.
+- The tags beginning with `proxy` are the panel's: don't name yours so.
+- Direct routes to the addresses of the panel and nodes go ahead of your rules.
+- Saving checks the JSON, the tags of outbounds and balancers, and where the rules lead. A rule needs an `outboundTag` or a `balancerTag`.

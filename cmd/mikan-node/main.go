@@ -52,6 +52,9 @@ func run() error {
 	// The last lines of the log, secrets cut out, for the panel's Diagnostics page.
 	logs := logbuf.New(logbuf.DefaultLines)
 	log := slog.New(logs.Handler(slog.NewTextHandler(os.Stderr, nil)))
+	if limit := node.LimitMemory(); limit > 0 {
+		log.Info("soft memory limit", "mib", limit>>20)
+	}
 	dataDir := envOr("MIKAN_DATA_DIR", config.DefaultDataDir)
 	sock := envOr("MIKAN_NODE_SOCKET", config.DefaultNodeSocket)
 
@@ -118,7 +121,7 @@ func run() error {
 		// With the panel's API lock on, strangers are closed before the TLS handshake.
 		go serve(tls.NewListener(eng.APIListener(tcp), cfg))
 		log.Info("node api for the panel", "port", key.Port)
-		go helloLoop(ctx, key, dataDir, log)
+		go helloLoop(ctx, key, eng, dataDir, log)
 	}
 
 	t := time.NewTicker(10 * time.Second)
@@ -130,6 +133,8 @@ func run() error {
 				log.Error("persist counters", "err", err)
 			}
 			eng.TickAPILock()
+			eng.TickMemory()
+			eng.TickGuard()
 		case <-ctx.Done():
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

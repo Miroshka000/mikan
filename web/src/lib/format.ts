@@ -114,6 +114,15 @@ export function daysUntil(iso: string, now = Date.now()): number {
   return calendarDay(new Date(iso).getTime()) - calendarDay(now);
 }
 
+/**
+ * The days a term that waits for its first connection will have: its end moves on with the
+ * clock every ten minutes, so the days are rounded from the time left. Counted by the calendar
+ * they would drop a day for ten minutes past midnight, when the last move was before it.
+ */
+export function waitingDays(iso: string, now = Date.now()): number {
+  return Math.max(0, Math.round((new Date(iso).getTime() - now) / 86_400_000));
+}
+
 export function expiryText(iso: string | null | undefined, now = Date.now()): { text: string; tone: "" | "warn" | "bad" } {
   if (!iso) return { text: t("time.forever"), tone: "" };
   const d = daysUntil(iso, now);

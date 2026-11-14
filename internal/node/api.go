@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"slices"
 	"strconv"
 	"sync"
@@ -68,6 +69,16 @@ func Handler(e *Engine, log *slog.Logger) http.Handler {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+	// Closes the slots' connections and keeps their access: the panel's "reset connections".
+	// A slot the node does not have closes nothing; it is no error, or a panel could not tell
+	// it from the 404 of a node that predates the call.
+	mux.HandleFunc("POST /v1/slots/reset", func(w http.ResponseWriter, r *http.Request) {
+		var req nodeapi.ResetRequest
+		if !decode(w, r, &req) {
+			return
+		}
+		writeJSON(w, http.StatusOK, nodeapi.ResetResult{Closed: e.Reg.ResetSlots(req.Slots)})
 	})
 	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, e.Health())
@@ -216,6 +227,11 @@ func Handler(e *Engine, log *slog.Logger) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, nodeapi.TargetScan{Scanned: scanned, Results: res})
 	})
+	// What the node's memory holds and what its goroutines wait on: the way to tell why a node
+	// grew while it is big, for whoever reaches this API (the socket's permissions, the panel's
+	// pinned certificate). curl --unix-socket /run/mikan/node.sock http://node/debug/pprof/heap
+	mux.Handle("GET /debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("GET /debug/pprof/goroutine", pprof.Handler("goroutine"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Over TLS only the panel's pinned certificate gets this far: the lock learns where
 		// the panel is from it (apilock.go). The unix socket is the panel's own node's.

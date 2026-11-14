@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -14,6 +15,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/nodesync"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/proto"
 )
 
 type CascadeHop struct {
@@ -51,6 +53,11 @@ type CascadeRelay struct {
 	ExitNodeID *int64       `json:"exit_node_id,omitempty"`
 	Listener   string       `json:"listener" enum:"ok,busy,failed,unknown" doc:"Слушает ли нода порт служебного входа: busy, если порт занят другой программой"`
 	Error      string       `json:"error,omitempty" doc:"Почему служебный вход не запустился, как сказала нода"`
+	Dest       string       `json:"dest" doc:"Сайт маскировки REALITY служебного входа, host:port"`
+	ServerName string       `json:"server_name" doc:"Имя сайта (SNI), под которое маскируются подключения нод к служебному входу"`
+	AutoSNI    bool         `json:"auto_sni" doc:"Сайт держит панель: как у протоколов ноды, иначе подобранный рядом с сервером, и меняет его, когда он перестал работать"`
+	Target     string       `json:"target" enum:"own,protocol,picked,default,manual" doc:"Откуда сайт: own - свой домен сервера, protocol - как у протоколов ноды, picked - подобран рядом с сервером, default - www.microsoft.com, пока лучшего нет, manual - задан админом"`
+	AutoPort   bool         `json:"auto_port" doc:"Порт держит панель: переносит его, если порт занят другой программой или его режут между серверами (при включённом «Менять порт, если его блокируют»); false - порт задан админом и не меняется сам"`
 }
 
 type CascadeView struct {
@@ -65,6 +72,11 @@ type cascadePatchInput struct {
 	Body struct {
 		Outbound   string `json:"outbound" enum:"direct,warp,node" doc:"Куда выпускать трафик других нод, пришедший через эту"`
 		ExitNodeID int64  `json:"exit_node_id,omitempty" minimum:"0"`
+		AutoSNI    *bool  `json:"auto_sni,omitempty" doc:"true: сайт маскировки служебного входа держит панель; false: dest и server_name задают его"`
+		Dest       string `json:"dest,omitempty" maxLength:"255" doc:"Сайт маскировки служебного входа, host:port; с auto_sni: false"`
+		ServerName string `json:"server_name,omitempty" maxLength:"253" doc:"Имя для подключений нод; нужно, когда в dest IP"`
+		AutoPort   *bool  `json:"auto_port,omitempty" doc:"true: порт служебного входа держит панель; false: port задаёт его"`
+		Port       string `json:"port,omitempty" maxLength:"5" doc:"Порт служебного входа, один TCP-порт; с auto_port: false"`
 	}
 }
 
@@ -135,17 +147,37 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 	for _, n := range nodes {
 		names[n.ID] = n.Name
 	}
+	ins, err := q.ListInbounds(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := &cascadeOutput{Body: CascadeView{Exits: []CascadeExit{}}}
 	r, err := q.GetNodeRelay(ctx, in.ID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+	// The relay runs, and goes on to its exit, only while some node leaves through it now.
+	live := false
 	if err == nil {
 		users, err := q.ListRelayUsers(ctx, in.ID)
 		if err != nil {
 			return nil, err
 		}
-		v := &CascadeRelay{Port: r.Port, Sources: []CascadeHop{}, Outbound: r.Outbound, Listener: relayUnknown}
+		relays, err := q.ListNodeRelays(ctx)
+		if err != nil {
+			return nil, err
+		}
+		users = domain.NewCascade(nodes, ins, relays).RelaySources(in.ID, users)
+		live = len(users) > 0
+		var own []db.Inbound
+		for _, i := range ins {
+			if i.NodeID == in.ID {
+				own = append(own, i)
+			}
+		}
+		dest, sni := domain.RelayTargetOf(r)
+		v := &CascadeRelay{Port: r.Port, Sources: []CascadeHop{}, Outbound: r.Outbound, Listener: relayUnknown,
+			Dest: dest, ServerName: sni, AutoSNI: r.AutoSni != 0, Target: domain.RelayTargetSource(r, own), AutoPort: r.AutoPort != 0}
 		out.Body.Relay = v
 		for _, u := range users {
 			v.Sources = append(v.Sources, CascadeHop{NodeID: u.SrcNodeID, Name: names[u.SrcNodeID]})
@@ -154,15 +186,11 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 			id := r.ExitNodeID.Int64
 			v.Outbound, v.ExitNodeID = "node", &id
 		}
-		if h.d.Nodes != nil {
+		if live && h.d.Nodes != nil {
 			if hv, ok := h.d.Nodes.Health(in.ID); ok {
 				v.Listener, v.Error = relayListener(hv, r.Port)
 			}
 		}
-	}
-	ins, err := q.ListInbounds(ctx)
-	if err != nil {
-		return nil, err
 	}
 	idx := map[int64]int{}
 	exit := func(id int64) *CascadeExit {
@@ -179,7 +207,7 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 			e.Inbounds = append(e.Inbounds, i.Name)
 		}
 	}
-	if r.ExitNodeID.Valid {
+	if live && r.ExitNodeID.Valid {
 		exit(r.ExitNodeID.Int64).Relay = true
 	}
 	if h.d.Nodes != nil {
@@ -194,11 +222,23 @@ func (h *handlers) getCascade(ctx context.Context, in *nodeIDInput) (*cascadeOut
 }
 
 func (h *handlers) patchCascade(ctx context.Context, in *cascadePatchInput) (*cascadeOutput, error) {
-	if _, err := h.getNode(ctx, in.ID); err != nil {
+	node, err := h.getNode(ctx, in.ID)
+	if err != nil {
 		return nil, err
 	}
 	b := in.Body
-	err := h.d.Store.Tx(ctx, func(q *db.Queries) error {
+	// The admin's own site is checked as an inbound's, before anything is written: a name
+	// that leads to a private network is refused.
+	manual := b.AutoSNI != nil && !*b.AutoSNI
+	if manual {
+		if strings.TrimSpace(b.Dest) == "" {
+			return nil, fieldErr("body.dest", "dest_format")
+		}
+		if err := h.d.Inbounds.CheckRelayTarget(ctx, node, b.Dest, b.ServerName); err != nil {
+			return nil, relayTargetError(err)
+		}
+	}
+	err = h.d.Store.Tx(ctx, func(q *db.Queries) error {
 		// The relay is made even before anyone uses the node as an exit: the route is
 		// ready when they do.
 		n, err := q.GetNode(ctx, in.ID)
@@ -218,12 +258,69 @@ func (h *handlers) patchCascade(ctx context.Context, in *cascadePatchInput) (*ca
 			}
 			outbound, exit = "direct", sql.NullInt64{Int64: b.ExitNodeID, Valid: true}
 		}
-		return q.SetNodeRelayRoute(ctx, db.SetNodeRelayRouteParams{Outbound: outbound, ExitNodeID: exit, NodeID: in.ID})
+		if err := q.SetNodeRelayRoute(ctx, db.SetNodeRelayRouteParams{Outbound: outbound, ExitNodeID: exit, NodeID: in.ID}); err != nil {
+			return err
+		}
+		switch {
+		case manual:
+			_, err = domain.SetRelayTarget(ctx, q, in.ID, strings.TrimSpace(b.Dest), strings.TrimSpace(b.ServerName), false)
+		case b.AutoSNI != nil:
+			// Back to the panel: the site of the node's protocols at once; else the tuner finds
+			// one next to the server.
+			_, err = domain.SetRelayAuto(ctx, q, in.ID)
+		}
+		if err != nil || b.AutoPort == nil {
+			return err
+		}
+		port := ""
+		if !*b.AutoPort {
+			if port = strings.TrimSpace(b.Port); port == "" {
+				return domain.ErrBadPort
+			}
+		}
+		return domain.SetRelayPort(ctx, q, n, port, *b.AutoPort)
 	})
 	if err != nil {
+		var pe *proto.Error
+		var busy *domain.PortInUseError
+		switch {
+		case errors.As(err, &pe):
+			return nil, relayTargetError(err)
+		case errors.Is(err, domain.ErrBadPort):
+			return nil, fieldErr("body.port", "bad_port")
+		case errors.As(err, &busy):
+			return nil, portError(err)
+		}
 		return nil, cascadeError(err, "exit_node_id")
 	}
 	h.d.Changes.SlotsChanged()
-	h.audit(ctx, sessionOf(ctx).AdminID, "node.cascade", "node", strconv.FormatInt(in.ID, 10), map[string]any{"outbound": b.Outbound, "exit_node_id": b.ExitNodeID})
+	details := map[string]any{"outbound": b.Outbound, "exit_node_id": b.ExitNodeID}
+	if b.AutoSNI != nil {
+		details["auto_sni"] = *b.AutoSNI
+		if manual {
+			details["dest"], details["server_name"] = strings.TrimSpace(b.Dest), strings.TrimSpace(b.ServerName)
+		}
+	}
+	if b.AutoPort != nil {
+		details["auto_port"] = *b.AutoPort
+		if !*b.AutoPort {
+			details["port"] = strings.TrimSpace(b.Port)
+		}
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, "node.cascade", "node", strconv.FormatInt(in.ID, 10), details)
 	return h.getCascade(ctx, &nodeIDInput{ID: in.ID})
+}
+
+// relayTargetError names the field of a relay site the admin set: the name, when a site
+// given by IP has none, else the site.
+func relayTargetError(err error) error {
+	var pe *proto.Error
+	if !errors.As(err, &pe) {
+		return err
+	}
+	location := "body.dest"
+	if pe.Code == "reality_sni" {
+		location = "body.server_name"
+	}
+	return fieldErr(location, pe.Code)
 }

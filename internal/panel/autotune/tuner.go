@@ -2,6 +2,7 @@ package autotune
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"math/rand/v2"
 	"slices"
@@ -28,6 +29,9 @@ type Nodes interface {
 	CheckTarget(ctx context.Context, id int64, req nodeapi.TargetCheckRequest) (nodeapi.TargetResult, error)
 	ScanTargets(ctx context.Context, id int64, req nodeapi.TargetScanRequest) (nodeapi.TargetScan, error)
 	Health(id int64) (nodesync.HealthView, bool)
+	// Probe is a node's last look at the internet through one of its outbounds, as the way
+	// through another node's relay; the node keeps an answer for a minute.
+	Probe(ctx context.Context, id int64, proxy string) (nodeapi.ProbeResult, error)
 }
 
 // Options are the tuner's timings. The windows are long on purpose: a server whose
@@ -101,6 +105,13 @@ type Tuner struct {
 	// relayLeft are the ports each node's relay left lately, by node id: there is no event
 	// table for them as there is for inbounds, so a restart forgets them.
 	relayLeft map[int64]map[string]time.Time
+	// relayFails are the failed checks in a row of each relay's own site, relayPicked when a
+	// site next to its server was last looked for; relayBlocked since when its sources have
+	// not reached it, relayMoved when its port was last moved for that; by node id.
+	relayFails   map[int64]int
+	relayPicked  map[int64]time.Time
+	relayBlocked map[int64]time.Time
+	relayMoved   map[int64]time.Time
 
 	busyMu sync.Mutex // one MoveBusy at a time
 
@@ -109,7 +120,10 @@ type Tuner struct {
 	// under mu; a replacement reads them once the checks are over.
 	failed    map[string]time.Time
 	checkedAt time.Time
-	prunedAt  time.Time
+	// stockTried is when a site was last looked for for an inbound on the stock site
+	// (leaveStockSite), by inbound id; under mu.
+	stockTried map[int64]time.Time
+	prunedAt   time.Time
 }
 
 type state struct {
@@ -119,7 +133,8 @@ type state struct {
 
 func New(st *store.Store, set *settings.Settings, nodes Nodes, changes domain.Changes, log *slog.Logger, now func() time.Time, o Options) *Tuner {
 	return &Tuner{st: st, inbounds: domain.NewInbounds(st, nil, now), set: set, nodes: nodes, changes: changes, log: log, now: now, o: o, pick: rand.IntN,
-		state: map[int64]*state{}, busy: map[int64]string{}, relayLeft: map[int64]map[string]time.Time{}, failed: map[string]time.Time{}}
+		state: map[int64]*state{}, busy: map[int64]string{}, relayLeft: map[int64]map[string]time.Time{}, failed: map[string]time.Time{}, stockTried: map[int64]time.Time{},
+		relayFails: map[int64]int{}, relayPicked: map[int64]time.Time{}, relayBlocked: map[int64]time.Time{}, relayMoved: map[int64]time.Time{}}
 }
 
 // Status returns the tuner's view of an inbound; false before its first round.
@@ -157,6 +172,52 @@ type world struct {
 	panelHost    string
 	panelPort    int
 	eventsWindow time.Duration
+	// picked are the sites this round moved an inbound or a relay to, by node id: the next
+	// one of the node to need a site takes the same, before the snapshot shows the first move.
+	picked map[int64]string
+	// scans are the sites found next to a node's server in this round, by node id (sitesNear).
+	scans map[int64][]nodeapi.TargetResult
+}
+
+// reached says whether a client got through to the inbound within the time the tuner
+// remembers (reachKeep).
+func (w *world) reached(inbound int64) bool {
+	for _, by := range w.reach {
+		if by[inbound] != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// siteNames are the names node's other enabled inbounds show to a stranger, and the site
+// this round already picked for the node: a node keeps to one site, so that all its ports
+// show one certificate and not a neighbor's each. skip is the inbound being moved (0: none).
+func (w *world) siteNames(node, skip int64) map[string]bool {
+	used := map[string]bool{}
+	for _, in := range w.inbounds[node] {
+		if in.ID == skip || in.Enabled == 0 {
+			continue
+		}
+		if other, err := proto.Parse(in.Config); err == nil {
+			_, names := presets.Dest(other)
+			for _, name := range names {
+				used[strings.ToLower(name)] = true
+			}
+		}
+	}
+	if name := w.picked[node]; name != "" {
+		used[name] = true
+	}
+	return used
+}
+
+// took notes the site node was moved to in this round.
+func (w *world) took(node int64, sni string) {
+	if w.picked == nil {
+		w.picked = map[int64]string{}
+	}
+	w.picked[node] = strings.ToLower(sni)
 }
 
 // roundTimeout is the most a round may take: a node that does not answer holds a check for
@@ -181,10 +242,14 @@ func (t *Tuner) Step(ctx context.Context) {
 		return
 	}
 	t.forget(w)
-	if w.now.Sub(t.checkedAt) >= t.o.CheckEvery {
+	checks := w.now.Sub(t.checkedAt) >= t.o.CheckEvery
+	if checks {
 		t.checkedAt = w.now
 		t.checkTargets(ctx, w)
 	}
+	// After the inbounds' checks: a relay follows the site an inbound just moved to.
+	t.relayTargets(ctx, w, checks)
+	t.relayPorts(ctx, w)
 	for _, n := range w.nodes {
 		t.detect(ctx, w, n)
 	}
@@ -324,13 +389,19 @@ func (t *Tuner) load(ctx context.Context) (*world, error) {
 		}
 	}
 	// Bound devices use keys of their own: the same profile as their user's, fetched on
-	// their own schedule.
+	// their own schedule. A device is seen as it asks for its keys, before the profile is
+	// made: one turned away with a notice, or left without a profile by an error, took
+	// nothing. Its last visit counts only if the profile went out to its address then.
 	devices, err := q.ListDeviceSlots(ctx)
 	if err != nil {
 		return nil, err
 	}
 	for _, d := range devices {
-		w.users[d.SlotName] = User{Inbounds: allowed[d.UserID], Fetched: d.LastSeen}
+		u := User{Inbounds: allowed[d.UserID]}
+		if fetched[d.UserID][d.LastIp] >= d.LastSeen {
+			u.Fetched = d.LastSeen
+		}
+		w.users[d.SlotName] = u
 	}
 	reach, err := q.ListInboundReachSince(ctx, w.now.Add(-reachKeep).Unix())
 	if err != nil {
@@ -641,6 +712,7 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 		tpl proto.Template
 	}
 	found := make([][]candidate, len(w.nodes))
+	stock := make([][]candidate, len(w.nodes)) // on the site a fresh inbound starts with, and it answers
 	var wg sync.WaitGroup
 	for i, n := range w.nodes {
 		wg.Go(func() {
@@ -666,6 +738,8 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 						t.noteTarget(x.ID, dest, *prev)
 						if !prev.OK {
 							found[i] = append(found[i], candidate{n, x, tpl})
+						} else if dest == presets.DefaultDest {
+							stock[i] = append(stock[i], candidate{n, x, tpl})
 						}
 					}
 					continue
@@ -678,6 +752,8 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 				seen[key] = &r
 				if !r.OK {
 					found[i] = append(found[i], candidate{n, x, tpl})
+				} else if dest == presets.DefaultDest {
+					stock[i] = append(stock[i], candidate{n, x, tpl})
 				}
 			}
 		})
@@ -696,6 +772,58 @@ func (t *Tuner) checkTargets(ctx context.Context, w *world) {
 				t.replaceTarget(ctx, w, c.n, c.x, c.tpl, "target_down")
 			}
 		}
+	}
+	for _, list := range stock {
+		for _, c := range list {
+			if ctx.Err() != nil {
+				return
+			}
+			t.leaveStockSite(ctx, w, c.n, c.x, c.tpl)
+		}
+	}
+}
+
+// ReasonStock is why an inbound nobody used yet left the site every installation starts with.
+const ReasonStock = "default_site"
+
+// stockRetry is how often a site next to the server is looked for again for an inbound that
+// stays on the stock site because none was found: a search is some 250 connections to the
+// node's neighbors, not something to repeat every round.
+const stockRetry = 24 * time.Hour
+
+// leaveStockSite moves x off presets.DefaultDest to a site next to its server while no
+// client has reached x: every fresh installation starts on that one site, and its
+// certificate on a hoster's address is a mark of its own. Nobody uses x yet, so nobody
+// loses a connection to the change; an inbound that has clients keeps its site ("Check
+// node" says so), as a change would cut them off until their subscription is read again.
+// Nothing found is no trouble: the stock site works, and the search is tried again later.
+func (t *Tuner) leaveStockSite(ctx context.Context, w *world, n db.Node, x db.Inbound, tpl proto.Template) {
+	if !w.sniOn || x.AutoSni == 0 || domain.ListenPinsSNI(x.Listen) || w.reached(x.ID) {
+		return
+	}
+	if h := t.history(w, x.ID); !h.lastSNI.IsZero() && w.now.Sub(h.lastSNI) < t.o.Cooldown || h.recent >= t.o.MaxChanges {
+		return
+	}
+	t.mu.Lock()
+	tried, ok := t.stockTried[x.ID]
+	wait := ok && w.now.Sub(tried) < stockRetry
+	if !wait {
+		t.stockTried[x.ID] = w.now
+	}
+	t.mu.Unlock()
+	if wait {
+		return
+	}
+	results, err := t.sitesNear(ctx, w, n)
+	if err != nil {
+		if !errors.Is(err, errNoAddress) {
+			t.log.Warn("autotune: scan targets", "node", n.ID, "err", err)
+		}
+		return
+	}
+	oldDest, oldNames := presets.Dest(tpl)
+	if pick := t.chooseTarget(w, results, oldDest, oldNames, w.siteNames(n.ID, x.ID)); pick != nil {
+		t.moveTarget(ctx, w, n, x, oldDest, oldNames, pick, ReasonStock)
 	}
 }
 
@@ -719,15 +847,40 @@ func (t *Tuner) noteTarget(inbound int64, dest string, r nodeapi.TargetResult) {
 // never the panel's or a node's own name, never a target that failed lately, preferably
 // one the node's other inbounds do not use. It reports whether the target changed.
 func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inbound, tpl proto.Template, reason string) bool {
-	ip, err := t.nodeIP(ctx, w, n)
-	if err != nil {
+	results, err := t.sitesNear(ctx, w, n)
+	if errors.Is(err, errNoAddress) {
+		t.setStuck(x.ID, "no_target")
+		return false
+	} else if err != nil {
+		t.log.Warn("autotune: scan targets", "node", n.ID, "err", err)
+		return false
+	}
+	oldDest, oldNames := presets.Dest(tpl)
+	pick := t.chooseTarget(w, results, oldDest, oldNames, w.siteNames(n.ID, x.ID))
+	if pick == nil {
 		t.setStuck(x.ID, "no_target")
 		return false
 	}
+	return t.moveTarget(ctx, w, n, x, oldDest, oldNames, pick, reason)
+}
+
+// errNoAddress: the node has no address to look for sites around.
+var errNoAddress = errors.New("the node has no public address")
+
+// sitesNear are the sites next to node's server, the search made once a round: several
+// inbounds of a node that need a site in one round share it, and the node is not scanned
+// once for each.
+func (t *Tuner) sitesNear(ctx context.Context, w *world, n db.Node) ([]nodeapi.TargetResult, error) {
+	if found, ok := w.scans[n.ID]; ok {
+		return found, nil
+	}
+	ip, err := t.nodeIP(ctx, w, n)
+	if err != nil {
+		return nil, errNoAddress
+	}
 	wide, err := t.set.On(ctx, settings.WideScan)
 	if err != nil {
-		t.log.Warn("autotune: scan targets: settings", "node", n.ID, "err", err)
-		return false
+		return nil, err
 	}
 	limit := 16
 	if wide {
@@ -735,40 +888,18 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 	}
 	found, err := t.nodes.ScanTargets(ctx, n.ID, nodeapi.TargetScanRequest{IP: ip, Limit: limit, Wide: wide})
 	if err != nil {
-		t.log.Warn("autotune: scan targets", "node", n.ID, "err", err)
-		return false
+		return nil, err
 	}
-	oldDest, oldNames := presets.Dest(tpl)
-	used := map[string]bool{}
-	for _, in := range w.inbounds[n.ID] {
-		if in.ID == x.ID || in.Enabled == 0 {
-			continue
-		}
-		if other, err := proto.Parse(in.Config); err == nil {
-			_, names := presets.Dest(other)
-			for _, name := range names {
-				used[strings.ToLower(name)] = true
-			}
-		}
+	if w.scans == nil {
+		w.scans = map[int64][]nodeapi.TargetResult{}
 	}
-	var pick *nodeapi.TargetResult
-	for i := range found.Results {
-		c := &found.Results[i]
-		sni := strings.ToLower(c.SNI)
-		if !c.OK || !c.DNSMatch || w.ownNames[sni] || c.Dest == oldDest || slices.ContainsFunc(oldNames, func(s string) bool { return strings.EqualFold(s, sni) }) {
-			continue
-		}
-		if at, ok := t.failed[strings.ToLower(c.Dest)]; ok && w.now.Sub(at) < 24*time.Hour {
-			continue
-		}
-		if pick == nil || used[strings.ToLower(pick.SNI)] && !used[sni] {
-			pick = c // results come fastest first
-		}
-	}
-	if pick == nil {
-		t.setStuck(x.ID, "no_target")
-		return false
-	}
+	w.scans[n.ID] = found.Results
+	return found.Results, nil
+}
+
+// moveTarget points x at pick and writes the change down.
+func (t *Tuner) moveTarget(ctx context.Context, w *world, n db.Node, x db.Inbound, oldDest string, oldNames []string, pick *nodeapi.TargetResult, reason string) bool {
+	w.took(n.ID, pick.SNI)
 	// The scan above took minutes at most; the admin may have edited the inbound meanwhile.
 	// Update applies the new target to the row as it is now, not to the round's snapshot.
 	_, next, err := t.inbounds.Update(ctx, x.ID, domain.InboundPatch{Dest: &pick.Dest, ServerName: &pick.SNI})
@@ -782,6 +913,44 @@ func (t *Tuner) replaceTarget(ctx context.Context, w *world, n db.Node, x db.Inb
 	}
 	t.changed(ctx, w, n, next, db.AddInboundEventParams{Kind: "sni", OldValue: old, NewValue: pick.SNI, Reason: reason})
 	return true
+}
+
+// chooseTarget is the site of a scan to move to: one that works and whose name leads to
+// where it was found, not the panel's or a node's own name, not the site being left, not
+// one that failed lately. Of those it takes, in this order: a site used (the names the
+// node's other inbounds show) already holds, so that the node's ports show one certificate
+// and not several strangers'; a site people open; a weak name (scan.Weak), used or not.
+// Results come fastest first within each; nil when none will do.
+func (t *Tuner) chooseTarget(w *world, results []nodeapi.TargetResult, oldDest string, oldNames []string, used map[string]bool) *nodeapi.TargetResult {
+	const (
+		shared = iota // the node's site already, and a site people open
+		plain         // a site people open
+		weak          // a weak name
+		none
+	)
+	var pick *nodeapi.TargetResult
+	best := none
+	for i := range results {
+		c := &results[i]
+		sni := strings.ToLower(c.SNI)
+		if !c.OK || !c.DNSMatch || w.ownNames[sni] || c.Dest == oldDest || slices.ContainsFunc(oldNames, func(s string) bool { return strings.EqualFold(s, sni) }) {
+			continue
+		}
+		if at, ok := t.failed[strings.ToLower(c.Dest)]; ok && w.now.Sub(at) < 24*time.Hour {
+			continue
+		}
+		rank := plain
+		switch {
+		case scan.Weak(sni):
+			rank = weak
+		case used[sni]:
+			rank = shared
+		}
+		if rank < best {
+			pick, best = c, rank
+		}
+	}
+	return pick
 }
 
 // nodeIP is the IPv4 address clients reach the node at: the /24 around it is scanned.

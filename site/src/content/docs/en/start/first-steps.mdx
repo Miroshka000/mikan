@@ -19,6 +19,8 @@ The port is random and the path is 24 characters. Any other path on this port an
 mikan url
 ```
 
+In the panel, **Ctrl+K** (**⌘K** on a Mac) opens the command palette: find a client by name or id, a node or a section of the menu and open it right away.
+
 ## Protect the sign-in
 
 Open **Settings → Security**:
@@ -69,6 +71,6 @@ Changing the port or the camouflage reconnects this protocol's clients for a few
 | What happened | Command on the server |
 |---|---|
 | no panel link | `mikan url` |
-| forgot the password | `mikan reset-password`: a new password, and all sessions and API keys are revoked |
+| forgot the password | `mikan reset-password`: a new password, and all sessions, API keys and passkeys are revoked |
 | the link may have leaked | `mikan reset-path`: a new link, and the old one stops working in a few seconds |
 | lost the phone with 2FA | a recovery code at sign-in, or `mikan disable-2fa` |

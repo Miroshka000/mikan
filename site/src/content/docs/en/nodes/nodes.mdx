@@ -36,7 +36,9 @@ The panel stores only the key's fingerprint. If you lose it, the "Change key" bu
 
 The key carries the panel's address: when the node starts, it reports itself to the panel with a signed request, and the panel dials the node back at once. Keys from older panels have no panel address, so there is no such check for them and the node works as before. If the node's server goes out to the internet from a different IP than the one set in the panel, both the terminal and the panel say so: "the node reported from IP Y, the panel has X". Fix the address in **Configure**.
 
-The key contains the node's private key. To keep it out of the process list, you can pass it through the `MIKAN_JOIN_KEY` variable. The `--panel-ip IP` flag opens the node's API port only to the panel's address.
+The key contains the node's private key. To keep it out of the process list, you can pass it through the `MIKAN_JOIN_KEY` variable. The `--panel-ip IP` flag opens the node's API port only to the panel's address; should the panel move to another IP, the node moves that rule to the panel's new address by itself.
+
+When the node's server gets a new IP, the node tells the panel its new address (at its start, and when the panel has not reached it for a few minutes). The panel checks that this very node answers there and saves it, and a Telegram notice comes. Clients get the new address with their next subscription update. Turn it off in **Settings → System → Automatic fixes → Move nodes to a new IP**. A node added by a domain just follows its DNS.
 
 You can also add a node from the panel's server: `mikan node add --name NAME --host IP` prints the key.
 
@@ -46,8 +48,9 @@ The card shows the state, address, how many protocols are running, connections, 
 
 The **Certificate** row shows which certificate is in use right now: a public one (with the authority and the expiry), the panel's, your own, or a self-signed one. If there is no public certificate yet, it says why in plain words. The "Get now" button requests it at once and waits up to 90 seconds for the result. More in [Node certificate](#node-certificate). Buttons:
 
-- **Configure**: name, address, domain, and the "Serves clients" switch. A node that is turned off does not accept connections and disappears from subscriptions. Since 0.5.2.0 it also holds [load balancing](/mikan/en/nodes/balancing/), the [shared port 443](/mikan/en/nodes/shared-443/), "HTTP → HTTPS" and "Node API from the panel's IP only", see [Hardening a node](/mikan/en/nodes/hardening/).
+- **Configure**: name, address, domain, and the "Serves clients" switch. A node that is turned off does not accept connections and disappears from subscriptions. Since 0.5.2.0 it also holds [load balancing](/mikan/en/nodes/balancing/), the [shared port 443](/mikan/en/nodes/shared-443/), "HTTP → HTTPS" and "Node API from the panel's IP only", and since 0.5.2.1 "Open ports of the server", see [Hardening a node](/mikan/en/nodes/hardening/).
 - **Check node**: a full check with a list and hints, see [If a node does not connect](#if-a-node-does-not-connect).
+- **Clients** (since 0.5.2.1): who went through the node — when they were last seen on it, their traffic on it and who is online there now, with whose keys (a bound device's or the shared ones) and from which addresses. The latest seen come first, with a search by name and "Show more"; a name opens the client's card. Traffic is counted by client and node since 0.5.2.1, the totals since then; "seen" is the last stored batch of the client's traffic on that node (the panel stores them about every 10 seconds). A support operator who may not see the clients gets them as `#id`, without addresses and without the search. In the API: `GET /api/v1/nodes/{id}/clients` with `q`, `limit` and `offset`. A cascade exit node does not list the traffic it relays for other nodes here: those clients are listed on the source node.
 - **WARP**: exit to the internet through Cloudflare, see [WARP](/mikan/en/nodes/warp/).
 - **Cascade**: where the node sends other nodes' traffic, see [Cascades](/mikan/en/nodes/cascades/).
 - **Speed**: a check of the node's connection.
@@ -157,14 +160,54 @@ Every second the node looks at who is downloading now and splits the channel eve
 
 Once it is on, the node's clients reconnect once; the apps do it themselves. While sharing is on, Vision runs without the kernel's splice: a bit more CPU.
 
+## In auto select
+
+In **Edit node** the **In auto select** switch, on by default. Turn it off for a server the apps must not pick on their own, such as one for whitelists. The node's servers leave the "Auto" group in every subscription format (Clash, sing-box, Xray) and stay in the list and in their country's group, to pick by hand. With it off on every node, "Auto" takes all the servers.
+
+A node that does not answer the panel for over 5 minutes leaves "Auto" by itself and comes back once it answers. The apps learn of it with their next subscription update.
+
+## Server billing
+
+In **Edit node** → **Server billing** you keep where the server is and how it is paid for: the provider, the payment date, how often it repeats (once, every 1, 3, 6 or 12 months), the plan's traffic, the day its counter resets and at what percent to tell you. The panel pays and limits nothing, it only reminds. Dates are UTC.
+
+- The **payment date** can be any payment of the series: the panel counts the next one and shows it on the node's card. When a month has no such day (the 31st in November), the payment falls on the month's last day. As many days before it as **Remind** says (3 by default, 0 for none), "Server payment due" comes in Telegram, once a payment.
+- The **plan traffic** is what the provider gives a period; empty for no limit. A period starts on the **reset day** of each month (the month's last day when it is shorter). The panel counts everything the node carried in the period: its users' traffic and the other nodes' cascades, up and down together, as on the node's traffic chart. The card shows a bar of how much of how much and the reset date. When the set percent is reached (80 by default), "Server traffic running out" comes in Telegram, once a period.
+
+A provider may count traffic its own way (outgoing only, or with its overhead), so keep the threshold with room to spare. The alerts are switched in **Telegram → Alerts to me** → **Server payment and traffic**, together with the other [admin alerts](/mikan/en/operations/alerts/).
+
+## Tags
+
+Since 0.5.2.1. In **Edit node** the **Tags** field: your own words split by commas, such as `germany, whitelist`, as a client's tags. The node's card shows them, and the row of tags above the list of nodes shows only the nodes with the tag you pick (while you order the nodes, all of them show). Clients do not see tags. Protocols have tags of their own, see [Protocol presets](/mikan/en/protocols/presets/#connection-settings).
+
+In the API a node has `tags` (up to 20, on create and change), and `GET /api/v1/nodes?tag=hetzner` lists only the nodes with that tag, in any letter case.
+
 ## Front page for strangers
 
-In **Edit node** → **Front page for strangers**: "Maintenance" or "Cats clicker", the same pages as the panel's first page. A stranger who opens the server in a browser sees it instead of a bare 404:
+In **Edit node** → **Front page for strangers**: "Maintenance", "Cats clicker" or, since 0.5.2.1, "Your own site" from the builder, the same pages as the panel's first page. A stranger who opens the server in a browser sees it instead of a bare 404:
 
 - VLESS and Trojan on XHTTP, WebSocket or gRPC give it to any request that is not theirs, on any domain of theirs;
 - with the **shared port 443**, the node's own domain and a request with no name (by IP) get it too: on the node's real certificate, TLS 1.2 or later, with HSTS. A domain a protocol on the shared 443 takes stays with the protocol.
 
 Protocols without HTTP (REALITY, Vision, Trojan over TCP, Hysteria2 and the others) give no page, and REALITY still sends strangers on to its masking site.
+
+### Your own site from the builder
+
+Since 0.5.2.1, **Settings** → **Security** → **Front page for strangers** has a **Front page builder** button. It is an editor over the whole window:
+
+- **at the left** the tabs "Blocks" (what to add to the page), "Outline" (the page's blocks and their order), "Pages" (the pages of the site, their names and addresses) and "Site" (the kind, the language and "Random site");
+- **in the middle** the page itself: a click selects a block, a text is typed in place, the menu's items open the pages;
+- **at the right** the selected block's fields and, with nothing selected, the site's design: its name, palette, fonts and layout.
+
+Above them are undo and redo, the "Editor / Preview" and "Computer / Phone" switches, and saving.
+
+**Random site** makes a whole site of three pages: its kind (a blog, a utility's page, recipes, a board game club, a ceramics workshop, a gallery of drawings), its name, words, palette and fonts, in Russian or in English. It writes no reviews and no numbers: those blocks are in the library, and the words in them are yours. **Another look** keeps the words and changes the markup and the spacing.
+
+A site is pages at addresses of their own (`/`, `/about`), fonts and your pictures, up to 2 MB together. The pages run no script and ask nothing of another host. Every installation has its own: the markup, the names of the classes and of the files depend on the panel's seed, so one hash of a page does not find other installations.
+
+**Save and set everywhere** sets the site on the panel and on every node; **Save** only keeps it, to be chosen later with the "Your own site" tile. What is seen where:
+
+- at the panel's address and on the shared port 443 of a node of this version: the whole site, each page at its address;
+- on the ports of protocols with XHTTP, WebSocket or gRPC and on nodes older than 0.5.2.1: the first page alone.
 
 ## Speed check
 

@@ -15,6 +15,12 @@ UPDATE node_relays SET port = $1 WHERE node_id = $2;
 -- name: SetNodeRelayRoute :exec
 UPDATE node_relays SET outbound = $1, exit_node_id = $2 WHERE node_id = $3;
 
+-- name: SetNodeRelayTarget :exec
+UPDATE node_relays SET config = $1, auto_sni = $2 WHERE node_id = $3;
+
+-- name: SetNodeRelayAutoPort :exec
+UPDATE node_relays SET auto_port = $1 WHERE node_id = $2;
+
 -- name: GetRelayUser :one
 SELECT uuid FROM relay_users WHERE exit_node_id = $1 AND src_node_id = $2;
 

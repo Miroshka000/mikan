@@ -11,15 +11,19 @@ import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented } from "../../../components/ui";
 import { XHTTP_DEFAULT, XhttpTuning, type XHTTP } from "./xhttp";
 import { SwitchRow } from "../../../components/switch";
+import { MAX_TAGS, parseTags } from "../../../components/tags";
 import { t } from "../../../i18n";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
 import { fingerprintLabel, validFingerprint } from "../../../lib/fingerprints";
 import { destIsIP } from "../../../lib/format";
+import { hopMemoryMB, hopPorts, MAX_HOP_PORTS } from "../../../lib/hop";
 import { nodeLabel } from "../../../lib/node-label";
 import { useWarp } from "../node-warp";
 import { Editor, type ListenAt, ValidateResult, hostPort, listenAt, loopback, preloadEditor, useValidate } from "./shared";
 import { TargetPicker } from "./target";
 import { CdnSettings, cdnClient, cdnFormOf, type CdnForm } from "./cdn";
+import { HostsSettings } from "./hosts";
+import { Select } from "../../../components/select";
 
 /** The inbound form's fields as its inputs hold them. */
 type InboundForm = {
@@ -32,6 +36,7 @@ type InboundForm = {
   outbound: Inbound["outbound"];
   exitNode: number;
   poolId: number;
+  inAuto: boolean; // in the subscriptions' automatic choice
   name: string;
   config: string;
   autoPort: boolean;
@@ -43,6 +48,7 @@ type InboundForm = {
   clientSni: string;
   cdn: CdnForm | null;
   sni443: boolean;
+  tags: string; // the labels, split by commas
 };
 
 /** The form of inbound i; with none, an empty one. The one place that maps an inbound to the form. */
@@ -57,6 +63,7 @@ function inboundFormOf(i: Inbound | null): InboundForm {
     outbound: i?.outbound ?? "direct",
     exitNode: i?.exit_node_id ?? 0,
     poolId: i?.pool_id ?? 0,
+    inAuto: i?.in_auto ?? true,
     name: i?.display_name ?? "",
     config: i?.config ?? "",
     autoPort: i?.auto_port ?? true,
@@ -68,6 +75,7 @@ function inboundFormOf(i: Inbound | null): InboundForm {
     clientSni: i?.client.sni ?? "",
     cdn: i ? cdnFormOf(i) : null,
     sni443: i?.sni443 ?? false,
+    tags: i?.tags.join(", ") ?? "",
   };
 }
 
@@ -79,7 +87,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
   const { reset: resetValidate } = validate;
   const [tab, setTab] = useState<"main" | "xhttp" | "config">("main");
   const [form, set, replace] = useFields(() => inboundFormOf(null));
-  const { port, dest, sni, fp, obfs, xhttp, outbound, exitNode, poolId, name, config, autoPort, autoSni, listenMode, listenIP, clientServer, clientPort, clientSni, cdn, sni443 } = form;
+  const { port, dest, sni, fp, obfs, xhttp, outbound, exitNode, poolId, inAuto, name, config, autoPort, autoSni, listenMode, listenIP, clientServer, clientPort, clientSni, cdn, sni443, tags } = form;
   const pools = usePools();
   const allNodes = useNodes();
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -110,7 +118,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
     onSuccess: (_, body) => {
       void qc.invalidateQueries({ queryKey: qk.inbounds });
       // The automatic-fix switches and the listen address change nothing clients get.
-      const autoOnly = Object.keys(body).every((k) => k === "auto_port" || k === "auto_sni" || k === "outbound" || k === "exit_node_id" || k === "pool_id" || k === "listen");
+      const autoOnly = Object.keys(body).every((k) => k === "auto_port" || k === "auto_sni" || k === "outbound" || k === "exit_node_id" || k === "pool_id" || k === "listen" || k === "tags");
       toast.ok(autoOnly ? t("inbounds.savedAuto") : t("inbounds.saved"));
       onClose();
     },
@@ -138,6 +146,12 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
     const body: Schemas["PatchInboundInputBody"] = {};
     if (port !== inbound?.port) body.port = port.trim();
     if (name.trim() !== inbound?.display_name) body.display_name = name.trim();
+    const tagList = parseTags(tags);
+    if (tagList.length > MAX_TAGS) {
+      reject({ tags: t("tags.many", { n: MAX_TAGS }) });
+      return;
+    }
+    if (inbound && JSON.stringify(tagList) !== JSON.stringify(inbound.tags)) body.tags = tagList;
     // The config tab rewrites the whole template; the dest field is a shortcut into it.
     if (configChanged) body.config = config;
     else if (inbound?.dest !== undefined) {
@@ -190,6 +204,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
         JSON.stringify(client.cdn ?? null) !== JSON.stringify(was.cdn ?? null));
     if (!configChanged && clientChanged) body.client = client;
     if (poolId !== (inbound?.pool_id ?? 0)) body.pool_id = poolId;
+    if (inAuto !== (inbound?.in_auto ?? true)) body.in_auto = inAuto;
     const autoPortNow = autoPort && !behindProxy;
     if (autoPortNow !== inbound?.auto_port) body.auto_port = autoPortNow;
     const autoSniNow = autoSni && !behindProxy;
@@ -247,9 +262,22 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
               <Field label={t("inbounds.subName")} htmlFor="ed-name" hint={t("inbounds.subNameHint")} error={errors.display_name}>
                 <input id="ed-name" className="input" value={name} onChange={(e) => set.name(e.target.value)} placeholder={defaultName} maxLength={48} aria-invalid={!!errors.display_name} autoComplete="off" />
               </Field>
-              <Field label={t("inbounds.portLabel")} htmlFor="ed-port" error={errors.port} hint={inbound?.type === "hysteria2" ? t("inbounds.portHopHint") : undefined}>
+              <Field label={t("tags.label")} htmlFor="ed-tags" hint={t("tags.inboundHint")} error={errors.tags}>
+                <input id="ed-tags" className="input" value={tags} onChange={(e) => set.tags(e.target.value)} placeholder={t("tags.placeholder")} aria-invalid={!!errors.tags} autoComplete="off" />
+              </Field>
+              <Field
+                label={sni443 && nodeRouter ? t("inbounds.portInner") : t("inbounds.portLabel")}
+                htmlFor="ed-port"
+                error={errors.port}
+                hint={sni443 && nodeRouter ? t("inbounds.portSharedHint") : inbound?.type === "hysteria2" ? t("inbounds.portHopHint", { max: MAX_HOP_PORTS }) : undefined}
+              >
                 <input id="ed-port" className="input max-w-[200px]" inputMode="numeric" value={port} onChange={(e) => set.port(e.target.value)} aria-invalid={!!errors.port} />
               </Field>
+              {hopPorts(port) > MAX_HOP_PORTS && !errors.port ? (
+                <p className="banner warn -mt-2 mb-4 text-[13px]" role="note">
+                  {t("inbounds.wideRangeWarn", { n: hopPorts(port), mb: hopMemoryMB(hopPorts(port)), max: MAX_HOP_PORTS })}
+                </p>
+              ) : null}
               {inbound?.dest !== undefined ? (
                 <>
                   <Field
@@ -360,7 +388,7 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                   ]}
                 />
                 {outbound === "node" ? (
-                  <select
+                  <Select
                     className="input mt-2 max-w-[320px]"
                     value={exitNode}
                     onChange={(e) => {
@@ -381,21 +409,22 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                           {n.enabled ? "" : ` — ${t("nodes.disabled")}`}
                         </option>
                       ))}
-                  </select>
+                  </Select>
                 ) : null}
               </Field>
               {pools.data?.length ? (
                 <Field label={t("pools.inbound")} htmlFor="ed-pool" hint={t("pools.inboundHint")}>
-                  <select id="ed-pool" className="input max-w-[320px]" value={poolId} onChange={(e) => set.poolId(Number(e.target.value))}>
+                  <Select id="ed-pool" className="input max-w-[320px]" value={poolId} onChange={(e) => set.poolId(Number(e.target.value))}>
                     <option value={0}>{t("pools.mainServers")}</option>
                     {pools.data.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               ) : null}
+              <SwitchRow label={t("inbounds.inAuto")} sub={t("inbounds.inAutoHint")} checked={inAuto} onChange={set.inAuto} />
               {inbound?.sni443_possible ? (
                 <SwitchRow
                   label={t("inbounds.sni443.title")}
@@ -527,6 +556,11 @@ export function EditDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
                 </>
                 )}
               </Disclosure>
+              {inbound ? (
+                <Disclosure title={t("inbounds.hosts.title")} sub={t("inbounds.hosts.sub")}>
+                  <HostsSettings inbound={inbound} defaultFingerprint={settings.data?.client_fingerprint ?? "chrome"} />
+                </Disclosure>
+              ) : null}
               <Disclosure title={t("inbounds.auto")} sub={t("settings.autoSub")}>
                 <AutoSwitch
                   title={t("inbounds.autoPort")}

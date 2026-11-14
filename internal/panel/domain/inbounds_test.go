@@ -188,6 +188,59 @@ func TestUpdatePort(t *testing.T) {
 	}
 }
 
+// The core runs a QUIC server on every port of a hopping range: a new range is at most
+// MaxHopPorts wide, while one saved before the limit keeps working and saves as it is.
+func TestUpdatePortRangeWidth(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	st, s := inbounds(t, &now, nil)
+	ctx := context.Background()
+	hy := find(t, s, 1, "hysteria2")
+
+	if _, next, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("40000-40999")}); err != nil || next.Port != "40000-40999" {
+		t.Fatalf("a range of %d ports: %+v %v", MaxHopPorts, next, err)
+	}
+	if _, _, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("40000-41000")}); !errors.Is(err, ErrPortRangeWide) {
+		t.Fatalf("a range of %d ports: %v", MaxHopPorts+1, err)
+	}
+
+	// A range from before the limit, as the hint suggested.
+	if _, err := st.DB.ExecContext(ctx, "UPDATE inbounds SET port = $1 WHERE id = $2", "20000-30000", hy.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, next, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("20000-30000"), DisplayName: ptr("Hy2")}); err != nil || next.Port != "20000-30000" {
+		t.Fatalf("the saved wide range sent back with another change: %+v %v", next, err)
+	}
+	if _, _, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("20000-30001")}); !errors.Is(err, ErrPortRangeWide) {
+		t.Fatalf("another wide range: %v", err)
+	}
+	if _, next, err := s.Update(ctx, hy.ID, InboundPatch{Port: ptr("20000-20099")}); err != nil || next.Port != "20000-20099" {
+		t.Fatalf("narrowed: %+v %v", next, err)
+	}
+}
+
+func TestHopPorts(t *testing.T) {
+	for _, c := range []struct {
+		spec string
+		n    int
+		err  error
+	}{
+		{"443", 1, nil},
+		{"20000-20099", 100, nil},
+		{"20000-20999", MaxHopPorts, nil},
+		{"20000-21000", MaxHopPorts + 1, ErrPortRangeWide},
+		{"20000-30000", 10001, ErrPortRangeWide},
+		{"2083-2000", 0, ErrBadPort},
+		{"", 0, ErrBadPort},
+	} {
+		if n := HopPorts(c.spec); n != c.n {
+			t.Errorf("HopPorts(%q) = %d, want %d", c.spec, n, c.n)
+		}
+		if err := checkNewPort(c.spec); !errors.Is(err, c.err) {
+			t.Errorf("checkNewPort(%q) = %v, want %v", c.spec, err, c.err)
+		}
+	}
+}
+
 // The installer and the admin point REALITY inbounds at a site next to the server; the
 // panel's own HTTPS (self-steal) is for the panel's own node only.
 func TestUpdateTarget(t *testing.T) {
@@ -214,6 +267,43 @@ func TestUpdateTarget(t *testing.T) {
 	}
 	if _, _, err := s.Update(ctx, find(t, s, 1, "vless-vision").ID, InboundPatch{Dest: ptr("127.0.0.1:21355"), ServerName: ptr("vpn.example.com")}); err != nil {
 		t.Fatalf("self-steal on the panel's node: %v", err)
+	}
+	// The panel's own names typed as a site, on whatever port, are the panel's HTTPS asked
+	// for by that name: written as they are they would lead to the node's own 443.
+	set := settings.New(st.Q)
+	if err := settings.Set(ctx, set, settings.KeyDomain, "my.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.Set(ctx, set, settings.KeySubDomain, "sub.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	for typed, want := range map[string]string{"SUB.example.com:443": "sub.example.com", " my.example.com.:8443 ": "my.example.com"} {
+		_, got, err := s.Update(ctx, find(t, s, 1, "vless-vision").ID, InboundPatch{Dest: ptr(typed)})
+		if err != nil {
+			t.Fatalf("%q: %v", typed, err)
+		}
+		gt, _ := proto.Parse(got.Config)
+		if d, n := presets.Dest(gt); d != "127.0.0.1:21355" || len(n) != 1 || n[0] != want {
+			t.Fatalf("%q became %s %v, want the panel's own port asked for by %s", typed, d, n, want)
+		}
+	}
+	// A name of somebody else stays as written.
+	_, other, err := s.Update(ctx, find(t, s, 1, "vless-vision").ID, InboundPatch{Dest: ptr("shop.example.org:443")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ot, _ := proto.Parse(other.Config)
+	if d, n := presets.Dest(ot); d != "shop.example.org:443" || len(n) != 1 || n[0] != "shop.example.org" {
+		t.Fatalf("a stranger's site: %s %v", d, n)
+	}
+	// A new inbound given an own name starts on the panel's port as well.
+	fresh, err := s.Create(ctx, NewInbound{NodeID: 1, Preset: "vless_reality_grpc", Port: "2096", Dest: "my.example.com:443"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ft, _ := proto.Parse(fresh.Config)
+	if d, n := presets.Dest(ft); d != "127.0.0.1:21355" || len(n) != 1 || n[0] != "my.example.com" {
+		t.Fatalf("a new inbound on the own domain: %s %v", d, n)
 	}
 
 	n, err := st.Q.CreateNode(ctx, db.CreateNodeParams{Name: "🇺🇸 США", Address: "203.0.113.7:25305", PublicHost: "203.0.113.7", CreatedAt: now.Unix(), UpdatedAt: now.Unix()})

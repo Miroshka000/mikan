@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
@@ -31,6 +32,11 @@ func (f *fakeSender) SendTo(_ context.Context, chat string, text string, silent 
 	return tgapi.Message{MessageID: f.message}, f.sendErr
 }
 
+func (f *fakeSender) SendToTopic(_ context.Context, chat string, thread int64, text string) (tgapi.Message, error) {
+	f.calls = append(f.calls, "topic "+chat+"/"+strconv.FormatInt(thread, 10)+" "+text)
+	return tgapi.Message{MessageID: f.message}, f.sendErr
+}
+
 func (f *fakeSender) EditTo(_ context.Context, chat string, msg int64, text string) error {
 	f.calls = append(f.calls, "edit "+text)
 	return f.editErr
@@ -55,7 +61,7 @@ func TestSendPendingRoutesEachTarget(t *testing.T) {
 		{Key: "b", Target: targetSummary, Text: "summary"},
 		{Key: "c", Target: targetPublicChange, Text: "change"},
 	}}
-	m.sendPending(context.Background(), &st, cfg, f, 55, true)
+	m.sendPending(context.Background(), &st, cfg, outlets{tg: f, admin: 55, adminSet: true})
 	want := []string{"send to admin", "sendto @channel summary", "pin", "edit summary", "sendto @channel change"}
 	if len(f.calls) != len(want) {
 		t.Fatalf("calls = %q, want %q", f.calls, want)
@@ -79,7 +85,7 @@ func TestSendPendingSkipsSwitchedOffTargets(t *testing.T) {
 		{Key: "b", Target: targetSummary, Text: "y"},
 		{Key: "c", Target: targetPublicChange, Text: "z"},
 	}}
-	m.sendPending(context.Background(), &st, cfg, f, 0, false)
+	m.sendPending(context.Background(), &st, cfg, outlets{tg: f, admin: 0, adminSet: false})
 	if len(f.calls) != 0 || len(st.Pending) != 0 {
 		t.Fatalf("calls %q, pending %+v", f.calls, st.Pending)
 	}
@@ -96,7 +102,7 @@ func TestSendPendingRetriesAndDropsStale(t *testing.T) {
 		{Key: "stale", Target: targetAdmin, Text: "y", CreatedAt: now.Unix() - int64(deliveryMaxAge/time.Second) - 1},
 		{Key: "later", Target: targetAdmin, Text: "z", CreatedAt: now.Unix(), NextAttemptAt: now.Unix() + 60},
 	}}
-	m.sendPending(context.Background(), &st, cfg, f, 1, true)
+	m.sendPending(context.Background(), &st, cfg, outlets{tg: f, admin: 1, adminSet: true})
 	if len(f.calls) != 1 {
 		t.Fatalf("calls = %q", f.calls)
 	}
@@ -138,7 +144,7 @@ func TestSendPendingPermanentErrorIsDropped(t *testing.T) {
 	cfg := Default()
 	cfg.AdminEnabled = true
 	st := persistentState{Pending: []delivery{{Key: "a", Target: targetAdmin, Text: "x"}}}
-	m.sendPending(context.Background(), &st, cfg, f, 1, true)
+	m.sendPending(context.Background(), &st, cfg, outlets{tg: f, admin: 1, adminSet: true})
 	if len(st.Pending) != 0 {
 		t.Fatalf("a refused message stayed: %+v", st.Pending)
 	}

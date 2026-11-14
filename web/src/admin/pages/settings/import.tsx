@@ -8,11 +8,18 @@ import { Button, Field } from "../../../components/ui";
 import { t, type Key } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors, onFormError } from "../../../lib/fields";
+import { Select } from "../../../components/select";
 
-type Kind = "marzban" | "pasarguard" | "remnawave";
-const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave"];
+type Kind = "marzban" | "pasarguard" | "remnawave" | "3xui";
+const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave", "3xui"];
 // Where each panel keeps its subscription links, for the old-links path.
-const OLD_PATH: Record<Kind, string> = { marzban: "sub", pasarguard: "sub", remnawave: "api/sub" };
+const OLD_PATH: Record<Kind, string> = { marzban: "sub", pasarguard: "sub", remnawave: "api/sub", "3xui": "sub" };
+// The token field of each panel that has one: its label and hint.
+const TOKEN: Partial<Record<Kind, [Key, Key]>> = {
+  pasarguard: ["settings.import.apiKey", "settings.import.apiKeyHint"],
+  remnawave: ["settings.import.token", "settings.import.tokenHint"],
+  "3xui": ["settings.import.xuiToken", "settings.import.xuiTokenHint"],
+};
 
 /** Users from another panel: a preview first, then the import onto a chosen plan; both run
  * in the background and the card follows them. */
@@ -57,22 +64,26 @@ export function ImportCard() {
   };
   const preview = st?.mode === "preview" && st.state === "done" ? st.preview : undefined;
   const report = st?.mode === "import" ? st.report : undefined;
+  // Filed links open only once the next card has the old path (and a signing panel's secret).
+  const legacy = useQuery({ queryKey: ["legacy-links"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/legacy", { signal })), enabled: !!report?.links });
+  const linksOff = !!report?.links && !!legacy.data && !legacyActive(legacy.data);
   const usesPassword = src.kind !== "remnawave";
+  const token = TOKEN[src.kind];
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
       <form onSubmit={submit} noValidate>
         <CardHead title={t("settings.import.title")} sub={t("settings.import.sub")} />
         <Field label={t("settings.import.kind")} htmlFor="imp-kind">
-          <select id="imp-kind" className="input" value={src.kind} onChange={set("kind")} disabled={running}>
+          <Select id="imp-kind" className="input" value={src.kind} onChange={set("kind")} disabled={running}>
             {KINDS.map((k) => (
               <option key={k} value={k}>
                 {t(`settings.import.kinds.${k}`)}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
-        <Field label={t("settings.import.url")} htmlFor="imp-url" hint={t("settings.import.urlHint")}>
-          <input id="imp-url" className="input" value={src.url} onChange={set("url")} placeholder="https://panel.example.com" autoComplete="off" disabled={running} />
+        <Field label={t("settings.import.url")} htmlFor="imp-url" hint={t(src.kind === "3xui" ? "settings.import.xuiUrlHint" : "settings.import.urlHint")}>
+          <input id="imp-url" className="input" value={src.url} onChange={set("url")} placeholder={src.kind === "3xui" ? "https://panel.example.com:2053/path" : "https://panel.example.com"} autoComplete="off" disabled={running} />
         </Field>
         {usesPassword ? (
           <div className="grid gap-x-3 sm:grid-cols-2">
@@ -84,8 +95,8 @@ export function ImportCard() {
             </Field>
           </div>
         ) : null}
-        {src.kind !== "marzban" ? (
-          <Field label={t(src.kind === "remnawave" ? "settings.import.token" : "settings.import.apiKey")} htmlFor="imp-token" hint={t(src.kind === "remnawave" ? "settings.import.tokenHint" : "settings.import.apiKeyHint")}>
+        {token ? (
+          <Field label={t(token[0])} htmlFor="imp-token" hint={t(token[1])}>
             <input id="imp-token" className="input mono" type="password" value={src.token} onChange={set("token")} autoComplete="off" disabled={running} />
           </Field>
         ) : null}
@@ -109,14 +120,14 @@ export function ImportCard() {
             <Names label="settings.import.invalid" list={preview.invalid} bad />
             <div className="banner warn my-2">{t("settings.import.notCarried")}</div>
             <Field label={t("settings.import.tariff")} htmlFor="imp-tariff" hint={t("settings.import.tariffHint")} error={errors.tariff_id}>
-              <select id="imp-tariff" className="input" value={tariff} onChange={(e) => setTariff(e.target.value ? Number(e.target.value) : "")}>
+              <Select id="imp-tariff" className="input" value={tariff} onChange={(e) => setTariff(e.target.value ? Number(e.target.value) : "")}>
                 <option value="">—</option>
                 {(tariffs.data ?? []).map((tr) => (
                   <option key={tr.id} value={tr.id}>
                     {tr.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Button type="button" variant="primary" loading={run.isPending} disabled={tariff === "" || preview.new === 0} onClick={() => run.mutate()}>
               {t("settings.import.run", { n: preview.new })}
@@ -126,6 +137,7 @@ export function ImportCard() {
         {report ? (
           <div className="panel-soft mt-3 p-3 text-[13px]">
             <div className="font-medium">{t("settings.import.report", { created: report.created, links: report.links })}</div>
+            {linksOff ? <div className="banner warn mt-2">{t("settings.import.reportNext")}</div> : null}
             {report.skipped.count ? <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.import.skipped", { n: report.skipped.count })}</div> : null}
             <Names label="settings.import.noLink" list={report.no_link} />
             <Names label="settings.import.failedUsers" list={report.failed} bad />
@@ -137,6 +149,11 @@ export function ImportCard() {
 }
 
 const busy = (s?: string) => s === "fetching" || s === "checking" || s === "importing";
+
+const signedKind = (k: string) => k === "marzban" || k === "pasarguard";
+
+/** The old links open: they have a path, and a signing panel's links a secret. */
+const legacyActive = (v: Schemas["LegacyView"]) => v.path !== "" && (!signedKind(v.kind) || v.secret_set);
 
 /** A long list of names: the first ones, and how many there are in all. */
 function Names({ label, list, bad }: { label: Key; list: { names: string[]; count: number }; bad?: boolean }) {
@@ -175,7 +192,10 @@ export function LegacyLinksCard() {
   });
   const errors = fieldErrors(save.error);
   if (!v) return null;
-  const signed = draft.kind === "marzban" || draft.kind === "pasarguard";
+  const signed = signedKind(draft.kind);
+  // Imported clients whose links do not open yet: say what is missing.
+  const off = v.links > 0 && !legacyActive(v);
+  const suggest = !draft.path && draft.kind ? OLD_PATH[draft.kind] : "";
   return (
     <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
       <form
@@ -186,15 +206,25 @@ export function LegacyLinksCard() {
         }}
       >
       <CardHead title={t("settings.import.legacy")} sub={t("settings.import.legacySub")} />
+      {off ? (
+        <div className="banner warn mb-3 flex flex-wrap items-center justify-between gap-2" role="status">
+          <span>{t(v.path === "" ? "settings.import.legacyOff" : "settings.import.legacyNoSecret")}</span>
+          {suggest ? (
+            <Button type="button" size="sm" variant="ghost" onClick={() => setDraft((d) => ({ ...d, path: suggest }))}>
+              {t("settings.import.legacyUse", { path: suggest })}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <Field label={t("settings.import.legacyKind")} htmlFor="leg-kind">
-        <select id="leg-kind" className="input" value={draft.kind} onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value as Kind | "", path: d.path || (e.target.value ? OLD_PATH[e.target.value as Kind] : "") }))}>
+        <Select id="leg-kind" className="input" value={draft.kind} onChange={(e) => setDraft((d) => ({ ...d, kind: e.target.value as Kind | "", path: d.path || (e.target.value ? OLD_PATH[e.target.value as Kind] : "") }))}>
           <option value="">—</option>
           {KINDS.map((k) => (
             <option key={k} value={k}>
               {t(`settings.import.kinds.${k}`)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label={t("settings.import.legacyPath")} htmlFor="leg-path" hint={t("settings.import.legacyPathHint")} error={errors.path}>
         <input id="leg-path" className="input mono" value={draft.path} onChange={(e) => setDraft((d) => ({ ...d, path: e.target.value }))} placeholder="sub" autoComplete="off" aria-invalid={!!errors.path} />

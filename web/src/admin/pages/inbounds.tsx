@@ -8,14 +8,17 @@ import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
 import { Button, EmptyState, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui";
 import { Switch } from "../../components/switch";
+import { hasTag, TagChips, TagFilter } from "../../components/tags";
 import { t, tMaybe } from "../../i18n";
 import { ago, maskedAs } from "../../lib/format";
+import { hopMemoryMB, hopPorts, MAX_HOP_PORTS } from "../../lib/hop";
 import { nodeLabel } from "../../lib/node-label";
 import { hostPort, listenerError } from "./inbound/shared";
 import { AddDrawer } from "./inbound/add";
 import { EditDrawer } from "./inbound/edit";
 import { CopyDrawer } from "./inbound/copy";
 import { ExitBar } from "./inbound/exit-bar";
+import { Select } from "../../components/select";
 
 export function InboundsPage() {
   const all = useInbounds();
@@ -28,7 +31,11 @@ export function InboundsPage() {
   const multi = (nodes.data?.length ?? 0) > 1;
   const node = nodes.data?.find((n) => n.id === nodeId);
   // One node: its inbounds are all there is; several: the chosen node's.
-  const inbounds = useMemo(() => (all.data ?? []).filter((i) => !multi || i.node_id === nodeId), [all.data, multi, nodeId]);
+  const ofNode = useMemo(() => (all.data ?? []).filter((i) => !multi || i.node_id === nodeId), [all.data, multi, nodeId]);
+  // One label to show only the node's protocols with it; one they do not have filters nothing.
+  const [tag, setTag] = useState("");
+  const filter = tag && ofNode.some((i) => hasTag(i.tags, tag)) ? tag : "";
+  const inbounds = useMemo(() => (filter ? ofNode.filter((i) => hasTag(i.tags, filter)) : ofNode), [ofNode, filter]);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Inbound | null>(null);
   const [copying, setCopying] = useState<Inbound | null>(null);
@@ -83,7 +90,7 @@ export function InboundsPage() {
             <label htmlFor="inbounds-node" className="text-[13px] font-medium text-[var(--ink-700)]">
               {t("inbounds.node")}
             </label>
-            <select id="inbounds-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => {
+            <Select id="inbounds-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => {
                 setNodeId(Number(e.target.value));
                 setSelected(new Set());
               }}>
@@ -92,10 +99,18 @@ export function InboundsPage() {
                   {nodeLabel(n)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )
       ) : null}
+      <TagFilter
+        items={ofNode}
+        value={filter}
+        onChange={(v) => {
+          setTag(v);
+          setSelected(new Set());
+        }}
+      />
       <QueryBoundary
         query={all}
         pending={
@@ -134,10 +149,16 @@ export function InboundsPage() {
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-500)]">
                         <span>{i.preset === "custom" ? t("inbounds.customOf", { type: i.type }) : i.title}</span>
                         <span>·</span>
-                        <span>{t("inbounds.port", { port: i.listen ? hostPort(i.listen, i.port) : i.port, network: i.network })}</span>
+                        {/* Behind the node's shared 443 clients connect to 443; the inbound's own port is an inner one. */}
+                        <span>{i.sni443 && node?.sni_router ? t("inbounds.portShared", { port: i.port }) : t("inbounds.port", { port: i.listen ? hostPort(i.listen, i.port) : i.port, network: i.network })}</span>
                         <span>·</span>
                         <span className="mono">{i.name}</span>
                       </div>
+                      {i.tags.length > 0 ? (
+                        <div className="mt-1.5 text-xs">
+                          <TagChips tags={i.tags} />
+                        </div>
+                      ) : null}
                     </div>
                     <Switch
                       checked={i.enabled}
@@ -161,6 +182,11 @@ export function InboundsPage() {
                         <Pill tone="warn">{t("inbounds.sharedKey")}</Pill>
                       </span>
                     ) : null}
+                    {hopPorts(i.port) > MAX_HOP_PORTS ? (
+                      <span title={t("inbounds.wideRangeWarn", { n: hopPorts(i.port), mb: hopMemoryMB(hopPorts(i.port)), max: MAX_HOP_PORTS })}>
+                        <Pill tone="warn">{t("inbounds.wideRange", { n: hopPorts(i.port) })}</Pill>
+                      </span>
+                    ) : null}
                     {i.dest ? <span className="text-xs text-[var(--ink-500)]">{t("inbounds.maskedAs", { dest: maskedAs(i) })}</span> : null}
                   </div>
                   {i.apps.length > 0 && i.apps.length < 5 ? (
@@ -175,6 +201,7 @@ export function InboundsPage() {
                     </p>
                   ) : null}
                   <AutoInfo i={i} />
+                  <SNIClashInfo i={i} />
                   <div className="flex-1" aria-hidden />
                   <div className="mt-4 flex gap-2 border-t border-[var(--hairline)] pt-4">
                     <Button size="sm" onClick={() => setEditing(i)}>
@@ -209,6 +236,17 @@ export function InboundsPage() {
         onConfirm={() => removing && remove.mutate(removing.id)}
       />
     </>
+  );
+}
+
+/** Others of the node that ask for this connection's name behind the shared 443 where the router cannot tell them apart. */
+function SNIClashInfo({ i }: { i: Inbound }) {
+  const c = i.sni_clash;
+  if (!i.enabled || !c) return null;
+  return (
+    <p className="mt-3 text-[13px] text-[var(--berry-600)]" role="alert">
+      {t(`inbounds.sniClash.${c.fix}`, { with: c.with.join(", ") })}
+    </p>
   );
 }
 

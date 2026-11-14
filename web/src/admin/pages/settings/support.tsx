@@ -23,6 +23,7 @@ import { nodeLabel, serverName, useServers } from "../../../lib/node-label";
 import { useNow } from "../../../lib/now";
 import { useSaveSettings } from "./shared";
 import { CardHead } from "../../../components/layout";
+import { Select } from "../../../components/select";
 
 /** The support desk's bot: it gives the code, and the panel hands it the link. */
 const SUPPORT_BOT = "https://t.me/MikanSup_bot";
@@ -559,13 +560,13 @@ function RecordingsDrawer({ state, onChange }: { state: { source: string; name?:
           <>
             <p className="mb-4 text-[13px] text-[var(--ink-600)]">{t("support.rec.lead")}</p>
             <Field label={t("diag.server")} htmlFor="rec-source">
-              <select id="rec-source" className="input" value={source} onChange={(e) => onChange({ source: e.target.value })}>
+              <Select id="rec-source" className="input" value={source} onChange={(e) => onChange({ source: e.target.value })}>
                 {servers.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <QueryBoundary query={list} pending={<Skeleton style={{ height: 120, borderRadius: 16 }} />}>
               {(d) =>

@@ -21,6 +21,14 @@ Whoever opens the panel's address without the secret path sees the server's answ
 
 The **Open the front page** link under the tiles opens the panel's address without the secret path, so you see what a stranger sees. The admin panel's secret path does not depend on the template.
 
+## Each installation has its own page
+
+:::note[New in 0.5.2.1]
+Before 0.5.2.1 a template was the same on every mikan server.
+:::
+
+Each installation's template is made with its own words, colours, sizes and names in the page's code, and the 404 is worded its own way too. A page that is the same on every server to the byte would be a mark: one hash of it would find them all. The panel and its nodes show the same page, and it stays the same from one restart to the next. There is nothing to set; a node shows its own page once it is updated to 0.5.2.1.
+
 ## Your own site wins over a template
 
 If `/opt/mikan/data/panel/www` holds your files, the panel shows them, and the chosen template does not apply. The card then says "data/panel/www holds files of your own". How your own site works (paths, `404.html`) is in [Domain and certificates](/mikan/en/start/domain/#your-own-site-on-the-domain). This folder is not part of a backup, see [Backups](/mikan/en/operations/backups/).
