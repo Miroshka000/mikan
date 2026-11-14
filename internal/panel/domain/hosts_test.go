@@ -334,6 +334,7 @@ func TestHostALPNOf(t *testing.T) {
 	for src, want := range map[string]string{
 		"type: hysteria2\n":                              "h3",
 		"type: tuic\nalpn: [H2, h3, spdy/3, h2]\n":       "h2,h3",
+		"type: tuic\nalpn: [spdy/3]\n":                   "",
 		"type: vless\nws-path: /w\nmikan: {tls: node}\n": "h2,http/1.1",
 		"type: vless\nws-path: /w\n":                     "",
 	} {

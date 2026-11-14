@@ -251,16 +251,17 @@ func HostALPNOf(t proto.Template) []string {
 		}
 		return []string{"h2", "http/1.1"}
 	}
-	own := []string{}
-	if list, ok := t["alpn"].([]any); ok {
-		for _, a := range list {
-			if s, ok := a.(string); ok && slices.Contains(HostALPN, strings.ToLower(s)) && !slices.Contains(own, strings.ToLower(s)) {
-				own = append(own, strings.ToLower(s))
-			}
-		}
+	list, _ := t["alpn"].([]any)
+	if len(list) == 0 {
+		return []string{"h3"}
 	}
-	if len(own) == 0 {
-		own = []string{"h3"}
+	// A listener of ALPN of its own answers only those: one the panel cannot offer leaves
+	// the host none.
+	own := []string{}
+	for _, a := range list {
+		if s, ok := a.(string); ok && slices.Contains(HostALPN, strings.ToLower(s)) && !slices.Contains(own, strings.ToLower(s)) {
+			own = append(own, strings.ToLower(s))
+		}
 	}
 	return own
 }
