@@ -31,6 +31,9 @@ type Input struct {
 	// Client is what the apps get in place of the template's mikan.client: a field left
 	// empty keeps the template's.
 	Client proto.ClientOverrides
+	// OwnClient: Client is the whole of what the apps get, as a host other than the
+	// default one is; an empty field is what they get without it, not the template's.
+	OwnClient bool
 }
 
 // Proxy is the client side of the template t for in: what the apps of the user dial.
@@ -42,7 +45,9 @@ func Proxy(t proto.Template, in Input) (model.Proxy, error) {
 	}
 	ext := t.Ext()
 	// From here on in.Client is the one the apps get; nothing else reads mikan.client.
-	in.Client = overrides(in.Client, ext.Client)
+	if !in.OwnClient {
+		in.Client = overrides(in.Client, ext.Client)
+	}
 	p := model.Proxy{Name: in.Name, Type: t.Type(), Server: in.Host, Port: in.Port}
 	if in.Client.Server != "" {
 		p.Server = in.Client.Server
@@ -182,8 +187,11 @@ func keys(p *model.Proxy, t proto.Template, ext proto.Ext, in Input) error {
 		p.Password = s.Secret
 	case "hysteria2":
 		p.Password, p.ALPN, p.UDP = s.Secret, strs(t["alpn"]), true
-		// A port of the inbound's own (a proxy in front) replaces the node's hopping range.
-		if in.PortSpec != "" && in.PortSpec != strconv.Itoa(in.Port) && p.Port == in.Port {
+		// A port of the inbound's own (a proxy in front) replaces the node's hopping range,
+		// and so does any port a host sets, the first one of the range too: a proxy in
+		// front of the node may forward that one alone.
+		ownPort := in.OwnClient && in.Client.Port > 0
+		if in.PortSpec != "" && in.PortSpec != strconv.Itoa(in.Port) && p.Port == in.Port && !ownPort {
 			p.Ports = in.PortSpec
 		}
 		if obfs := str(t["obfs"]); obfs != "" {

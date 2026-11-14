@@ -65,21 +65,51 @@ func Proxies(p Profile) []model.Proxy {
 			if prefix := NodePrefix(n.Name); multi && !in.Named && prefix != "" {
 				base = prefix + " " + base
 			}
-			// mihomo refuses a profile with two proxies of the same name.
-			name := base
-			for i := 2; used[name]; i++ {
-				name = base + " " + strconv.Itoa(i)
+			for i, h := range hosts(in) {
+				// mihomo refuses a profile with two proxies of the same name: a second host
+				// of the inbound is "Name 2".
+				name := base
+				for i := 2; used[name]; i++ {
+					name = base + " " + strconv.Itoa(i)
+				}
+				tpl := t
+				if i > 0 {
+					tpl = t.Clone() // Proxy may share maps with its template
+				}
+				c, err := Proxy(tpl, Input{Name: name, Host: n.Endpoint.Host, Port: port, PortSpec: spec,
+					SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Keys: p.Keys, SSOneKey: n.SSOneKey,
+					Client: h.client, OwnClient: h.own})
+				if err != nil {
+					p.skip(in, err)
+					continue
+				}
+				used[name] = true
+				c.Node, c.Pool, c.NoAuto = n.ID, in.Pool, in.NoAuto
+				out = append(out, c)
 			}
-			c, err := Proxy(t, Input{Name: name, Host: n.Endpoint.Host, Port: port, PortSpec: spec,
-				SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Keys: p.Keys, SSOneKey: n.SSOneKey})
-			if err != nil {
-				p.skip(in, err)
-				continue
-			}
-			used[name] = true
-			c.Node, c.Pool, c.NoAuto = n.ID, in.Pool, in.NoAuto
-			out = append(out, c)
 		}
+	}
+	return out
+}
+
+// host is one place an inbound is reached at, as Proxy takes it.
+type host struct {
+	client proto.ClientOverrides
+	own    bool // client is the whole of it, not over the template's mikan.client
+}
+
+// hosts are the places clients reach in at, one proxy each. The default host is the
+// template's mikan.client, which it repeats: that one reads the template, so an inbound
+// gives what it gave before it had hosts. The others are whole, an empty field is what
+// clients get without it. An inbound with no hosts is reached at the default alone.
+func hosts(in model.Inbound) []host {
+	out := []host{{}}
+	for i, h := range in.Hosts {
+		if i == 0 {
+			continue
+		}
+		out = append(out, host{own: true, client: proto.ClientOverrides{Server: h.Address, Port: h.Port,
+			SNI: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint}})
 	}
 	return out
 }

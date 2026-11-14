@@ -55,8 +55,8 @@ type Inbound struct {
 	Config   string // the template (proto)
 	// NoAuto keeps the inbound's servers out of the automatic choice (as Node.NoAuto).
 	NoAuto bool
-	// Hosts are the places clients reach the inbound at, the default one first. Until the
-	// build reads them it reads the template's mikan.client, which the default host repeats.
+	// Hosts are the places clients reach the inbound at, the default one first; each is a
+	// proxy. The build reads the default one from the template's mikan.client, which it repeats.
 	Hosts []Host
 }
 
