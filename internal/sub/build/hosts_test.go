@@ -112,6 +112,16 @@ func TestHostOverTLSFallsBack(t *testing.T) {
 	}
 }
 
+// realityKey is a fresh X25519 private key as REALITY's config holds it.
+func realityKey(t *testing.T) string {
+	t.Helper()
+	k, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(k.Bytes())
+}
+
 // A Hysteria2 host that sets a port, the range's first one too, gets that port alone: the
 // proxy in front of the node may forward no other. One with no port keeps the hopping.
 func TestHostPortStopsHopping(t *testing.T) {
@@ -224,8 +234,8 @@ func TestHostNames(t *testing.T) {
 func TestHostChoices(t *testing.T) {
 	in := model.Inbound{ID: 1, Node: 1, Name: "Fast", Named: true, Port: 443, PortSpec: "443", Config: "type: vless\nws-path: /w\nmikan: {tls: node}\n",
 		Hosts: []model.Host{
-			{Addresses: []string{"a1.example.com", "a2.example.com"}},
-			{Address: "b.example.com", Addresses: []string{"b1.example.com", "b2.example.com", "b3.example.com"}, SNI: "s.example.com", SNIs: []string{"s1.example.com"}},
+			{ID: 10, Addresses: []string{"a1.example.com", "a2.example.com"}},
+			{ID: 11, Address: "b.example.com", Addresses: []string{"b1.example.com", "b2.example.com", "b3.example.com"}, SNI: "s.example.com", SNIs: []string{"s1.example.com"}},
 		}}
 	build := func(seed string) [][2]string {
 		var out [][2]string
@@ -247,6 +257,29 @@ func TestHostChoices(t *testing.T) {
 		for j, p := range got {
 			seen[strconv.Itoa(j)+" "+p[0]] = true
 			seen[strconv.Itoa(j)+" sni "+p[1]] = true
+		}
+	}
+	// The choice follows the host, not its place: one added before it changes nothing.
+	moved := in
+	moved.Hosts = []model.Host{in.Hosts[0], {ID: 5, Address: "x.example.com"}, in.Hosts[1]}
+	for i := range 50 {
+		seed := "token-" + strconv.Itoa(i)
+		var got [][2]string
+		for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{moved}, Nodes: []model.Node{hostsNode}, Seed: seed}) {
+			got = append(got, [2]string{p.Server, p.TLS.SNI})
+		}
+		if want := build(seed)[1]; got[2] != want {
+			t.Fatalf("seed %s: %q after a host before it, %q before", seed, got[2], want)
+		}
+	}
+	// A template that takes no TLS name of clients' any more leaves the saved ones out.
+	reality := in
+	reality.Config = "type: vless\nreality-config: {dest: www.microsoft.com:443, private-key: " + realityKey(t) + ", short-id: [ab], server-names: [www.microsoft.com]}\n"
+	for i := range 50 {
+		for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{reality}, Nodes: []model.Node{hostsNode}, Seed: "token-" + strconv.Itoa(i)}) {
+			if p.TLS.SNI == "s1.example.com" {
+				t.Fatalf("REALITY got a saved SNI choice: %+v", p.TLS)
+			}
 		}
 	}
 	for _, k := range []string{"0 nl.example.com", "0 a1.example.com", "0 a2.example.com", "1 b.example.com", "1 b1.example.com", "1 b2.example.com", "1 b3.example.com",
