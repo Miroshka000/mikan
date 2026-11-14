@@ -218,6 +218,51 @@ func TestReachBalancesAmongTheNodesThatServe(t *testing.T) {
 	}
 }
 
+// A node where the client is shown no host is no candidate of its group: the client is
+// placed on one that shows it something, and stays there once the first one would too.
+func TestReachBalancesAmongTheNodesThatShow(t *testing.T) {
+	e, u, _, x, y, _ := balanceEnv(t)
+	ins, err := e.st.Q.ListInbounds(e.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range ins {
+		if in.NodeID != x.ID {
+			continue
+		}
+		if err := e.st.Q.SetDefaultInboundHost(e.ctx, db.SetDefaultInboundHostParams{InboundID: in.ID}); err != nil {
+			t.Fatal(err)
+		}
+		hosts, err := e.st.Q.ListInboundHosts(e.ctx, in.ID)
+		if err != nil || len(hosts) != 1 {
+			t.Fatal(hosts, err)
+		}
+		if err := e.st.Q.SetInboundHostOptions(e.ctx, db.SetInboundHostOptionsParams{ID: hosts[0].ID, InboundID: in.ID, Trial: "only"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	placed := func(want int64) {
+		t.Helper()
+		held, err := e.st.Q.ListUserAssignments(e.ctx, u.ID)
+		if err != nil || len(held) != 1 || held[0].NodeID != want {
+			t.Fatalf("placed on %+v, want node %d: %v", held, want, err)
+		}
+	}
+	if got, want := e.names(u), []string{"y1", "solo1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("reach: %v, want %v", got, want)
+	}
+	placed(y.ID)
+	// On the trial now: x shows the client its host, but the client keeps its node.
+	if _, err := e.st.DB.ExecContext(e.ctx, "UPDATE users SET source = 'trial' WHERE id = $1", u.ID); err != nil {
+		t.Fatal(err)
+	}
+	u, _ = e.st.Q.GetUser(e.ctx, u.ID)
+	if got, want := e.names(u), []string{"y1", "solo1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("reach on the trial: %v, want %v", got, want)
+	}
+	placed(y.ID)
+}
+
 // failingBalancer fails, after noting what it was asked to narrow.
 type failingBalancer struct{ asked map[int64]bool }
 

@@ -3,6 +3,7 @@ package subsrc
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"mikan/internal/panel/domain"
@@ -119,7 +120,7 @@ func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error)
 	if err != nil {
 		return nil, err
 	}
-	hidden, err := s.hidden(ctx, hosts, r.grants)
+	hidden, err := s.h.hidden(ctx, s.u, hosts, r.grants)
 	if err != nil {
 		return nil, err
 	}
@@ -135,21 +136,21 @@ func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error)
 // hidden are the ids of the hosts the user is not shown (domain.HostShows), by the state of
 // the subscription, whose packages have grants left. Whether the user is on the trial is
 // read only when a host asks it.
-func (s *subscription) hidden(ctx context.Context, hosts map[int64][]db.InboundHost, grants domain.GrantsLeft) (map[int64]bool, error) {
-	state := domain.State(s.u, grants.Main(s.u.ID), s.h.now())
+func (h *Handler) hidden(ctx context.Context, u db.User, hosts map[int64][]db.InboundHost, grants domain.GrantsLeft) (map[int64]bool, error) {
+	state := domain.State(u, grants.Main(u.ID), h.now())
 	var trial *bool
 	out := map[int64]bool{}
 	for _, list := range hosts {
-		for _, h := range list {
-			if h.Trial != "" && trial == nil {
-				t, err := domain.OnTrial(ctx, s.h.st.Q, s.u)
+		for _, host := range list {
+			if host.Trial != "" && trial == nil {
+				t, err := domain.OnTrial(ctx, h.st.Q, u)
 				if err != nil {
 					return nil, err
 				}
 				trial = &t
 			}
-			if !domain.HostShows(h.States, h.Trial, state, trial != nil && *trial) {
-				out[h.ID] = true
+			if !domain.HostShows(host.States, host.Trial, state, trial != nil && *trial) {
+				out[host.ID] = true
 			}
 		}
 	}
@@ -235,6 +236,13 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 	// One node of each balance group: the client's own. A balancer that fails shows the
 	// group whole rather than leave the client without servers.
 	if h.balance != nil && u.ID != 0 {
+		// A node where every host is hidden from the client (Host.States, Host.Trial) gives it
+		// nothing: no candidate either, or the group could place the client on it and leave
+		// it without the group's servers. A client placed on such a node is placed anew, and
+		// stays there once the node shows it something again.
+		if err := h.dropHidden(ctx, u, all, serves, nodes, grants); err != nil {
+			return reach{}, err
+		}
 		if picked, err := h.balance.Nodes(ctx, u.ID, nodes); err != nil {
 			h.warn("balance", "subscriptions: load balancing", "err", err)
 		} else {
@@ -248,6 +256,41 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 		out.inbounds = append(out.inbounds, in)
 	}
 	return out, nil
+}
+
+// dropHidden takes out of nodes those where u is shown no host of an inbound it may use
+// (serves); an inbound without hosts is reached at its template's.
+func (h *Handler) dropHidden(ctx context.Context, u db.User, all []db.Inbound, serves func(db.Inbound) bool, nodes map[int64]bool, grants domain.GrantsLeft) error {
+	var ins []db.Inbound
+	for _, in := range all {
+		if nodes[in.NodeID] && serves(in) {
+			ins = append(ins, in)
+		}
+	}
+	hosts, err := h.hosts(ctx, ins)
+	if err != nil {
+		return err
+	}
+	hidden, err := h.hidden(ctx, u, hosts, grants)
+	if err != nil {
+		return err
+	}
+	if len(hidden) == 0 {
+		return nil
+	}
+	shows := map[int64]bool{}
+	for _, in := range ins {
+		list := hosts[in.ID]
+		if len(list) == 0 || slices.ContainsFunc(list, func(x db.InboundHost) bool { return !hidden[x.ID] }) {
+			shows[in.NodeID] = true
+		}
+	}
+	for id := range nodes {
+		if !shows[id] {
+			delete(nodes, id)
+		}
+	}
+	return nil
 }
 
 // Inbound is in as the subscription module sees it, reached at hosts.
