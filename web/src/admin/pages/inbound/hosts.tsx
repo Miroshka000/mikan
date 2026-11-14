@@ -12,11 +12,12 @@ import { Button, Field } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { fingerprintLabel } from "../../../lib/fingerprints";
 import { onFormError } from "../../../lib/fields";
+import { TITLE_VARS, unknownVars } from "../../../lib/title-vars";
 
 type Host = Schemas["HostView"];
 
 /** A host's own fields as its inputs hold them: those no template holds, the default host's too. */
-type OwnForm = { alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean };
+type OwnForm = { name: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean };
 
 /** A host as its inputs hold it; id 0 is one not saved yet. */
 type HostForm = OwnForm & { id: number; address: string; port: string; sni: string; host: string; fingerprint: string };
@@ -28,6 +29,7 @@ const formOf = (h: Host): HostForm => ({
   sni: h.sni,
   host: h.host,
   fingerprint: h.fingerprint,
+  name: h.name,
   alpn: h.alpn,
   ipVersion: h.ip_version,
   mux: h.mux.enabled,
@@ -35,7 +37,7 @@ const formOf = (h: Host): HostForm => ({
   muxPadding: h.mux.padding,
   cdn: h.cdn,
 });
-const emptyForm: HostForm = { id: 0, address: "", port: "", sni: "", host: "", fingerprint: "", alpn: [], ipVersion: "", mux: false, muxProtocol: "", muxPadding: false, cdn: false };
+const emptyForm: HostForm = { id: 0, address: "", port: "", sni: "", host: "", fingerprint: "", name: "", alpn: [], ipVersion: "", mux: false, muxProtocol: "", muxPadding: false, cdn: false };
 
 const IP_VERSIONS = ["ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"] as const;
 const MUX_PROTOCOLS = ["smux", "yamux", "h2mux"];
@@ -56,8 +58,9 @@ function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
 }
 
 /** The own fields of a form as the API takes them. */
-function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "alpn" | "ip_version" | "mux" | "cdn"> {
+function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "alpn" | "ip_version" | "mux" | "cdn"> {
   return {
+    name: f.name.trim(),
     // In the order the admin ticked them: the first is what clients prefer.
     alpn: can.alpn ? f.alpn.filter((a) => can.alpnValues.includes(a)) : [],
     ip_version: f.ipVersion,
@@ -151,6 +154,7 @@ function DefaultHostRow({ inbound, host }: { inbound: Inbound; host: Host }) {
         }}
         can={can}
         errors={errors}
+        inbound={inbound}
       />
       <Button type="button" size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate()}>
         {t("common.save")}
@@ -160,9 +164,35 @@ function DefaultHostRow({ inbound, host }: { inbound: Inbound; host: Host }) {
 }
 
 /** The inputs of a host's own fields; those the protocol cannot use are not shown. */
-function OwnFields({ uid, f, set, can, errors }: { uid: string; f: OwnForm; set: (patch: Partial<OwnForm>) => void; can: OwnFieldsCan; errors: Record<string, string> }) {
+function OwnFields({ uid, f, set, can, errors, inbound }: { uid: string; f: OwnForm; set: (patch: Partial<OwnForm>) => void; can: OwnFieldsCan; errors: Record<string, string>; inbound: Inbound }) {
+  const unknown = unknownVars(f.name);
   return (
     <>
+      <Field
+        label={t("inbounds.hosts.name")}
+        htmlFor={`${uid}-name`}
+        hint={unknown.length ? `${t("inbounds.hosts.nameHint")} ${t("settings.unknownVars", { vars: unknown.join(" ") })}` : t("inbounds.hosts.nameHint")}
+        error={errors.name}
+      >
+        <input
+          id={`${uid}-name`}
+          className="input"
+          value={f.name}
+          onChange={(e) => set({ name: e.target.value })}
+          placeholder={inbound.sub_name}
+          maxLength={48}
+          aria-invalid={!!errors.name}
+          autoComplete="off"
+        />
+      </Field>
+      <div className="-mt-1 flex flex-wrap items-center gap-2" role="group" aria-label={t("settings.titleVars")}>
+        <span className="text-xs text-[var(--ink-500)]">{t("settings.titleVars")}</span>
+        {TITLE_VARS.map((v) => (
+          <button key={v} type="button" className="chip-btn" title={t(`settings.titleVar.${v}`)} onClick={() => set({ name: (f.name ? f.name.replace(/\s*$/, " ") : "") + `{${v}}` })}>
+            <span className="mono">{`{${v}}`}</span>
+          </button>
+        ))}
+      </div>
       {can.alpn ? (
         <Field label={t("inbounds.hosts.alpn")} hint={t("inbounds.hosts.alpnHint")} error={errors.alpn}>
           <div className="flex flex-wrap gap-4">
@@ -337,7 +367,7 @@ function HostRow({ inbound, initial, defaultFingerprint, onDone }: { inbound: In
           />
         </Field>
       ) : null}
-      <OwnFields uid={uid} f={f} set={set} can={ownFieldsOf(inbound)} errors={errors} />
+      <OwnFields uid={uid} f={f} set={set} can={ownFieldsOf(inbound)} errors={errors} inbound={inbound} />
       <div className="flex flex-wrap gap-2">
         <Button type="button" size="sm" variant="primary" loading={save.isPending} disabled={!fpOK} onClick={submit}>
           {t("common.save")}

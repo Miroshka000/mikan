@@ -4829,6 +4829,8 @@ export interface components {
             ip_version?: string;
             /** @description Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding */
             mux?: components["schemas"]["HostMux"];
+            /** @description Имя в подписке; можно с переменными заголовка: «🇳🇱 NL · осталось {left}». Пусто — имя подключения, у доп. адресов с номером */
+            name?: string;
             /**
              * Format: int64
              * @description Порт для клиентов; 0 — порт подключения
@@ -4895,6 +4897,8 @@ export interface components {
             ip_version: string;
             /** @description Мультиплексирование соединений (sing-mux) */
             mux: components["schemas"]["HostMux"];
+            /** @description Имя в подписке, с переменными заголовка ({days}, {left}…) для каждого пользователя; пусто — имя подключения */
+            name: string;
             /**
              * Format: int64
              * @description Порт для клиентов; 0 — порт подключения

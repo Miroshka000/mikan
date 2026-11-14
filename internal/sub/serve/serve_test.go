@@ -37,7 +37,8 @@ type fakeSub struct {
 	keysErr     error
 	keys        []Device
 	inboundsErr error
-	pool        int64 // the group of the first inbound; 0: the main traffic
+	pool        int64        // the group of the first inbound; 0: the main traffic
+	hosts       []model.Host // the first inbound's
 	bound       int64
 	boundErr    error
 	boundCalls  int
@@ -65,7 +66,7 @@ func (f *fakeSub) Inbounds(context.Context) ([]model.Inbound, error) {
 		return nil, f.inboundsErr
 	}
 	ins := subtest.Defaults("").Build.Inbounds
-	ins[0].Pool = f.pool
+	ins[0].Pool, ins[0].Hosts = f.pool, f.hosts
 	return ins, nil
 }
 func (f *fakeSub) Fetched(ctx context.Context, _ string) {
@@ -952,5 +953,21 @@ func TestConfigProfile(t *testing.T) {
 		if name := p.Type().Field(i).Name; name != "App" && p.Field(i).IsZero() {
 			t.Errorf("%s is not set", name)
 		}
+	}
+}
+
+// The names of hosts get the user's values, {devices} too, counted once; with no host name
+// that has a variable the devices are not counted at all.
+func TestHostNamesFilled(t *testing.T) {
+	sub := newSub(t, apps.Policy{NoBuiltin: true})
+	sub.cfg.Binding, sub.bound = true, 2
+	w := fetch(t, sub, "clash.meta/1.19.32")
+	if w.Code != http.StatusOK || sub.boundCalls != 0 {
+		t.Fatalf("no host names: %d, %d counts", w.Code, sub.boundCalls)
+	}
+	sub.hosts = []model.Host{{}, {Name: "{name} · {devices}"}}
+	w = fetch(t, sub, "clash.meta/1.19.32")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "u · 2") || sub.boundCalls != 1 {
+		t.Fatalf("host name not filled (%d counts):\n%s", sub.boundCalls, w.Body.String())
 	}
 }

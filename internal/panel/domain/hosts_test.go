@@ -202,11 +202,11 @@ func TestHostOwnFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, err := s.AddHost(ctx, ws.ID, Host{Address: "edge.example.com", ALPN: []string{" H2 ", "h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true})
+	h, err := s.AddHost(ctx, ws.ID, Host{Address: "edge.example.com", ALPN: []string{" H2 ", "h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true, Name: " Edge · {days} "})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(h.Alpn, ",") != "h2,http/1.1" || h.IpVersion != "ipv4-prefer" || !h.Mux || h.MuxProtocol != "smux" || !h.MuxPadding || !h.Cdn {
+	if strings.Join(h.Alpn, ",") != "h2,http/1.1" || h.IpVersion != "ipv4-prefer" || !h.Mux || h.MuxProtocol != "smux" || !h.MuxPadding || !h.Cdn || h.Name != "Edge · {days}" {
 		t.Fatalf("added: %+v", h)
 	}
 	// A multiplexing that is off keeps no protocol or padding; no ALPN is an empty list.
@@ -214,7 +214,7 @@ func TestHostOwnFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn {
+	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn || h.Name != "" {
 		t.Fatalf("cleared: %+v", h)
 	}
 
@@ -278,11 +278,11 @@ func TestHostOwnFields(t *testing.T) {
 			t.Fatal(err)
 		}
 		d := hosts[0]
-		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn {
+		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn || d.Name != "Main {left}" {
 			t.Fatalf("%s: the default host %+v", when, d)
 		}
 	}
-	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true}); err != nil {
+	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true, Name: "Main {left}"}); err != nil {
 		t.Fatal(err)
 	}
 	own("the hosts")
@@ -323,7 +323,7 @@ func TestHostOwnFields(t *testing.T) {
 	if err != nil || len(ch) != 2 {
 		t.Fatalf("the copy's hosts: %+v %v", ch, err)
 	}
-	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn {
+	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn || ch[0].Name != "Main {left}" {
 		t.Fatalf("the copy's default host: %+v", ch[0])
 	}
 }

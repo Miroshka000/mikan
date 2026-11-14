@@ -24,6 +24,8 @@ Since 0.5.2.1 a connection has an **Addresses for clients** block: the places cl
 
 Every address, the default one too, also has fields of its own: ALPN (h3, h2, http/1.1; only with TLS on the node's certificate and on QUIC protocols), the IP version, multiplexing (sing-mux: VLESS, Trojan and Shadowsocks, not over XHTTP and not with Vision) and "Through a CDN with its own certificate" (VLESS and Trojan that can go behind a CDN). The Clash apps and sing-box get all of them; the Xray apps (Happ, INCY, v2RayTun and others) get ALPN and the IP version, without multiplexing, which Xray does not speak. With "Through a CDN" the node's self-signed certificate is not pinned for that address, since the CDN shows its own.
 
+An address may also have its own **name in the subscription**, up to 48 characters, with the variables of the subscription title: `{brand}`, `{name}`, `{tariff}`, `{date}`, `{days}`, `{used}`, `{left}`, `{total}`, `{devices}`. They are filled for each client when the subscription updates: "🇳🇱 NL · {left} left" becomes "🇳🇱 NL · 12.5 GB left" for one of them. An empty name is the connection's (numbered on the other addresses), and so is the name a client gets when the values leave it blank or turn it into a built-in policy of mihomo (DIRECT, REJECT…). Commas and quotes in the values become spaces. The name changes with the values, and some apps remember the chosen server by its name and lose it after such an update.
+
 The API is the same: `GET`, `POST /api/v1/inbounds/{id}/hosts` and `PUT`, `DELETE /api/v1/inbounds/{id}/hosts/{host_id}`. Like the address for clients, addresses are changed only in the admin's session, not with an API key.
 
 ## nginx stream example

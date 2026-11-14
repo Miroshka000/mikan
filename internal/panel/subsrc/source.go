@@ -222,7 +222,7 @@ func Inbound(in db.Inbound, hosts []db.InboundHost) submodel.Inbound {
 		Named: in.DisplayName != "", Port: domain.FirstPort(in.Port), PortSpec: in.Port, Config: in.Config, NoAuto: in.NoAuto != 0}
 	for _, h := range hosts {
 		out.Hosts = append(out.Hosts, submodel.Host{Address: h.Address, Port: int(h.Port), SNI: h.Sni, Host: h.Host, Fingerprint: h.Fingerprint,
-			ALPN: h.Alpn, IPVersion: h.IpVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.Cdn})
+			ALPN: h.Alpn, IPVersion: h.IpVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.Cdn, Name: h.Name})
 	}
 	return out
 }

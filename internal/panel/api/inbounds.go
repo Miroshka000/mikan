@@ -210,6 +210,7 @@ type HostView struct {
 	IPVersion string   `json:"ip_version" doc:"Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении"`
 	Mux       HostMux  `json:"mux" doc:"Мультиплексирование соединений (sing-mux)"`
 	CDN       bool     `json:"cdn" doc:"Перед адресом CDN со своим сертификатом: самоподписанный сертификат ноды клиентам не закрепляется"`
+	Name      string   `json:"name" doc:"Имя в подписке, с переменными заголовка ({days}, {left}…) для каждого пользователя; пусто — имя подключения"`
 }
 
 // HostMux is the multiplexing of a host's clients: sing-mux, over one connection of the
@@ -232,11 +233,12 @@ type HostInput struct {
 	IPVersion   string   `json:"ip_version,omitempty" maxLength:"16" doc:"Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении"`
 	Mux         HostMux  `json:"mux,omitempty" doc:"Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding"`
 	CDN         bool     `json:"cdn,omitempty" doc:"Перед адресом CDN со своим сертификатом: VLESS и Trojan на сертификате ноды по XHTTP, WebSocket или gRPC"`
+	Name        string   `json:"name,omitempty" maxLength:"48" doc:"Имя в подписке; можно с переменными заголовка: «🇳🇱 NL · осталось {left}». Пусто — имя подключения, у доп. адресов с номером"`
 }
 
 func (b HostInput) host() domain.Host {
 	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint,
-		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN}
+		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name}
 }
 
 type hostsOutput struct{ Body []HostView }
@@ -264,7 +266,7 @@ func viewHost(r db.InboundHost) HostView {
 		alpn = []string{}
 	}
 	return HostView{ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint,
-		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn}
+		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Name: r.Name}
 }
 
 func (h *handlers) listInboundHosts(ctx context.Context, in *userIDInput) (*hostsOutput, error) {
@@ -283,6 +285,9 @@ func (h *handlers) addInboundHost(ctx context.Context, in *addHostInput) (*hostO
 	if err := requireSession(ctx, "address"); err != nil {
 		return nil, err
 	}
+	if err := h.checkHostName(ctx, in.Body.Name); err != nil {
+		return nil, err
+	}
 	row, err := h.d.Inbounds.AddHost(ctx, in.ID, in.Body.host())
 	if err != nil {
 		return nil, hostError(err)
@@ -295,6 +300,9 @@ func (h *handlers) updateInboundHost(ctx context.Context, in *updateHostInput) (
 	if err := requireSession(ctx, "address"); err != nil {
 		return nil, err
 	}
+	if err := h.checkHostName(ctx, in.Body.Name); err != nil {
+		return nil, err
+	}
 	row, err := h.d.Inbounds.UpdateHost(ctx, in.ID, in.HostID, in.Body.host())
 	if err != nil {
 		return nil, hostError(err)
@@ -305,6 +313,18 @@ func (h *handlers) updateInboundHost(ctx context.Context, in *updateHostInput) (
 	}
 	h.auditHost(ctx, "inbound.host_update", in.ID, row)
 	return &hostOutput{Body: viewHost(row)}, nil
+}
+
+// checkHostName holds a host's name to the rules of an inbound's: the variables are filled
+// per user, and the build falls back to the inbound's name when what they fill to breaks them.
+func (h *handlers) checkHostName(ctx context.Context, name string) error {
+	if name = strings.TrimSpace(name); name == "" {
+		return nil
+	}
+	if code := h.checkSubName(ctx, name); code != "" {
+		return huma.Error422UnprocessableEntity("bad_name", &huma.ErrorDetail{Location: "body.name", Message: code})
+	}
+	return nil
 }
 
 func (h *handlers) deleteInboundHost(ctx context.Context, in *hostIDInput) (*struct{}, error) {
