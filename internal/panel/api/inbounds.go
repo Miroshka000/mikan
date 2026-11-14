@@ -45,6 +45,7 @@ type InboundView struct {
 	Apps        []string       `json:"apps" doc:"Приложения, которым подключение попадает в подписку: mihomo, xray, singbox, stash, other"`
 	Shared      bool           `json:"shared,omitempty" doc:"Один ключ на всех: учёт, лимиты и отключение по пользователям не работают"`
 	NodeCert    bool           `json:"node_cert,omitempty" doc:"Работает на сертификате ноды (Hysteria2, TUIC, AnyTLS, TrustTunnel, VLESS TLS): с самоподписанным в sing-box приложениях не появится"`
+	HostALPN    []string       `json:"host_alpn" doc:"ALPN, которые можно задать адресам для клиентов: у QUIC — из ALPN самого подключения, у TLS по TCP — h2 и http/1.1, без TLS ноды — ничего"`
 	AutoPort    bool           `json:"auto_port" doc:"Панель сама переносит подключение на другой порт, если его блокируют (и включено в настройках)"`
 	AutoSNI     bool           `json:"auto_sni" doc:"Панель сама меняет сайт маскировки REALITY, если он перестал подходить (и включено в настройках)"`
 	Auto        AutoView       `json:"auto"`
@@ -204,19 +205,38 @@ type HostView struct {
 	SNI         string `json:"sni" doc:"SNI для клиентов; пусто — как обычно"`
 	Host        string `json:"host" doc:"HTTP Host у клиентов (WebSocket, XHTTP); пусто — как на сервере"`
 	Fingerprint string `json:"fingerprint" doc:"Отпечаток TLS (uTLS); пусто — общий из настроек"`
+	// The host's own fields: the default host has them too, and they are not the template's.
+	ALPN      []string `json:"alpn" doc:"ALPN, который предлагают клиенты, по порядку: h3, h2, http/1.1; пусто — как в приложении"`
+	IPVersion string   `json:"ip_version" doc:"Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении"`
+	Mux       HostMux  `json:"mux" doc:"Мультиплексирование соединений (sing-mux)"`
+	CDN       bool     `json:"cdn" doc:"Перед адресом CDN со своим сертификатом: самоподписанный сертификат ноды клиентам не закрепляется"`
 }
 
-// HostInput is a host as it is saved: every field at once.
+// HostMux is the multiplexing of a host's clients: sing-mux, over one connection of the
+// protocol.
+type HostMux struct {
+	Enabled  bool   `json:"enabled" doc:"Включено: VLESS, Trojan и Shadowsocks, не XHTTP и не Vision"`
+	Protocol string `json:"protocol" maxLength:"16" doc:"smux, yamux или h2mux; пусто — как в приложении"`
+	Padding  bool   `json:"padding" doc:"Дополнять кадры случайными данными"`
+}
+
+// HostInput is a host as it is saved: every field at once. The host's own fields may be
+// left out, as before they were: then they are empty.
 type HostInput struct {
-	Address     string `json:"address" maxLength:"253" doc:"Адрес для клиентов; пусто — адрес ноды"`
-	Port        int    `json:"port" minimum:"0" maximum:"65535" doc:"Порт для клиентов; 0 — порт подключения"`
-	SNI         string `json:"sni" maxLength:"253" doc:"SNI для клиентов; пусто — как обычно. Не у REALITY: там имя задаёт сайт маскировки"`
-	Host        string `json:"host" maxLength:"253" doc:"HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере"`
-	Fingerprint string `json:"fingerprint" maxLength:"32" doc:"Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек"`
+	Address     string   `json:"address" maxLength:"253" doc:"Адрес для клиентов; пусто — адрес ноды"`
+	Port        int      `json:"port" minimum:"0" maximum:"65535" doc:"Порт для клиентов; 0 — порт подключения"`
+	SNI         string   `json:"sni" maxLength:"253" doc:"SNI для клиентов; пусто — как обычно. Не у REALITY: там имя задаёт сайт маскировки"`
+	Host        string   `json:"host" maxLength:"253" doc:"HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере"`
+	Fingerprint string   `json:"fingerprint" maxLength:"32" doc:"Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек"`
+	ALPN        []string `json:"alpn,omitempty" maxItems:"3" doc:"ALPN у клиентов, по порядку: h3, h2, http/1.1. Только с TLS: на сертификате ноды и у QUIC-протоколов; пусто — как в приложении"`
+	IPVersion   string   `json:"ip_version,omitempty" maxLength:"16" doc:"Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении"`
+	Mux         HostMux  `json:"mux,omitempty" doc:"Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding"`
+	CDN         bool     `json:"cdn,omitempty" doc:"Перед адресом CDN со своим сертификатом: VLESS и Trojan на сертификате ноды по XHTTP, WebSocket или gRPC"`
 }
 
 func (b HostInput) host() domain.Host {
-	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint}
+	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint,
+		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN}
 }
 
 type hostsOutput struct{ Body []HostView }
@@ -239,7 +259,12 @@ type hostIDInput struct {
 }
 
 func viewHost(r db.InboundHost) HostView {
-	return HostView{ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint}
+	alpn := r.Alpn
+	if alpn == nil {
+		alpn = []string{}
+	}
+	return HostView{ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint,
+		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn}
 }
 
 func (h *handlers) listInboundHosts(ctx context.Context, in *userIDInput) (*hostsOutput, error) {
@@ -300,7 +325,8 @@ func (h *handlers) auditHost(ctx context.Context, action string, inboundID int64
 		name = in.Name
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, action, "inbound", name, map[string]any{"host_id": r.ID, "default": r.Position == 0,
-		"address": r.Address, "port": r.Port, "sni": r.Sni, "host": r.Host, "fingerprint": r.Fingerprint})
+		"address": r.Address, "port": r.Port, "sni": r.Sni, "host": r.Host, "fingerprint": r.Fingerprint,
+		"alpn": r.Alpn, "ip_version": r.IpVersion, "mux": r.Mux, "mux_protocol": r.MuxProtocol, "mux_padding": r.MuxPadding, "cdn": r.Cdn})
 }
 
 // hostError maps the domain's refusals of a host to the API's codes: a field the inbound's
@@ -372,11 +398,12 @@ func (h *handlers) viewInbound(ctx context.Context, in db.Inbound, last map[int6
 			}
 		}
 	}
-	v.Apps = []string{}
+	v.Apps, v.HostALPN = []string{}, []string{}
 	if t, err := proto.Parse(in.Config); err == nil {
 		v.Type, v.Network = t.Type(), t.Network()
 		v.Shared = proto.Shared(t)
 		v.NodeCert = t.NodeCert()
+		v.HostALPN = domain.HostALPNOf(t)
 		for _, f := range apps.For(proto.NeedsOf(t)) {
 			v.Apps = append(v.Apps, string(f))
 		}

@@ -272,7 +272,16 @@ func TestInboundsCarryTheirHosts(t *testing.T) {
 	if err := e.st.Q.SetDefaultInboundHost(e.ctx, db.SetDefaultInboundHostParams{InboundID: a.ID, Address: "proxy.example.com", Port: 8443, Fingerprint: "ios"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.st.Q.AddInboundHost(e.ctx, db.AddInboundHostParams{InboundID: a.ID, Address: "b.example.com", Sni: "s.example.com", Host: "h.example.com"}); err != nil {
+	hosts, err := e.st.Q.ListInboundHosts(e.ctx, a.ID)
+	if err != nil || len(hosts) != 1 {
+		t.Fatal(hosts, err)
+	}
+	// The host's own fields come along, the default host's too.
+	if err := e.st.Q.SetInboundHostOptions(e.ctx, db.SetInboundHostOptionsParams{ID: hosts[0].ID, InboundID: a.ID, IpVersion: "ipv6"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.st.Q.AddInboundHost(e.ctx, db.AddInboundHostParams{InboundID: a.ID, Address: "b.example.com", Sni: "s.example.com", Host: "h.example.com",
+		Alpn: []string{"h2", "http/1.1"}, IpVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, Cdn: true}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := (&subscription{h: e.h, u: u, cfg: e.cfg}).Inbounds(e.ctx)
@@ -280,7 +289,8 @@ func TestInboundsCarryTheirHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[int64][]submodel.Host{
-		a.ID: {{Address: "proxy.example.com", Port: 8443, Fingerprint: "ios"}, {Address: "b.example.com", SNI: "s.example.com", Host: "h.example.com"}},
+		a.ID: {{Address: "proxy.example.com", Port: 8443, Fingerprint: "ios", ALPN: []string{}, IPVersion: "ipv6"},
+			{Address: "b.example.com", SNI: "s.example.com", Host: "h.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true}},
 		b.ID: nil,
 	}
 	if len(got) != 2 {

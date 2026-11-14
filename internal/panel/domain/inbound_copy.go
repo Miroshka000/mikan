@@ -95,7 +95,11 @@ func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbou
 			}
 			row.Tags = src.Tags
 		}
-		// The copy is reached at the same places: its default host came with the template.
+		// The copy is reached at the same places: its default host came with the template,
+		// and takes the original's own fields of it.
+		if err := q.CopyDefaultHostOptions(ctx, db.CopyDefaultHostOptionsParams{ToInbound: row.ID, FromInbound: src.ID}); err != nil {
+			return err
+		}
 		return q.CopyInboundHosts(ctx, db.CopyInboundHostsParams{ToInbound: row.ID, FromInbound: src.ID})
 	})
 	return row, err

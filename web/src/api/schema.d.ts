@@ -4817,10 +4817,18 @@ export interface components {
         HostInput: {
             /** @description Адрес для клиентов; пусто — адрес ноды */
             address: string;
+            /** @description ALPN у клиентов, по порядку: h3, h2, http/1.1. Только с TLS: на сертификате ноды и у QUIC-протоколов; пусто — как в приложении */
+            alpn?: string[];
+            /** @description Перед адресом CDN со своим сертификатом: VLESS и Trojan на сертификате ноды по XHTTP, WebSocket или gRPC */
+            cdn?: boolean;
             /** @description Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек */
             fingerprint: string;
             /** @description HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере */
             host: string;
+            /** @description Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении */
+            ip_version?: string;
+            /** @description Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding */
+            mux?: components["schemas"]["HostMux"];
             /**
              * Format: int64
              * @description Порт для клиентов; 0 — порт подключения
@@ -4836,6 +4844,14 @@ export interface components {
             label: string;
             /** @enum {string} */
             level: "ok" | "warn" | "error";
+        };
+        HostMux: {
+            /** @description Включено: VLESS, Trojan и Shadowsocks, не XHTTP и не Vision */
+            enabled: boolean;
+            /** @description Дополнять кадры случайными данными */
+            padding: boolean;
+            /** @description smux, yamux или h2mux; пусто — как в приложении */
+            protocol: string;
         };
         HostReport: {
             /** @description RFC 3339 */
@@ -4863,6 +4879,10 @@ export interface components {
         HostView: {
             /** @description Адрес для клиентов; пусто — адрес ноды */
             address: string;
+            /** @description ALPN, который предлагают клиенты, по порядку: h3, h2, http/1.1; пусто — как в приложении */
+            alpn: string[];
+            /** @description Перед адресом CDN со своим сертификатом: самоподписанный сертификат ноды клиентам не закрепляется */
+            cdn: boolean;
             /** @description Адрес по умолчанию: тот же, что client и fingerprint подключения; удаляется только с подключением */
             default: boolean;
             /** @description Отпечаток TLS (uTLS); пусто — общий из настроек */
@@ -4871,6 +4891,10 @@ export interface components {
             host: string;
             /** Format: int64 */
             id: number;
+            /** @description Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении */
+            ip_version: string;
+            /** @description Мультиплексирование соединений (sing-mux) */
+            mux: components["schemas"]["HostMux"];
             /**
              * Format: int64
              * @description Порт для клиентов; 0 — порт подключения
@@ -4977,6 +5001,8 @@ export interface components {
             exit_node_id?: number;
             /** @description Отпечаток TLS (uTLS) у клиентов; пусто — общий из настроек */
             fingerprint?: string;
+            /** @description ALPN, которые можно задать адресам для клиентов: у QUIC — из ALPN самого подключения, у TLS по TCP — h2 и http/1.1, без TLS ноды — ничего */
+            host_alpn: string[];
             /** Format: int64 */
             id: number;
             /** @description Подключение входит в «Авто» подписки; выключено — только в списке и группе страны (выключенная нода убирает все свои) */

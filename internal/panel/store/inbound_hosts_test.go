@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"io/fs"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -69,9 +70,25 @@ func TestInboundHostsMigration(t *testing.T) {
 	}
 	check := func(when string) {
 		t.Helper()
-		q := db.New(s.DB)
-		got, err := q.ListHostsOfInbounds(ctx, []int64{71, 72, 73, 74})
-		if err != nil {
+		// The columns of 0063 written out: the sqlc queries read the later ones too, which
+		// this version of the table does not have yet.
+		var got []db.InboundHost
+		if err := func() error {
+			rows, err := s.DB.QueryContext(ctx, `SELECT id, inbound_id, position, address, port, sni, host, fingerprint FROM inbound_hosts
+WHERE inbound_id IN (71, 72, 73, 74) ORDER BY inbound_id, position`)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var h db.InboundHost
+				if err := rows.Scan(&h.ID, &h.InboundID, &h.Position, &h.Address, &h.Port, &h.Sni, &h.Host, &h.Fingerprint); err != nil {
+					return err
+				}
+				got = append(got, h)
+			}
+			return rows.Err()
+		}(); err != nil {
 			t.Fatal(err)
 		}
 		var defaults []db.InboundHost
@@ -86,7 +103,7 @@ func TestInboundHostsMigration(t *testing.T) {
 		for _, h := range defaults {
 			w := want[h.InboundID]
 			w.ID = h.ID
-			if h != w {
+			if !reflect.DeepEqual(h, w) {
 				t.Errorf("%s: inbound %d: %+v, want %+v", when, h.InboundID, h, w)
 			}
 		}

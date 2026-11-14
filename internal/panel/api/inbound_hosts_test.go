@@ -112,6 +112,28 @@ func TestInboundHostsAPI(t *testing.T) {
 	if code != http.StatusOK || !strings.Contains(body, `"client":{"server":"edge.example.com","port":2053`) {
 		t.Fatalf("the inbound after its default host: %d %s", code, body)
 	}
+
+	// The host's own fields: saved trimmed, the default host's too, and named when refused.
+	const own = `"alpn": ["h2", "H2", "http/1.1"], "ip_version": "ipv4-prefer", "mux": {"enabled": true, "protocol": "smux", "padding": true}, "cdn": true`
+	if code, body := f.send(http.MethodPut, addedPath, `{"address": "c.example.com", "port": 0, "sni": "", "host": "", "fingerprint": "", `+own+`}`); code != http.StatusOK ||
+		!strings.Contains(body, `"alpn":["h2","http/1.1"]`) || !strings.Contains(body, `"mux":{"enabled":true,"protocol":"smux","padding":true}`) || !strings.Contains(body, `"cdn":true`) {
+		t.Fatalf("own fields: %d %s", code, body)
+	}
+	if code, body := f.send(http.MethodPut, defPath, `{"address": "edge.example.com", "port": 2053, "sni": "", "host": "", "fingerprint": "", `+own+`}`); code != http.StatusOK ||
+		!strings.Contains(body, `"ip_version":"ipv4-prefer"`) {
+		t.Fatalf("the default host's own fields: %d %s", code, body)
+	}
+	if code, body := f.send(http.MethodPatch, "/api/v1/inbounds/"+strconv.FormatInt(in.ID, 10), `{"client": {"server": "edge2.example.com", "port": 0, "sni": ""}}`); code != http.StatusOK {
+		t.Fatalf("the inbound's client: %d %s", code, body)
+	}
+	if hosts := list(""); hosts[0].Address != "edge2.example.com" || hosts[0].IPVersion != "ipv4-prefer" || !hosts[0].Mux.Enabled || !hosts[0].CDN || len(hosts[0].ALPN) != 2 {
+		t.Fatalf("the default host after the template: %+v", hosts[0])
+	}
+	if code, body := f.send(http.MethodPut, addedPath, `{"address": "", "port": 0, "sni": "", "host": "", "fingerprint": "", "mux": {"enabled": true, "protocol": "mplex", "padding": false}}`); code != http.StatusUnprocessableEntity ||
+		!strings.Contains(body, "body.mux.protocol") || !strings.Contains(body, "host_mux_protocol") {
+		t.Fatalf("a bad mux protocol: %d %s", code, body)
+	}
+
 	if code, body := f.send(http.MethodDelete, defPath, ""); code != http.StatusConflict || !strings.Contains(body, "default_host") {
 		t.Fatalf("deleting the default host: %d %s", code, body)
 	}
@@ -124,7 +146,7 @@ func TestInboundHostsAPI(t *testing.T) {
 	if code, _ := f.do(http.MethodGet, "/api/v1/inbounds/999/hosts", ""); code != http.StatusNotFound {
 		t.Fatalf("the hosts of no inbound: %d", code)
 	}
-	for action, want := range map[string]int{"inbound.host_add": 1, "inbound.host_update": 2, "inbound.host_delete": 1} {
+	for action, want := range map[string]int{"inbound.host_add": 1, "inbound.host_update": 4, "inbound.host_delete": 1} {
 		if got := f.audited(action); got != want {
 			t.Errorf("%s audited %d times, want %d", action, got, want)
 		}

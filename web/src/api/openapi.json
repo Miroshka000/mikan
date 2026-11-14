@@ -3782,6 +3782,18 @@
             "maxLength": 253,
             "type": "string"
           },
+          "alpn": {
+            "description": "ALPN у клиентов, по порядку: h3, h2, http/1.1. Только с TLS: на сертификате ноды и у QUIC-протоколов; пусто — как в приложении",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "type": "array"
+          },
+          "cdn": {
+            "description": "Перед адресом CDN со своим сертификатом: VLESS и Trojan на сертификате ноды по XHTTP, WebSocket или gRPC",
+            "type": "boolean"
+          },
           "fingerprint": {
             "description": "Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек",
             "maxLength": 32,
@@ -3791,6 +3803,15 @@
             "description": "HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере",
             "maxLength": 253,
             "type": "string"
+          },
+          "ip_version": {
+            "description": "Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении",
+            "maxLength": 16,
+            "type": "string"
+          },
+          "mux": {
+            "$ref": "#/components/schemas/HostMux",
+            "description": "Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding"
           },
           "port": {
             "description": "Порт для клиентов; 0 — порт подключения",
@@ -3840,6 +3861,30 @@
           "level",
           "label",
           "detail"
+        ],
+        "type": "object"
+      },
+      "HostMux": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Включено: VLESS, Trojan и Shadowsocks, не XHTTP и не Vision",
+            "type": "boolean"
+          },
+          "padding": {
+            "description": "Дополнять кадры случайными данными",
+            "type": "boolean"
+          },
+          "protocol": {
+            "description": "smux, yamux или h2mux; пусто — как в приложении",
+            "maxLength": 16,
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "protocol",
+          "padding"
         ],
         "type": "object"
       },
@@ -3931,6 +3976,17 @@
             "description": "Адрес для клиентов; пусто — адрес ноды",
             "type": "string"
           },
+          "alpn": {
+            "description": "ALPN, который предлагают клиенты, по порядку: h3, h2, http/1.1; пусто — как в приложении",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "cdn": {
+            "description": "Перед адресом CDN со своим сертификатом: самоподписанный сертификат ноды клиентам не закрепляется",
+            "type": "boolean"
+          },
           "default": {
             "description": "Адрес по умолчанию: тот же, что client и fingerprint подключения; удаляется только с подключением",
             "type": "boolean"
@@ -3946,6 +4002,14 @@
           "id": {
             "format": "int64",
             "type": "integer"
+          },
+          "ip_version": {
+            "description": "Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении",
+            "type": "string"
+          },
+          "mux": {
+            "$ref": "#/components/schemas/HostMux",
+            "description": "Мультиплексирование соединений (sing-mux)"
           },
           "port": {
             "description": "Порт для клиентов; 0 — порт подключения",
@@ -3964,7 +4028,11 @@
           "port",
           "sni",
           "host",
-          "fingerprint"
+          "fingerprint",
+          "alpn",
+          "ip_version",
+          "mux",
+          "cdn"
         ],
         "type": "object"
       },
@@ -4202,6 +4270,13 @@
             "description": "Отпечаток TLS (uTLS) у клиентов; пусто — общий из настроек",
             "type": "string"
           },
+          "host_alpn": {
+            "description": "ALPN, которые можно задать адресам для клиентов: у QUIC — из ALPN самого подключения, у TLS по TCP — h2 и http/1.1, без TLS ноды — ничего",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "id": {
             "format": "int64",
             "type": "integer"
@@ -4326,6 +4401,7 @@
           "status",
           "updated_at",
           "apps",
+          "host_alpn",
           "auto_port",
           "auto_sni",
           "auto",
