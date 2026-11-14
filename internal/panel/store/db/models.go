@@ -247,6 +247,8 @@ type InboundHost struct {
 	MuxPadding  bool
 	Cdn         bool
 	Name        string
+	Addresses   []string
+	Snis        []string
 }
 
 type InboundReach struct {

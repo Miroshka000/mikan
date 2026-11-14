@@ -3782,6 +3782,14 @@
             "maxLength": 253,
             "type": "string"
           },
+          "addresses": {
+            "description": "Ещё адреса для клиентов: каждый получает один из address и этих, всегда один и тот же (по токену подписки); пустой address среди них — адрес ноды",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
+          },
           "alpn": {
             "description": "ALPN у клиентов, по порядку: h3, h2, http/1.1. Только с TLS: на сертификате ноды и у QUIC-протоколов; пусто — как в приложении",
             "items": {
@@ -3829,6 +3837,14 @@
             "description": "SNI для клиентов; пусто — как обычно. Не у REALITY: там имя задаёт сайт маскировки",
             "maxLength": 253,
             "type": "string"
+          },
+          "snis": {
+            "description": "Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же; только где можно задать sni",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "type": "array"
           }
         },
         "required": [
@@ -3981,6 +3997,13 @@
             "description": "Адрес для клиентов; пусто — адрес ноды",
             "type": "string"
           },
+          "addresses": {
+            "description": "Ещё адреса: каждый клиент получает один из address и этих, всегда один и тот же",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "alpn": {
             "description": "ALPN, который предлагают клиенты, по порядку: h3, h2, http/1.1; пусто — как в приложении",
             "items": {
@@ -4028,6 +4051,13 @@
           "sni": {
             "description": "SNI для клиентов; пусто — как обычно",
             "type": "string"
+          },
+          "snis": {
+            "description": "Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -4042,7 +4072,9 @@
           "ip_version",
           "mux",
           "cdn",
-          "name"
+          "name",
+          "addresses",
+          "snis"
         ],
         "type": "object"
       },

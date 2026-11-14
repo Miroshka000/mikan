@@ -4817,6 +4817,8 @@ export interface components {
         HostInput: {
             /** @description Адрес для клиентов; пусто — адрес ноды */
             address: string;
+            /** @description Ещё адреса для клиентов: каждый получает один из address и этих, всегда один и тот же (по токену подписки); пустой address среди них — адрес ноды */
+            addresses?: string[];
             /** @description ALPN у клиентов, по порядку: h3, h2, http/1.1. Только с TLS: на сертификате ноды и у QUIC-протоколов; пусто — как в приложении */
             alpn?: string[];
             /** @description Перед адресом CDN со своим сертификатом: VLESS и Trojan на сертификате ноды по XHTTP, WebSocket или gRPC */
@@ -4838,6 +4840,8 @@ export interface components {
             port: number;
             /** @description SNI для клиентов; пусто — как обычно. Не у REALITY: там имя задаёт сайт маскировки */
             sni: string;
+            /** @description Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же; только где можно задать sni */
+            snis?: string[];
         };
         HostItem: {
             detail: string;
@@ -4881,6 +4885,8 @@ export interface components {
         HostView: {
             /** @description Адрес для клиентов; пусто — адрес ноды */
             address: string;
+            /** @description Ещё адреса: каждый клиент получает один из address и этих, всегда один и тот же */
+            addresses: string[];
             /** @description ALPN, который предлагают клиенты, по порядку: h3, h2, http/1.1; пусто — как в приложении */
             alpn: string[];
             /** @description Перед адресом CDN со своим сертификатом: самоподписанный сертификат ноды клиентам не закрепляется */
@@ -4906,6 +4912,8 @@ export interface components {
             port: number;
             /** @description SNI для клиентов; пусто — как обычно */
             sni: string;
+            /** @description Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же */
+            snis: string[];
         };
         ImportRunInputBody: {
             /** @enum {string} */

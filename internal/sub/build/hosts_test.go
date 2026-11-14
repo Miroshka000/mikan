@@ -112,6 +112,16 @@ func TestHostOverTLSFallsBack(t *testing.T) {
 	}
 }
 
+// realityKey is a fresh X25519 private key as REALITY's config holds it.
+func realityKey(t *testing.T) string {
+	t.Helper()
+	k, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(k.Bytes())
+}
+
 // A Hysteria2 host that sets a port, the range's first one too, gets that port alone: the
 // proxy in front of the node may forward no other. One with no port keeps the hopping.
 func TestHostPortStopsHopping(t *testing.T) {
@@ -215,5 +225,78 @@ func TestHostNames(t *testing.T) {
 	long := fillName(strings.Repeat("я", 40)+"{name}", map[string]string{"name": strings.Repeat("ю", 40)})
 	if n := len([]rune(long)); n != NameMax {
 		t.Fatalf("a long name keeps %d letters", n)
+	}
+}
+
+// A host with more addresses or TLS names gives each user one of them with its own, the
+// same at every build, and users spread over them; the default host's too. Without a seed
+// (the preview) it is the host's own.
+func TestHostChoices(t *testing.T) {
+	in := model.Inbound{ID: 1, Node: 1, Name: "Fast", Named: true, Port: 443, PortSpec: "443", Config: "type: vless\nws-path: /w\nmikan: {tls: node}\n",
+		Hosts: []model.Host{
+			{ID: 10, Addresses: []string{"a1.example.com", "a2.example.com"}},
+			{ID: 11, Address: "b.example.com", Addresses: []string{"b1.example.com", "b2.example.com", "b3.example.com"}, SNI: "s.example.com", SNIs: []string{"s1.example.com"}},
+		}}
+	build := func(seed string) [][2]string {
+		var out [][2]string
+		for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{in}, Nodes: []model.Node{hostsNode}, Seed: seed}) {
+			out = append(out, [2]string{p.Server, p.TLS.SNI})
+		}
+		return out
+	}
+	if got, want := build(""), [][2]string{{"nl.example.com", "nl.example.com"}, {"b.example.com", "s.example.com"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("without a seed: %q", got)
+	}
+	seen := map[string]bool{}
+	for i := range 200 {
+		seed := "token-" + strconv.Itoa(i)
+		got := build(seed)
+		if !reflect.DeepEqual(got, build(seed)) {
+			t.Fatalf("seed %s picks differently", seed)
+		}
+		for j, p := range got {
+			seen[strconv.Itoa(j)+" "+p[0]] = true
+			seen[strconv.Itoa(j)+" sni "+p[1]] = true
+		}
+	}
+	// The choice follows the host, not its place: one added before it changes nothing.
+	moved := in
+	moved.Hosts = []model.Host{in.Hosts[0], {ID: 5, Address: "x.example.com"}, in.Hosts[1]}
+	for i := range 50 {
+		seed := "token-" + strconv.Itoa(i)
+		var got [][2]string
+		for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{moved}, Nodes: []model.Node{hostsNode}, Seed: seed}) {
+			got = append(got, [2]string{p.Server, p.TLS.SNI})
+		}
+		if want := build(seed)[1]; got[2] != want {
+			t.Fatalf("seed %s: %q after a host before it, %q before", seed, got[2], want)
+		}
+	}
+	// The address and the TLS name are picked apart: with one more of each, every pair comes.
+	pair := in
+	pair.Hosts = []model.Host{{ID: 7}, {ID: 8, Address: "p.example.com", Addresses: []string{"q.example.com"}, SNI: "p.example.com", SNIs: []string{"q.example.com"}}}
+	pairs := map[[2]string]bool{}
+	for i := range 100 {
+		ps := Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{pair}, Nodes: []model.Node{hostsNode}, Seed: "token-" + strconv.Itoa(i)})
+		pairs[[2]string{ps[1].Server, ps[1].TLS.SNI}] = true
+	}
+	if len(pairs) != 4 {
+		t.Fatalf("pairs of address and SNI: %v", pairs)
+	}
+	// A template that takes no TLS name of clients' any more leaves the saved ones out.
+	reality := in
+	reality.Config = "type: vless\nreality-config: {dest: www.microsoft.com:443, private-key: " + realityKey(t) + ", short-id: [ab], server-names: [www.microsoft.com]}\n"
+	for i := range 50 {
+		for _, p := range Proxies(Profile{Keys: testKeys, Inbounds: []model.Inbound{reality}, Nodes: []model.Node{hostsNode}, Seed: "token-" + strconv.Itoa(i)}) {
+			if p.TLS.SNI == "s1.example.com" {
+				t.Fatalf("REALITY got a saved SNI choice: %+v", p.TLS)
+			}
+		}
+	}
+	for _, k := range []string{"0 nl.example.com", "0 a1.example.com", "0 a2.example.com", "1 b.example.com", "1 b1.example.com", "1 b2.example.com", "1 b3.example.com",
+		"1 sni s.example.com", "1 sni s1.example.com"} {
+		if !seen[k] {
+			t.Errorf("no user got %s: %v", k, seen)
+		}
 	}
 }

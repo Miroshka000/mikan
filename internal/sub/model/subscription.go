@@ -65,6 +65,7 @@ type Inbound struct {
 // Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing, the inbound's name. The host's
 // own fields (ALPN to Name) are the default host's too, and no template holds them.
 type Host struct {
+	ID          int64 // the panel's, for good: a user's choice of Addresses and SNIs follows it
 	Address     string
 	Port        int
 	SNI         string
@@ -80,6 +81,10 @@ type Host struct {
 	// Name is the proxy's name, the variables of the profile title in it ({days}, {left}…)
 	// filled for the user (build.Profile.Vars); "": the inbound's.
 	Name string
+	// Addresses and SNIs are more of Address and SNI: the user gets one of the host's own
+	// and these, the same one at every update (build.Profile.Seed).
+	Addresses []string
+	SNIs      []string
 }
 
 // GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.

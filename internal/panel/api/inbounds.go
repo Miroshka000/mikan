@@ -211,6 +211,8 @@ type HostView struct {
 	Mux       HostMux  `json:"mux" doc:"Мультиплексирование соединений (sing-mux)"`
 	CDN       bool     `json:"cdn" doc:"Перед адресом CDN со своим сертификатом: самоподписанный сертификат ноды клиентам не закрепляется"`
 	Name      string   `json:"name" doc:"Имя в подписке, с переменными заголовка ({days}, {left}…) для каждого пользователя; пусто — имя подключения"`
+	Addresses []string `json:"addresses" doc:"Ещё адреса: каждый клиент получает один из address и этих, всегда один и тот же"`
+	SNIs      []string `json:"snis" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же"`
 }
 
 // HostMux is the multiplexing of a host's clients: sing-mux, over one connection of the
@@ -234,11 +236,13 @@ type HostInput struct {
 	Mux         HostMux  `json:"mux,omitempty" doc:"Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding"`
 	CDN         bool     `json:"cdn,omitempty" doc:"Перед адресом CDN со своим сертификатом: VLESS и Trojan на сертификате ноды по XHTTP, WebSocket или gRPC"`
 	Name        string   `json:"name,omitempty" maxLength:"48" doc:"Имя в подписке; можно с переменными заголовка: «🇳🇱 NL · осталось {left}». Пусто — имя подключения, у доп. адресов с номером"`
+	Addresses   []string `json:"addresses,omitempty" maxItems:"16" doc:"Ещё адреса для клиентов: каждый получает один из address и этих, всегда один и тот же (по токену подписки); пустой address среди них — адрес ноды"`
+	SNIs        []string `json:"snis,omitempty" maxItems:"16" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же; только где можно задать sni"`
 }
 
 func (b HostInput) host() domain.Host {
 	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint,
-		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name}
+		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name, Addresses: b.Addresses, SNIs: b.SNIs}
 }
 
 type hostsOutput struct{ Body []HostView }
@@ -260,12 +264,20 @@ type hostIDInput struct {
 	HostID int64 `path:"host_id" minimum:"1"`
 }
 
+// strsOrEmpty is list, an empty one for none: the API shows [] rather than null.
+func strsOrEmpty(list []string) []string {
+	if list == nil {
+		return []string{}
+	}
+	return list
+}
+
 func viewHost(r db.InboundHost) HostView {
 	alpn := r.Alpn
 	if alpn == nil {
 		alpn = []string{}
 	}
-	return HostView{ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint,
+	return HostView{Addresses: strsOrEmpty(r.Addresses), SNIs: strsOrEmpty(r.Snis), ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint,
 		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Name: r.Name}
 }
 
