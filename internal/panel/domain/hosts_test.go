@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -210,11 +211,20 @@ func TestHostOwnFields(t *testing.T) {
 		t.Fatalf("added: %+v", h)
 	}
 	// A multiplexing that is off keeps no protocol or padding; no ALPN is an empty list.
+	// More addresses and names are saved trimmed, each once, without the host's own.
+	h, err = s.UpdateHost(ctx, ws.ID, h.ID, Host{Address: "edge.example.com", Addresses: []string{" b.example.com ", "", "B.example.com", "Edge.example.com", "c.example.com"},
+		SNI: "s.example.com", SNIs: []string{"t.example.com"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(h.Addresses, ",") != "b.example.com,c.example.com" || strings.Join(h.Snis, ",") != "t.example.com" {
+		t.Fatalf("choices: %+v", h)
+	}
 	h, err = s.UpdateHost(ctx, ws.ID, h.ID, Host{Address: "edge.example.com", MuxProtocol: "yamux", MuxPadding: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn || h.Name != "" {
+	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn || h.Name != "" || len(h.Addresses) != 0 || len(h.Snis) != 0 {
 		t.Fatalf("cleared: %+v", h)
 	}
 
@@ -252,6 +262,10 @@ func TestHostOwnFields(t *testing.T) {
 		{vision, Host{Mux: true}, "mux", "host_mux_flow"},
 		{reality, Host{CDN: true}, "cdn", "cdn_type"},
 		{vision, Host{CDN: true}, "cdn", "cdn_transport"},
+		{ws, Host{Addresses: []string{"bad host"}}, "addresses", "config_client_server"},
+		{reality, Host{SNIs: []string{"www.bing.com"}}, "snis", "config_client_sni"}, // the target's name
+		{ws, Host{SNIs: []string{"a..b"}}, "snis", "config_client_sni"},
+		{ws, Host{Addresses: manyAddresses(HostChoicesMax + 1)}, "addresses", "host_choices_long"},
 	} {
 		if _, err := s.AddHost(ctx, c.in.ID, c.h); !errors.As(err, &edit) || edit.Field != c.field || edit.Err.Code != c.code {
 			t.Errorf("%s %+v: %v, want %s %s", c.in.Preset, c.h, err, c.field, c.code)
@@ -278,11 +292,11 @@ func TestHostOwnFields(t *testing.T) {
 			t.Fatal(err)
 		}
 		d := hosts[0]
-		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn || d.Name != "Main {left}" {
+		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn || d.Name != "Main {left}" || strings.Join(d.Addresses, ",") != "front2.example.com" {
 			t.Fatalf("%s: the default host %+v", when, d)
 		}
 	}
-	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true, Name: "Main {left}"}); err != nil {
+	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true, Name: "Main {left}", Addresses: []string{"front2.example.com"}}); err != nil {
 		t.Fatal(err)
 	}
 	own("the hosts")
@@ -323,7 +337,7 @@ func TestHostOwnFields(t *testing.T) {
 	if err != nil || len(ch) != 2 {
 		t.Fatalf("the copy's hosts: %+v %v", ch, err)
 	}
-	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn || ch[0].Name != "Main {left}" {
+	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn || ch[0].Name != "Main {left}" || strings.Join(ch[0].Addresses, ",") != "front2.example.com" {
 		t.Fatalf("the copy's default host: %+v", ch[0])
 	}
 }
@@ -346,4 +360,13 @@ func TestHostALPNOf(t *testing.T) {
 			t.Errorf("%q: %q, want %q", src, got, want)
 		}
 	}
+}
+
+// manyAddresses are n addresses, each its own.
+func manyAddresses(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = "a" + strconv.Itoa(i) + ".example.com"
+	}
+	return out
 }

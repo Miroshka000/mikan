@@ -2,6 +2,7 @@ package build
 
 import (
 	"fmt"
+	"hash/fnv"
 	"strconv"
 	"strings"
 	"unicode"
@@ -23,6 +24,9 @@ type Profile struct {
 	// Vars are the user's values of the variables a host's name may have (serve.Values);
 	// nil leaves them as written.
 	Vars map[string]string
+	// Seed picks the user's one of a host's more addresses and TLS names: the subscription's
+	// token, so that a user keeps them and users spread over them. "": the host's own.
+	Seed string
 	// Groups are the profile's groups, with their defaults: a proxy never takes the name of
 	// one, nor of PROXY. The groups of countries and routes give way to the proxies.
 	Groups model.GroupNames
@@ -82,7 +86,7 @@ func Proxies(p Profile) []model.Proxy {
 			if prefix := NodePrefix(n.Name); multi && !in.Named && prefix != "" {
 				base = prefix + " " + base
 			}
-			for i, h := range hosts(in) {
+			for i, h := range hosts(in, p.Seed) {
 				// A host's own name is the admin's, as typed: no flag of the node.
 				own := base
 				if h.name != "" {
@@ -130,18 +134,42 @@ type host struct {
 // gives what it gave before it had hosts, with the default host's own fields. The others
 // are whole, an empty field is what clients get without it. An inbound with no hosts is
 // reached at the default alone.
-func hosts(in model.Inbound) []host {
+func hosts(in model.Inbound, seed string) []host {
 	out := []host{{}}
 	for i, h := range in.Hosts {
 		o := Options{ALPN: h.ALPN, IPVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.CDN}
+		addr := pick(seed, "address", in.ID, i, h.Address, h.Addresses)
+		sni := pick(seed, "sni", in.ID, i, h.SNI, h.SNIs)
 		if i == 0 {
+			// The default host is the template's; a choice of its more values goes over it.
 			out[0].options, out[0].name = o, h.Name
+			if addr != h.Address {
+				out[0].client.Server = addr // one of the more ones: never empty
+			}
+			if sni != h.SNI {
+				out[0].client.SNI = sni
+			}
 			continue
 		}
-		out = append(out, host{own: true, options: o, name: h.Name, client: proto.ClientOverrides{Server: h.Address, Port: h.Port,
-			SNI: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint}})
+		out = append(out, host{own: true, options: o, name: h.Name, client: proto.ClientOverrides{Server: addr, Port: h.Port,
+			SNI: sni, Host: h.Host, Fingerprint: h.Fingerprint}})
 	}
 	return out
+}
+
+// pick is the user's one of a host's own value and its more ones: the same for one seed (the
+// user's token), spread over the users; the host's own without a seed or more values. kind,
+// the inbound and the host's position make the picks of each list their own.
+func pick(seed, kind string, inbound int64, pos int, own string, more []string) string {
+	if seed == "" || len(more) == 0 {
+		return own
+	}
+	h := fnv.New64a()
+	fmt.Fprintf(h, "%s|%s|%d|%d", seed, kind, inbound, pos)
+	if i := h.Sum64() % uint64(len(more)+1); i > 0 {
+		return more[i-1]
+	}
+	return own
 }
 
 // HostNames are the names of the hosts of ins that have variables to fill ({…}).

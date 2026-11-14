@@ -281,7 +281,7 @@ func TestInboundsCarryTheirHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := e.st.Q.AddInboundHost(e.ctx, db.AddInboundHostParams{InboundID: a.ID, Address: "b.example.com", Sni: "s.example.com", Host: "h.example.com",
-		Alpn: []string{"h2", "http/1.1"}, IpVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, Cdn: true}); err != nil {
+		Alpn: []string{"h2", "http/1.1"}, IpVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, Cdn: true, Addresses: []string{"b2.example.com"}, Snis: []string{"s2.example.com"}}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := (&subscription{h: e.h, u: u, cfg: e.cfg}).Inbounds(e.ctx)
@@ -289,8 +289,9 @@ func TestInboundsCarryTheirHosts(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[int64][]submodel.Host{
-		a.ID: {{Address: "proxy.example.com", Port: 8443, Fingerprint: "ios", ALPN: []string{}, IPVersion: "ipv6"},
-			{Address: "b.example.com", SNI: "s.example.com", Host: "h.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true}},
+		a.ID: {{Address: "proxy.example.com", Port: 8443, Fingerprint: "ios", ALPN: []string{}, IPVersion: "ipv6", Addresses: []string{}, SNIs: []string{}},
+			{Address: "b.example.com", SNI: "s.example.com", Host: "h.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true,
+				Addresses: []string{"b2.example.com"}, SNIs: []string{"s2.example.com"}}},
 		b.ID: nil,
 	}
 	if len(got) != 2 {

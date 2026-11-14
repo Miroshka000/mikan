@@ -80,6 +80,10 @@ type Host struct {
 	// Name is the proxy's name, the variables of the profile title in it ({days}, {left}…)
 	// filled for the user (build.Profile.Vars); "": the inbound's.
 	Name string
+	// Addresses and SNIs are more of Address and SNI: the user gets one of the host's own
+	// and these, the same one at every update (build.Profile.Seed).
+	Addresses []string
+	SNIs      []string
 }
 
 // GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.

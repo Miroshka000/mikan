@@ -17,7 +17,7 @@ import { TITLE_VARS, unknownVars } from "../../../lib/title-vars";
 type Host = Schemas["HostView"];
 
 /** A host's own fields as its inputs hold them: those no template holds, the default host's too. */
-type OwnForm = { name: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean };
+type OwnForm = { name: string; addresses: string; snis: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean };
 
 /** A host as its inputs hold it; id 0 is one not saved yet. */
 type HostForm = OwnForm & { id: number; address: string; port: string; sni: string; host: string; fingerprint: string };
@@ -30,6 +30,8 @@ const formOf = (h: Host): HostForm => ({
   host: h.host,
   fingerprint: h.fingerprint,
   name: h.name,
+  addresses: h.addresses.join("\n"),
+  snis: h.snis.join("\n"),
   alpn: h.alpn,
   ipVersion: h.ip_version,
   mux: h.mux.enabled,
@@ -37,16 +39,17 @@ const formOf = (h: Host): HostForm => ({
   muxPadding: h.mux.padding,
   cdn: h.cdn,
 });
-const emptyForm: HostForm = { id: 0, address: "", port: "", sni: "", host: "", fingerprint: "", name: "", alpn: [], ipVersion: "", mux: false, muxProtocol: "", muxPadding: false, cdn: false };
+const emptyForm: HostForm = { id: 0, address: "", port: "", sni: "", host: "", fingerprint: "", name: "", addresses: "", snis: "", alpn: [], ipVersion: "", mux: false, muxProtocol: "", muxPadding: false, cdn: false };
 
 const IP_VERSIONS = ["ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"] as const;
 const MUX_PROTOCOLS = ["smux", "yamux", "h2mux"];
 
-type OwnFieldsCan = { alpn: boolean; alpnValues: string[]; mux: boolean; cdn: boolean };
+type OwnFieldsCan = { sni: boolean; alpn: boolean; alpnValues: string[]; mux: boolean; cdn: boolean };
 
 /** Which own fields the inbound's protocol can use; the panel refuses the others with a reason. */
 function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
   return {
+    sni: inbound.client_sni,
     // TLS on the node's certificate, or QUIC: a REALITY client speaks the target site's TLS.
     alpn: inbound.host_alpn.length > 0,
     // The panel's word: over QUIC the listener's own ALPN, over TCP h2 and HTTP/1.1.
@@ -57,10 +60,15 @@ function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
   };
 }
 
+/** The values of a list, one per line (or comma), as the API takes them. */
+const lines = (s: string) => s.split(/[\s,]+/).filter(Boolean);
+
 /** The own fields of a form as the API takes them. */
-function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "alpn" | "ip_version" | "mux" | "cdn"> {
+function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "addresses" | "snis" | "alpn" | "ip_version" | "mux" | "cdn"> {
   return {
     name: f.name.trim(),
+    addresses: lines(f.addresses),
+    snis: can.sni ? lines(f.snis) : [],
     // In the order the admin ticked them: the first is what clients prefer.
     alpn: can.alpn ? f.alpn.filter((a) => can.alpnValues.includes(a)) : [],
     ip_version: f.ipVersion,
@@ -163,6 +171,15 @@ function DefaultHostRow({ inbound, host }: { inbound: Inbound; host: Host }) {
   );
 }
 
+/** A list of more values of a host, one per line. */
+function ChoicesField({ uid, label, hint, value, onChange, error }: { uid: string; label: string; hint: string; value: string; onChange: (v: string) => void; error?: string }) {
+  return (
+    <Field label={label} htmlFor={uid} hint={hint} error={error}>
+      <textarea id={uid} className="input mono" rows={2} value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={!!error} spellCheck={false} autoComplete="off" />
+    </Field>
+  );
+}
+
 /** The inputs of a host's own fields; those the protocol cannot use are not shown. */
 function OwnFields({ uid, f, set, can, errors, inbound }: { uid: string; f: OwnForm; set: (patch: Partial<OwnForm>) => void; can: OwnFieldsCan; errors: Record<string, string>; inbound: Inbound }) {
   const unknown = unknownVars(f.name);
@@ -185,6 +202,8 @@ function OwnFields({ uid, f, set, can, errors, inbound }: { uid: string; f: OwnF
           autoComplete="off"
         />
       </Field>
+      <ChoicesField uid={`${uid}-addresses`} label={t("inbounds.hosts.addresses")} hint={t("inbounds.hosts.addressesHint")} value={f.addresses} onChange={(addresses) => set({ addresses })} error={errors.addresses} />
+      {can.sni ? <ChoicesField uid={`${uid}-snis`} label={t("inbounds.hosts.snis")} hint={t("inbounds.hosts.snisHint")} value={f.snis} onChange={(snis) => set({ snis })} error={errors.snis} /> : null}
       <div className="-mt-1 flex flex-wrap items-center gap-2" role="group" aria-label={t("settings.titleVars")}>
         <span className="text-xs text-[var(--ink-500)]">{t("settings.titleVars")}</span>
         {TITLE_VARS.map((v) => (

@@ -21,7 +21,7 @@ import (
 // (UpdateHost). Every other host is one more proxy of the inbound in the subscriptions.
 //
 // A host also has fields of its own that no template holds (ALPN, the IP version,
-// multiplexing, a CDN in front, its name): the default host has them too, written only through the
+// multiplexing, a CDN in front, its name, more addresses and TLS names): the default host has them too, written only through the
 // hosts, and a write of the template leaves them as they are.
 
 var (
@@ -50,7 +50,14 @@ type Host struct {
 	// Name is the host's proxy name in subscriptions, with the variables of the profile
 	// title filled for each user; "": the inbound's, numbered after the default host's.
 	Name string
+	// Addresses and SNIs are more of Address and SNI: each client gets one of the host's
+	// own and these, always the same one (by its token). At most HostChoicesMax each.
+	Addresses []string
+	SNIs      []string
 }
+
+// HostChoicesMax bounds a host's more addresses and TLS names each.
+const HostChoicesMax = 16
 
 // The values of a host's own fields, as mihomo names them.
 var (
@@ -97,7 +104,7 @@ func (s *Inbounds) AddHost(ctx context.Context, id int64, h Host) (db.InboundHos
 			return err
 		}
 		row, err = q.AddInboundHost(ctx, db.AddInboundHostParams{InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs})
 		return err
 	})
 	return row, err
@@ -143,7 +150,7 @@ func (s *Inbounds) UpdateHost(ctx context.Context, id, hostID int64, h Host) (db
 			return err
 		}
 		row, err = q.UpdateInboundHost(ctx, db.UpdateInboundHostParams{ID: hostID, InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrUnknownHost
 		}
@@ -197,7 +204,7 @@ type defaultHost struct {
 
 func (d defaultHost) write(ctx context.Context, q *db.Queries, inboundID int64) error {
 	return q.SetInboundHostOptions(ctx, db.SetInboundHostOptionsParams{ID: d.id, InboundID: inboundID,
-		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name})
+		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name, Addresses: d.h.Addresses, Snis: d.h.SNIs})
 }
 
 // trimmed is h as it is saved: each ALPN once, in the order given, and no protocol or
@@ -205,6 +212,7 @@ func (d defaultHost) write(ctx context.Context, q *db.Queries, inboundID int64) 
 func (h Host) trimmed() Host {
 	h.Address, h.SNI, h.Host, h.Fingerprint = strings.TrimSpace(h.Address), strings.TrimSpace(h.SNI), strings.TrimSpace(h.Host), strings.TrimSpace(h.Fingerprint)
 	h.Name = strings.TrimSpace(h.Name)
+	h.Addresses, h.SNIs = choices(h.Addresses, h.Address), choices(h.SNIs, h.SNI)
 	h.IPVersion, h.MuxProtocol = strings.TrimSpace(h.IPVersion), strings.TrimSpace(h.MuxProtocol)
 	alpn := []string{}
 	for _, a := range h.ALPN {
@@ -217,6 +225,18 @@ func (h Host) trimmed() Host {
 		h.MuxProtocol, h.MuxPadding = "", false
 	}
 	return h
+}
+
+// choices is a list of more values as it is saved: trimmed, each once, none empty or the
+// host's own (one).
+func choices(list []string, one string) []string {
+	out := []string{}
+	for _, v := range list {
+		if v = strings.TrimSpace(v); v != "" && !strings.EqualFold(v, one) && !slices.ContainsFunc(out, func(x string) bool { return strings.EqualFold(x, v) }) {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // checkHost holds a host to the rules of the inbound's own client endpoint (config is its
@@ -286,6 +306,23 @@ func checkHostOptions(config string, h Host) error {
 func hostOptions(t proto.Template, h Host) error {
 	refuse := func(field, code string) error {
 		return &EditError{Field: field, Err: &proto.Error{Code: code, Field: field}}
+	}
+	// The more addresses and names are held to the rules of the host's own.
+	if len(h.Addresses) > HostChoicesMax {
+		return refuse("addresses", "host_choices_long")
+	}
+	if len(h.SNIs) > HostChoicesMax {
+		return refuse("snis", "host_choices_long")
+	}
+	for _, a := range h.Addresses {
+		if err := proto.SetClientEndpoint(t.Clone(), a, 0, "", ""); err != nil {
+			return refuse("addresses", "config_client_server")
+		}
+	}
+	for _, n := range h.SNIs {
+		if err := proto.SetClientEndpoint(t.Clone(), "", 0, n, ""); err != nil {
+			return refuse("snis", "config_client_sni")
+		}
 	}
 	for _, a := range h.ALPN {
 		if !slices.Contains(HostALPN, a) {
