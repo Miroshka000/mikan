@@ -12,8 +12,31 @@ import (
 // cannot carry: TUIC, AnyTLS and the mihomo-only protocols, Hysteria2 with Gecko, and a
 // certificate pinned by anything but its SHA-256, for which xray refuses the whole config.
 // No outbound multiplexes (mux): it breaks XTLS Vision, and gRPC and XHTTP multiplex on
-// their own.
+// their own; an address for clients' sing-mux is not xray's mux and stays out too.
 func outbound(p model.Proxy, tag string) (map[string]any, bool) {
+	o, ok := outboundOf(p, tag)
+	if ok && p.IPVersion != "" {
+		ss, _ := o["streamSettings"].(map[string]any)
+		if ss == nil {
+			ss = map[string]any{}
+			o["streamSettings"] = ss
+		}
+		sock, _ := ss["sockopt"].(map[string]any)
+		if sock == nil {
+			sock = map[string]any{}
+			ss["sockopt"] = sock
+		}
+		sock["domainStrategy"] = ipStrategy[p.IPVersion]
+	}
+	return o, ok
+}
+
+// ipStrategy is xray's domainStrategy of a dial for mihomo's ip-version: the strict ones
+// use that version alone, the preferring ones fall back to the other.
+var ipStrategy = map[string]string{"ipv4": "ForceIPv4", "ipv6": "ForceIPv6", "ipv4-prefer": "UseIPv4v6", "ipv6-prefer": "UseIPv6v4"}
+
+// outboundOf is outbound without the IP version.
+func outboundOf(p model.Proxy, tag string) (map[string]any, bool) {
 	o := map[string]any{"tag": tag}
 	switch p.Type {
 	case "vless":
@@ -124,7 +147,7 @@ func secure(ss map[string]any, p model.Proxy) bool {
 	if t.Fingerprint != "" {
 		tls["fingerprint"] = t.Fingerprint
 	}
-	if p.Type == "hysteria2" && len(p.ALPN) > 0 {
+	if len(p.ALPN) > 0 { // Hysteria2's own, or an address for clients'
 		tls["alpn"] = p.ALPN
 	}
 	if t.Pin != "" {

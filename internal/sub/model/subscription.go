@@ -63,8 +63,7 @@ type Inbound struct {
 // Host is one place clients reach an inbound at; an empty field (port 0) keeps what they get
 // without it: the node's address, the inbound's port, the usual TLS name, the server's HTTP
 // Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing. The host's
-// own fields (ALPN to CDN) are the default host's too, and no template holds them; the
-// panel saves them, and the build does not read them yet.
+// own fields (ALPN to CDN) are the default host's too, and no template holds them.
 type Host struct {
 	Address     string
 	Port        int

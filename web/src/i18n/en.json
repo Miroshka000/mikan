@@ -1937,7 +1937,7 @@
     "hosts": {
       "title": "Addresses for clients",
       "sub": "Several places clients can reach this protocol at",
-      "note": "The default address is the one clients get now. Every other address is one more server in the subscription, named as the protocol with a number; a field left empty there is the node's, not the default address's. ALPN, the IP version, multiplexing and CDN are saved for every address, but reach the apps in the next version.",
+      "note": "The default address is the one clients get now. Every other address is one more server in the subscription, named as the protocol with a number; a field left empty there is the node's, not the default address's. ALPN, the IP version and CDN reach every app, multiplexing the Clash apps and sing-box.",
       "default": "Default:",
       "defaultHint": "The address, port and SNI change in \"Behind another server\" or \"Behind a CDN\" above, and with the fingerprint; the fields below are this address's own.",
       "nodeAddress": "node address",

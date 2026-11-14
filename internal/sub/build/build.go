@@ -78,7 +78,7 @@ func Proxies(p Profile) []model.Proxy {
 				}
 				c, err := Proxy(tpl, Input{Name: name, Host: n.Endpoint.Host, Port: port, PortSpec: spec,
 					SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Keys: p.Keys, SSOneKey: n.SSOneKey,
-					Client: h.client, OwnClient: h.own})
+					Client: h.client, OwnClient: h.own, Options: h.options})
 				if err != nil {
 					p.skip(in, err)
 					continue
@@ -94,21 +94,25 @@ func Proxies(p Profile) []model.Proxy {
 
 // host is one place an inbound is reached at, as Proxy takes it.
 type host struct {
-	client proto.ClientOverrides
-	own    bool // client is the whole of it, not over the template's mikan.client
+	client  proto.ClientOverrides
+	own     bool // client is the whole of it, not over the template's mikan.client
+	options Options
 }
 
 // hosts are the places clients reach in at, one proxy each. The default host is the
 // template's mikan.client, which it repeats: that one reads the template, so an inbound
-// gives what it gave before it had hosts. The others are whole, an empty field is what
-// clients get without it. An inbound with no hosts is reached at the default alone.
+// gives what it gave before it had hosts, with the default host's own fields. The others
+// are whole, an empty field is what clients get without it. An inbound with no hosts is
+// reached at the default alone.
 func hosts(in model.Inbound) []host {
 	out := []host{{}}
 	for i, h := range in.Hosts {
+		o := Options{ALPN: h.ALPN, IPVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.CDN}
 		if i == 0 {
+			out[0].options = o
 			continue
 		}
-		out = append(out, host{own: true, client: proto.ClientOverrides{Server: h.Address, Port: h.Port,
+		out = append(out, host{own: true, options: o, client: proto.ClientOverrides{Server: h.Address, Port: h.Port,
 			SNI: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint}})
 	}
 	return out

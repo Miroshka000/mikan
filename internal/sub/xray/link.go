@@ -105,6 +105,9 @@ func security(q url.Values, p model.Proxy) {
 	case "vless", "trojan", "anytls":
 		q.Set("security", "tls")
 		q.Set("fp", t.Fingerprint)
+		if len(p.ALPN) > 0 {
+			q.Set("alpn", strings.Join(p.ALPN, ","))
+		}
 	}
 	if t.SNI != "" {
 		q.Set("sni", t.SNI)

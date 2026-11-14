@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"mikan/internal/proto"
@@ -124,5 +125,52 @@ func TestHostPortStopsHopping(t *testing.T) {
 	want := []string{"nl.example.com:20000 20000-20099", "relay.example.com:20000 ", "relay.example.com:30000 ", "other.example.com:20000 20000-20099"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("proxies:\n%q\nwant\n%q", got, want)
+	}
+}
+
+// An address's own fields go on its proxy where the protocol carries them, and one the
+// template no longer takes is left out rather than breaking the proxy. A CDN in front
+// leaves the node's self-signed certificate unpinned.
+func TestHostOptionsOnProxies(t *testing.T) {
+	pinned := model.Node{ID: 1, Name: "n", Endpoint: model.Endpoint{Host: "198.51.100.1", PinSHA256: strings.Repeat("ab", 32)}}
+	ws := "type: vless\nws-path: /w\nmikan: {tls: node}\n"
+	grpc := "type: trojan\ngrpc-service-name: g\nmikan: {tls: node}\n"
+	hy2 := proto.Marshal(proto.Template{"type": "hysteria2", "alpn": []any{"h3"}})
+	vision := "type: vless\nmikan: {tls: node, flow: xtls-rprx-vision}\n"
+	all := Options{ALPN: []string{"http/1.1", "h2", "h3"}, IPVersion: "ipv4", Mux: true, MuxProtocol: "yamux", MuxPadding: true}
+	for _, c := range []struct {
+		name, src string
+		o         Options
+		alpn      string
+		mux       bool
+		pin       bool
+	}{
+		{"ws", ws, all, "http/1.1,h2", true, true},
+		{"ws without http/1.1", ws, Options{ALPN: []string{"h2"}}, "", false, true},
+		{"grpc", grpc, all, "http/1.1,h2", true, true},
+		{"hysteria2", hy2, all, "h3", false, true},
+		{"vision", vision, all, "http/1.1,h2", false, true},
+		{"ws behind a CDN", ws, Options{CDN: true}, "", false, false},
+	} {
+		tpl, err := proto.Parse(c.src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := Proxy(tpl, Input{Name: "x", Host: pinned.Endpoint.Host, Port: 443, PortSpec: "443", PinSHA256: pinned.Endpoint.PinSHA256, Keys: testKeys, Options: c.o})
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got := strings.Join(p.ALPN, ","); got != c.alpn {
+			t.Errorf("%s: ALPN %q, want %q", c.name, got, c.alpn)
+		}
+		if (p.Smux != nil) != c.mux || c.mux && (p.Smux.Protocol != "yamux" || !p.Smux.Padding) {
+			t.Errorf("%s: mux %+v, want %v", c.name, p.Smux, c.mux)
+		}
+		if (p.TLS.Pin != "") != c.pin {
+			t.Errorf("%s: pin %q, want %v", c.name, p.TLS.Pin, c.pin)
+		}
+		if p.IPVersion != c.o.IPVersion {
+			t.Errorf("%s: IP version %q", c.name, p.IPVersion)
+		}
 	}
 }

@@ -125,6 +125,7 @@ func templateConfig(p profile.Profile, src string) (map[string]any, error) {
 		direct = model.FreeTag("direct", tags)
 		outs = append(outs, map[string]any{"type": "direct", "tag": direct})
 	}
+	resolveWith(servers, defaultResolver(cfg))
 	cfg["outbounds"] = outs
 	// Checked before the panel's own rule goes in, for a refusal to name the admin's rules
 	// by their places.
@@ -133,6 +134,20 @@ func templateConfig(p profile.Profile, src string) (map[string]any, error) {
 	}
 	hostsDirect(cfg, p.Direct, direct)
 	return cfg, nil
+}
+
+// defaultResolver is the DNS server tag of the template's route.default_domain_resolver,
+// written as a tag or as {"server": tag}; "" for none.
+func defaultResolver(cfg map[string]any) string {
+	route, _ := cfg["route"].(map[string]any)
+	switch r := route["default_domain_resolver"].(type) {
+	case string:
+		return r
+	case map[string]any:
+		s, _ := r["server"].(string)
+		return s
+	}
+	return ""
 }
 
 // hostsDirect sends the panel's and the nodes' hosts to the outbound direct, ahead of the

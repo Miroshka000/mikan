@@ -39,8 +39,13 @@ type Proxy struct {
 	// Encryption is VLESS Encryption as the app sends it, with the public halves of the
 	// server's keys; "": none.
 	Encryption string
-	// ALPN is what Hysteria2, TUIC and ShadowQUIC offer; nil: the core's own.
-	ALPN       []string
+	// ALPN is what the app offers in TLS: Hysteria2's, TUIC's and ShadowQUIC's own, or an
+	// address for clients' (VLESS, Trojan, AnyTLS on the node's certificate); nil: the
+	// core's own.
+	ALPN []string
+	// IPVersion is how the app reaches Server: ipv4, ipv6, ipv4-prefer or ipv6-prefer
+	// (mihomo's names); "": the core's own.
+	IPVersion  string
 	Obfs       *Obfs  // Hysteria2's obfuscation; nil: none
 	Congestion string // TUIC's congestion control
 	// UDPRelay is how TUIC relays UDP: quic; "": native, packet by packet. An own Clash
