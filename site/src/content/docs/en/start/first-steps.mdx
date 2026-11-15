@@ -66,11 +66,20 @@ Changing the port or the camouflage reconnects this protocol's clients for a few
 - [Telegram bot](/mikan/en/billing/telegram/): so subscribers can see their expiry date and renew on their own.
 - [Nodes](/mikan/en/nodes/nodes/): more servers in other countries.
 
+## Sign in with GitHub or Telegram
+
+Since 0.5.2.1 you can sign in to the panel with your GitHub or Telegram account instead of the password: **Settings → Security → Sign-in with GitHub and Telegram**. With 2FA on, the code is still asked.
+
+- **GitHub**: create an OAuth app on GitHub (Settings → Developer settings → OAuth Apps), put the address from Sign-in setup into its Authorization callback URL, and paste the app's Client ID and secret there.
+- **Telegram**: the sign-in goes through the panel's bot and needs the panel's domain. Give it to the bot in @BotFather: `/setdomain`.
+
+Then type the password and press Link GitHub or Link Telegram: the browser goes to the service and comes back. The sign-in page gets a button. A new password unlinks the accounts.
+
 ## If you lose access
 
 | What happened | Command on the server |
 |---|---|
 | no panel link | `mikan url` |
-| forgot the password | `mikan reset-password`: a new password, and all sessions, API keys and passkeys are revoked |
+| forgot the password | `mikan reset-password`: a new password, and all sessions, API keys and passkeys are revoked, and the linked GitHub and Telegram accounts unlinked |
 | the link may have leaked | `mikan reset-path`: a new link, and the old one stops working in a few seconds |
 | lost the phone with 2FA | a recovery code at sign-in, or `mikan disable-2fa` |

@@ -111,3 +111,81 @@ func CheckInitData(token, initData string, now time.Time) (tgapi.User, error) {
 	}
 	return u, nil
 }
+
+// The Telegram login (oauth.telegram.org, the login widget's own page) proves who signed in
+// with the account's fields signed with a key derived from the bot token: unlike initData's,
+// the SHA-256 of the token itself.
+
+// LoginTTL: the login comes back at once, so an older signature is not accepted; within it
+// the caller takes each signature once.
+const LoginTTL = 10 * time.Minute
+
+var ErrLogin = errors.New("telegram_login")
+
+// LoginUser is the account a Telegram login is of.
+type LoginUser struct {
+	ID       int64
+	Username string // "" without one
+	Name     string // first and last name
+	Hash     string // the signature, which the caller takes once
+}
+
+// CheckLogin verifies the result of a Telegram login: the base64 of its JSON fields, as
+// oauth.telegram.org gives it back in the address (#tgAuthResult=…).
+func CheckLogin(token, result string, now time.Time) (LoginUser, error) {
+	var raw []byte
+	var err error
+	for _, enc := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding} {
+		if raw, err = enc.DecodeString(strings.TrimSpace(result)); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return LoginUser{}, ErrLogin
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return LoginUser{}, ErrLogin
+	}
+	vals := map[string]string{}
+	for k, v := range obj {
+		var s string
+		if json.Unmarshal(v, &s) == nil {
+			vals[k] = s
+			continue
+		}
+		// Numbers and the like are signed as written.
+		vals[k] = string(v)
+	}
+	hash := vals["hash"]
+	if hash == "" || token == "" {
+		return LoginUser{}, ErrLogin
+	}
+	keys := make([]string, 0, len(vals))
+	for k := range vals {
+		if k != "hash" {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	lines := make([]string, len(keys))
+	for i, k := range keys {
+		lines[i] = k + "=" + vals[k]
+	}
+	key := sha256.Sum256([]byte(token))
+	m := hmac.New(sha256.New, key[:])
+	m.Write([]byte(strings.Join(lines, "\n")))
+	want, err := hex.DecodeString(hash)
+	if err != nil || !hmac.Equal(m.Sum(nil), want) {
+		return LoginUser{}, ErrLogin
+	}
+	at, err := strconv.ParseInt(vals["auth_date"], 10, 64)
+	if err != nil || now.Sub(time.Unix(at, 0)) > LoginTTL || time.Unix(at, 0).Sub(now) > time.Minute {
+		return LoginUser{}, ErrLogin
+	}
+	id, err := strconv.ParseInt(vals["id"], 10, 64)
+	if err != nil || id <= 0 {
+		return LoginUser{}, ErrLogin
+	}
+	return LoginUser{ID: id, Username: vals["username"], Name: strings.TrimSpace(vals["first_name"] + " " + vals["last_name"]), Hash: hash}, nil
+}

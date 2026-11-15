@@ -38,6 +38,9 @@ func TestResetPasswordRevokesSessionsAndKeys(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if _, err := st.Q.CreateAdminIdentity(ctx, db.CreateAdminIdentityParams{AdminID: a.ID, Provider: "github", Subject: "42", Name: "octo", CreatedAt: now.Unix()}); err != nil {
+		t.Fatal(err)
+	}
 	var out bytes.Buffer
 	if err := resetPassword(ctx, st, []string{"--password-stdin"}, strings.NewReader("brand-new-password\n"), &out); err != nil {
 		t.Fatal(err)
@@ -51,7 +54,10 @@ func TestResetPasswordRevokesSessionsAndKeys(t *testing.T) {
 	if rows, _ := st.Q.ListAdminPasskeys(ctx, a.ID); len(rows) != 0 {
 		t.Fatalf("%d passkeys survived the reset", len(rows))
 	}
-	if !strings.Contains(out.String(), "1 API keys and 2 passkeys are revoked") || strings.Contains(out.String(), "brand-new-password") {
+	if rows, _ := st.Q.ListAdminIdentities(ctx, a.ID); len(rows) != 0 {
+		t.Fatalf("%d linked accounts survived the reset", len(rows))
+	}
+	if !strings.Contains(out.String(), "1 API keys, 2 passkeys and 1 linked accounts are revoked") || strings.Contains(out.String(), "brand-new-password") {
 		t.Fatalf("output: %q", out.String())
 	}
 	got, _ := st.Q.GetAdmin(ctx, a.ID)

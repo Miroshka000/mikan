@@ -901,7 +901,18 @@
       "passkey_exists": "Этот ключ уже добавлен",
       "default_host": "Адрес по умолчанию удаляется только вместе с протоколом",
       "host_state": "Статус: активен, лимит исчерпан, истёк или отключён",
-      "host_trial": "Пробные: только пробным или всем, кроме пробных"
+      "host_trial": "Пробные: только пробным или всем, кроме пробных",
+      "github_client_id": "Client ID без пробелов и знаков адреса",
+      "github_off": "Вход через GitHub не настроен",
+      "github_denied": "Вход через GitHub отменён",
+      "github_failed": "GitHub не подтвердил вход: проверьте Client ID, secret и callback URL",
+      "identity_expired": "Время на вход вышло, начните заново",
+      "identity_no_address": "У панели нет адреса",
+      "identity_taken": "Этот аккаунт уже привязан, или у вас уже есть аккаунт этого сервиса",
+      "identity_unknown": "Этот аккаунт не привязан ни к одному админу",
+      "telegram_login": "Telegram не подтвердил вход",
+      "telegram_no_domain": "Для входа через Telegram панели нужен домен",
+      "telegram_off": "Бот Telegram не подключён"
     },
     "acme": {
       "port80_busy": "Порт 80 занят другой программой, а центр сертификации проверяет сервер через него. Если это nginx или Caddy, команда ниже пропустит проверку к mikan; иначе освободите порт",
@@ -945,7 +956,12 @@
     "or": "или",
     "passkey": "Войти по ключу доступа",
     "passkeyFailed": "Ключ доступа не принят. Попробуйте ещё раз или войдите по паролю.",
-    "passkeyAddress": "Ключи доступа работают, только когда панель открыта по её домену."
+    "passkeyAddress": "Ключи доступа работают, только когда панель открыта по её домену.",
+    "via": {
+      "github": "Войти через GitHub",
+      "telegram": "Войти через Telegram"
+    },
+    "externalFailed": "Не удалось войти. Попробуйте ещё раз."
   },
   "dashboard": {
     "title": "Обзор",
@@ -2384,7 +2400,7 @@
     "certTemp": "временный",
     "certNote": "Продлевается автоматически. Для выпуска нужен открытый порт 80, он занимается на несколько секунд.",
     "passwordChanged": "Пароль изменён, другие сессии завершены",
-    "revokeKeys": "Отозвать и ключи API, и ключи доступа: ключ, выпущенный или добавленный из угнанной сессии, переживёт смену пароля",
+    "revokeKeys": "Отозвать ключи API и ключи доступа, отвязать GitHub и Telegram: выпущенное или привязанное из угнанной сессии иначе переживёт смену пароля",
     "twoFactorPasswordHint": "Для включения 2FA нужен пароль.",
     "currentPassword": "Текущий пароль",
     "newPassword": "Новый пароль",
@@ -3208,7 +3224,34 @@
     "passkeyDeleteText": "Войти им будет нельзя. Пароль остаётся.",
     "passkeyUnsupported": "Этот браузер не умеет создавать ключи доступа.",
     "passkeyNoDomain": "Для ключей доступа нужен домен панели: укажите его на вкладке «Основное», в поле «Домен».",
-    "passkeyDomainNote": "Ключ доступа привязан к домену панели: после смены домена ключи нужно добавить заново."
+    "passkeyDomainNote": "Ключ доступа привязан к домену панели: после смены домена ключи нужно добавить заново.",
+    "identities": "Вход через GitHub и Telegram",
+    "identitiesSub": "Аккаунт заменяет пароль; код 2FA, если она включена, всё равно спрашивается",
+    "identitiesNone": "Аккаунты не привязаны.",
+    "identityProvider": {
+      "github": "GitHub",
+      "telegram": "Telegram"
+    },
+    "identityLink": {
+      "github": "Привязать GitHub",
+      "telegram": "Привязать Telegram"
+    },
+    "identityUnlink": "Отвязать",
+    "identityLinked": "{provider} привязан",
+    "identityDeleted": "Аккаунт отвязан",
+    "identityFailed": "Не удалось привязать аккаунт",
+    "identityPasswordHint": "Без пароля украденная сессия могла бы привязать свой аккаунт",
+    "identityNotReady": "Сначала настройте вход ниже: приложение GitHub или бот Telegram с доменом панели.",
+    "identityDeleteTitle": "Отвязать аккаунт?",
+    "identityDeleteText": "Войти через него больше не получится, пока не привяжете снова.",
+    "identitySetup": "Настройка входа",
+    "githubAppHint": "Создайте OAuth-приложение в GitHub (Settings → Developer settings → OAuth Apps) и укажите в нём Authorization callback URL ниже. Client ID и secret вставьте сюда; пустой Client ID выключает вход через GitHub.",
+    "githubCallback": "Authorization callback URL",
+    "githubCallbackCopied": "Адрес скопирован",
+    "githubSecretSet": "Сохранён; оставьте пустым, чтобы не менять",
+    "telegramLoginNoBot": "Вход идёт через бота панели: подключите его в разделе Telegram.",
+    "telegramLoginNoDomain": "Telegram пускает только на домен: задайте панели домен.",
+    "telegramLoginHint": "Вход идёт через бота @{bot}. Укажите ему домен в @BotFather: /setdomain → {domain}."
   },
   "deviceMode": {
     "label": "Как считать:",

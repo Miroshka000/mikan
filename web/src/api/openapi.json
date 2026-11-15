@@ -3467,6 +3467,68 @@
         ],
         "type": "object"
       },
+      "GitHubProvider": {
+        "additionalProperties": false,
+        "properties": {
+          "callback_url": {
+            "description": "Authorization callback URL, который нужно указать в приложении GitHub; пусто, пока у панели нет адреса",
+            "type": "string"
+          },
+          "client_id": {
+            "description": "Client ID OAuth-приложения GitHub; пусто — вход через GitHub выключен",
+            "type": "string"
+          },
+          "secret_set": {
+            "description": "Client secret сохранён (сам он не показывается)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "client_id",
+          "secret_set",
+          "callback_url"
+        ],
+        "type": "object"
+      },
+      "GithubAppInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "description": "Client ID; пусто — выключить вход через GitHub",
+            "maxLength": 64,
+            "type": "string"
+          },
+          "client_secret": {
+            "description": "Client secret; не передан — остаётся сохранённый",
+            "maxLength": 128,
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id"
+        ],
+        "type": "object"
+      },
+      "GithubLoginInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "ticket": {
+            "description": "Из адреса страницы входа (#github=…)",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "totp": {
+            "description": "Код из приложения, если включена 2FA",
+            "maxLength": 16,
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket"
+        ],
+        "type": "object"
+      },
       "Goal": {
         "additionalProperties": false,
         "properties": {
@@ -4113,6 +4175,90 @@
           "snis",
           "states",
           "trial"
+        ],
+        "type": "object"
+      },
+      "IdentityBeginInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "description": "Пароль: без него украденная сессия привязала бы свой аккаунт",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "totp": {
+            "description": "Код из приложения, если включена 2FA",
+            "maxLength": 16,
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "type": "object"
+      },
+      "IdentityProviders": {
+        "additionalProperties": false,
+        "properties": {
+          "github": {
+            "$ref": "#/components/schemas/GitHubProvider"
+          },
+          "telegram": {
+            "$ref": "#/components/schemas/TelegramProvider"
+          }
+        },
+        "required": [
+          "github",
+          "telegram"
+        ],
+        "type": "object"
+      },
+      "IdentityURLOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "description": "Куда перейти браузеру",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "type": "object"
+      },
+      "IdentityView": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "description": "Имя аккаунта там: логин GitHub, @username или имя в Telegram",
+            "type": "string"
+          },
+          "provider": {
+            "enum": [
+              "github",
+              "telegram"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "provider",
+          "name",
+          "created_at"
         ],
         "type": "object"
       },
@@ -4904,6 +5050,24 @@
         "required": [
           "username",
           "password"
+        ],
+        "type": "object"
+      },
+      "LoginMethodsOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "github": {
+            "description": "Можно войти через GitHub",
+            "type": "boolean"
+          },
+          "telegram": {
+            "description": "Можно войти через Telegram",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "github",
+          "telegram"
         ],
         "type": "object"
       },
@@ -7199,7 +7363,7 @@
             "type": "string"
           },
           "revoke_keys": {
-            "description": "Отозвать и ключи API, и ключи доступа (passkey) (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный или добавленный из угнанной сессии, пережил бы это",
+            "description": "Отозвать ключи API и ключи доступа (passkey), отвязать аккаунты GitHub и Telegram (по умолчанию да): другие сессии завершаются при смене пароля, а выпущенное или привязанное из угнанной сессии пережило бы это",
             "type": "boolean"
           }
         },
@@ -12228,6 +12392,41 @@
         ],
         "type": "object"
       },
+      "TelegramLinkInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "description": "Значение tgAuthResult из адреса, с которым Telegram вернул на страницу",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "type": "object"
+      },
+      "TelegramLoginInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "description": "Значение tgAuthResult из адреса страницы входа",
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "totp": {
+            "description": "Код из приложения, если включена 2FA",
+            "maxLength": 16,
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "type": "object"
+      },
       "TelegramPreviewInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -12260,6 +12459,24 @@
         },
         "required": [
           "html"
+        ],
+        "type": "object"
+      },
+      "TelegramProvider": {
+        "additionalProperties": false,
+        "properties": {
+          "bot": {
+            "description": "Бот панели (@username), через которого идёт вход; пусто — бот не подключён",
+            "type": "string"
+          },
+          "domain": {
+            "description": "Домен, который нужно указать боту в @BotFather (/setdomain); пусто — у панели нет домена, вход через Telegram недоступен",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bot",
+          "domain"
         ],
         "type": "object"
       },
@@ -15009,6 +15226,339 @@
         "x-session-only": true
       }
     },
+    "/api/v1/auth/github/callback": {
+      "get": {
+        "operationId": "github-callback",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "code",
+            "schema": {
+              "maxLength": 512,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "error",
+            "schema": {
+              "maxLength": 128,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Возврат с GitHub",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/identities": {
+      "get": {
+        "operationId": "list-identities",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IdentityView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Аккаунты для входа (GitHub, Telegram)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/identities/github/begin": {
+      "post": {
+        "operationId": "github-link-begin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityBeginInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityURLOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Начать привязку GitHub",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/identities/telegram": {
+      "post": {
+        "operationId": "link-telegram",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramLinkInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Привязать Telegram",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/identities/telegram/begin": {
+      "post": {
+        "operationId": "telegram-link-begin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdentityBeginInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityURLOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Начать привязку Telegram",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/identities/{id}": {
+      "delete": {
+        "operationId": "delete-identity",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Отвязать аккаунт",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/identity-providers": {
+      "get": {
+        "operationId": "identity-providers",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityProviders"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Настройка входа через GitHub и Telegram",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/identity-providers/github": {
+      "put": {
+        "operationId": "set-github-app",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GithubAppInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityProviders"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "OAuth-приложение GitHub",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "operationId": "login",
@@ -15055,6 +15605,125 @@
           {}
         ],
         "summary": "Вход",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login/github": {
+      "post": {
+        "operationId": "github-login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GithubLoginInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeBody"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Вход через GitHub",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login/github/begin": {
+      "post": {
+        "operationId": "github-login-begin",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityURLOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Начать вход через GitHub",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login/methods": {
+      "get": {
+        "operationId": "login-methods",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginMethodsOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Способы входа",
         "tags": [
           "auth"
         ]
@@ -15140,6 +15809,91 @@
           {}
         ],
         "summary": "Начать вход по passkey",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login/telegram": {
+      "post": {
+        "operationId": "telegram-login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramLoginInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeBody"
+                }
+              }
+            },
+            "description": "OK",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Вход через Telegram",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login/telegram/begin": {
+      "post": {
+        "operationId": "telegram-login-begin",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityURLOutputBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {}
+        ],
+        "summary": "Начать вход через Telegram",
         "tags": [
           "auth"
         ]

@@ -23,6 +23,8 @@ export const qk = {
   settings: ["settings"] as const,
   sessions: ["sessions"] as const,
   passkeys: ["passkeys"] as const,
+  identities: ["identities"] as const,
+  identityProviders: ["identity-providers"] as const,
   telegram: ["telegram"] as const,
   updates: ["updates"] as const,
   apiKeys: ["api-keys"] as const,

@@ -92,6 +92,16 @@ type Admin struct {
 	LastLoginAt   sql.NullInt64
 }
 
+type AdminIdentity struct {
+	ID         int64
+	AdminID    int64
+	Provider   string
+	Subject    string
+	Name       string
+	CreatedAt  int64
+	LastUsedAt sql.NullInt64
+}
+
 type AdminPasskey struct {
 	ID           int64
 	AdminID      int64

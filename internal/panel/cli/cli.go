@@ -301,7 +301,7 @@ func resetPassword(ctx context.Context, st *store.Store, args []string, stdin io
 	if err != nil {
 		return err
 	}
-	var keys, passkeys int64
+	var keys, passkeys, identities int64
 	err = st.Tx(ctx, func(q *db.Queries) error {
 		if err := q.SetAdminPassword(ctx, db.SetAdminPasswordParams{PasswordHash: hash, ID: a.ID}); err != nil {
 			return err
@@ -310,8 +310,9 @@ func resetPassword(ctx context.Context, st *store.Store, args []string, stdin io
 			return err
 		}
 		// This is what an owner runs on the server after losing the panel or suspecting a
-		// hijacked session: a key or a passkey made from that session must not survive it.
-		// Scripts get new keys from the admin panel, the admin adds the passkeys again.
+		// hijacked session: a key, a passkey or an account linked from that session must not
+		// survive it. Scripts get new keys from the admin panel, the admin adds the passkeys
+		// and links the accounts again.
 		keys, err = q.DeleteAPIKeysOf(ctx, a.ID)
 		if err != nil {
 			return err
@@ -319,12 +320,15 @@ func resetPassword(ctx context.Context, st *store.Store, args []string, stdin io
 		if passkeys, err = q.DeleteAdminPasskeysOf(ctx, a.ID); err != nil {
 			return err
 		}
-		return audit.Write(ctx, q, time.Now(), audit.Entry{Action: "cli.reset_password", TargetType: "admin", TargetID: a.Username, Details: map[string]any{"keys_revoked": keys, "passkeys_revoked": passkeys}})
+		if identities, err = q.DeleteAdminIdentitiesOf(ctx, a.ID); err != nil {
+			return err
+		}
+		return audit.Write(ctx, q, time.Now(), audit.Entry{Action: "cli.reset_password", TargetType: "admin", TargetID: a.Username, Details: map[string]any{"keys_revoked": keys, "passkeys_revoked": passkeys, "identities_revoked": identities}})
 	})
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "The password of %s is changed, all sessions are ended, %d API keys and %d passkeys are revoked.\n", a.Username, keys, passkeys)
+	fmt.Fprintf(stdout, "The password of %s is changed, all sessions are ended, %d API keys, %d passkeys and %d linked accounts are revoked.\n", a.Username, keys, passkeys, identities)
 	if generated {
 		fmt.Fprintln(stdout, "New password: "+password+"   ← shown once")
 	}

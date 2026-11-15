@@ -15,6 +15,7 @@ import { useCopy } from "../../../lib/copy";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { ago, dateShort } from "../../../lib/format";
 import { createPasskey, passkeyCancelled, passkeysSupported } from "../../../lib/passkey";
+import { IdentitiesCard } from "./identities";
 
 export function AccessCard({ s }: { s: Schemas["SettingsView"] }) {
   const toast = useToast();
@@ -184,13 +185,14 @@ function Part({ bare, i, children }: { bare?: boolean; i: number; children: Reac
   );
 }
 
-/** How the admin gets in: the password, the second factor and the passkeys, in one block. */
+/** How the admin gets in: the password, the second factor, the passkeys and the linked accounts, in one block. */
 export function LoginCard({ s }: { s: Schemas["SettingsView"] }) {
   return (
     <section className="card glass reveal" style={{ "--i": 4 } as React.CSSProperties}>
       <PasswordCard bare />
       <TwoFactorCard bare />
       <PasskeysCard s={s} bare />
+      <IdentitiesCard bare />
     </section>
   );
 }
