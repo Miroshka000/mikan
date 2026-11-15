@@ -148,6 +148,7 @@ export default defineConfig({
 						{ slug: 'operations/filters' },
 						{ slug: 'operations/front-page' },
 						{ slug: 'operations/community-addons' },
+						{ slug: 'operations/gallery' },
 						{ slug: 'operations/support-access' },
 						{ slug: 'operations/cli' },
 					],

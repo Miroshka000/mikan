@@ -1,0 +1,24 @@
+---
+title: Community gallery
+description: Subscription templates, rule lists, bots, addons and tools around mikan by other authors, and how to add your own to the gallery.
+---
+
+import Gallery from '../../../../components/Gallery.astro';
+
+This is what people make around mikan: subscription templates, rule lists, bots, addons, tools. "In the panel" means you can load it right in the panel, such as a ready template in the template editor (**Settings → Subscription → Templates → Load a ready template**).
+
+:::caution[These are works of other authors]
+mikan does not review or support what the gallery lists, apart from the "In the panel" ones. A template or a rule list decides where your clients' traffic goes, and a bot or a tool gets access to the panel: take what you trust the author of. Addons are installed by their own rules, see [Community addons](/mikan/en/operations/community-addons/).
+:::
+
+<Gallery lang="en" />
+
+## Add your own
+
+1. Publish the work in a public repository or on a public page, with a description of how to use it and a license that lets others take it.
+2. Open a pull request that adds an entry to [`site/src/data/gallery.json`](https://github.com/Miroshka000/mikan/edit/dev/site/src/data/gallery.json): an `id` in Latin letters, the `kind` (`template`, `rules`, `page`, `bot`, `addon` or `tool`), the name and description in Russian and English (`title`, `about`), the author (`author`), the link (`url`) and, if there is one, the license (`license`).
+3. You can talk the work over before the PR in the [mikan forum on Telegram](https://t.me/+I2JFR7DbPow1ZmQy).
+
+What does not go in: templates with somebody's servers or keys inside, paid works with no open version, copies of others' works without the author's consent. An entry whose author is gone or whose work stopped working may leave the gallery.
+
+A template under an open license can also be proposed for the panel's own catalog of ready templates: open an issue with the link. The catalog names each template's author, license and source, and the lists it links are pinned to a commit.
