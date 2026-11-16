@@ -51,7 +51,21 @@ export function ImportCard() {
   }, [st?.finished, st?.mode, qc]);
   const body = () => ({ kind: src.kind, url: src.url.trim(), username: src.username.trim(), password: src.password, token: src.token.trim() });
   const started = (s: Schemas["JobState"]) => qc.setQueryData(["import-status"], s);
-  const check = useMutation({ mutationFn: () => unwrap(api.POST("/api/v1/import/preview", { body: body() })), onSuccess: started, onError: (e) => toast.error(errorText(e)) });
+  // A preview is of the source it was asked for: the key is kept once the panel took the check, and
+  // after the source changes (or while a check is on its way, or when it failed) nothing is
+  // brought over until it is checked again.
+  const sourceKey = [src.kind, src.url.trim(), src.username.trim(), src.password, src.token.trim()].join("\n");
+  const [checkedKey, setCheckedKey] = useState("");
+  const check = useMutation({
+    mutationFn: (_key: string) => unwrap(api.POST("/api/v1/import/preview", { body: body() })),
+    onMutate: () => setCheckedKey(""),
+    onSuccess: (s, key) => {
+      started(s);
+      setCheckedKey(key);
+    },
+    onError: (e) => toast.error(errorText(e)),
+  });
+  const stale = check.isPending || checkedKey !== sourceKey;
   const run = useMutation({
     mutationFn: () => {
       const { kind, ...rest } = body();
@@ -67,15 +81,9 @@ export function ImportCard() {
   const cancel = useMutation({ mutationFn: () => unwrap(api.DELETE("/api/v1/import", {})), onSuccess: () => void job.refetch(), onError: (e) => toast.error(errorText(e)) });
   const errors = fieldErrors(run.error);
   const set = (k: keyof typeof src) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setSrc((s) => ({ ...s, [k]: e.target.value }));
-  // A preview is of the source it was asked for: once the source changes, it is checked again
-  // before anything is brought over.
-  const sourceKey = [src.kind, src.url.trim(), src.username.trim(), src.password, src.token.trim()].join("\n");
-  const [checkedKey, setCheckedKey] = useState("");
-  const stale = checkedKey !== sourceKey;
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    setCheckedKey(sourceKey);
-    check.mutate();
+    check.mutate(sourceKey);
   };
   const preview = st?.mode === "preview" && st.state === "done" ? st.preview : undefined;
   const report = st?.mode === "import" ? st.report : undefined;
