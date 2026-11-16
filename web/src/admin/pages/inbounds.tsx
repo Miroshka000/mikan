@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowUpDown, Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api, errorText, unwrap, type Inbound, type Schemas } from "../../api/client";
 import { qk, useInbounds, useNodes } from "../../api/hooks";
@@ -18,6 +18,7 @@ import { AddDrawer } from "./inbound/add";
 import { EditDrawer } from "./inbound/edit";
 import { CopyDrawer } from "./inbound/copy";
 import { ExitBar } from "./inbound/exit-bar";
+import { ServerOrderDrawer } from "./server-order/order-drawer";
 import { Select } from "../../components/select";
 
 export function InboundsPage() {
@@ -40,6 +41,8 @@ export function InboundsPage() {
   const [editing, setEditing] = useState<Inbound | null>(null);
   const [copying, setCopying] = useState<Inbound | null>(null);
   const [removing, setRemoving] = useState<Inbound | null>(null);
+  // «Порядок в подписке»: every server of every node in one list.
+  const [ordering, setOrdering] = useState(false);
   // Ticked inbounds of the node on screen, for setting their exit at once.
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const chosen = useMemo(() => inbounds.filter((i) => selected.has(i.id)), [inbounds, selected]);
@@ -71,10 +74,18 @@ export function InboundsPage() {
         title={t("nav.inbounds")}
         sub={t("inbounds.subtitle")}
         actions={
-          <Button variant="primary" onClick={() => setAdding(true)}>
-            <Plus size={18} aria-hidden />
-            <span className="max-[760px]:hidden">{t("common.add")}</span>
-          </Button>
+          <>
+            {all.data && all.data.length > 0 ? (
+              <Button onClick={() => setOrdering(true)} aria-label={t("serverOrder.title")}>
+                <ArrowUpDown size={18} aria-hidden />
+                <span className="max-[760px]:hidden">{t("serverOrder.title")}</span>
+              </Button>
+            ) : null}
+            <Button variant="primary" onClick={() => setAdding(true)}>
+              <Plus size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("common.add")}</span>
+            </Button>
+          </>
         }
       />
       {multi && nodes.data ? (
@@ -224,6 +235,7 @@ export function InboundsPage() {
       <AddDrawer open={adding} onOpenChange={setAdding} nodeId={nodeId} nodeName={multi && node ? nodeLabel(node) : undefined} />
       <EditDrawer inbound={editing} onClose={() => setEditing(null)} />
       <CopyDrawer inbound={copying} onClose={() => setCopying(null)} />
+      <ServerOrderDrawer open={ordering} onClose={() => setOrdering(false)} />
       <ExitBar chosen={chosen} nodes={nodes.data ?? []} clear={() => setSelected(new Set())} />
       <Confirm
         open={!!removing}

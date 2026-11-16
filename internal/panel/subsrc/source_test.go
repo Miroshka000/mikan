@@ -321,7 +321,7 @@ func TestInboundsCarryTheirHosts(t *testing.T) {
 	if err != nil || len(hosts) != 1 {
 		t.Fatal(hosts, err)
 	}
-	// The host's own fields come along, the default host's too.
+	// The host's own fields come along, the default host's too, and so do their places.
 	if err := e.st.Q.SetInboundHostOptions(e.ctx, db.SetInboundHostOptionsParams{ID: hosts[0].ID, InboundID: a.ID, IpVersion: "ipv6"}); err != nil {
 		t.Fatal(err)
 	}
@@ -330,13 +330,16 @@ func TestInboundsCarryTheirHosts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if hosts[0].Sort == 0 || added.Sort != hosts[0].Sort {
+		t.Fatalf("places: default %d, added %d: the added one shares its inbound's last place", hosts[0].Sort, added.Sort)
+	}
 	got, err := (&subscription{h: e.h, u: u, cfg: e.cfg}).Inbounds(e.ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := map[int64][]submodel.Host{
-		a.ID: {{ID: hosts[0].ID, Address: "proxy.example.com", Port: 8443, Fingerprint: "ios", ALPN: []string{}, IPVersion: "ipv6", Addresses: []string{}, SNIs: []string{}},
-			{ID: added.ID, Address: "b.example.com", SNI: "s.example.com", Host: "h.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true,
+		a.ID: {{ID: hosts[0].ID, Order: hosts[0].Sort, Address: "proxy.example.com", Port: 8443, Fingerprint: "ios", ALPN: []string{}, IPVersion: "ipv6", Addresses: []string{}, SNIs: []string{}},
+			{ID: added.ID, Order: added.Sort, Address: "b.example.com", SNI: "s.example.com", Host: "h.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true,
 				Addresses: []string{"b2.example.com"}, SNIs: []string{"s2.example.com"}}},
 		b.ID: nil,
 	}

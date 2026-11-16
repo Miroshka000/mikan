@@ -169,7 +169,7 @@ type nodeIDInput struct {
 
 type orderNodesInput struct {
 	Body struct {
-		IDs []int64 `json:"ids" minItems:"1" maxItems:"1000" doc:"Все ноды панели, каждая один раз, в том порядке, в каком их серверы идут в подписках"`
+		IDs []int64 `json:"ids" minItems:"1" maxItems:"1000" doc:"Все ноды панели, каждая один раз. Их серверы встают в подписках блоками в этом порядке, серверы одной ноды — как шли"`
 	}
 }
 
@@ -178,15 +178,19 @@ func (h *handlers) registerNodes() {
 	huma.Register(h.api, huma.Operation{OperationID: "create-node", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/nodes", Summary: "Добавить ноду", Tags: []string{"node"}, DefaultStatus: http.StatusCreated}, h.createNode)
 	huma.Register(h.api, huma.Operation{OperationID: "update-node", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPatch, Path: "/api/v1/nodes/{id}", Summary: "Изменить ноду", Tags: []string{"node"}}, h.updateNode)
 	huma.Register(h.api, huma.Operation{OperationID: "rekey-node", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/nodes/{id}/key", Summary: "Выпустить новый ключ ноды (старый перестаёт работать)", Tags: []string{"node"}}, h.rekeyNode)
-	huma.Register(h.api, huma.Operation{OperationID: "order-nodes", Method: http.MethodPut, Path: "/api/v1/nodes/order", Summary: "Порядок серверов в подписке", Tags: []string{"node"}, DefaultStatus: http.StatusNoContent}, h.orderNodes)
+	huma.Register(h.api, huma.Operation{OperationID: "order-nodes", Method: http.MethodPut, Path: "/api/v1/nodes/order", Summary: "Порядок нод в подписке", Tags: []string{"node"}, DefaultStatus: http.StatusNoContent}, h.orderNodes)
 	huma.Register(h.api, huma.Operation{OperationID: "delete-node", Method: http.MethodDelete, Path: "/api/v1/nodes/{id}", Summary: "Удалить ноду", Tags: []string{"node"}, DefaultStatus: http.StatusNoContent}, h.deleteNode)
 }
 
-// orderNodes sets the order of the servers in the subscriptions: the list must be every
-// node once, so a stale page of the admin cannot silently drop or duplicate one.
+// orderNodes sets the order of the nodes, and their servers go with them in the
+// subscriptions, a node's as they were: the list must be every node once, so a stale page of
+// the admin cannot silently drop or duplicate one.
 func (h *handlers) orderNodes(ctx context.Context, in *orderNodesInput) (*struct{}, error) {
 	ids := in.Body.IDs
 	err := h.d.Store.Tx(ctx, func(q *db.Queries) error {
+		if err := q.LockSubOrder(ctx); err != nil {
+			return err
+		}
 		nodes, err := q.ListNodes(ctx)
 		if err != nil {
 			return err
@@ -195,9 +199,16 @@ func (h *handlers) orderNodes(ctx context.Context, in *orderNodesInput) (*struct
 		for i, n := range nodes {
 			have[i] = n.ID
 		}
-		return setOrder(ids, have, "node_order_mismatch", func(id, place int64) error {
+		if err := setOrder(ids, have, "node_order_mismatch", func(id, place int64) error {
 			return q.SetNodeSort(ctx, db.SetNodeSortParams{Sort: place, ID: id})
-		})
+		}); err != nil {
+			return err
+		}
+		rows, err := q.ListHostsInOrder(ctx)
+		if err != nil {
+			return err
+		}
+		return moveServers(ctx, q, rows, ids)
 	})
 	if err != nil {
 		return nil, err

@@ -281,6 +281,7 @@ type InboundHost struct {
 	Snis        []string
 	States      []string
 	Trial       string
+	Sort        int64
 }
 
 type InboundReach struct {

@@ -88,7 +88,16 @@ The exit of several protocols at once is changed with the **Way out to the inter
 
 ## Server order
 
-When there is more than one node, up and down arrows appear on the cards. The order of nodes in the panel becomes the order of servers in the subscription, in all apps.
+Since 0.5.2.1. **Protocols → Subscription order** opens one window with every server clients get: each address for clients of each protocol, of all the nodes at once, in the order they appear in the apps. Drag a server by the handle on its left, or move it with the keyboard: Space picks it up, the arrows move it, Space drops it, Esc puts it back. **Save order** keeps it. Each client gets the servers its plan and group allow in this same order, in every app.
+
+- **By node** puts each node's servers together, the nodes in their order.
+- **By exit country** (there when [cascades](/mikan/en/nodes/cascades/) are set up) puts a cascade next to the servers of the node it leaves to the internet through: for example, first everything that exits in the Netherlands, then everything that exits in Germany.
+
+A node goes where its first server is: the panel lists the nodes in this order, and the Clash apps show the countries' groups in it.
+
+The order of the nodes themselves is changed in **Nodes → Reorder**: drag a node the same way, and each node's servers go in the subscription as one block, keeping their order within the node. When the servers of different nodes are mixed now, the panel first asks whether to put them together by node. The **Server order** button there opens the window with every server.
+
+A new address for clients goes right after its protocol's servers, a new protocol after its node's servers, a new node at the end.
 
 ## If a node does not connect
 

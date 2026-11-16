@@ -26,9 +26,7 @@ import (
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/panel/subpage"
-	"mikan/internal/proto"
 	"mikan/internal/sub/apps"
-	"mikan/internal/sub/build"
 	"mikan/internal/sub/mihomo"
 	submodel "mikan/internal/sub/model"
 	"mikan/internal/sub/profile"
@@ -579,21 +577,10 @@ func groupsOf(cfg Config, over *submodel.GroupNames) submodel.GroupNames {
 // sample is the profile of a user given every inbound, with placeholder keys; its proxies
 // keep off the names of groups (over, when set, in place of the saved ones).
 func (h *Handler) sample(ctx context.Context, groups *submodel.GroupNames) (profile.Profile, Config, error) {
-	cfg, err := h.cfg(ctx)
+	ps, cfg, err := h.sampleProxies(ctx, groups)
 	if err != nil {
 		return profile.Profile{}, cfg, err
 	}
-	r, err := h.reach(ctx, db.User{}, cfg, domain.GrantsLeft{})
-	if err != nil {
-		return profile.Profile{}, cfg, err
-	}
-	hosts, err := h.hosts(ctx, r.inbounds)
-	if err != nil {
-		return profile.Profile{}, cfg, err
-	}
-	keys := proto.Slot{Name: "preview", UUID: "00000000-0000-0000-0000-000000000000", Secret: "preview"}
-	ps := build.Proxies(build.Profile{Keys: keys, Inbounds: inbounds(r.inbounds, hosts), Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint,
-		Groups: groupsOf(cfg, groups)})
 	prof := cfg.Profile(ps)
 	// A current mihomo: the preview shows every list, and a template started from it keeps
 	// the ones a younger core reads (an app that does not name its core still gets none).

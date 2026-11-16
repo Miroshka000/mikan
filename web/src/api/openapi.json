@@ -6782,7 +6782,7 @@
         "additionalProperties": false,
         "properties": {
           "ids": {
-            "description": "Все ноды панели, каждая один раз, в том порядке, в каком их серверы идут в подписках",
+            "description": "Все ноды панели, каждая один раз. Их серверы встают в подписках блоками в этом порядке, серверы одной ноды — как шли",
             "items": {
               "format": "int64",
               "type": "integer"
@@ -6794,6 +6794,25 @@
         },
         "required": [
           "ids"
+        ],
+        "type": "object"
+      },
+      "OrderServersInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "host_ids": {
+            "description": "Все адреса подключений панели (host_id), каждый один раз, в том порядке, в каком серверы идут в подписках. Нода встаёт туда, где её первый сервер",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "host_ids"
         ],
         "type": "object"
       },
@@ -11624,6 +11643,67 @@
           "rule",
           "format",
           "outcome"
+        ],
+        "type": "object"
+      },
+      "SubOrderItem": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "Адрес для клиентов; пусто — адрес ноды",
+            "type": "string"
+          },
+          "cdn": {
+            "description": "Клиенты ходят через CDN",
+            "type": "boolean"
+          },
+          "default": {
+            "description": "Адрес по умолчанию: тот, что задаёт само подключение",
+            "type": "boolean"
+          },
+          "for_some": {
+            "description": "Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них",
+            "type": "boolean"
+          },
+          "host_id": {
+            "description": "Адрес подключения для клиентов: его id в порядке, который сохраняют",
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound_id": {
+            "description": "Подключение (протокол), чей это адрес",
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Имя сервера в приложении клиента, которому доступно всё; переменные — как написаны. У сервера, который клиенты сейчас не получают, — его собственное имя или имя подключения, без флага ноды",
+            "type": "string"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "port": {
+            "description": "Порт для клиентов; 0 — порт подключения",
+            "format": "int64",
+            "type": "integer"
+          },
+          "served": {
+            "description": "Клиенты получают этот сервер сейчас: подключение и нода включены",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "host_id",
+          "inbound_id",
+          "node_id",
+          "default",
+          "address",
+          "port",
+          "cdn",
+          "name",
+          "served",
+          "for_some"
         ],
         "type": "object"
       },
@@ -17647,6 +17727,73 @@
         ]
       }
     },
+    "/api/v1/inbounds/order": {
+      "get": {
+        "description": "Все серверы подписок по порядку, у всех нод: каждый адрес для клиентов каждого подключения. Каждый клиент получает те из них, что ему доступны, в этом порядке.",
+        "operationId": "list-server-order",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SubOrderItem"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Порядок серверов в подписке",
+        "tags": [
+          "inbounds"
+        ]
+      },
+      "put": {
+        "operationId": "order-servers",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderServersInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Задать порядок серверов в подписке",
+        "tags": [
+          "inbounds"
+        ]
+      }
+    },
     "/api/v1/inbounds/scan-targets": {
       "post": {
         "operationId": "scan-targets",
@@ -18624,7 +18771,7 @@
             "description": "Error"
           }
         },
-        "summary": "Порядок серверов в подписке",
+        "summary": "Порядок нод в подписке",
         "tags": [
           "node"
         ]

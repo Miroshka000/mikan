@@ -12,6 +12,9 @@ type Proxy struct {
 	Name string
 	Node int64 // the node the inbound is on
 	Pool int64 // the inbound's server group; 0: none, the main servers
+	// Host is the id of the inbound's host the proxy reaches it at (model.Host.ID); 0: the
+	// template's own, of an inbound without hosts.
+	Host int64
 	// NoAuto keeps the server out of the automatic choice: its inbound's word (the node's is
 	// Node.NoAuto).
 	NoAuto bool

@@ -547,6 +547,7 @@
       "folder_not_found": "There is no such folder: reload the page",
       "folder_order_mismatch": "The list of folders has changed: reload the page and try again",
       "node_order_mismatch": "The list of servers has changed: reload the page and try again",
+      "host_order_mismatch": "The list of servers has changed: open the window again and retry",
       "pool_name_taken": "A group with this name exists already",
       "pool_not_found": "No such group",
       "pool_duplicate": "A group is named twice",
@@ -3465,13 +3466,16 @@
   },
   "nodes": {
     "subtitle": "Servers that run the VPN. The subscription includes the protocols of every enabled node, each in its own group.",
-    "orderHint": "In clients' apps the servers appear in this same order. Use the arrows to move them.",
+    "orderHint": "Each node's servers go in the subscription together, the nodes in this order. Drag a node by the handle or move it with the keyboard: Space, the arrows, Space.",
+    "orderServers": "Server order",
+    "orderList": "Nodes in order",
+    "orderServersCount": "{n, plural, =0 {no servers} one {# server} other {# servers}} in subscriptions",
+    "orderMixed": "The servers of different nodes are mixed now, as set in Subscription order. A new node order puts each node's servers together.",
+    "orderMixedTitle": "Put the servers together by node?",
+    "orderMixedText": "The servers of different nodes are mixed now. The new node order puts each node's servers together and keeps their order within the node.",
+    "orderMixedConfirm": "Put together and save",
     "orderEdit": "Reorder",
-    "orderDone": "Done",
     "moreActions": "More actions: {name}",
-    "moveUp": "Move {name} up",
-    "moveDown": "Move {name} down",
-    "position": "Position {n} of {total}",
     "add": "Add node",
     "addSubmit": "Add and get the key",
     "emptyTitle": "No nodes yet",
@@ -3606,6 +3610,42 @@
     "frontPageMaintenance": "Maintenance",
     "frontPageCats": "Cat clicker",
     "frontPageRouter": "With the shared port 443 the node's domain and a request with no name get it too: the node's real certificate, TLS 1.2 or later, HSTS. A domain a protocol on the shared 443 takes stays with the protocol and shows the page too if it is XHTTP, WebSocket or gRPC."
+  },
+  "serverOrder": {
+    "title": "Subscription order",
+    "meta": "{n, plural, one {# server} other {# servers}} · {nodes, plural, one {# node} other {# nodes}}",
+    "lead": "Clients get the servers in this order, each one those its plan and group allow. A node goes where its first server is.",
+    "howTo": "Drag a server by the handle on its left. With the keyboard: Space picks a server up, the arrows move it, Space drops it, Esc puts it back.",
+    "arrange": "Arrange",
+    "byNodes": "By node",
+    "byNodesHint": "Each node's servers together, the nodes in their order; within a node the order stays",
+    "byExit": "By exit country",
+    "byExitHint": "Cascades go next to the servers of the node they leave through",
+    "saved": "Order saved. Clients get it when their subscription updates",
+    "stale": "The servers changed while you were ordering them. The list is loaded again: order it once more",
+    "emptyTitle": "No servers yet",
+    "emptyText": "Add a protocol: each of its addresses for clients becomes a server in the subscription.",
+    "address": "address {address}",
+    "exitVia": "exits via {node}",
+    "cdn": "via CDN",
+    "forSome": "not for all",
+    "forSomeHint": "The address goes to some subscriptions only: by status or to trials",
+    "off": {
+      "inbound": "protocol off",
+      "node": "node off",
+      "other": "not in subscriptions"
+    }
+  },
+  "reorder": {
+    "keys": "With the keyboard: the arrows go from item to item, Space picks an item up, the arrows move it, Space drops it, Esc puts it back.",
+    "item": "{name}, place {n} of {total}",
+    "moved": "{name}: place {n} of {total}",
+    "save": "Save order",
+    "saved": "Order saved",
+    "unsaved": "The order is not saved",
+    "discardTitle": "Close without saving?",
+    "discardText": "The new order will be lost.",
+    "discard": "Don't save"
   },
   "telegram": {
     "subtitle": "A bot for subscription owners and a Mini App with the subscription page",
@@ -5855,7 +5895,11 @@
         "create": "Node added",
         "update": "Node changed",
         "delete": "Node deleted",
-        "restart": "Node restarted"
+        "restart": "Node restarted",
+        "order": "Node order changed"
+      },
+      "inbound": {
+        "order": "Subscription server order changed"
       },
       "settings": {
         "update": "Settings changed"

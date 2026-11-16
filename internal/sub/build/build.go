@@ -3,7 +3,6 @@ package build
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
 	"strconv"
 	"strings"
 	"unicode"
@@ -53,77 +52,46 @@ func (p Profile) skip(in model.Inbound, err error) {
 	}
 }
 
-// Proxies are the user's proxies, node by node in the nodes' order, and in a node the
-// inbounds' own.
+// Proxies are the user's proxies in the panel's order of its servers (servers): the places
+// the admin gave the hosts, and without them node by node in the nodes' order, in a node the
+// inbounds' own, in an inbound its hosts'.
 func Proxies(p Profile) []model.Proxy {
-	var out []model.Proxy
+	list := p.servers()
+	out := make([]model.Proxy, 0, len(list))
 	used := map[string]bool{}
-	multi := len(p.Nodes) > 1
-	for _, n := range p.Nodes {
-		for _, in := range p.Inbounds {
-			if in.Node != n.ID {
-				continue
-			}
-			port := in.Port
-			if port == 0 {
-				p.skip(in, fmt.Errorf("bad port %q", in.PortSpec))
-				continue
-			}
-			t, err := parseTemplate(in.Config)
-			if err != nil {
-				// Saved configs are validated; one broken inbound must not empty the subscription.
-				p.skip(in, err)
-				continue
-			}
-			spec := in.PortSpec
-			if n.Endpoint.SNIRouter && proto.SNI443(t) {
-				port, spec = 443, "443"
-			}
-			base := shownName(in.Name)
-			if base == "" {
-				base = shownName(in.Label) // nothing was left of it
-			}
-			// A name the admin typed is used as is; preset names get the node's flag.
-			if prefix := NodePrefix(n.Name); multi && !in.Named && prefix != "" {
-				base = prefix + " " + base
-			}
-			for i, h := range hosts(in, p.Seed, proto.ClientSNI(t)) {
-				// A host's own name is the admin's, as typed: no flag of the node.
-				own := base
-				if h.name != "" {
-					if s := fillName(h.name, p.Vars); s != "" {
-						own = s
-					}
-				}
-				// mihomo refuses a profile with two proxies of the same name, or a proxy named
-				// as a group: a second host of the inbound is "Name 2", a user's {name} that is
-				// the main group's "VPN 2".
-				name := own
-				for i := 2; used[name] || p.group(name); i++ {
-					name = own + " " + strconv.Itoa(i)
-				}
-				tpl := t
-				if i > 0 {
-					tpl = t.Clone() // Proxy may share maps with its template
-				}
-				c, err := Proxy(tpl, Input{Name: name, Host: n.Endpoint.Host, Port: port, PortSpec: spec,
-					SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Keys: p.Keys, SSOneKey: n.SSOneKey,
-					Client: h.client, OwnClient: h.own, Options: h.options})
-				if err != nil {
-					p.skip(in, err)
-					continue
-				}
-				used[name] = true
-				c.Node, c.Pool, c.NoAuto = n.ID, in.Pool, in.NoAuto
-				out = append(out, c)
+	for _, s := range list {
+		// A host's own name is the admin's, as typed: no flag of the node.
+		own := s.base
+		if s.h.name != "" {
+			if v := fillName(s.h.name, p.Vars); v != "" {
+				own = v
 			}
 		}
+		// mihomo refuses a profile with two proxies of the same name, or a proxy named as a
+		// group: the second one of a name is "Name 2" (a second host of the inbound that has
+		// no name of its own), a user's {name} that is the main group's "VPN 2".
+		name := own
+		for i := 2; used[name] || p.group(name); i++ {
+			name = own + " " + strconv.Itoa(i)
+		}
+		c, err := Proxy(s.tpl.take(), Input{Name: name, Host: s.n.Endpoint.Host, Port: s.port, PortSpec: s.spec,
+			SNI: s.n.Endpoint.SNI, PinSHA256: s.n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Keys: p.Keys, SSOneKey: s.n.SSOneKey,
+			Client: s.h.client, OwnClient: s.h.own, Options: s.h.options})
+		if err != nil {
+			p.skip(s.in, err)
+			continue
+		}
+		used[name] = true
+		c.Node, c.Pool, c.NoAuto, c.Host = s.n.ID, s.in.Pool, s.in.NoAuto, s.h.id
+		out = append(out, c)
 	}
 	return out
 }
 
 // host is one place an inbound is reached at, as Proxy takes it.
 type host struct {
+	id      int64 // the panel's (model.Host.ID); 0: the template's, of an inbound without hosts
+	order   int64 // its place among the panel's servers (model.Host.Order)
 	client  proto.ClientOverrides
 	own     bool // client is the whole of it, not over the template's mikan.client
 	options Options
@@ -155,7 +123,7 @@ func hosts(in model.Inbound, seed string, sniOK bool) []host {
 		}
 		if i == 0 {
 			// The default host is the template's; a choice of its more values goes over it.
-			out[0].options, out[0].name = o, h.Name
+			out[0].options, out[0].name, out[0].id, out[0].order = o, h.Name, h.ID, h.Order
 			if addr != h.Address {
 				out[0].client.Server = addr // one of the more ones: never empty
 			}
@@ -164,7 +132,7 @@ func hosts(in model.Inbound, seed string, sniOK bool) []host {
 			}
 			continue
 		}
-		out = append(out, host{own: true, options: o, name: h.Name, client: proto.ClientOverrides{Server: addr, Port: h.Port,
+		out = append(out, host{id: h.ID, order: h.Order, own: true, options: o, name: h.Name, client: proto.ClientOverrides{Server: addr, Port: h.Port,
 			SNI: sni, Host: h.Host, Fingerprint: h.Fingerprint}})
 	}
 	if out[0].hidden {

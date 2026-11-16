@@ -65,7 +65,10 @@ type Inbound struct {
 // Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing, the inbound's name. The host's
 // own fields (ALPN to Name) are the default host's too, and no template holds them.
 type Host struct {
-	ID          int64 // the panel's, for good: a user's choice of Addresses and SNIs follows it
+	ID int64 // the panel's, for good: a user's choice of Addresses and SNIs follows it
+	// Order is the host's place among the servers of every node (the admin's order of the
+	// subscription); 0: none, it follows the server before it.
+	Order       int64
 	Address     string
 	Port        int
 	SNI         string

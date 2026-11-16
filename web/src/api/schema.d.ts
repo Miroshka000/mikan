@@ -1038,6 +1038,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inbounds/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Порядок серверов в подписке
+         * @description Все серверы подписок по порядку, у всех нод: каждый адрес для клиентов каждого подключения. Каждый клиент получает те из них, что ему доступны, в этом порядке.
+         */
+        get: operations["list-server-order"];
+        /** Задать порядок серверов в подписке */
+        put: operations["order-servers"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inbounds/scan-targets": {
         parameters: {
             query?: never;
@@ -1332,7 +1353,7 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Порядок серверов в подписке */
+        /** Порядок нод в подписке */
         put: operations["order-nodes"];
         post?: never;
         delete?: never;
@@ -6214,8 +6235,12 @@ export interface components {
             ids: number[];
         };
         OrderNodesInputBody: {
-            /** @description Все ноды панели, каждая один раз, в том порядке, в каком их серверы идут в подписках */
+            /** @description Все ноды панели, каждая один раз. Их серверы встают в подписках блоками в этом порядке, серверы одной ноды — как шли */
             ids: number[];
+        };
+        OrderServersInputBody: {
+            /** @description Все адреса подключений панели (host_id), каждый один раз, в том порядке, в каком серверы идут в подписках. Нода встаёт туда, где её первый сервер */
+            host_ids: number[];
         };
         OrderSubDocsInputBody: {
             /** @description Все инструкции в новом порядке */
@@ -7957,6 +7982,37 @@ export interface components {
             outcome: "served" | "stub" | "blocked" | "dropped";
             /** @description Что решило: имя правила, builtin:ssr, builtin:old, apps; пусто — ничего */
             rule: string;
+        };
+        SubOrderItem: {
+            /** @description Адрес для клиентов; пусто — адрес ноды */
+            address: string;
+            /** @description Клиенты ходят через CDN */
+            cdn: boolean;
+            /** @description Адрес по умолчанию: тот, что задаёт само подключение */
+            default: boolean;
+            /** @description Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них */
+            for_some: boolean;
+            /**
+             * Format: int64
+             * @description Адрес подключения для клиентов: его id в порядке, который сохраняют
+             */
+            host_id: number;
+            /**
+             * Format: int64
+             * @description Подключение (протокол), чей это адрес
+             */
+            inbound_id: number;
+            /** @description Имя сервера в приложении клиента, которому доступно всё; переменные — как написаны. У сервера, который клиенты сейчас не получают, — его собственное имя или имя подключения, без флага ноды */
+            name: string;
+            /** Format: int64 */
+            node_id: number;
+            /**
+             * Format: int64
+             * @description Порт для клиентов; 0 — порт подключения
+             */
+            port: number;
+            /** @description Клиенты получают этот сервер сейчас: подключение и нода включены */
+            served: boolean;
         };
         SubPageView: {
             background?: components["schemas"]["PageAsset"];
@@ -11462,6 +11518,66 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["InboundView"][];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-server-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubOrderItem"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "order-servers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderServersInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

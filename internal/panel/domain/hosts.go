@@ -85,6 +85,15 @@ func HostShows(states []string, trialOf string, state string, trial bool) bool {
 	return trialOf == "" || trialOf == "only" && trial || trialOf == "never" && !trial
 }
 
+// HostForSome says whether a host of states and trial goes to some users only (HostShows):
+// not to every state, or to the trial's or the others' alone.
+func HostForSome(states []string, trialOf string) bool {
+	if trialOf != "" {
+		return true
+	}
+	return len(states) > 0 && slices.ContainsFunc(HostStates, func(s string) bool { return !slices.Contains(states, s) })
+}
+
 // OnTrial says whether u is on the trial: it came of the trial (users.source) and paid for
 // nothing besides it. A trial the admin lengthened is still one; a user who bought a plan or
 // more traffic since is not.
@@ -96,8 +105,12 @@ func OnTrial(ctx context.Context, q *db.Queries, u db.User) (bool, error) {
 	return !paid, err
 }
 
-// createInbound adds an inbound with its default host.
+// createInbound adds an inbound with its default host, which takes the place of its node's
+// last server in the subscriptions.
 func createInbound(ctx context.Context, q *db.Queries, p db.CreateInboundParams) (db.Inbound, error) {
+	if err := q.LockSubOrder(ctx); err != nil {
+		return db.Inbound{}, err
+	}
 	row, err := q.CreateInbound(ctx, p)
 	if err != nil {
 		return row, err
@@ -131,6 +144,10 @@ func (s *Inbounds) AddHost(ctx context.Context, id int64, h Host) (db.InboundHos
 			return err
 		}
 		if _, err := q.LockInbound(ctx, id); err != nil {
+			return err
+		}
+		// It takes its inbound's last place in the subscriptions, as the order is.
+		if err := q.LockSubOrder(ctx); err != nil {
 			return err
 		}
 		row, err = q.AddInboundHost(ctx, db.AddInboundHostParams{InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,

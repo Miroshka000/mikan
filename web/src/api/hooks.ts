@@ -15,6 +15,8 @@ export const qk = {
   userNodes: (id: number) => ["users", "nodes", id] as const,
   tariffs: ["tariffs"] as const,
   inbounds: ["inbounds"] as const,
+  // Under the inbounds: a change of any of them (or of their addresses) moves the list.
+  serverOrder: ["inbounds", "order"] as const,
   presets: ["presets"] as const,
   overview: ["overview"] as const,
   traffic: (range: string) => ["traffic", range] as const,
@@ -178,6 +180,11 @@ export function useTariffs() {
 export function useInbounds() {
   // The listeners' state; an edit refreshes the list at once.
   return useQuery({ queryKey: qk.inbounds, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/inbounds", { signal })), refetchInterval: 30_000 });
+}
+
+/** Every server of the subscriptions in their order: each address of each protocol, across the nodes. */
+export function useServerOrder(enabled = true) {
+  return useQuery({ queryKey: qk.serverOrder, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/inbounds/order", { signal })), enabled });
 }
 
 export function usePresets() {

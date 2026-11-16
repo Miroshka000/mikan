@@ -12,11 +12,16 @@ import (
 )
 
 const addInboundHost = `-- name: AddInboundHost :one
-INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial)
-VALUES ($1, (SELECT COALESCE(max(position), 0) + 1 FROM inbound_hosts WHERE inbound_id = $1), $2, $3, $4, $5, $6,
+INSERT INTO inbound_hosts (inbound_id, position, sort, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial)
+VALUES ($1, (SELECT COALESCE(max(position), 0) + 1 FROM inbound_hosts WHERE inbound_id = $1),
+  COALESCE(
+    (SELECT max(sort) FROM inbound_hosts WHERE inbound_id = $1),
+    (SELECT max(h.sort) FROM inbound_hosts h JOIN inbounds i ON i.id = h.inbound_id WHERE i.node_id = (SELECT node_id FROM inbounds WHERE id = $1)),
+    (SELECT COALESCE(max(sort), 0) + 1 FROM inbound_hosts)),
+  $2, $3, $4, $5, $6,
   COALESCE($7::text[], '{}'), $8, $9, $10, $11, $12, $13,
   COALESCE($14::text[], '{}'), COALESCE($15::text[], '{}'), COALESCE($16::text[], '{}'), $17)
-RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial
+RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort
 `
 
 type AddInboundHostParams struct {
@@ -39,7 +44,8 @@ type AddInboundHostParams struct {
 	Trial       string
 }
 
-// A new host goes after the others; position 0 stays the default one's.
+// A new host goes after the others; position 0 stays the default one's. In the subscriptions
+// it takes its inbound's last place, and its position puts it after that host.
 func (q *Queries) AddInboundHost(ctx context.Context, arg AddInboundHostParams) (InboundHost, error) {
 	row := q.db.QueryRowContext(ctx, addInboundHost,
 		arg.InboundID,
@@ -81,6 +87,7 @@ func (q *Queries) AddInboundHost(ctx context.Context, arg AddInboundHostParams) 
 		pq.Array(&i.Snis),
 		pq.Array(&i.States),
 		&i.Trial,
+		&i.Sort,
 	)
 	return i, err
 }
@@ -106,8 +113,13 @@ func (q *Queries) CopyDefaultHostOptions(ctx context.Context, arg CopyDefaultHos
 }
 
 const copyInboundHosts = `-- name: CopyInboundHosts :exec
-INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial)
-SELECT $1, src.position, src.address, src.port, src.sni, src.host, src.fingerprint,
+INSERT INTO inbound_hosts (inbound_id, position, sort, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial)
+SELECT $1, src.position,
+  COALESCE(
+    (SELECT max(sort) FROM inbound_hosts WHERE inbound_id = $1),
+    (SELECT max(h.sort) FROM inbound_hosts h JOIN inbounds i ON i.id = h.inbound_id WHERE i.node_id = (SELECT node_id FROM inbounds WHERE id = $1)),
+    (SELECT COALESCE(max(sort), 0) + 1 FROM inbound_hosts)),
+  src.address, src.port, src.sni, src.host, src.fingerprint,
   src.alpn, src.ip_version, src.mux, src.mux_protocol, src.mux_padding, src.cdn, src.name, src.addresses, src.snis, src.states, src.trial FROM inbound_hosts src
 WHERE src.inbound_id = $2 AND src.position > 0
 `
@@ -117,7 +129,8 @@ type CopyInboundHostsParams struct {
 	FromInbound int64
 }
 
-// A copy of an inbound takes its other hosts; its default one comes from its template.
+// A copy of an inbound takes its other hosts; its default one comes from its template. They
+// take the place of the copy's default host, after which their positions put them.
 func (q *Queries) CopyInboundHosts(ctx context.Context, arg CopyInboundHostsParams) error {
 	_, err := q.db.ExecContext(ctx, copyInboundHosts, arg.ToInbound, arg.FromInbound)
 	return err
@@ -142,7 +155,7 @@ func (q *Queries) DeleteInboundHost(ctx context.Context, arg DeleteInboundHostPa
 }
 
 const getInboundHost = `-- name: GetInboundHost :one
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial FROM inbound_hosts WHERE id = $1 AND inbound_id = $2
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort FROM inbound_hosts WHERE id = $1 AND inbound_id = $2
 `
 
 type GetInboundHostParams struct {
@@ -173,12 +186,73 @@ func (q *Queries) GetInboundHost(ctx context.Context, arg GetInboundHostParams) 
 		pq.Array(&i.Snis),
 		pq.Array(&i.States),
 		&i.Trial,
+		&i.Sort,
 	)
 	return i, err
 }
 
+const listHostsInOrder = `-- name: ListHostsInOrder :many
+SELECT h.id, h.inbound_id, h.position, h.address, h.port, h.sni, h.host, h.fingerprint, h.alpn, h.ip_version, h.mux, h.mux_protocol, h.mux_padding, h.cdn, h.name, h.addresses, h.snis, h.states, h.trial, h.sort, i.node_id FROM inbound_hosts h
+JOIN inbounds i ON i.id = h.inbound_id
+JOIN nodes n ON n.id = i.node_id
+ORDER BY h.sort, n.sort, n.id, i.id, h.position
+`
+
+type ListHostsInOrderRow struct {
+	InboundHost InboundHost
+	NodeID      int64
+}
+
+// Every host of the panel in the subscriptions' order: by place, and a tie as the
+// subscriptions gave them before places, node by node in the nodes' order, a node's inbounds
+// by id, an inbound's hosts by position (build.Proxies keeps that order in a tie too).
+func (q *Queries) ListHostsInOrder(ctx context.Context) ([]ListHostsInOrderRow, error) {
+	rows, err := q.db.QueryContext(ctx, listHostsInOrder)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHostsInOrderRow{}
+	for rows.Next() {
+		var i ListHostsInOrderRow
+		if err := rows.Scan(
+			&i.InboundHost.ID,
+			&i.InboundHost.InboundID,
+			&i.InboundHost.Position,
+			&i.InboundHost.Address,
+			&i.InboundHost.Port,
+			&i.InboundHost.Sni,
+			&i.InboundHost.Host,
+			&i.InboundHost.Fingerprint,
+			pq.Array(&i.InboundHost.Alpn),
+			&i.InboundHost.IpVersion,
+			&i.InboundHost.Mux,
+			&i.InboundHost.MuxProtocol,
+			&i.InboundHost.MuxPadding,
+			&i.InboundHost.Cdn,
+			&i.InboundHost.Name,
+			pq.Array(&i.InboundHost.Addresses),
+			pq.Array(&i.InboundHost.Snis),
+			pq.Array(&i.InboundHost.States),
+			&i.InboundHost.Trial,
+			&i.InboundHost.Sort,
+			&i.NodeID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHostsOfInbounds = `-- name: ListHostsOfInbounds :many
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial FROM inbound_hosts WHERE inbound_id = ANY($1::bigint[]) ORDER BY inbound_id, position
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort FROM inbound_hosts WHERE inbound_id = ANY($1::bigint[]) ORDER BY inbound_id, position
 `
 
 func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]InboundHost, error) {
@@ -210,6 +284,7 @@ func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]Inbou
 			pq.Array(&i.Snis),
 			pq.Array(&i.States),
 			&i.Trial,
+			&i.Sort,
 		); err != nil {
 			return nil, err
 		}
@@ -225,7 +300,7 @@ func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]Inbou
 }
 
 const listInboundHosts = `-- name: ListInboundHosts :many
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial FROM inbound_hosts WHERE inbound_id = $1 ORDER BY position
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort FROM inbound_hosts WHERE inbound_id = $1 ORDER BY position
 `
 
 func (q *Queries) ListInboundHosts(ctx context.Context, inboundID int64) ([]InboundHost, error) {
@@ -257,6 +332,7 @@ func (q *Queries) ListInboundHosts(ctx context.Context, inboundID int64) ([]Inbo
 			pq.Array(&i.Snis),
 			pq.Array(&i.States),
 			&i.Trial,
+			&i.Sort,
 		); err != nil {
 			return nil, err
 		}
@@ -283,9 +359,26 @@ func (q *Queries) LockInbound(ctx context.Context, id int64) (int64, error) {
 	return id_2, err
 }
 
+const lockSubOrder = `-- name: LockSubOrder :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-sub-order', 0))
+`
+
+// Taken by a change of the subscription's order (of the servers, of the nodes) and by a new
+// inbound or host: a new one takes its place from the order as it is once a change of it
+// commits, and a change of it sees every host there is.
+func (q *Queries) LockSubOrder(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, lockSubOrder)
+	return err
+}
+
 const setDefaultInboundHost = `-- name: SetDefaultInboundHost :exec
-INSERT INTO inbound_hosts (inbound_id, position, address, port, sni, host, fingerprint)
-VALUES ($1, 0, $2, $3, $4, $5, $6)
+INSERT INTO inbound_hosts (inbound_id, position, sort, address, port, sni, host, fingerprint)
+VALUES ($1, 0,
+  COALESCE(
+    (SELECT max(sort) FROM inbound_hosts WHERE inbound_id = $1),
+    (SELECT max(h.sort) FROM inbound_hosts h JOIN inbounds i ON i.id = h.inbound_id WHERE i.node_id = (SELECT node_id FROM inbounds WHERE id = $1)),
+    (SELECT COALESCE(max(sort), 0) + 1 FROM inbound_hosts)),
+  $2, $3, $4, $5, $6)
 ON CONFLICT (inbound_id) WHERE position = 0 DO UPDATE
 SET address = excluded.address, port = excluded.port, sni = excluded.sni, host = excluded.host, fingerprint = excluded.fingerprint
 `
@@ -299,7 +392,9 @@ type SetDefaultInboundHostParams struct {
 	Fingerprint string
 }
 
-// The template's five fields only: the host's own (alpn and the rest) stay as they are.
+// The template's five fields only: the host's own (alpn and the rest) stay as they are, and
+// its place too. A new inbound's default host takes the last place of its node's servers (the
+// inbound's id puts it after them), the first one of a node without servers the place after all.
 func (q *Queries) SetDefaultInboundHost(ctx context.Context, arg SetDefaultInboundHostParams) error {
 	_, err := q.db.ExecContext(ctx, setDefaultInboundHost,
 		arg.InboundID,
@@ -309,6 +404,20 @@ func (q *Queries) SetDefaultInboundHost(ctx context.Context, arg SetDefaultInbou
 		arg.Host,
 		arg.Fingerprint,
 	)
+	return err
+}
+
+const setHostSort = `-- name: SetHostSort :exec
+UPDATE inbound_hosts SET sort = $1 WHERE id = $2
+`
+
+type SetHostSortParams struct {
+	Sort int64
+	ID   int64
+}
+
+func (q *Queries) SetHostSort(ctx context.Context, arg SetHostSortParams) error {
+	_, err := q.db.ExecContext(ctx, setHostSort, arg.Sort, arg.ID)
 	return err
 }
 
@@ -362,7 +471,7 @@ UPDATE inbound_hosts SET address = $1, port = $2, sni = $3, host = $4, fingerpri
   name = $12, addresses = COALESCE($13::text[], '{}'), snis = COALESCE($14::text[], '{}'),
   states = COALESCE($15::text[], '{}'), trial = $16
 WHERE id = $17 AND inbound_id = $18
-RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial
+RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort
 `
 
 type UpdateInboundHostParams struct {
@@ -428,6 +537,7 @@ func (q *Queries) UpdateInboundHost(ctx context.Context, arg UpdateInboundHostPa
 		pq.Array(&i.Snis),
 		pq.Array(&i.States),
 		&i.Trial,
+		&i.Sort,
 	)
 	return i, err
 }

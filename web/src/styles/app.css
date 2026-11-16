@@ -344,6 +344,17 @@
   .dr-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 16px 20px; border-top: 1px solid var(--hairline); }
   .dr-sec { padding: 20px 0; border-top: 1px solid var(--hairline); }
   .dr-sec h3 { font: 600 13px/20px var(--font-ui-stack); color: var(--ink-700); margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+  /* a list put in order by dragging (components/sortable.tsx) */
+  .sortable { display: flex; flex-direction: column; gap: 8px; }
+  .sortable-item { position: relative; display: flex; align-items: center; gap: 4px; min-height: 56px; padding: 8px 12px 8px 4px; border: 1px solid var(--hairline); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-sm); list-style: none; }
+  .sortable-item:focus-visible { outline: 2px solid var(--mikan-600); outline-offset: 2px; border-radius: 16px; }
+  .sortable-item[data-lifted] { z-index: 1; border-color: var(--mikan-500); box-shadow: var(--shadow-lg); }
+  .sortable-handle { display: grid; flex: none; place-items: center; width: 32px; height: 40px; border-radius: 12px; color: var(--ink-400); cursor: grab; touch-action: none; user-select: none; transition: background-color 0.2s, color 0.2s; }
+  .sortable-handle:hover { background: var(--surface-soft); color: var(--ink-700); }
+  .sortable-handle:active { cursor: grabbing; }
+  .sortable-item[aria-disabled="true"] .sortable-handle { cursor: default; color: var(--ink-300); }
+  .sortable-item[aria-disabled="true"] .sortable-handle:hover { background: none; }
   .gauge { position: relative; }
   .gauge svg { display: block; transform: rotate(-90deg); }
   .gauge .track { stroke: var(--ink-100); }
