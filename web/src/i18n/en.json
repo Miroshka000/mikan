@@ -913,7 +913,14 @@
       "identity_unknown": "This account is not linked to any admin",
       "telegram_login": "Telegram did not confirm the sign-in",
       "telegram_no_domain": "Telegram sign-in needs the panel to have a domain",
-      "telegram_off": "The Telegram bot is not connected"
+      "telegram_off": "The Telegram bot is not connected",
+      "label_blank": "A name is required",
+      "bad_key": "Key: lowercase Latin letters, digits and _, starting with a letter, up to 32 characters",
+      "field_key_taken": "A field with this key already exists",
+      "field_limit": "There are too many fields already: delete the ones you do not use",
+      "unknown_field": "There is no such field: reload the page",
+      "bad_field_value": "The value does not fit this field",
+      "field_order_mismatch": "The list of fields has changed: reload the page and try again"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to mikan; otherwise free the port",
@@ -5959,5 +5966,43 @@
     "many": "{n} tags at most",
     "filter": "Show by tag",
     "all": "All"
+  },
+  "customFields": {
+    "title": "Custom fields",
+    "sub": "Fields for your own notes on clients and nodes: an order number, a phone, the hoster's account. A card shows and edits them, the API has them (custom_fields), and the list searches the clients' ones. They do not change any access.",
+    "scope": {
+      "user": "Clients",
+      "node": "Nodes"
+    },
+    "kind": {
+      "text": "Text",
+      "number": "Number",
+      "bool": "Yes/no",
+      "date": "Date",
+      "url": "Link"
+    },
+    "none": "No fields yet",
+    "values": "filled in: {n}",
+    "up": "Up",
+    "down": "Down",
+    "rename": "Rename",
+    "scopeLabel": "Whose field",
+    "kindLabel": "Type",
+    "kindHint": "Cannot be changed later",
+    "label": "Name",
+    "labelPlaceholder": "Order number",
+    "key": "API key",
+    "keyHint": "Latin letters, digits and _, starting with a letter; cannot be changed later",
+    "add": "Add field",
+    "created": "Field “{label}” added",
+    "renameTitle": "Rename field",
+    "deleteTitle": "Delete field “{label}”?",
+    "deleteText": "Its values on {n} clients or nodes are deleted with it.",
+    "deleteEmpty": "The field is not filled in anywhere yet.",
+    "deleted": "Field deleted",
+    "userTitle": "Custom fields",
+    "nodeTitle": "Custom fields",
+    "saved": "Fields saved",
+    "loadFailed": "Could not load the custom fields."
   }
 }

@@ -13,6 +13,7 @@ import { t } from "../../../i18n";
 import { useCopy } from "../../../lib/copy";
 import { onFormError } from "../../../lib/fields";
 import { nodeLabel } from "../../../lib/node-label";
+import { changedFields, NodeFieldsInputs } from "../custom-fields";
 import { JoinProgress, type FixActions } from "../node-check";
 import type { Node } from "../nodes";
 import { BalanceFields, balanceKey, useBalance } from "../nodes-balance";
@@ -131,9 +132,11 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
   const balance = useBalance();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [billing, setBilling] = useState<BillingForm | null>(null);
+  const [custom, setCustom] = useState<Record<string, string>>({});
   useEffect(() => {
     if (node) {
       setBilling(billingForm(node.billing));
+      setCustom({});
       // The server as it was given, not the address for clients (its domain when it has one):
       // the field saves the server.
       setForm({ name: node.name, public_name: node.public_name, host: node.server_host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "",
@@ -217,6 +220,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
       body.billing = b.body;
     }
     body.front_page = form.front_page as NonNullable<Schemas["PatchNodeInputBody"]["front_page"]>;
+    body.custom_fields = changedFields(custom, node.custom_fields);
     const group = form.group.trim();
     const capacity = group && form.capacity.trim() ? Number(form.capacity) : undefined;
     if (capacity !== undefined && (!Number.isInteger(capacity) || capacity < 1)) {
@@ -252,6 +256,14 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
         <Field label={t("tags.label")} htmlFor="e-tags" hint={t("tags.nodeHint")} error={errors.tags}>
           <input id="e-tags" className="input" value={form.tags} onChange={set("tags")} placeholder={t("tags.placeholder")} autoComplete="off" aria-invalid={!!errors.tags} />
         </Field>
+        <NodeFieldsInputs
+          values={{ ...node?.custom_fields, ...custom }}
+          onChange={(k, v) => {
+            setCustom((c) => ({ ...c, [k]: v }));
+            setErrors(({ [`custom_fields.${k}`]: _, ...rest }) => rest);
+          }}
+          errors={Object.fromEntries(Object.entries(errors).flatMap(([k, v]) => (k.startsWith("custom_fields.") ? [[k.slice("custom_fields.".length), v]] : [])))}
+        />
         {node && !node.local ? (
           <>
             <Field label={t("nodes.host")} htmlFor="e-host" hint={t("nodes.hostHint")} error={errors.host}>

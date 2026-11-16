@@ -177,6 +177,16 @@ type Campaign struct {
 	CreatedAt int64
 }
 
+type CustomField struct {
+	ID        int64
+	Scope     string
+	Key       string
+	Label     string
+	Kind      string
+	Sort      int64
+	CreatedAt int64
+}
+
 type Device struct {
 	UserID    int64
 	Ip        string
@@ -355,6 +365,12 @@ type NodeAssignment struct {
 	BalanceGroup string
 	NodeID       int64
 	AssignedAt   int64
+}
+
+type NodeFieldValue struct {
+	NodeID  int64
+	FieldID int64
+	Value   string
 }
 
 type NodeRelay struct {
@@ -828,6 +844,12 @@ type User struct {
 	DeviceMode        string
 	ExtraDevices      int64
 	ExtraDevicesUntil sql.NullInt64
+}
+
+type UserFieldValue struct {
+	UserID  int64
+	FieldID int64
+	Value   string
 }
 
 type UserFolder struct {

@@ -2582,6 +2582,46 @@
         ],
         "type": "object"
       },
+      "CreateCustomFieldInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "Латиница в нижнем регистре, цифры и _, с буквы; потом не меняется",
+            "pattern": "^[a-z][a-z0-9_]{0,31}$",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Потом не меняется",
+            "enum": [
+              "text",
+              "number",
+              "bool",
+              "date",
+              "url"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "user",
+              "node"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "key",
+          "label",
+          "kind"
+        ],
+        "type": "object"
+      },
       "CreateFolderInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -2841,6 +2881,14 @@
             "maxLength": 100,
             "type": "string"
           },
+          "custom_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Значения своих полей по ключу; пустая строка — без значения",
+            "maxProperties": 30,
+            "type": "object"
+          },
           "name": {
             "maxLength": 100,
             "minLength": 1,
@@ -2908,6 +2956,56 @@
         "required": [
           "name",
           "url"
+        ],
+        "type": "object"
+      },
+      "CustomFieldView": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "key": {
+            "description": "Имя поля в API: ключ в custom_fields пользователя или ноды",
+            "type": "string"
+          },
+          "kind": {
+            "description": "text — строка, number — число, bool — да/нет (значение true), date — дата YYYY-MM-DD, url — ссылка http(s)",
+            "enum": [
+              "text",
+              "number",
+              "bool",
+              "date",
+              "url"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "description": "Название поля в панели",
+            "type": "string"
+          },
+          "scope": {
+            "description": "Чьё поле: пользователей или нод",
+            "enum": [
+              "user",
+              "node"
+            ],
+            "type": "string"
+          },
+          "values": {
+            "description": "У скольких пользователей или нод поле заполнено",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "key",
+          "label",
+          "kind",
+          "values"
         ],
         "type": "object"
       },
@@ -6160,6 +6258,13 @@
             "format": "double",
             "type": "number"
           },
+          "custom_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Свои поля админа (GET /api/v1/custom-fields, scope node) по ключу; поля без значения нет в объекте",
+            "type": "object"
+          },
           "domain": {
             "type": "string"
           },
@@ -6377,7 +6482,8 @@
           "own_ports",
           "capacity",
           "channel_mbps",
-          "tags"
+          "tags",
+          "custom_fields"
         ],
         "type": "object"
       },
@@ -6756,6 +6862,33 @@
           "expired",
           "traffic_90",
           "traffic_100"
+        ],
+        "type": "object"
+      },
+      "OrderCustomFieldsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Все поля этого scope, каждое один раз, в том порядке, в каком их показывают карточки",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
+          },
+          "scope": {
+            "enum": [
+              "user",
+              "node"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "ids"
         ],
         "type": "object"
       },
@@ -7643,6 +7776,20 @@
         },
         "type": "object"
       },
+      "PatchCustomFieldInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "type": "object"
+      },
       "PatchFiltersInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -7840,6 +7987,14 @@
             "maximum": 100000,
             "minimum": 1,
             "type": "integer"
+          },
+          "custom_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Значения своих полей по ключу, только названные; пустая строка стирает значение",
+            "maxProperties": 30,
+            "type": "object"
           },
           "domain": {
             "maxLength": 253,
@@ -8287,6 +8442,14 @@
           "contact": {
             "maxLength": 100,
             "type": "string"
+          },
+          "custom_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Значения своих полей по ключу, только названные; пустая строка стирает значение",
+            "maxProperties": 30,
+            "type": "object"
           },
           "device_limit": {
             "format": "int64",
@@ -13854,6 +14017,13 @@
             "format": "date-time",
             "type": "string"
           },
+          "custom_fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Свои поля админа (GET /api/v1/custom-fields) по ключу; поля без значения нет в объекте",
+            "type": "object"
+          },
           "device_limit": {
             "format": "int64",
             "type": [
@@ -14070,6 +14240,7 @@
           "hidden",
           "starts_on_connect",
           "next_tariff",
+          "custom_fields",
           "created_at"
         ],
         "type": "object"
@@ -16959,6 +17130,200 @@
         "summary": "Переименовать кампанию или убрать в архив",
         "tags": [
           "campaigns"
+        ]
+      }
+    },
+    "/api/v1/custom-fields": {
+      "get": {
+        "operationId": "list-custom-fields",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CustomFieldView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Свои поля пользователей и нод",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "create-custom-field",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCustomFieldInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomFieldView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Добавить своё поле",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/custom-fields/order": {
+      "put": {
+        "operationId": "order-custom-fields",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderCustomFieldsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Порядок своих полей",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/custom-fields/{id}": {
+      "delete": {
+        "operationId": "delete-custom-field",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить своё поле вместе с его значениями",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "update-custom-field",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchCustomFieldInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomFieldView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Переименовать своё поле",
+        "tags": [
+          "users"
         ]
       }
     },

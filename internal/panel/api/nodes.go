@@ -5,8 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"maps"
 	"math"
 	"net/http"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -110,6 +112,8 @@ type NodeInfo struct {
 
 	// Tags are the admin's labels of the node, as a user's.
 	Tags []string `json:"tags" doc:"Метки ноды: свои слова админа, по ним фильтруют список"`
+	// CustomFields are the values of the admin's own fields of nodes (customfields.go).
+	CustomFields map[string]string `json:"custom_fields" doc:"Свои поля админа (GET /api/v1/custom-fields, scope node) по ключу; поля без значения нет в объекте"`
 }
 
 type nodesOutput struct{ Body []NodeInfo }
@@ -156,6 +160,8 @@ type patchNodeInput struct {
 		// What the node's users reach on its server's own addresses, past the server's firewall.
 		OwnPorts *[]int    `json:"own_ports,omitempty" maxItems:"16" doc:"Порты адреса самого сервера, которые открыть клиентам этой ноды, например свой DNS; файрвол сервера такие подключения не закрывает. Весь список целиком; пустой убирает все"`
 		Tags     *[]string `json:"tags,omitempty" maxItems:"20" doc:"Метки ноды целиком; пустой список снимает все"`
+		// CustomFields are values of the admin's own fields of nodes, by key.
+		CustomFields map[string]string `json:"custom_fields,omitempty" maxProperties:"30" doc:"Значения своих полей по ключу, только названные; пустая строка стирает значение"`
 	}
 }
 
@@ -223,7 +229,8 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 	v := NodeInfo{ID: n.ID, Name: n.Name, PublicName: n.PublicName, Local: n.Address == "", Address: n.Address, Host: domain.NodeHost(n), ServerHost: n.PublicHost, Domain: n.Domain,
 		Tags: domain.DecodeTags(n.Tags), Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
 		FairShare: n.FairShare != 0, ChannelMbps: store.Int64Ptr(n.ChannelMbps), BalanceGroup: n.BalanceGroup, Capacity: store.Int64Ptr(n.Capacity),
-		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, SNIByKey: n.SniByKey != 0, FrontPage: n.FrontPage, InAuto: n.NoAuto == 0, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow}
+		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, SNIByKey: n.SniByKey != 0, FrontPage: n.FrontPage, InAuto: n.NoAuto == 0, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow,
+		CustomFields: map[string]string{}}
 	if v.APIAllow == nil {
 		v.APIAllow = []string{}
 	}
@@ -307,6 +314,10 @@ func (h *handlers) listNodes(ctx context.Context, in *listNodesInput) (*nodesOut
 	if err != nil {
 		return nil, err
 	}
+	fields, err := nodeFields(ctx, h.d.Store.Q)
+	if err != nil {
+		return nil, err
+	}
 	out := &nodesOutput{Body: make([]NodeInfo, 0, len(nodes))}
 	for _, n := range nodes {
 		if in.Tag != "" && !domain.HasTag(n.Tags, in.Tag) {
@@ -314,6 +325,7 @@ func (h *handlers) listNodes(ctx context.Context, in *listNodesInput) (*nodesOut
 		}
 		v := h.viewNode(ctx, n, inbounds)
 		v.Traffic24h, v.Cascade24h = day[n.ID].users.Up+day[n.ID].users.Down, day[n.ID].relay.Up+day[n.ID].relay.Down
+		v.CustomFields = fieldsOrEmpty(fields[n.ID])
 		if err := h.vpsTraffic(ctx, &v, n); err != nil {
 			return nil, err
 		}
@@ -428,6 +440,23 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 		}
 		billing = &v
 	}
+	fields, err := checkFieldValues(ctx, h.d.Store.Q, "node", b.CustomFields)
+	if err != nil {
+		return nil, err
+	}
+	// Only the own fields: nothing the node carries changes, so nothing is told to the nodes.
+	rest := b
+	rest.CustomFields = nil
+	if reflect.ValueOf(rest).IsZero() && b.CustomFields != nil {
+		if _, err := h.getNode(ctx, in.ID); err != nil {
+			return nil, err
+		}
+		if err := h.d.Store.Tx(ctx, func(q *db.Queries) error { return setNodeFields(ctx, q, in.ID, fields) }); err != nil {
+			return nil, err
+		}
+		h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(in.ID, 10), map[string]any{"custom_fields": slices.Sorted(maps.Keys(b.CustomFields))})
+		return h.nodeInfo(ctx, in.ID)
+	}
 	rules, err := h.nodeRules(ctx)
 	if err != nil {
 		return nil, err
@@ -441,7 +470,13 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0,
 		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "sni_by_key": n.SniByKey != 0, "front_page": n.FrontPage, "in_auto": n.NoAuto == 0, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow, "own_ports": n.OwnPorts, "tags": domain.DecodeTags(n.Tags),
-		"billing": billingView(domain.BillingOf(n))})
+		"billing": billingView(domain.BillingOf(n)), "custom_fields": slices.Sorted(maps.Keys(b.CustomFields))})
+	// The node's change is stored and told already; its fields come after it.
+	if len(fields) > 0 {
+		if err := h.d.Store.Tx(ctx, func(q *db.Queries) error { return setNodeFields(ctx, q, n.ID, fields) }); err != nil {
+			return nil, err
+		}
+	}
 	return h.nodeInfo(ctx, n.ID)
 }
 
@@ -521,6 +556,11 @@ func (h *handlers) nodeInfo(ctx context.Context, id int64) (*nodeInfoOutput, err
 	}
 	v := h.viewNode(ctx, n, inbounds)
 	v.Traffic24h, v.Cascade24h = day[n.ID].users.Up+day[n.ID].users.Down, day[n.ID].relay.Up+day[n.ID].relay.Down
+	fields, err := nodeFields(ctx, h.d.Store.Q)
+	if err != nil {
+		return nil, err
+	}
+	v.CustomFields = fieldsOrEmpty(fields[n.ID])
 	if err := h.vpsTraffic(ctx, &v, n); err != nil {
 		return nil, err
 	}
@@ -556,6 +596,9 @@ func (h *handlers) rekeyNode(ctx context.Context, in *nodeIDInput) (*nodeKeyOutp
 	}
 	out := &nodeKeyOutput{}
 	out.Body.Node, out.Body.Key, out.Body.Command = h.viewNode(ctx, n, inbounds), key, release.JoinCommand(key)
+	if out.Body.Node.CustomFields, err = nodeFieldsOf(ctx, h.d.Store.Q, n.ID); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 

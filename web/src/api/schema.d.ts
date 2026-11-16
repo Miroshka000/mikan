@@ -792,6 +792,59 @@ export interface paths {
         patch: operations["update-campaign"];
         trace?: never;
     };
+    "/api/v1/custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Свои поля пользователей и нод */
+        get: operations["list-custom-fields"];
+        put?: never;
+        /** Добавить своё поле */
+        post: operations["create-custom-field"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custom-fields/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Порядок своих полей */
+        put: operations["order-custom-fields"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/custom-fields/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить своё поле вместе с его значениями */
+        delete: operations["delete-custom-field"];
+        options?: never;
+        head?: never;
+        /** Переименовать своё поле */
+        patch: operations["update-custom-field"];
+        trace?: never;
+    };
     "/api/v1/exit-dns": {
         parameters: {
             query?: never;
@@ -4707,6 +4760,18 @@ export interface components {
             code?: string;
             name: string;
         };
+        CreateCustomFieldInputBody: {
+            /** @description Латиница в нижнем регистре, цифры и _, с буквы; потом не меняется */
+            key: string;
+            /**
+             * @description Потом не меняется
+             * @enum {string}
+             */
+            kind: "text" | "number" | "bool" | "date" | "url";
+            label: string;
+            /** @enum {string} */
+            scope: "user" | "node";
+        };
         CreateFolderInputBody: {
             /**
              * @description Не задан — gray
@@ -4789,6 +4854,10 @@ export interface components {
         };
         CreateUserInputBody: {
             contact?: string;
+            /** @description Значения своих полей по ключу; пустая строка — без значения */
+            custom_fields?: {
+                [key: string]: string;
+            };
             name: string;
             note?: string;
             /** @description Срок начнётся с первого подключения; не задано — как у тарифа */
@@ -4808,6 +4877,29 @@ export interface components {
             name: string;
             /** @description http:// или https:// и адрес получателя. Адреса этого сервера, его сети и облачных метаданных панель не принимает; для адресов сети нужен allow_local */
             url: string;
+        };
+        CustomFieldView: {
+            /** Format: int64 */
+            id: number;
+            /** @description Имя поля в API: ключ в custom_fields пользователя или ноды */
+            key: string;
+            /**
+             * @description text — строка, number — число, bool — да/нет (значение true), date — дата YYYY-MM-DD, url — ссылка http(s)
+             * @enum {string}
+             */
+            kind: "text" | "number" | "bool" | "date" | "url";
+            /** @description Название поля в панели */
+            label: string;
+            /**
+             * @description Чьё поле: пользователей или нод
+             * @enum {string}
+             */
+            scope: "user" | "node";
+            /**
+             * Format: int64
+             * @description У скольких пользователей или нод поле заполнено
+             */
+            values: number;
         };
         DNS: {
             default_nameserver?: string[];
@@ -6005,6 +6097,10 @@ export interface components {
              * @description Загрузка процессора всего сервера, не только ноды
              */
             cpu_percent: number;
+            /** @description Свои поля админа (GET /api/v1/custom-fields, scope node) по ключу; поля без значения нет в объекте */
+            custom_fields: {
+                [key: string]: string;
+            };
             domain: string;
             enabled: boolean;
             /** @description Слова ошибки связи как есть, для «подробнее» */
@@ -6229,6 +6325,12 @@ export interface components {
             expired: boolean;
             traffic_100: boolean;
             traffic_90: boolean;
+        };
+        OrderCustomFieldsInputBody: {
+            /** @description Все поля этого scope, каждое один раз, в том порядке, в каком их показывают карточки */
+            ids: number[];
+            /** @enum {string} */
+            scope: "user" | "node";
         };
         OrderFoldersInputBody: {
             /** @description Все папки, каждая один раз, в том порядке, в каком их показывает список */
@@ -6520,6 +6622,9 @@ export interface components {
             archived?: boolean;
             name?: string;
         };
+        PatchCustomFieldInputBody: {
+            label: string;
+        };
         PatchFiltersInputBody: {
             /** @description Весь исходящий фильтр */
             egress?: components["schemas"]["EgressFilter"];
@@ -6601,6 +6706,10 @@ export interface components {
              * @description Ширина канала ноды, Мбит/с в каждую сторону
              */
             channel_mbps?: number;
+            /** @description Значения своих полей по ключу, только названные; пустая строка стирает значение */
+            custom_fields?: {
+                [key: string]: string;
+            };
             domain?: string;
             enabled?: boolean;
             /** @description Делить канал ноды поровну между теми, кто сейчас качает; нужен channel_mbps */
@@ -6772,6 +6881,10 @@ export interface components {
              */
             billing_day?: number;
             contact?: string;
+            /** @description Значения своих полей по ключу, только названные; пустая строка стирает значение */
+            custom_fields?: {
+                [key: string]: string;
+            };
             /** Format: int64 */
             device_limit?: number;
             /**
@@ -8856,6 +8969,10 @@ export interface components {
             contact: string;
             /** Format: date-time */
             created_at: string;
+            /** @description Свои поля админа (GET /api/v1/custom-fields) по ключу; поля без значения нет в объекте */
+            custom_fields: {
+                [key: string]: string;
+            };
             /** Format: int64 */
             device_limit: number | null;
             /**
@@ -10888,6 +11005,163 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CampaignView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-custom-field": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCustomFieldInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "order-custom-fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderCustomFieldsInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-custom-field": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-custom-field": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchCustomFieldInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldView"];
                 };
             };
             /** @description Error */

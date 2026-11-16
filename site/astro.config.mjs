@@ -146,6 +146,7 @@ export default defineConfig({
 						{ slug: 'operations/alerts' },
 						{ slug: 'operations/diagnostics' },
 						{ slug: 'operations/filters' },
+						{ slug: 'operations/custom-fields' },
 						{ slug: 'operations/front-page' },
 						{ slug: 'operations/community-addons' },
 						{ slug: 'operations/gallery' },

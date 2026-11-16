@@ -62,6 +62,7 @@ export const qk = {
   readySubTemplates: ["sub-templates-ready"] as const,
   userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
+  customFields: ["custom-fields"] as const,
   lifecycle: ["lifecycle"] as const,
   // Under the users: a change of any of them may move who the removal reaches.
   inactive: (days: number) => ["users", "inactive", days] as const,
@@ -397,6 +398,30 @@ export function useFolderMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<T
     },
   });
 }
+
+export function useCustomFields() {
+  return useQuery({ queryKey: qk.customFields, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/custom-fields", { signal })) });
+}
+
+/** A field's change shows on every card: the users and the nodes are asked again with the fields. */
+export function useCustomFieldMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.customFields });
+      void qc.invalidateQueries({ queryKey: qk.users });
+      void qc.invalidateQueries({ queryKey: qk.nodes });
+    },
+  });
+}
+
+export const customFieldActions = {
+  create: (body: Schemas["CreateCustomFieldInputBody"]) => unwrap(api.POST("/api/v1/custom-fields", { body })),
+  rename: ({ id, label }: { id: number; label: string }) => unwrap(api.PATCH("/api/v1/custom-fields/{id}", { params: { path: { id } }, body: { label } })),
+  remove: (id: number) => unwrap(api.DELETE("/api/v1/custom-fields/{id}", { params: { path: { id } } })),
+  order: (body: Schemas["OrderCustomFieldsInputBody"]) => unwrap(api.PUT("/api/v1/custom-fields/order", { body })),
+};
 
 export const folderActions = {
   create: (body: Schemas["CreateFolderInputBody"]) => unwrap(api.POST("/api/v1/folders", { body })),
