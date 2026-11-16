@@ -196,9 +196,11 @@ func maskObject(m map[string]any, parent string) map[string]any {
 			}
 		case (k == "ip" || k == "last_ip") && !infrastructure:
 			m[k] = ""
-		case k == "custom_fields" && person:
-			// The admin's own fields of a user may hold anything about the person: a phone, an order.
-			if _, isObject := val.(map[string]any); isObject {
+		case k == "custom_fields":
+			// The admin's own fields of a user may hold anything about the person: a phone, an
+			// order. A node's are the admin's words about a server, kept as they are: their
+			// keys are the admin's, not the API's names of a person's data.
+			if _, isObject := val.(map[string]any); isObject && person {
 				m[k] = map[string]any{}
 			}
 		case k == "telegram", k == "legacy":

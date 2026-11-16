@@ -50,3 +50,11 @@ ON CONFLICT (node_id, field_id) DO UPDATE SET value = EXCLUDED.value;
 
 -- name: ClearNodeFieldValue :exec
 DELETE FROM node_field_values WHERE node_id = $1 AND field_id = $2;
+
+-- name: LockCustomFields :many
+-- The fields of ids that still exist, kept from being deleted until the transaction ends: a
+-- value written for one of them cannot meet a field that is gone.
+SELECT id FROM custom_fields WHERE id = ANY(sqlc.arg(ids)::bigint[]) ORDER BY id FOR KEY SHARE;
+
+-- name: NodeFieldValuesOf :many
+SELECT f.key, v.value FROM node_field_values v JOIN custom_fields f ON f.id = v.field_id WHERE v.node_id = $1;

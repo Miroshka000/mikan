@@ -5958,6 +5958,7 @@
     "deleted": "Field deleted",
     "userTitle": "Custom fields",
     "nodeTitle": "Custom fields",
-    "saved": "Fields saved"
+    "saved": "Fields saved",
+    "loadFailed": "Could not load the custom fields."
   }
 }

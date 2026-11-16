@@ -487,8 +487,8 @@ type userFilter struct {
 	state, source, hidden string
 	query                 string // lowercased and trimmed; empty: no search
 	folder                folderFilter
-	// fields is the text of the users' own fields the search looks through too (searchText).
-	fields map[int64]string
+	// fields are the values of the users' own fields the search looks through too (searchText).
+	fields map[int64][]string
 }
 
 // newUserFilter reads a filter whose fields are at at ("query." for the list, "body.filter."
@@ -521,7 +521,8 @@ func (f userFilter) wants(u db.User, st string) bool {
 	} else if f.state != "all" && !(st == f.state || (f.state == domain.StateActive && st == domain.StateExpiring)) {
 		return false
 	}
-	return f.query == "" || strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags)+f.fields[u.ID], f.query)
+	return f.query == "" || strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags), f.query) ||
+		slices.ContainsFunc(f.fields[u.ID], func(v string) bool { return strings.Contains(v, f.query) })
 }
 
 // searchFields reads the users' own fields into f when it searches.
@@ -698,11 +699,12 @@ func (h *handlers) createUser(ctx context.Context, in *createUserInput) (*userOu
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, fieldErr("body.tariff_id", "tariff_not_found")
 	}
-	if err == nil && len(fields) > 0 {
-		err = h.d.Store.Tx(ctx, func(q *db.Queries) error { return setUserFields(ctx, q, u.ID, fields) })
-	}
 	if err == nil {
 		h.audit(ctx, sessionOf(ctx).AdminID, "user.create", "user", strconv.FormatInt(u.ID, 10), map[string]any{"tariff_id": in.Body.TariffID})
+		// The user is there already: a field deleted since the check is skipped (liveChanges).
+		if len(fields) > 0 {
+			err = h.d.Store.Tx(ctx, func(q *db.Queries) error { return setUserFields(ctx, q, u.ID, fields) })
+		}
 	}
 	return h.userResult(ctx, u, err)
 }
@@ -768,9 +770,6 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 	} else {
 		u, err = h.d.Users.Update(ctx, in.ID, p)
 	}
-	if err == nil && len(fields) > 0 {
-		err = h.d.Store.Tx(ctx, func(q *db.Queries) error { return setUserFields(ctx, q, u.ID, fields) })
-	}
 	if err == nil {
 		var details map[string]any
 		if b.Name != nil && u.Name != before {
@@ -787,6 +786,9 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 			d = details
 		}
 		h.audit(ctx, sessionOf(ctx).AdminID, "user.update", "user", strconv.FormatInt(in.ID, 10), d)
+		if len(fields) > 0 {
+			err = h.d.Store.Tx(ctx, func(q *db.Queries) error { return setUserFields(ctx, q, u.ID, fields) })
+		}
 	}
 	return h.userResult(ctx, u, err)
 }

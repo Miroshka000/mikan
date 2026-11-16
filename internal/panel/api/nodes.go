@@ -8,6 +8,7 @@ import (
 	"maps"
 	"math"
 	"net/http"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -217,7 +218,8 @@ func (h *handlers) viewNode(ctx context.Context, n db.Node, inbounds []db.Inboun
 	v := NodeInfo{ID: n.ID, Name: n.Name, PublicName: n.PublicName, Local: n.Address == "", Address: n.Address, Host: domain.NodeHost(n), ServerHost: n.PublicHost, Domain: n.Domain,
 		Tags: domain.DecodeTags(n.Tags), Enabled: n.Enabled != 0, Inbounds: len(domain.NodeInbounds(inbounds, n.ID)), Status: "unknown",
 		FairShare: n.FairShare != 0, ChannelMbps: store.Int64Ptr(n.ChannelMbps), BalanceGroup: n.BalanceGroup, Capacity: store.Int64Ptr(n.Capacity),
-		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, SNIByKey: n.SniByKey != 0, FrontPage: n.FrontPage, InAuto: n.NoAuto == 0, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow}
+		HTTPRedirect: n.HttpRedirect != 0, SNIRouter: n.SniRouter != 0, SNIByKey: n.SniByKey != 0, FrontPage: n.FrontPage, InAuto: n.NoAuto == 0, APILockdown: n.ApiLockdown != 0, APIAllow: n.ApiAllow,
+		CustomFields: map[string]string{}}
 	if v.APIAllow == nil {
 		v.APIAllow = []string{}
 	}
@@ -431,6 +433,19 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 	if err != nil {
 		return nil, err
 	}
+	// Only the own fields: nothing the node carries changes, so nothing is told to the nodes.
+	rest := b
+	rest.CustomFields = nil
+	if reflect.ValueOf(rest).IsZero() && b.CustomFields != nil {
+		if _, err := h.getNode(ctx, in.ID); err != nil {
+			return nil, err
+		}
+		h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(in.ID, 10), map[string]any{"custom_fields": slices.Sorted(maps.Keys(b.CustomFields))})
+		if err := h.d.Store.Tx(ctx, func(q *db.Queries) error { return setNodeFields(ctx, q, in.ID, fields) }); err != nil {
+			return nil, err
+		}
+		return h.nodeInfo(ctx, in.ID)
+	}
 	rules, err := h.nodeRules(ctx)
 	if err != nil {
 		return nil, err
@@ -440,16 +455,17 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 	if err != nil {
 		return nil, h.nodeErr(err)
 	}
-	if len(fields) > 0 {
-		if err := h.d.Store.Tx(ctx, func(q *db.Queries) error { return setNodeFields(ctx, q, n.ID, fields) }); err != nil {
-			return nil, err
-		}
-	}
 	h.nodesChanged()
 	h.d.Changes.SlotsChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(n.ID, 10), map[string]any{"name": n.Name, "public_name": n.PublicName, "enabled": n.Enabled != 0,
 		"fair_share": n.FairShare != 0, "channel_mbps": n.ChannelMbps.Int64, "http_redirect": n.HttpRedirect != 0, "sni_router": n.SniRouter != 0, "sni_by_key": n.SniByKey != 0, "front_page": n.FrontPage, "in_auto": n.NoAuto == 0, "api_lockdown": n.ApiLockdown != 0, "api_allow": n.ApiAllow, "own_ports": n.OwnPorts, "tags": domain.DecodeTags(n.Tags),
 		"billing": billingView(domain.BillingOf(n)), "custom_fields": slices.Sorted(maps.Keys(b.CustomFields))})
+	// The node's change is stored and told already; its fields come after it.
+	if len(fields) > 0 {
+		if err := h.d.Store.Tx(ctx, func(q *db.Queries) error { return setNodeFields(ctx, q, n.ID, fields) }); err != nil {
+			return nil, err
+		}
+	}
 	return h.nodeInfo(ctx, n.ID)
 }
 
@@ -569,6 +585,9 @@ func (h *handlers) rekeyNode(ctx context.Context, in *nodeIDInput) (*nodeKeyOutp
 	}
 	out := &nodeKeyOutput{}
 	out.Body.Node, out.Body.Key, out.Body.Command = h.viewNode(ctx, n, inbounds), key, release.JoinCommand(key)
+	if out.Body.Node.CustomFields, err = nodeFieldsOf(ctx, h.d.Store.Q, n.ID); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 

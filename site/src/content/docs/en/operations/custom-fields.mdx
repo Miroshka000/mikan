@@ -53,7 +53,7 @@ These endpoints work with the fields themselves:
 A client and a node carry their values in `custom_fields`, an object of key to value. A field with no value is not in it.
 
 `POST /api/v1/users`, `PATCH /api/v1/users/{id}` and `PATCH /api/v1/nodes/{id}` take `custom_fields`. They change only the fields you name, and an empty string clears a value. Values are stored in a normalized form:
-- a number in its shortest form: `1e3` becomes `1000`;
+- a number as a plain decimal, digit for digit, without extra zeros: `007.50` becomes `7.5`;
 - a date as `YYYY-MM-DD`;
 - yes as `true`; `false` clears the value.
 

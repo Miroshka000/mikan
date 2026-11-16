@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"math"
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +33,9 @@ const maxCustomFields = 30
 const maxFieldValue = 500
 
 var fieldKey = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+
+// plainNumber is a decimal: a sign, the whole part, the fraction.
+var plainNumber = regexp.MustCompile(`^([+-]?)([0-9]+)(?:\.([0-9]+))?$`)
 
 type CustomFieldView struct {
 	ID     int64  `json:"id"`
@@ -229,7 +232,7 @@ func (h *handlers) deleteCustomField(ctx context.Context, in *customFieldIDInput
 }
 
 // fieldValue is a value as it is kept for a field of kind, "" for none: a bool keeps only
-// true, a number its shortest form; ok false when the value is not one of the kind.
+// true, a number its plain decimal form; ok false when the value is not one of the kind.
 func fieldValue(kind, raw string) (string, bool) {
 	v := strings.TrimSpace(raw)
 	if v == "" {
@@ -240,11 +243,24 @@ func fieldValue(kind, raw string) (string, bool) {
 	}
 	switch kind {
 	case "number":
-		n, err := strconv.ParseFloat(v, 64)
-		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+		// A plain decimal, kept digit for digit: a float would round 9007199254740993.
+		m := plainNumber.FindStringSubmatch(v)
+		if m == nil {
 			return "", false
 		}
-		return strconv.FormatFloat(n, 'f', -1, 64), true
+		whole := strings.TrimLeft(m[2], "0")
+		if whole == "" {
+			whole = "0"
+		}
+		frac := strings.TrimRight(m[3], "0")
+		out := whole
+		if frac != "" {
+			out += "." + frac
+		}
+		if m[1] == "-" && out != "0" {
+			out = "-" + out
+		}
+		return out, true
 	case "bool":
 		switch v {
 		case "true":
@@ -312,8 +328,32 @@ func checkFieldValues(ctx context.Context, q *db.Queries, scope string, in map[s
 	return out, nil
 }
 
+// liveChanges keeps the changes whose field still exists and locks those fields until the
+// transaction ends: a field deleted since the values were checked takes its value along.
+func liveChanges(ctx context.Context, q *db.Queries, changes []fieldChange) ([]fieldChange, error) {
+	ids := make([]int64, len(changes))
+	for i, c := range changes {
+		ids[i] = c.field
+	}
+	live, err := q.LockCustomFields(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	var out []fieldChange
+	for _, c := range changes {
+		if slices.Contains(live, c.field) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 // setUserFields writes a user's checked values.
 func setUserFields(ctx context.Context, q *db.Queries, userID int64, changes []fieldChange) error {
+	changes, err := liveChanges(ctx, q, changes)
+	if err != nil {
+		return err
+	}
 	for _, c := range changes {
 		var err error
 		if c.value == "" {
@@ -329,6 +369,10 @@ func setUserFields(ctx context.Context, q *db.Queries, userID int64, changes []f
 }
 
 func setNodeFields(ctx context.Context, q *db.Queries, nodeID int64, changes []fieldChange) error {
+	changes, err := liveChanges(ctx, q, changes)
+	if err != nil {
+		return err
+	}
 	for _, c := range changes {
 		var err error
 		if c.value == "" {
@@ -374,6 +418,19 @@ func nodeFields(ctx context.Context, q *db.Queries) (map[int64]map[string]string
 	return m, nil
 }
 
+// nodeFieldsOf are one node's values by key, an object even with none.
+func nodeFieldsOf(ctx context.Context, q *db.Queries, id int64) (map[string]string, error) {
+	rows, err := q.NodeFieldValuesOf(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]string, len(rows))
+	for _, r := range rows {
+		m[r.Key] = r.Value
+	}
+	return m, nil
+}
+
 // fieldsOrEmpty is an owner's values for JSON: an object even with none.
 func fieldsOrEmpty(m map[string]string) map[string]string {
 	if m == nil {
@@ -382,17 +439,15 @@ func fieldsOrEmpty(m map[string]string) map[string]string {
 	return m
 }
 
-// searchText is the users' values joined, lowercased, by user: what the list's search
-// looks through besides the name, contact, note and tags.
-func searchText(fields map[int64]map[string]string) map[int64]string {
-	out := make(map[int64]string, len(fields))
+// searchText is the users' values, lowercased, by user: what the list's search looks
+// through besides the name, contact, note and tags. Each value is matched on its own, so the
+// answer does not depend on the order a map gives them in.
+func searchText(fields map[int64]map[string]string) map[int64][]string {
+	out := make(map[int64][]string, len(fields))
 	for id, kv := range fields {
-		var b strings.Builder
 		for _, v := range kv {
-			b.WriteString(" ")
-			b.WriteString(strings.ToLower(v))
+			out[id] = append(out[id], strings.ToLower(v))
 		}
-		out[id] = b.String()
 	}
 	return out
 }

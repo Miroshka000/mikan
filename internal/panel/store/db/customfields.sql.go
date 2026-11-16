@@ -180,6 +180,35 @@ func (q *Queries) ListCustomFields(ctx context.Context) ([]CustomField, error) {
 	return items, nil
 }
 
+const lockCustomFields = `-- name: LockCustomFields :many
+SELECT id FROM custom_fields WHERE id = ANY($1::bigint[]) ORDER BY id FOR KEY SHARE
+`
+
+// The fields of ids that still exist, kept from being deleted until the transaction ends: a
+// value written for one of them cannot meet a field that is gone.
+func (q *Queries) LockCustomFields(ctx context.Context, ids []int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, lockCustomFields, pq.Array(ids))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int64{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const nodeFieldValues = `-- name: NodeFieldValues :many
 SELECT v.node_id, f.key, v.value FROM node_field_values v JOIN custom_fields f ON f.id = v.field_id
 `
@@ -200,6 +229,38 @@ func (q *Queries) NodeFieldValues(ctx context.Context) ([]NodeFieldValuesRow, er
 	for rows.Next() {
 		var i NodeFieldValuesRow
 		if err := rows.Scan(&i.NodeID, &i.Key, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const nodeFieldValuesOf = `-- name: NodeFieldValuesOf :many
+SELECT f.key, v.value FROM node_field_values v JOIN custom_fields f ON f.id = v.field_id WHERE v.node_id = $1
+`
+
+type NodeFieldValuesOfRow struct {
+	Key   string
+	Value string
+}
+
+func (q *Queries) NodeFieldValuesOf(ctx context.Context, nodeID int64) ([]NodeFieldValuesOfRow, error) {
+	rows, err := q.db.QueryContext(ctx, nodeFieldValuesOf, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []NodeFieldValuesOfRow{}
+	for rows.Next() {
+		var i NodeFieldValuesOfRow
+		if err := rows.Scan(&i.Key, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

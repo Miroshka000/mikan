@@ -13,7 +13,6 @@ import { SwitchRow } from "../../components/switch";
 import { useToast } from "../../components/toast";
 import { Button, Field, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
-import { useDraft } from "../../lib/draft";
 import { fieldErrors } from "../../lib/fields";
 import { Section } from "./user/section";
 
@@ -60,14 +59,29 @@ export function FieldInput({ field, id, value, onChange, onBlur, error }: { fiel
   );
 }
 
-/** The values that differ from what the server has: a cleared one is sent as "". */
-export function changedFields(draft: Record<string, string>, saved: Record<string, string>): Record<string, string> | undefined {
+/**
+ * The edited values that differ from what the server has, a cleared one as "". Only the keys
+ * the admin touched: a value another admin saved meanwhile is not sent back over.
+ */
+export function changedFields(edits: Record<string, string>, saved: Record<string, string>): Record<string, string> | undefined {
   const out: Record<string, string> = {};
-  for (const k of new Set([...Object.keys(draft), ...Object.keys(saved)])) {
-    const d = (draft[k] ?? "").trim();
+  for (const [k, v] of Object.entries(edits)) {
+    const d = v.trim();
     if (d !== (saved[k] ?? "")) out[k] = d;
   }
   return Object.keys(out).length ? out : undefined;
+}
+
+/** A failed list of fields, with a retry: the editors do not just lose their inputs. */
+function FieldsFailed({ retry }: { retry: () => void }) {
+  return (
+    <p className="text-xs text-[var(--ink-500)]">
+      {t("customFields.loadFailed")}{" "}
+      <button type="button" className="underline" onClick={retry}>
+        {t("common.retry")}
+      </button>
+    </p>
+  );
 }
 
 /** The errors of custom_fields.<key> by key. */
@@ -83,6 +97,13 @@ export function customFieldErrors(error: unknown): Record<string, string> {
 export function NodeFieldsInputs({ values, onChange, errors }: { values: Record<string, string>; onChange: (key: string, v: string) => void; errors: Record<string, string> }) {
   const fields = useCustomFields();
   const list = (fields.data ?? []).filter((f) => f.scope === "node");
+  if (fields.isError && !fields.data)
+    return (
+      <fieldset className="mt-2 border-t border-[var(--hairline)] pt-4">
+        <legend className="mb-2 text-[13px] font-medium">{t("customFields.nodeTitle")}</legend>
+        <FieldsFailed retry={() => void fields.refetch()} />
+      </fieldset>
+    );
   if (list.length === 0) return null;
   return (
     <fieldset className="mt-2 border-t border-[var(--hairline)] pt-4">
@@ -94,19 +115,39 @@ export function NodeFieldsInputs({ values, onChange, errors }: { values: Record<
   );
 }
 
-/** A user's own fields on the card, saved with a button: a value being typed is kept while the card polls. */
+/**
+ * A user's own fields on the card, saved with a button. Only the values the admin edits are
+ * kept apart from the card: the polls refresh the rest, and an edit being typed stays.
+ */
 export function UserFieldsSection({ u }: { u: User }) {
   const fields = useCustomFields();
   const toast = useToast();
   const update = useUserMutation(userActions.update);
-  const { draft, setDraft, dirty, reset } = useDraft(u.custom_fields);
+  const [edits, setEdits] = useState<Record<string, string>>({});
   const list = (fields.data ?? []).filter((f) => f.scope === "user");
+  if (fields.isError && !fields.data)
+    return (
+      <Section title={t("customFields.userTitle")}>
+        <FieldsFailed retry={() => void fields.refetch()} />
+      </Section>
+    );
   if (list.length === 0) return null;
   const errors = customFieldErrors(update.error);
+  const dirty = !!changedFields(edits, u.custom_fields);
   const save = () => {
-    const custom_fields = changedFields(draft, u.custom_fields);
+    const custom_fields = changedFields(edits, u.custom_fields);
     if (!custom_fields) return;
-    update.mutate({ id: u.id, body: { custom_fields } }, { onSuccess: () => toast.ok(t("customFields.saved")), onError: (e) => !(e instanceof ApiError && Object.keys(customFieldErrors(e)).length) && toast.error(errorText(e)) });
+    update.mutate(
+      { id: u.id, body: { custom_fields } },
+      {
+        onSuccess: () => {
+          // What was saved is the card's now; an edit typed after the click stays an edit.
+          setEdits((cur) => Object.fromEntries(Object.entries(cur).filter(([k, v]) => v.trim() !== custom_fields[k])));
+          toast.ok(t("customFields.saved"));
+        },
+        onError: (e) => !(e instanceof ApiError && Object.keys(customFieldErrors(e)).length) && toast.error(errorText(e)),
+      },
+    );
   };
   return (
     <Section title={t("customFields.userTitle")}>
@@ -118,7 +159,7 @@ export function UserFieldsSection({ u }: { u: User }) {
         noValidate
       >
         {list.map((f) => (
-          <FieldInput key={f.id} field={f} id={`user-cf-${f.key}`} value={draft[f.key] ?? ""} onChange={(v) => setDraft({ ...draft, [f.key]: v })} error={errors[f.key]} />
+          <FieldInput key={f.id} field={f} id={`user-cf-${f.key}`} value={edits[f.key] ?? u.custom_fields[f.key] ?? ""} onChange={(v) => setEdits((cur) => ({ ...cur, [f.key]: v }))} error={errors[f.key]} />
         ))}
         {dirty ? (
           <div className="mt-2 flex gap-2">
@@ -130,7 +171,7 @@ export function UserFieldsSection({ u }: { u: User }) {
               size="sm"
               variant="ghost"
               onClick={() => {
-                reset();
+                setEdits({});
                 update.reset();
               }}
             >

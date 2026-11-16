@@ -136,7 +136,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
   useEffect(() => {
     if (node) {
       setBilling(billingForm(node.billing));
-      setCustom(node.custom_fields);
+      setCustom({});
       // The server as it was given, not the address for clients (its domain when it has one):
       // the field saves the server.
       setForm({ name: node.name, public_name: node.public_name, host: node.server_host, domain: node.domain, enabled: node.enabled, fair_share: node.fair_share, channel: node.channel_mbps != null ? String(node.channel_mbps) : "",
@@ -257,7 +257,7 @@ export function EditNodeDrawer({ node, onClose }: { node: Node | null; onClose: 
           <input id="e-tags" className="input" value={form.tags} onChange={set("tags")} placeholder={t("tags.placeholder")} autoComplete="off" aria-invalid={!!errors.tags} />
         </Field>
         <NodeFieldsInputs
-          values={custom}
+          values={{ ...node?.custom_fields, ...custom }}
           onChange={(k, v) => {
             setCustom((c) => ({ ...c, [k]: v }));
             setErrors(({ [`custom_fields.${k}`]: _, ...rest }) => rest);
