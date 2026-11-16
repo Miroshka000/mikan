@@ -175,10 +175,9 @@ export function ThemeCard() {
   // Another tab may change the theme: follow it here too.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      // The page itself follows in lib/density.ts; the card shows the choice.
       if (e.key === DENSITY_KEY) {
-        const d = getDensity();
-        setDensityState(d);
-        setDensity(d, { keep: false });
+        setDensityState(getDensity());
         return;
       }
       if (e.key !== KEY) return;

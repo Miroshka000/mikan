@@ -30,3 +30,10 @@ export function setDensity(d: Density, opts: { keep?: boolean } = {}) {
   if (d === "compact") document.documentElement.dataset.density = "compact";
   else delete document.documentElement.dataset.density;
 }
+
+// Another tab's choice is followed on every page, not only while the theme card is open.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === DENSITY_KEY) setDensity(getDensity(), { keep: false });
+  });
+}
