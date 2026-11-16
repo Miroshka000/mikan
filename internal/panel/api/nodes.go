@@ -440,10 +440,10 @@ func (h *handlers) updateNode(ctx context.Context, in *patchNodeInput) (*nodeInf
 		if _, err := h.getNode(ctx, in.ID); err != nil {
 			return nil, err
 		}
-		h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(in.ID, 10), map[string]any{"custom_fields": slices.Sorted(maps.Keys(b.CustomFields))})
 		if err := h.d.Store.Tx(ctx, func(q *db.Queries) error { return setNodeFields(ctx, q, in.ID, fields) }); err != nil {
 			return nil, err
 		}
+		h.audit(ctx, sessionOf(ctx).AdminID, "node.update", "node", strconv.FormatInt(in.ID, 10), map[string]any{"custom_fields": slices.Sorted(maps.Keys(b.CustomFields))})
 		return h.nodeInfo(ctx, in.ID)
 	}
 	rules, err := h.nodeRules(ctx)
