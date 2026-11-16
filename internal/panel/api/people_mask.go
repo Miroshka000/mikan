@@ -196,6 +196,11 @@ func maskObject(m map[string]any, parent string) map[string]any {
 			}
 		case (k == "ip" || k == "last_ip") && !infrastructure:
 			m[k] = ""
+		case k == "custom_fields" && person:
+			// The admin's own fields of a user may hold anything about the person: a phone, an order.
+			if _, isObject := val.(map[string]any); isObject {
+				m[k] = map[string]any{}
+			}
 		case k == "telegram", k == "legacy":
 			// The linked Telegram account and the old links of an imported panel: gone.
 			if _, isObject := val.(map[string]any); isObject {

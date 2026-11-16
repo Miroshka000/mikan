@@ -13,6 +13,7 @@ import { AppCard } from "./app";
 import { AuditCard } from "./audit";
 import { AutoCard, LanguageCard, ServiceCard, UpdatesCard } from "./general";
 import { ServerCheckCard } from "../node-check";
+import { CustomFieldsCard } from "../custom-fields";
 import { GoalsCard } from "./goals";
 import { ImportCard, LegacyLinksCard } from "./import";
 import { ROUTING_PARTS, RoutingSection, type RoutingPart } from "./routing";
@@ -101,6 +102,7 @@ export function SettingsPage() {
                   <LanguageCard s={s} />
                   <ThemeCard />
                   <AppCard s={s} />
+                  <CustomFieldsCard />
                 </>
               ) : tab === "subscription" ? (
                 subPart === "clients" ? (

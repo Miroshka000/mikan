@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -66,7 +67,9 @@ type UserView struct {
 	StartsOnConnect bool `json:"starts_on_connect" doc:"Срок ждёт первого подключения: до него стоит на месте, expires_at уходит вперёд вместе с часами (обновляется раз в 10 минут), подписка показывает весь срок"`
 	// NextTariff is the tariff the subscription moves to once its term ends.
 	NextTariff *NextTariffView `json:"next_tariff" doc:"Следующий тариф: включится сам, когда кончится срок; null — нет"`
-	CreatedAt  time.Time       `json:"created_at"`
+	// CustomFields are the values of the admin's own fields (customfields.go).
+	CustomFields map[string]string `json:"custom_fields" doc:"Свои поля админа (GET /api/v1/custom-fields) по ключу; поля без значения нет в объекте"`
+	CreatedAt    time.Time         `json:"created_at"`
 }
 
 // userEnv is what every user of one response shares, read once for the whole response: a
@@ -80,6 +83,7 @@ type userEnv struct {
 	// connection, and who has a next tariff.
 	waiting map[int64]bool
 	next    map[int64]domain.NextTariff
+	fields  map[int64]map[string]string // the admin's own fields, by user
 }
 
 // lifecycleOf reads the lifecycle of the users of ids into e: two small tables, one read
@@ -89,7 +93,10 @@ func (h *handlers) lifecycleOf(ctx context.Context, e *userEnv, ids []int64) err
 	if e.waiting, err = domain.WaitingOf(ctx, h.d.Store.Q, ids); err != nil {
 		return err
 	}
-	e.next, err = domain.NextTariffsOf(ctx, h.d.Store.Q, ids)
+	if e.next, err = domain.NextTariffsOf(ctx, h.d.Store.Q, ids); err != nil {
+		return err
+	}
+	e.fields, err = userFields(ctx, h.d.Store.Q, ids)
 	return err
 }
 
@@ -154,6 +161,7 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 	v.StartsOnConnect = env.waiting[u.ID]
 	n, ok := env.next[u.ID]
 	v.NextTariff = nextView(n, ok)
+	v.CustomFields = fieldsOrEmpty(env.fields[u.ID])
 	return v
 }
 
@@ -230,6 +238,8 @@ type createUserInput struct {
 		Note     string   `json:"note,omitempty" maxLength:"2000"`
 		Tags     []string `json:"tags,omitempty" maxItems:"20"`
 		TariffID int64    `json:"tariff_id" minimum:"1"`
+		// CustomFields are values of the admin's own fields, by key.
+		CustomFields map[string]string `json:"custom_fields,omitempty" maxProperties:"30" doc:"Значения своих полей по ключу; пустая строка — без значения"`
 		// StartsOnConnect over the tariff's own word; nil: the tariff's.
 		StartsOnConnect *bool `json:"starts_on_connect,omitempty" doc:"Срок начнётся с первого подключения; не задано — как у тарифа"`
 	}
@@ -238,26 +248,27 @@ type createUserInput struct {
 type patchUserInput struct {
 	ID   int64 `path:"id" minimum:"1"`
 	Body struct {
-		Name             *string    `json:"name,omitempty" minLength:"1" maxLength:"100"`
-		Contact          *string    `json:"contact,omitempty" maxLength:"100"`
-		Note             *string    `json:"note,omitempty" maxLength:"2000"`
-		Tags             *[]string  `json:"tags,omitempty" maxItems:"20"`
-		Disabled         *bool      `json:"disabled,omitempty"`
-		TrafficLimit     *int64     `json:"traffic_limit,omitempty" minimum:"0"`
-		TrafficUnlimited bool       `json:"traffic_unlimited,omitempty"`
-		DeviceLimit      *int64     `json:"device_limit,omitempty" minimum:"1" maximum:"100"`
-		DevicesUnlimited bool       `json:"devices_unlimited,omitempty"`
-		DeviceMode       *string    `json:"device_mode,omitempty" enum:"bound,online" doc:"Как считается лимит устройств: bound: привязанные устройства, online: любое число, считаются только одновременно онлайн"`
-		SpeedLimit       *int64     `json:"speed_limit,omitempty" minimum:"1" maximum:"100000" doc:"Скорость, Мбит/с в каждую сторону"`
-		SpeedUnlimited   bool       `json:"speed_unlimited,omitempty" doc:"Снять ограничение скорости"`
-		ExpiresAt        *time.Time `json:"expires_at,omitempty"`
-		NeverExpires     bool       `json:"never_expires,omitempty"`
-		BillingDay       *int64     `json:"billing_day,omitempty" minimum:"0" maximum:"31" doc:"День оплаты 1–31; 0 — убрать"`
-		Inbounds         *[]int64   `json:"inbounds,omitempty"`
-		TariffID         *int64     `json:"tariff_id,omitempty" minimum:"1" doc:"Применить тариф: лимиты из тарифа, срок — от сегодня"`
-		Hidden           *bool      `json:"hidden,omitempty" doc:"Скрыть пользователя из списка или вернуть в него; доступ он не теряет"`
-		FolderID         *int64     `json:"folder_id,omitempty" minimum:"0" doc:"Положить в папку; 0 — убрать из папки"`
-		StartsOnConnect  *bool      `json:"starts_on_connect,omitempty" doc:"true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана"`
+		Name             *string           `json:"name,omitempty" minLength:"1" maxLength:"100"`
+		Contact          *string           `json:"contact,omitempty" maxLength:"100"`
+		Note             *string           `json:"note,omitempty" maxLength:"2000"`
+		Tags             *[]string         `json:"tags,omitempty" maxItems:"20"`
+		Disabled         *bool             `json:"disabled,omitempty"`
+		TrafficLimit     *int64            `json:"traffic_limit,omitempty" minimum:"0"`
+		TrafficUnlimited bool              `json:"traffic_unlimited,omitempty"`
+		DeviceLimit      *int64            `json:"device_limit,omitempty" minimum:"1" maximum:"100"`
+		DevicesUnlimited bool              `json:"devices_unlimited,omitempty"`
+		DeviceMode       *string           `json:"device_mode,omitempty" enum:"bound,online" doc:"Как считается лимит устройств: bound: привязанные устройства, online: любое число, считаются только одновременно онлайн"`
+		SpeedLimit       *int64            `json:"speed_limit,omitempty" minimum:"1" maximum:"100000" doc:"Скорость, Мбит/с в каждую сторону"`
+		SpeedUnlimited   bool              `json:"speed_unlimited,omitempty" doc:"Снять ограничение скорости"`
+		ExpiresAt        *time.Time        `json:"expires_at,omitempty"`
+		NeverExpires     bool              `json:"never_expires,omitempty"`
+		BillingDay       *int64            `json:"billing_day,omitempty" minimum:"0" maximum:"31" doc:"День оплаты 1–31; 0 — убрать"`
+		Inbounds         *[]int64          `json:"inbounds,omitempty"`
+		TariffID         *int64            `json:"tariff_id,omitempty" minimum:"1" doc:"Применить тариф: лимиты из тарифа, срок — от сегодня"`
+		Hidden           *bool             `json:"hidden,omitempty" doc:"Скрыть пользователя из списка или вернуть в него; доступ он не теряет"`
+		FolderID         *int64            `json:"folder_id,omitempty" minimum:"0" doc:"Положить в папку; 0 — убрать из папки"`
+		CustomFields     map[string]string `json:"custom_fields,omitempty" maxProperties:"30" doc:"Значения своих полей по ключу, только названные; пустая строка стирает значение"`
+		StartsOnConnect  *bool             `json:"starts_on_connect,omitempty" doc:"true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана"`
 	}
 }
 
@@ -476,6 +487,8 @@ type userFilter struct {
 	state, source, hidden string
 	query                 string // lowercased and trimmed; empty: no search
 	folder                folderFilter
+	// fields is the text of the users' own fields the search looks through too (searchText).
+	fields map[int64]string
 }
 
 // newUserFilter reads a filter whose fields are at at ("query." for the list, "body.filter."
@@ -508,7 +521,20 @@ func (f userFilter) wants(u db.User, st string) bool {
 	} else if f.state != "all" && !(st == f.state || (f.state == domain.StateActive && st == domain.StateExpiring)) {
 		return false
 	}
-	return f.query == "" || strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags), f.query)
+	return f.query == "" || strings.Contains(strings.ToLower(u.Name+" "+u.Contact+" "+u.Note+" "+u.Tags)+f.fields[u.ID], f.query)
+}
+
+// searchFields reads the users' own fields into f when it searches.
+func (h *handlers) searchFields(ctx context.Context, f *userFilter) error {
+	if f.query == "" {
+		return nil
+	}
+	all, err := userFields(ctx, h.d.Store.Q, nil)
+	if err != nil {
+		return err
+	}
+	f.fields = searchText(all)
+	return nil
 }
 
 // matchingIDs are the ids of the users f matches now: the users the list shows for it,
@@ -536,6 +562,9 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 	// Only the page's users get their slots read.
 	f, err := newUserFilter(ctx, "query.", in.State, in.Query, in.Folder, in.Source, in.Hidden)
 	if err != nil {
+		return nil, err
+	}
+	if err := h.searchFields(ctx, &f); err != nil {
 		return nil, err
 	}
 	users, err := h.d.Store.Q.ListUsers(ctx)
@@ -660,10 +689,17 @@ func (h *handlers) userResult(ctx context.Context, u db.User, err error) (*userO
 }
 
 func (h *handlers) createUser(ctx context.Context, in *createUserInput) (*userOutput, error) {
+	fields, err := checkFieldValues(ctx, h.d.Store.Q, "user", in.Body.CustomFields)
+	if err != nil {
+		return nil, err
+	}
 	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID,
 		Source: domain.UserFromAdmin, StartsOnConnect: in.Body.StartsOnConnect})
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, fieldErr("body.tariff_id", "tariff_not_found")
+	}
+	if err == nil && len(fields) > 0 {
+		err = h.d.Store.Tx(ctx, func(q *db.Queries) error { return setUserFields(ctx, q, u.ID, fields) })
 	}
 	if err == nil {
 		h.audit(ctx, sessionOf(ctx).AdminID, "user.create", "user", strconv.FormatInt(u.ID, 10), map[string]any{"tariff_id": in.Body.TariffID})
@@ -721,13 +757,36 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 			before = old.Name
 		}
 	}
-	u, err := h.d.Users.Update(ctx, in.ID, p)
+	fields, err := checkFieldValues(ctx, h.d.Store.Q, "user", b.CustomFields)
+	if err != nil {
+		return nil, err
+	}
+	var u db.User
+	// Only the own fields: nothing of the user's access changes, so nothing is told to the nodes.
+	if p == (domain.Patch{}) && b.CustomFields != nil {
+		u, err = h.d.Users.Get(ctx, in.ID)
+	} else {
+		u, err = h.d.Users.Update(ctx, in.ID, p)
+	}
+	if err == nil && len(fields) > 0 {
+		err = h.d.Store.Tx(ctx, func(q *db.Queries) error { return setUserFields(ctx, q, u.ID, fields) })
+	}
 	if err == nil {
-		var details any
+		var details map[string]any
 		if b.Name != nil && u.Name != before {
 			details = map[string]any{"name": u.Name, "name_was": before}
 		}
-		h.audit(ctx, sessionOf(ctx).AdminID, "user.update", "user", strconv.FormatInt(in.ID, 10), details)
+		if len(b.CustomFields) > 0 {
+			if details == nil {
+				details = map[string]any{}
+			}
+			details["custom_fields"] = slices.Sorted(maps.Keys(b.CustomFields))
+		}
+		var d any // no details: nil, not an empty map
+		if details != nil {
+			d = details
+		}
+		h.audit(ctx, sessionOf(ctx).AdminID, "user.update", "user", strconv.FormatInt(in.ID, 10), d)
 	}
 	return h.userResult(ctx, u, err)
 }
@@ -967,6 +1026,9 @@ func (h *handlers) bulkTargets(ctx context.Context, in *bulkInput) ([]int64, err
 	f := b.Filter
 	uf, err := newUserFilter(ctx, "body.filter.", f.State, f.Query, f.Folder, f.Source, f.Hidden)
 	if err != nil {
+		return nil, err
+	}
+	if err := h.searchFields(ctx, &uf); err != nil {
 		return nil, err
 	}
 	ids, err := h.matchingIDs(ctx, uf)
