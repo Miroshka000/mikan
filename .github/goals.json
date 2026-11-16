@@ -89,7 +89,7 @@
         "ru": "Одно окно со всеми подключениями, которые получают клиенты, и их порядок перетаскиванием. Например, сгруппировать по стране выхода.",
         "en": "One screen with every connection clients get, ordered by dragging. For example, grouped by exit country."
       },
-      "target": 50, "raised": 0, "currency": "USD", "status": "open", "url": "https://t.me/tribute/app?startapp=g6r2"
+      "target": 50, "raised": 0, "currency": "USD", "status": "done", "version": "0.5.2.1", "url": "https://t.me/tribute/app?startapp=g6r2"
     },
     {
       "id": "pay-demo",
