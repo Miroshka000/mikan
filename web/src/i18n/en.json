@@ -901,7 +901,18 @@
       "passkey_exists": "This passkey is added already",
       "default_host": "The default address goes only with its protocol",
       "host_state": "Status: active, limit reached, expired or disabled",
-      "host_trial": "Trial: trial only or everyone but the trial"
+      "host_trial": "Trial: trial only or everyone but the trial",
+      "github_client_id": "A Client ID has no spaces or address characters",
+      "github_off": "GitHub sign-in is not set up",
+      "github_denied": "GitHub sign-in was cancelled",
+      "github_failed": "GitHub did not confirm the sign-in: check the Client ID, secret and callback URL",
+      "identity_expired": "The sign-in took too long, start again",
+      "identity_no_address": "The panel has no address",
+      "identity_taken": "This account is linked already, or you have an account of this service already",
+      "identity_unknown": "This account is not linked to any admin",
+      "telegram_login": "Telegram did not confirm the sign-in",
+      "telegram_no_domain": "Telegram sign-in needs the panel to have a domain",
+      "telegram_off": "The Telegram bot is not connected"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to mikan; otherwise free the port",
@@ -945,7 +956,12 @@
     "or": "or",
     "passkey": "Sign in with a passkey",
     "passkeyFailed": "The passkey was not accepted. Try again or sign in with the password.",
-    "passkeyAddress": "Passkeys work only when the panel is opened at its domain."
+    "passkeyAddress": "Passkeys work only when the panel is opened at its domain.",
+    "via": {
+      "github": "Sign in with GitHub",
+      "telegram": "Sign in with Telegram"
+    },
+    "externalFailed": "Could not sign in. Try again."
   },
   "dashboard": {
     "title": "Overview",
@@ -2384,7 +2400,7 @@
     "certTemp": "temporary",
     "certNote": "Renews automatically. Issuance needs port 80 open, it is held for a few seconds.",
     "passwordChanged": "Password changed, other sessions ended",
-    "revokeKeys": "Revoke API keys and passkeys too: one made from a hijacked session would outlive the password change",
+    "revokeKeys": "Revoke API keys and passkeys, unlink GitHub and Telegram too: what a hijacked session made or linked would outlive the password change",
     "twoFactorPasswordHint": "Turning on 2FA needs the password.",
     "currentPassword": "Current password",
     "newPassword": "New password",
@@ -3208,7 +3224,34 @@
     "passkeyDeleteText": "Signing in with it will stop working. The password stays.",
     "passkeyUnsupported": "This browser cannot make passkeys.",
     "passkeyNoDomain": "Passkeys need the panel's domain: set it on the General tab, in the Domain field.",
-    "passkeyDomainNote": "A passkey is bound to the panel's domain: after the domain changes, add the passkeys again."
+    "passkeyDomainNote": "A passkey is bound to the panel's domain: after the domain changes, add the passkeys again.",
+    "identities": "Sign-in with GitHub and Telegram",
+    "identitiesSub": "The account stands for the password; the 2FA code is still asked when 2FA is on",
+    "identitiesNone": "No accounts linked.",
+    "identityProvider": {
+      "github": "GitHub",
+      "telegram": "Telegram"
+    },
+    "identityLink": {
+      "github": "Link GitHub",
+      "telegram": "Link Telegram"
+    },
+    "identityUnlink": "Unlink",
+    "identityLinked": "{provider} linked",
+    "identityDeleted": "Account unlinked",
+    "identityFailed": "Could not link the account",
+    "identityPasswordHint": "Without the password a stolen session could link an account of its own",
+    "identityNotReady": "Set the sign-in up below first: a GitHub app, or the Telegram bot with the panel’s domain.",
+    "identityDeleteTitle": "Unlink the account?",
+    "identityDeleteText": "It will not sign you in until you link it again.",
+    "identitySetup": "Sign-in setup",
+    "githubAppHint": "Create an OAuth app on GitHub (Settings → Developer settings → OAuth Apps) with the Authorization callback URL below. Paste its Client ID and secret here; an empty Client ID turns GitHub sign-in off.",
+    "githubCallback": "Authorization callback URL",
+    "githubCallbackCopied": "Address copied",
+    "githubSecretSet": "Saved; leave empty to keep it",
+    "telegramLoginNoBot": "Sign-in goes through the panel’s bot: connect it in the Telegram section.",
+    "telegramLoginNoDomain": "Telegram signs in on a domain only: give the panel a domain.",
+    "telegramLoginHint": "Sign-in goes through @{bot}. Give it the domain in @BotFather: /setdomain → {domain}."
   },
   "deviceMode": {
     "label": "How to count:",

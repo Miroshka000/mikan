@@ -255,6 +255,15 @@ type handlers struct {
 	passkeyAdd    map[int64]passkeyCeremony
 	passkeyLogins map[string]passkeyCeremony
 
+	// identityMu guards the sign-ins through GitHub and Telegram under way (identities.go):
+	// the round trips through GitHub by state, the tickets they left, the Telegram links begun
+	// by admin, and the Telegram signatures already taken.
+	identityMu      sync.Mutex
+	githubStates    map[string]githubState
+	identityTickets map[string]identityTicket
+	telegramLinks   map[int64]time.Time
+	telegramUsed    map[string]time.Time
+
 	metricsCache metricsCache
 
 	// speedCooldown spaces the speed tests of a node.
@@ -330,10 +339,12 @@ func New(d Deps) (http.Handler, huma.API, error) {
 		return nil, nil, err
 	}
 	h := &handlers{d: d, api: api, dummyHash: dummy, hashSem: make(chan struct{}, 4), pending: map[int64]pendingTOTP{},
-		passkeyAdd: map[int64]passkeyCeremony{}, passkeyLogins: map[string]passkeyCeremony{}}
+		passkeyAdd: map[int64]passkeyCeremony{}, passkeyLogins: map[string]passkeyCeremony{},
+		githubStates: map[string]githubState{}, identityTickets: map[string]identityTicket{}, telegramLinks: map[int64]time.Time{}, telegramUsed: map[string]time.Time{}}
 	api.UseMiddleware(h.middleware)
 	h.registerAuth()
 	h.registerPasskeys()
+	h.registerIdentities()
 	h.registerUsers()
 	h.registerFolders()
 	h.registerHapp()
