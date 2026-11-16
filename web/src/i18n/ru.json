@@ -3275,7 +3275,11 @@
     "githubSecretSet": "Сохранён; оставьте пустым, чтобы не менять",
     "telegramLoginNoBot": "Вход идёт через бота панели: подключите его в разделе Telegram.",
     "telegramLoginNoDomain": "Telegram пускает только на домен: задайте панели домен.",
-    "telegramLoginHint": "Вход идёт через бота @{bot}. Укажите ему домен в @BotFather: /setdomain → {domain}."
+    "telegramLoginHint": "Вход идёт через бота @{bot}. Укажите ему домен в @BotFather: /setdomain → {domain}.",
+    "density": "Плотность",
+    "densityHint": "Компактная убирает лишние отступы в таблицах, карточках и формах, чтобы на экран помещалось больше. Только для мыши: на телефоне и планшете кнопки остаются крупными. Хранится в этом браузере.",
+    "densityComfortable": "Обычная",
+    "densityCompact": "Компактная"
   },
   "deviceMode": {
     "label": "Как считать:",

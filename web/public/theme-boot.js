@@ -18,4 +18,10 @@
   var root = document.documentElement;
   root.setAttribute("data-theme", theme);
   root.setAttribute("data-tone", dark.indexOf(theme) >= 0 ? "dark" : "light");
+  // The density (src/lib/density.ts) the same way: a compact panel never jumps on load.
+  try {
+    if (localStorage.getItem("mikan-density") === "compact") root.setAttribute("data-density", "compact");
+  } catch (e) {
+    // Storage blocked: the default density.
+  }
 })();

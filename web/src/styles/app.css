@@ -494,6 +494,28 @@
   .code-block { position: relative; border-radius: 12px; background: var(--code-bg); color: var(--code-fg); padding: 12px 48px 12px 12px; font: 12px/1.6 var(--font-mono-stack); white-space: pre-wrap; word-break: break-all; max-height: 360px; overflow: auto; }
   .code-block .icon-btn { position: absolute; top: 4px; right: 4px; color: var(--code-fg); }
   .code-block .icon-btn:hover { background: rgba(255, 255, 255, 0.1); }
+
+  /* Compact density (lib/density.ts): less room around the rows, cards, fields and buttons,
+     for a mouse only; a finger keeps the full targets. Utilities on an element still win. */
+  @media (pointer: fine) {
+    :root[data-density="compact"] .card { padding: 14px; }
+    :root[data-density="compact"] .main { gap: 12px; }
+    :root[data-density="compact"] .utable th { padding: 6px 10px 8px; }
+    :root[data-density="compact"] .utable td { padding: 6px 10px; }
+    :root[data-density="compact"] .row-list > * { padding-top: 6px; padding-bottom: 6px; }
+    :root[data-density="compact"] .btn { height: 34px; padding: 0 12px; }
+    :root[data-density="compact"] .btn-sm { height: 28px; padding: 0 10px; }
+    :root[data-density="compact"] .input { height: 36px; }
+    :root[data-density="compact"] textarea.input { height: auto; min-height: 64px; padding: 8px 12px; }
+    :root[data-density="compact"] .field { gap: 6px; margin-bottom: 12px; }
+    :root[data-density="compact"] .dr-sec { padding: 14px 0; }
+    :root[data-density="compact"] .chip { height: 30px; }
+    :root[data-density="compact"] .chip-btn { height: 28px; }
+    :root[data-density="compact"] .tabs button { height: 32px; }
+    :root[data-density="compact"] .menu-item { height: 32px; }
+    :root[data-density="compact"] .kpi { min-height: 108px; gap: 6px; }
+    :root[data-density="compact"] .kpi-value { font-size: 26px; line-height: 32px; }
+  }
 }
 
 @keyframes drift-a { to { transform: translate3d(5vw, 4vw, 0) scale(1.08); } }
