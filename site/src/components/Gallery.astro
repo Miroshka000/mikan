@@ -1,0 +1,177 @@
+---
+// The community gallery: works of others around mikan, from site/src/data/gallery.json,
+// grouped by kind. A kind with nothing yet asks for the first one.
+import gallery from '../data/gallery.json';
+
+type Lang = 'ru' | 'en';
+type Kind = 'template' | 'rules' | 'page' | 'bot' | 'addon' | 'tool';
+type Item = {
+	id: string;
+	kind: Kind;
+	title: Partial<Record<Lang, string>>;
+	about?: Partial<Record<Lang, string>>;
+	author: string;
+	url: string;
+	license?: string;
+	builtin?: boolean;
+};
+
+const { lang = 'ru' } = Astro.props as { lang?: Lang };
+const other: Lang = lang === 'ru' ? 'en' : 'ru';
+const text = (m?: Partial<Record<Lang, string>>) => m?.[lang] || m?.[other] || '';
+const items = gallery.items as Item[];
+const kinds: Kind[] = ['template', 'rules', 'page', 'bot', 'addon', 'tool'];
+
+const t = {
+	ru: {
+		kind: {
+			template: 'Шаблоны подписок',
+			rules: 'Списки правил',
+			page: 'Страница подписки',
+			bot: 'Боты',
+			addon: 'Аддоны',
+			tool: 'Утилиты и скрипты',
+		},
+		builtin: 'Есть в панели',
+		by: 'Автор',
+		empty: 'Пока пусто. Сделали своё? Добавьте в галерею.',
+	},
+	en: {
+		kind: {
+			template: 'Subscription templates',
+			rules: 'Rule lists',
+			page: 'Subscription page',
+			bot: 'Bots',
+			addon: 'Addons',
+			tool: 'Tools and scripts',
+		},
+		builtin: 'In the panel',
+		by: 'By',
+		empty: 'Nothing yet. Made something? Add it to the gallery.',
+	},
+}[lang];
+---
+
+<div class="gallery not-content">
+	{
+		kinds.map((kind) => {
+			const list = items.filter((i) => i.kind === kind);
+			return (
+				<section aria-labelledby={`gallery-${kind}`}>
+					<h2 id={`gallery-${kind}`}>{t.kind[kind]}</h2>
+					{list.length === 0 ? (
+						<p class="empty">{t.empty}</p>
+					) : (
+						<ul class="grid">
+							{list.map((i) => (
+								<li class="item" id={i.id}>
+									<div class="head">
+										<h3>
+											<a href={i.url} rel="noopener" target="_blank">
+												{text(i.title)}
+											</a>
+										</h3>
+										{i.builtin ? <span class="pill">{t.builtin}</span> : null}
+									</div>
+									{text(i.about) ? <p class="about">{text(i.about)}</p> : null}
+									<p class="foot">
+										{t.by} {i.author}
+										{i.license ? ` · ${i.license}` : ''}
+									</p>
+								</li>
+							))}
+						</ul>
+					)}
+				</section>
+			);
+		})
+	}
+</div>
+
+<style>
+	.gallery {
+		margin-top: 1.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 2rem;
+	}
+
+	h2 {
+		margin: 0 0 0.75rem;
+		font-size: 1.25rem;
+		font-weight: 650;
+		color: var(--mk-ink);
+	}
+
+	.grid {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 1rem;
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	@media (min-width: 50rem) {
+		.grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	.item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 1.25rem;
+		border-radius: var(--mk-radius-lg);
+		background: var(--mk-surface);
+		border: 1px solid var(--mk-hairline);
+	}
+
+	.head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	h3 {
+		margin: 0;
+		font-size: 1.0625rem;
+		font-weight: 650;
+		line-height: 1.35;
+	}
+
+	h3 a {
+		color: var(--mk-ink);
+		text-decoration: none;
+	}
+
+	h3 a:hover {
+		text-decoration: underline;
+	}
+
+	.pill {
+		flex: none;
+		padding: 0.125rem 0.625rem;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 600;
+		white-space: nowrap;
+		background: var(--mk-leaf-soft);
+		color: var(--mk-leaf);
+	}
+
+	.about {
+		margin: 0;
+		font-size: 0.9375rem;
+		color: var(--mk-text);
+	}
+
+	.foot,
+	.empty {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--mk-muted, var(--mk-text));
+	}
+</style>
