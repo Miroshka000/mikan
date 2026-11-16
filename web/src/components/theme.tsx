@@ -1,8 +1,10 @@
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
+import { DENSITY_KEY, getDensity, setDensity, type Density } from "../lib/density";
 import { DARK_THEMES, isDarkTheme, LIGHT_THEMES, THEMES, type Theme } from "../lib/themes";
 import { CardHead } from "./layout";
+import { Segmented } from "./ui";
 
 /*
  * The panel's theme, kept in this browser. The palettes themselves are in styles/themes.css;
@@ -132,6 +134,7 @@ export function ThemesToggle({ open, total, onToggle }: { open: boolean; total: 
 
 export function ThemeCard() {
   const [choice, set] = useState<ThemeChoice>(getTheme);
+  const [density, setDensityState] = useState<Density>(getDensity);
   const [open, setOpen] = useState(false);
   const [rows, perRow] = useTilesPerRow();
   const refs = useRef(new Map<ThemeChoice, HTMLButtonElement>());
@@ -172,6 +175,12 @@ export function ThemeCard() {
   // Another tab may change the theme: follow it here too.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      if (e.key === DENSITY_KEY) {
+        const d = getDensity();
+        setDensityState(d);
+        setDensity(d, { keep: false });
+        return;
+      }
       if (e.key !== KEY) return;
       const next = getTheme();
       set(next);
@@ -227,6 +236,24 @@ export function ThemeCard() {
         ))}
       </div>
       {folds || open ? <ThemesToggle open={open} total={THEMES.length} onToggle={() => setOpen((v) => !v)} /> : null}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--hairline)] pt-4">
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium">{t("settings.density")}</div>
+          <div className="text-xs text-[var(--ink-500)]">{t("settings.densityHint")}</div>
+        </div>
+        <Segmented<Density>
+          label={t("settings.density")}
+          value={density}
+          options={[
+            { value: "comfortable", label: t("settings.densityComfortable") },
+            { value: "compact", label: t("settings.densityCompact") },
+          ]}
+          onChange={(d) => {
+            setDensityState(d);
+            setDensity(d);
+          }}
+        />
+      </div>
     </section>
   );
 }

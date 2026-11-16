@@ -3275,7 +3275,11 @@
     "githubSecretSet": "Saved; leave empty to keep it",
     "telegramLoginNoBot": "Sign-in goes through the panel’s bot: connect it in the Telegram section.",
     "telegramLoginNoDomain": "Telegram signs in on a domain only: give the panel a domain.",
-    "telegramLoginHint": "Sign-in goes through @{bot}. Give it the domain in @BotFather: /setdomain → {domain}."
+    "telegramLoginHint": "Sign-in goes through @{bot}. Give it the domain in @BotFather: /setdomain → {domain}.",
+    "density": "Density",
+    "densityHint": "Compact takes the extra room out of tables, cards and forms so more fits on the screen. Mouse only: on a phone or tablet the buttons stay large. Kept in this browser.",
+    "densityComfortable": "Comfortable",
+    "densityCompact": "Compact"
   },
   "deviceMode": {
     "label": "How to count:",
