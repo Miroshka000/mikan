@@ -373,8 +373,8 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 	}
 	// A sales bot's balances go into the accounts' balance, in its currency.
-	importer.Balance = func(ctx context.Context) (model.BalanceConfig, error) {
-		c, err := billing.LoadConfig(ctx, set)
+	importer.Balance = func(ctx context.Context, q *db.Queries) (model.BalanceConfig, error) {
+		c, err := billing.LoadConfig(ctx, settings.New(q))
 		return model.BalanceConfig(c.Balance), err
 	}
 	deps.Importer = importer

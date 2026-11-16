@@ -59,7 +59,7 @@ type Importer struct {
 	Done func(ctx context.Context, kind Kind)
 	// Balance is the setup of the accounts' balance, which a bot's balances are carried into;
 	// nil: they are not.
-	Balance func(ctx context.Context) (model.BalanceConfig, error)
+	Balance BalanceSetup
 
 	mu     sync.Mutex
 	state  JobState
@@ -263,14 +263,6 @@ func (im *Importer) runBot(ctx context.Context, mode string, src Source, adminID
 			finish(fmt.Errorf("panic: %v", p))
 		}
 	}()
-	var bc model.BalanceConfig
-	if im.Balance != nil {
-		var err error
-		if bc, err = im.Balance(ctx); err != nil {
-			finish(err)
-			return
-		}
-	}
 	bot, err := FetchBot(ctx, im.hc, src)
 	if err != nil {
 		im.log.Warn("import", "from", src.Kind, "err", err)
@@ -282,6 +274,13 @@ func (im *Importer) runBot(ctx context.Context, mode string, src Source, adminID
 	}
 	if mode == "preview" {
 		im.update(func(s *JobState) { s.State, s.Total = "checking", len(bot.Accounts) })
+		bc := model.BalanceConfig{Currency: "-"} // no balance to carry into
+		if im.Balance != nil {
+			if bc, err = im.Balance(ctx, im.st.Q); err != nil {
+				finish(err)
+				return
+			}
+		}
 		p, err := CheckBot(ctx, im.st.Q, bc, bot)
 		if err != nil {
 			finish(stopped(ctx, err))
@@ -292,7 +291,7 @@ func (im *Importer) runBot(ctx context.Context, mode string, src Source, adminID
 		return
 	}
 	im.update(func(s *JobState) { s.State, s.Total = "importing", len(bot.Accounts) })
-	r, err := ApplyBot(ctx, im.st, im.now(), bc, adminID, bot, func(done int) {
+	r, err := ApplyBot(ctx, im.st, im.now(), im.Balance, adminID, bot, func(done int) {
 		im.update(func(s *JobState) { s.Done = done })
 	})
 	report = &r

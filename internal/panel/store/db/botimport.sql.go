@@ -174,6 +174,17 @@ func (q *Queries) ListImportedPayments(ctx context.Context, arg ListImportedPaym
 	return items, nil
 }
 
+const lockBalanceCurrency = `-- name: LockBalanceCurrency :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-balance-currency', 0))
+`
+
+// Taken by a change of the balance's currency and by money carried into balances from
+// outside: the currency read for the amount stays the currency the amount is kept in.
+func (q *Queries) LockBalanceCurrency(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, lockBalanceCurrency)
+	return err
+}
+
 const markImportedAccount = `-- name: MarkImportedAccount :execrows
 INSERT INTO imported_accounts (source, tg_id, amount, at) VALUES ($1, $2, $3, $4)
 ON CONFLICT (source, tg_id) DO NOTHING

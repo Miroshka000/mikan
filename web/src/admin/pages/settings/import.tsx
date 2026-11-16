@@ -53,7 +53,11 @@ export function ImportCard() {
   const started = (s: Schemas["JobState"]) => qc.setQueryData(["import-status"], s);
   const check = useMutation({ mutationFn: () => unwrap(api.POST("/api/v1/import/preview", { body: body() })), onSuccess: started, onError: (e) => toast.error(errorText(e)) });
   const run = useMutation({
-    mutationFn: () => unwrap(api.POST("/api/v1/import", { body: { ...body(), tariff_id: Number(tariff) } })),
+    mutationFn: () => {
+      const { kind, ...rest } = body();
+      if (kind === "bedolaga") throw new Error(t("settings.import.checkAgain"));
+      return unwrap(api.POST("/api/v1/import", { body: { ...rest, kind, tariff_id: Number(tariff) } }));
+    },
     onSuccess: (s) => {
       started(s);
       toast.ok(t("settings.import.started"));
@@ -63,8 +67,14 @@ export function ImportCard() {
   const cancel = useMutation({ mutationFn: () => unwrap(api.DELETE("/api/v1/import", {})), onSuccess: () => void job.refetch(), onError: (e) => toast.error(errorText(e)) });
   const errors = fieldErrors(run.error);
   const set = (k: keyof typeof src) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setSrc((s) => ({ ...s, [k]: e.target.value }));
+  // A preview is of the source it was asked for: once the source changes, it is checked again
+  // before anything is brought over.
+  const sourceKey = [src.kind, src.url.trim(), src.username.trim(), src.password, src.token.trim()].join("\n");
+  const [checkedKey, setCheckedKey] = useState("");
+  const stale = checkedKey !== sourceKey;
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    setCheckedKey(sourceKey);
     check.mutate();
   };
   const preview = st?.mode === "preview" && st.state === "done" ? st.preview : undefined;
@@ -146,7 +156,8 @@ export function ImportCard() {
                 ))}
               </Select>
             </Field>
-            <Button type="button" variant="primary" loading={run.isPending} disabled={tariff === "" || preview.new === 0} onClick={() => run.mutate()}>
+            {stale ? <div className="mb-2 text-xs text-[var(--berry-600)]">{t("settings.import.checkAgain")}</div> : null}
+            <Button type="button" variant="primary" loading={run.isPending} disabled={stale || tariff === "" || preview.new === 0} onClick={() => run.mutate()}>
               {t("settings.import.run", { n: preview.new })}
             </Button>
           </div>
@@ -163,7 +174,8 @@ export function ImportCard() {
             )}
             {botPreview.carried ? <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.import.botCarried", { n: botPreview.carried })}</div> : null}
             <div className="mt-1 mb-2 text-xs text-[var(--ink-500)]">{t("settings.import.botPayments", { n: botPreview.payments })}</div>
-            <Button type="button" variant="primary" loading={runBot.isPending} disabled={!bot || botPreview.accounts === 0} onClick={() => runBot.mutate()}>
+            {stale ? <div className="mb-2 text-xs text-[var(--berry-600)]">{t("settings.import.checkAgain")}</div> : null}
+            <Button type="button" variant="primary" loading={runBot.isPending} disabled={stale || botPreview.accounts === 0} onClick={() => runBot.mutate()}>
               {t("settings.import.botRun")}
             </Button>
           </div>

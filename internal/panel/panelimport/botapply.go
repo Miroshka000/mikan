@@ -41,9 +41,12 @@ type BotReport struct {
 }
 
 // carry is a ruble balance (kopecks) in the minor units of mikan's balance, rounded to the
-// nearest; false while the balance has no currency to keep it in.
+// nearest; false when the balance's currency is not one mikan keeps or has no rate. An
+// unset currency is rubles, as the payment settings show it.
 func carry(c model.BalanceConfig, kopecks int64) (int64, bool) {
 	switch {
+	case c.Currency == "":
+		return kopecks, true
 	case !slices.Contains(model.BalanceCurrencies, c.Currency):
 		return 0, false
 	case c.Currency == "RUB":
@@ -103,7 +106,9 @@ func planBot(ctx context.Context, q *db.Queries, bot Bot) (botPlan, error) {
 				ids = append(ids, id)
 			}
 		}
-		if len(ids) == 0 {
+		// The contact only for an account with no link: one whose link is not here has its
+		// subscription missing, not someone else's.
+		if len(a.Tokens) == 0 {
 			ids = byContact[contactOf(a.TgID)]
 		}
 		for _, id := range ids {
@@ -153,6 +158,17 @@ func planBot(ctx context.Context, q *db.Queries, bot Bot) (botPlan, error) {
 	return p, nil
 }
 
+// currencyOf is the balance's currency, rubles when unset.
+func currencyOf(c model.BalanceConfig) string {
+	if c.Currency == "" {
+		return "RUB"
+	}
+	return c.Currency
+}
+
+// BalanceSetup reads the balance's setup with q, a transaction's when money is carried.
+type BalanceSetup func(ctx context.Context, q *db.Queries) (model.BalanceConfig, error)
+
 func contactOf(tg int64) string { return "tg:" + strconv.FormatInt(tg, 10) }
 
 func chunked[T any](list []T, fn func([]T) error) error {
@@ -185,7 +201,7 @@ func CheckBot(ctx context.Context, q *db.Queries, bc model.BalanceConfig, bot Bo
 	}
 	_, canCarry := carry(bc, 0)
 	if canCarry {
-		r.Currency = bc.Currency
+		r.Currency = currencyOf(bc)
 	}
 	for _, a := range bot.Accounts {
 		if p.matched(a.TgID) {
@@ -214,26 +230,24 @@ func CheckBot(ctx context.Context, q *db.Queries, bc model.BalanceConfig, bot Bo
 const botNote = "Bedolaga"
 
 // ApplyBot brings the bot's accounts over: each in one transaction (its chat, links, client
-// mark and balance), then the history. adminID is who ran it, for the balance's audit.
-// progress, when not nil, is told after each account.
-func ApplyBot(ctx context.Context, st *store.Store, now time.Time, bc model.BalanceConfig, adminID int64, bot Bot, progress func(done int)) (BotReport, error) {
+// mark and balance), then the history. The balance's currency and rate are read in the
+// transaction that credits, under the lock a currency change takes, so the amount is in
+// the currency it is kept in; balance nil: balances are not carried. adminID is who ran it,
+// for the balance's audit. progress, when not nil, is told after each account.
+func ApplyBot(ctx context.Context, st *store.Store, now time.Time, balance BalanceSetup, adminID int64, bot Bot, progress func(done int)) (BotReport, error) {
 	r := BotReport{Owned: newList(), Failed: newList()}
 	p, err := planBot(ctx, st.Q, bot)
 	if err != nil {
 		return r, err
-	}
-	if _, ok := carry(bc, 0); ok {
-		r.Currency = bc.Currency
 	}
 	at := now.Unix()
 	for i, a := range bot.Accounts {
 		if err := ctx.Err(); err != nil {
 			return r, err
 		}
-		amount, canCarry := carry(bc, a.Balance)
-		canCarry = canCarry && amount > 0 && !p.carried[a.TgID]
+		wantsCarry := balance != nil && a.Balance > 0 && !p.carried[a.TgID]
 		client := p.matched(a.TgID) || len(a.Tokens) > 0
-		if !client && !canCarry {
+		if !client && !wantsCarry {
 			if progress != nil {
 				progress(i + 1)
 			}
@@ -241,8 +255,10 @@ func ApplyBot(ctx context.Context, st *store.Store, now time.Time, bc model.Bala
 		}
 		var links int
 		var carried bool
+		var amount int64
+		var currency string
 		err := st.Tx(ctx, func(q *db.Queries) error {
-			links, carried = 0, false
+			links, carried, amount = 0, false, 0
 			if err := q.AddTgChatIfNew(ctx, db.AddTgChatIfNewParams{TgID: a.TgID, Username: a.Username, FirstName: a.FirstName, CreatedAt: at}); err != nil {
 				return err
 			}
@@ -262,9 +278,21 @@ func ApplyBot(ctx context.Context, st *store.Store, now time.Time, bc model.Bala
 					return err
 				}
 			}
-			if !canCarry {
+			if !wantsCarry {
 				return nil
 			}
+			if err := q.LockBalanceCurrency(ctx); err != nil {
+				return err
+			}
+			bc, err := balance(ctx, q)
+			if err != nil {
+				return err
+			}
+			var ok bool
+			if amount, ok = carry(bc, a.Balance); !ok || amount <= 0 {
+				return nil
+			}
+			currency = currencyOf(bc)
 			n, err := q.MarkImportedAccount(ctx, db.MarkImportedAccountParams{Source: string(Bedolaga), TgID: a.TgID, Amount: amount, At: at})
 			if err != nil || n == 0 {
 				return err // 0: another run carried it meanwhile
@@ -287,6 +315,7 @@ func ApplyBot(ctx context.Context, st *store.Store, now time.Time, bc model.Bala
 			if carried {
 				r.Balances++
 				r.BalanceTotal += amount
+				r.Currency = currency
 			}
 		}
 		if progress != nil {

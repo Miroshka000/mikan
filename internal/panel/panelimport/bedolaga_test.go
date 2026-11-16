@@ -106,7 +106,8 @@ func TestCarry(t *testing.T) {
 		{model.BalanceConfig{Currency: "USD", Rate: 90}, 9000, 100, true},
 		{model.BalanceConfig{Currency: "USD", Rate: 90}, 9040, 100, true},
 		{model.BalanceConfig{Currency: "USD"}, 9000, 0, false},
-		{model.BalanceConfig{}, 9000, 0, false},
+		{model.BalanceConfig{}, 9000, 9000, true}, // unset is rubles, as the settings show it
+		{model.BalanceConfig{Currency: "XYZ"}, 9000, 0, false},
 	} {
 		if got, ok := carry(c.bc, c.in); got != c.want || ok != c.ok {
 			t.Errorf("carry(%+v, %d) = %d, %v", c.bc, c.in, got, ok)
@@ -126,16 +127,18 @@ func TestApplyBot(t *testing.T) {
 		{Name: "a", Status: StatusActive, Token: tokA},
 		{Name: "b", Status: StatusActive, Contact: "tg:222", Token: "BBBBbbbbBBBBbbbb02"},
 		{Name: "c", Status: StatusActive, Token: tokC},
+		// carol's contact, but carol's link names another subscription: not hers.
+		{Name: "d", Status: StatusActive, Contact: "tg:333", Token: "DDDDddddDDDDdddd04"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	ids := map[string]int64{}
-	rows, err := st.Q.UsersOfLegacyTokens(ctx, []string{tokA, "BBBBbbbbBBBBbbbb02", tokC})
-	if err != nil || len(rows) != 3 {
+	rows, err := st.Q.UsersOfLegacyTokens(ctx, []string{tokA, "BBBBbbbbBBBBbbbb02", tokC, "DDDDddddDDDDdddd04"})
+	if err != nil || len(rows) != 4 {
 		t.Fatal(rows, err)
 	}
 	for _, r := range rows {
-		ids[map[string]string{tokA: "a", "BBBBbbbbBBBBbbbb02": "b", tokC: "c"}[r.Token]] = r.UserID
+		ids[map[string]string{tokA: "a", "BBBBbbbbBBBBbbbb02": "b", tokC: "c", "DDDDddddDDDDdddd04": "d"}[r.Token]] = r.UserID
 	}
 	if err := st.Q.LinkTg(ctx, db.LinkTgParams{UserID: ids["c"], TgID: 999, CreatedAt: now.Unix()}); err != nil {
 		t.Fatal(err)
@@ -146,8 +149,9 @@ func TestApplyBot(t *testing.T) {
 		t.Fatal(err)
 	}
 	rub := model.BalanceConfig{Currency: "RUB"}
+	setup := func(context.Context, *db.Queries) (model.BalanceConfig, error) { return rub, nil }
 
-	if p, err := CheckBot(ctx, st.Q, model.BalanceConfig{}, bot); err != nil || p.Balances != 0 || p.Currency != "" {
+	if p, err := CheckBot(ctx, st.Q, model.BalanceConfig{Currency: "USD"}, bot); err != nil || p.Balances != 0 || p.Currency != "" {
 		t.Fatalf("no currency: %+v %v", p, err)
 	}
 	p, err := CheckBot(ctx, st.Q, rub, bot)
@@ -159,7 +163,7 @@ func TestApplyBot(t *testing.T) {
 		t.Fatalf("preview: %+v", p)
 	}
 
-	r, err := ApplyBot(ctx, st, now, rub, 7, bot, nil)
+	r, err := ApplyBot(ctx, st, now, setup, 7, bot, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +178,9 @@ func TestApplyBot(t *testing.T) {
 	}
 	if n, _ := st.Q.GetBalance(ctx, 111); n != 15000 {
 		t.Errorf("alice's balance %d", n)
+	}
+	if l, err := st.Q.GetTgLink(ctx, ids["d"]); err == nil {
+		t.Errorf("d went to %d by the contact although carol's link names another", l.TgID)
 	}
 	if n, _ := st.Q.GetBalance(ctx, 333); n != 500 {
 		t.Errorf("carol's balance %d", n)
@@ -199,7 +206,7 @@ func TestApplyBot(t *testing.T) {
 	if p, _ := CheckBot(ctx, st.Q, rub, bot); p.Balances != 0 || p.Carried != 2 || p.Links != 0 {
 		t.Fatalf("second preview: %+v", p)
 	}
-	r, err = ApplyBot(ctx, st, now, rub, 7, bot, nil)
+	r, err = ApplyBot(ctx, st, now, setup, 7, bot, nil)
 	if err != nil || r.Links != 0 || r.Balances != 0 || r.Payments != 0 {
 		t.Fatalf("second run: %+v %v", r, err)
 	}

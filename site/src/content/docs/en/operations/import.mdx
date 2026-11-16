@@ -83,7 +83,7 @@ If you sold Remnawave subscriptions through the [Bedolaga](https://github.com/BE
 What comes over:
 
 - **The subscription's owner.** An account finds its subscription by its link: the link holds the Remnawave short UUID, which the import kept as an old link. Without a link, the account is looked up by the contact `tg:<id>` that the Remnawave import writes. A subscription that already has an owner in mikan keeps it. After the move the client does not have to link the subscription in mikan's bot again.
-- **The balance.** The rubles in the bot go to mikan's internal balance, once: a second run does not add them again. For that the balance needs a currency (**Payments → Payment methods**). If it is not rubles, the amount is converted at the balance's rate. The client sees it in the balance history marked "Bedolaga".
+- **The balance.** The rubles in the bot go to mikan's internal balance, once: a second run does not add them again. If mikan's balance is kept in another currency (**Payments → Payment methods**), the amount is converted at its rate. The client sees it in the balance history marked "Bedolaga".
 - **The transaction history.** Completed top-ups, payments and refunds are kept apart from mikan's payments: they are not counted as revenue and cannot be refunded from the panel. `GET /api/v1/balances/{tg_id}` gives them in `imported`.
 
 These accounts no longer get "new clients only" promo codes: mikan counts them as clients from the day the bot first saw them. Referrals, promo groups and autopay do not come over.

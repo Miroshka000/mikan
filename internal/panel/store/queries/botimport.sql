@@ -38,3 +38,8 @@ ON CONFLICT (tg_id) DO UPDATE SET since = LEAST(tg_clients.since, EXCLUDED.since
 
 -- name: UserNamesOf :many
 SELECT id, name FROM users WHERE id = ANY(sqlc.arg(ids)::bigint[]);
+
+-- name: LockBalanceCurrency :exec
+-- Taken by a change of the balance's currency and by money carried into balances from
+-- outside: the currency read for the amount stays the currency the amount is kept in.
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-balance-currency', 0));

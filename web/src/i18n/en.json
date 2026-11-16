@@ -2551,7 +2551,8 @@
       "botPayments": "Transactions for the history: {n}",
       "botRun": "Bring the accounts over",
       "botReport": "Accounts: {accounts}, subscriptions given an owner: {links}, balances carried: {balances} ({amount}), transactions for the history: {payments}",
-      "botFailed": "Could not be saved ({n}):"
+      "botFailed": "Could not be saved ({n}):",
+      "checkAgain": "The source changed after the check: check again."
     },
     "torrent": {
       "title": "Torrent blocker",
