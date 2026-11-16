@@ -1188,6 +1188,13 @@
           "currency": {
             "type": "string"
           },
+          "imported": {
+            "description": "История из бота продаж, откуда перенесён аккаунт: последние 50; это не платежи mikan",
+            "items": {
+              "$ref": "#/components/schemas/ImportedPaymentView"
+            },
+            "type": "array"
+          },
           "ops": {
             "items": {
               "$ref": "#/components/schemas/BalanceOpView"
@@ -1203,7 +1210,124 @@
           "tg_id",
           "balance",
           "currency",
-          "ops"
+          "ops",
+          "imported"
+        ],
+        "type": "object"
+      },
+      "BotPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "description": "Telegram-аккаунты бота",
+            "format": "int64",
+            "type": "integer"
+          },
+          "balance_total": {
+            "description": "Сколько всего, в копейках (сотых) валюты баланса",
+            "format": "int64",
+            "type": "integer"
+          },
+          "balances": {
+            "description": "Аккаунты, чей баланс будет перенесён",
+            "format": "int64",
+            "type": "integer"
+          },
+          "carried": {
+            "description": "Аккаунты, чей баланс уже перенесён прежде: второй раз он не добавится",
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "description": "Валюта баланса mikan; пусто — не выбрана, и балансы не переносятся",
+            "type": "string"
+          },
+          "links": {
+            "description": "Подписки, которые получат аккаунт-владельца",
+            "format": "int64",
+            "type": "integer"
+          },
+          "matched": {
+            "description": "Аккаунты, чьи подписки нашлись среди пользователей mikan",
+            "format": "int64",
+            "type": "integer"
+          },
+          "owned": {
+            "$ref": "#/components/schemas/List",
+            "description": "Подписки, у которых уже другой владелец: он остаётся"
+          },
+          "payments": {
+            "description": "Завершённые транзакции бота",
+            "format": "int64",
+            "type": "integer"
+          },
+          "unmatched": {
+            "$ref": "#/components/schemas/List",
+            "description": "Аккаунты с подпиской в боте, которой нет в mikan: сначала импортируйте пользователей Remnawave"
+          }
+        },
+        "required": [
+          "accounts",
+          "matched",
+          "links",
+          "owned",
+          "unmatched",
+          "balances",
+          "balance_total",
+          "currency",
+          "carried",
+          "payments"
+        ],
+        "type": "object"
+      },
+      "BotReport": {
+        "additionalProperties": false,
+        "properties": {
+          "accounts": {
+            "description": "Аккаунты, у которых что-то перенесено",
+            "format": "int64",
+            "type": "integer"
+          },
+          "balance_total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "balances": {
+            "description": "Аккаунты, чей баланс перенесён",
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "failed": {
+            "$ref": "#/components/schemas/List",
+            "description": "Аккаунты, которые не удалось сохранить"
+          },
+          "links": {
+            "description": "Подписки, получившие аккаунт-владельца",
+            "format": "int64",
+            "type": "integer"
+          },
+          "owned": {
+            "$ref": "#/components/schemas/List",
+            "description": "Подписки с другим владельцем: оставлены как были"
+          },
+          "payments": {
+            "description": "Транзакции, добавленные в историю (уже перенесённые не повторяются)",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accounts",
+          "links",
+          "owned",
+          "balances",
+          "balance_total",
+          "currency",
+          "payments",
+          "failed"
         ],
         "type": "object"
       },
@@ -4262,6 +4386,33 @@
         ],
         "type": "object"
       },
+      "ImportBotInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "bedolaga"
+            ],
+            "type": "string"
+          },
+          "token": {
+            "description": "Ключ Web API бота",
+            "maxLength": 4096,
+            "type": "string"
+          },
+          "url": {
+            "description": "Адрес Web API бота: https://bot.example.com или http://127.0.0.1:8080",
+            "maxLength": 300,
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "url",
+          "token"
+        ],
+        "type": "object"
+      },
       "ImportRunInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -4308,11 +4459,13 @@
         "additionalProperties": false,
         "properties": {
           "kind": {
+            "description": "bedolaga — бот продаж: аккаунты, балансы и история поверх уже перенесённых пользователей Remnawave; переносится через POST /api/v1/import/bot",
             "enum": [
               "marzban",
               "pasarguard",
               "remnawave",
-              "3xui"
+              "3xui",
+              "bedolaga"
             ],
             "type": "string"
           },
@@ -4321,7 +4474,7 @@
             "type": "string"
           },
           "token": {
-            "description": "Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина",
+            "description": "Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина; Bedolaga: ключ его Web API (X-API-Key)",
             "maxLength": 4096,
             "type": "string"
           },
@@ -4339,6 +4492,46 @@
         "required": [
           "kind",
           "url"
+        ],
+        "type": "object"
+      },
+      "ImportedPaymentView": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "description": "В копейках (сотых) валюты, как в боте",
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Тип в боте: deposit, subscription_payment, refund, withdrawal, referral_reward и другие",
+            "type": "string"
+          },
+          "method": {
+            "description": "Способ оплаты в боте",
+            "type": "string"
+          },
+          "source": {
+            "description": "Откуда: bedolaga",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "kind",
+          "amount",
+          "currency",
+          "created_at"
         ],
         "type": "object"
       },
@@ -4766,6 +4959,12 @@
       "JobState": {
         "additionalProperties": false,
         "properties": {
+          "bot_preview": {
+            "$ref": "#/components/schemas/BotPreview"
+          },
+          "bot_report": {
+            "$ref": "#/components/schemas/BotReport"
+          },
           "done": {
             "format": "int64",
             "type": "integer"
@@ -4780,6 +4979,10 @@
           },
           "from": {
             "description": "Панель и её адрес (без пути и данных для входа)",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Откуда: marzban, pasarguard, remnawave, 3xui или bedolaga",
             "type": "string"
           },
           "mode": {
@@ -17077,6 +17280,49 @@
           }
         },
         "summary": "Перенести пользователей из другой панели",
+        "tags": [
+          "settings"
+        ],
+        "x-session-only": true
+      }
+    },
+    "/api/v1/import/bot": {
+      "post": {
+        "description": "Telegram-аккаунты бота становятся владельцами своих подписок, их балансы переносятся один раз, завершённые транзакции — в историю. Идёт в фоне: ответ 202 сразу, ход и итог — в GET /api/v1/import/status (bot_report).",
+        "operationId": "import-bot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportBotInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobState"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Перенести аккаунты из бота продаж",
         "tags": [
           "settings"
         ],

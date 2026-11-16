@@ -1,6 +1,6 @@
 ---
 title: Import from other panels
-description: Moving users from Marzban, PasarGuard, Remnawave and 3x-ui, and how old subscription links keep working.
+description: Moving users from Marzban, PasarGuard, Remnawave and 3x-ui, the accounts of the Bedolaga bot, and how old subscription links keep working.
 ---
 
 import { Steps } from '@astrojs/starlight/components';
@@ -61,3 +61,29 @@ For clients to change nothing, point the old domain at the mikan server and set 
 - Set the subscription port in **Settings → Subscription** if the old panel served subscriptions on a different port.
 
 The bot accepts old links, and the user card shows the old link (Remnawave, 3x-ui) or that it works. Reissuing a link disables the old one too.
+
+## The Bedolaga sales bot
+
+If you sold Remnawave subscriptions through the [Bedolaga](https://github.com/BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot) bot, its accounts can come over after the users: who owns which subscription, the balances and the transaction history.
+
+<Steps>
+
+1. Bring over the users of this bot's Remnawave first, as above.
+
+2. Turn on the bot's Web API: `WEB_API_ENABLED=true` and a key in `WEB_API_DEFAULT_TOKEN` in its `.env`, then restart the bot. By default the API listens on `127.0.0.1:8080` on the bot's server. If mikan runs on another server, open the port to it only, or put an HTTPS proxy in front of the API.
+
+3. In **Settings → Import** pick **Bedolaga** and enter the API's address (`http://127.0.0.1:8080` when the bot is on this server) and the key.
+
+4. **Check** shows how many accounts found their subscriptions, how much money on the balances comes over and how many transactions.
+
+5. **Bring the accounts over** runs it in the background.
+
+</Steps>
+
+What comes over:
+
+- **The subscription's owner.** An account finds its subscription by its link: the link holds the Remnawave short UUID, which the import kept as an old link. Without a link, the account is looked up by the contact `tg:<id>` that the Remnawave import writes. A subscription that already has an owner in mikan keeps it. After the move the client does not have to link the subscription in mikan's bot again.
+- **The balance.** The rubles in the bot go to mikan's internal balance, once: a second run does not add them again. If mikan's balance is kept in another currency (**Payments → Payment methods**), the amount is converted at its rate. The client sees it in the balance history marked "Bedolaga".
+- **The transaction history.** Completed top-ups, payments and refunds are kept apart from mikan's payments: they are not counted as revenue and cannot be refunded from the panel. `GET /api/v1/balances/{tg_id}` gives them in `imported`.
+
+These accounts no longer get "new clients only" promo codes: mikan counts them as clients from the day the bot first saw them. Referrals, promo groups and autopay do not come over.

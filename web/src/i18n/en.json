@@ -2491,7 +2491,8 @@
         "marzban": "Marzban",
         "pasarguard": "PasarGuard",
         "remnawave": "Remnawave",
-        "3xui": "3x-ui"
+        "3xui": "3x-ui",
+        "bedolaga": "Bedolaga (sales bot)"
       },
       "url": "Address of the old panel",
       "urlHint": "As you open it in the browser, without the admin path: https://panel.example.com. The old panel keeps working; nothing is changed there.",
@@ -2536,7 +2537,22 @@
       "legacyOff": "The clients' old links do not open yet: set the path the old panel gave them under and save",
       "legacyNoSecret": "The old panel's signed links do not open without its secret: paste it and save",
       "legacyUse": "Use {path}",
-      "legacySaved": "Saved"
+      "legacySaved": "Saved",
+      "botIntro": "Bring over the users of this bot's Remnawave first: the accounts find their subscriptions by their links, or failing a link by the Telegram id in the contact. Balances come over once, and the transaction history is kept apart from mikan's payments.",
+      "botUrlHint": "The bot's Web API address (WEB_API_ENABLED=true). By default it listens on 127.0.0.1:8080 on the bot's server; http:// only to this server or the local network",
+      "botToken": "Web API key",
+      "botTokenHint": "WEB_API_DEFAULT_TOKEN from the bot's .env, or a key issued through its API",
+      "botFound": "Accounts in the bot: {total}, subscriptions found for {matched}. Subscriptions that get an owner: {links}",
+      "botOwned": "These subscriptions already have another owner, who stays ({n}):",
+      "botUnmatched": "These accounts' subscriptions are not in mikan ({n}):",
+      "botBalances": "Balances of {n} accounts come over, {amount} in all",
+      "botNoCurrency": "The balance has no currency yet (Payments → Payment methods): balances will not come over. Pick it and check again.",
+      "botCarried": "{n} accounts had their balance carried before: it is not added twice",
+      "botPayments": "Transactions for the history: {n}",
+      "botRun": "Bring the accounts over",
+      "botReport": "Accounts: {accounts}, subscriptions given an owner: {links}, balances carried: {balances} ({amount}), transactions for the history: {payments}",
+      "botFailed": "Could not be saved ({n}):",
+      "checkAgain": "The source changed after the check: check again."
     },
     "torrent": {
       "title": "Torrent blocker",

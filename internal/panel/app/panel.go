@@ -372,6 +372,11 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 			o.Log.Warn("import: the old links' kind is not saved", "err", err)
 		}
 	}
+	// A sales bot's balances go into the accounts' balance, in its currency.
+	importer.Balance = func(ctx context.Context, q *db.Queries) (model.BalanceConfig, error) {
+		c, err := billing.LoadConfig(ctx, settings.New(q))
+		return model.BalanceConfig(c.Balance), err
+	}
 	deps.Importer = importer
 	p.Importer = importer
 	// The subscriptions' handler comes later; the preview reaches it once it is there.

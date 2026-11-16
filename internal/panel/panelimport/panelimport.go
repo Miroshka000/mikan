@@ -46,6 +46,8 @@ const (
 	PasarGuard Kind = "pasarguard"
 	Remnawave  Kind = "remnawave"
 	XUI        Kind = "3xui" // 3x-ui (MHSanaei/3x-ui)
+	// Bedolaga is a sales bot, not a panel: FetchBot, on top of users from its Remnawave.
+	Bedolaga Kind = "bedolaga"
 )
 
 // Source is how to reach the old panel. Marzban and PasarGuard take an admin's username
@@ -181,21 +183,9 @@ func privateOK(a netip.Addr) bool {
 // Fetch lists the old panel's users, within FetchTimeout.
 func Fetch(ctx context.Context, hc *http.Client, src Source) ([]User, error) {
 	src.URL = strings.TrimRight(strings.TrimSpace(src.URL), "/")
-	u, err := url.Parse(src.URL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
-		return nil, fmt.Errorf("%w: the address must be https://host", ErrAnswer)
-	}
-	// A literal address is judged at once; a name, on the address it leads to (dialControl).
-	if a, err := netip.ParseAddr(strings.Trim(u.Hostname(), "[]")); err == nil {
-		if !AddressOK(a) || (u.Scheme == "http" && !privateOK(a)) {
-			return nil, fmt.Errorf("%w: %s", ErrAddress, a)
-		}
-	}
-	if hc == nil {
-		hc = Client()
-	}
-	if u.Scheme == "http" {
-		hc = plainOnly(hc)
+	hc, err := checkedClient(hc, src.URL)
+	if err != nil {
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, FetchTimeout)
 	defer cancel()
@@ -209,6 +199,28 @@ func Fetch(ctx context.Context, hc *http.Client, src Source) ([]User, error) {
 		return list, hidePath(err, src.URL)
 	}
 	return nil, fmt.Errorf("unknown panel %q", src.Kind)
+}
+
+// checkedClient checks the address of an old panel or a bot and gives the client to reach it
+// with: a literal address is judged at once, a name on the address it leads to
+// (dialControl); plain http only to this server or the LAN.
+func checkedClient(hc *http.Client, raw string) (*http.Client, error) {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
+		return nil, fmt.Errorf("%w: the address must be https://host", ErrAnswer)
+	}
+	if a, err := netip.ParseAddr(strings.Trim(u.Hostname(), "[]")); err == nil {
+		if !AddressOK(a) || (u.Scheme == "http" && !privateOK(a)) {
+			return nil, fmt.Errorf("%w: %s", ErrAddress, a)
+		}
+	}
+	if hc == nil {
+		hc = Client()
+	}
+	if u.Scheme == "http" {
+		hc = plainOnly(hc)
+	}
+	return hc, nil
 }
 
 // plainOnly is hc for an http:// address: the password goes unencrypted, so only to this

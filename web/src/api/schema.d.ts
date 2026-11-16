@@ -911,6 +911,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/import/bot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Перенести аккаунты из бота продаж
+         * @description Telegram-аккаунты бота становятся владельцами своих подписок, их балансы переносятся один раз, завершённые транзакции — в историю. Идёт в фоне: ответ 202 сразу, ход и итог — в GET /api/v1/import/status (bot_report).
+         */
+        post: operations["import-bot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/import/legacy": {
         parameters: {
             query?: never;
@@ -4100,9 +4120,83 @@ export interface components {
             /** Format: int64 */
             balance: number;
             currency: string;
+            /** @description История из бота продаж, откуда перенесён аккаунт: последние 50; это не платежи mikan */
+            imported: components["schemas"]["ImportedPaymentView"][];
             ops: components["schemas"]["BalanceOpView"][];
             /** Format: int64 */
             tg_id: number;
+        };
+        BotPreview: {
+            /**
+             * Format: int64
+             * @description Telegram-аккаунты бота
+             */
+            accounts: number;
+            /**
+             * Format: int64
+             * @description Сколько всего, в копейках (сотых) валюты баланса
+             */
+            balance_total: number;
+            /**
+             * Format: int64
+             * @description Аккаунты, чей баланс будет перенесён
+             */
+            balances: number;
+            /**
+             * Format: int64
+             * @description Аккаунты, чей баланс уже перенесён прежде: второй раз он не добавится
+             */
+            carried: number;
+            /** @description Валюта баланса mikan; пусто — не выбрана, и балансы не переносятся */
+            currency: string;
+            /**
+             * Format: int64
+             * @description Подписки, которые получат аккаунт-владельца
+             */
+            links: number;
+            /**
+             * Format: int64
+             * @description Аккаунты, чьи подписки нашлись среди пользователей mikan
+             */
+            matched: number;
+            /** @description Подписки, у которых уже другой владелец: он остаётся */
+            owned: components["schemas"]["List"];
+            /**
+             * Format: int64
+             * @description Завершённые транзакции бота
+             */
+            payments: number;
+            /** @description Аккаунты с подпиской в боте, которой нет в mikan: сначала импортируйте пользователей Remnawave */
+            unmatched: components["schemas"]["List"];
+        };
+        BotReport: {
+            /**
+             * Format: int64
+             * @description Аккаунты, у которых что-то перенесено
+             */
+            accounts: number;
+            /** Format: int64 */
+            balance_total: number;
+            /**
+             * Format: int64
+             * @description Аккаунты, чей баланс перенесён
+             */
+            balances: number;
+            currency: string;
+            /** @description Аккаунты, которые не удалось сохранить */
+            failed: components["schemas"]["List"];
+            /**
+             * Format: int64
+             * @description Подписки, получившие аккаунт-владельца
+             */
+            links: number;
+            /** @description Подписки с другим владельцем: оставлены как были */
+            owned: components["schemas"]["List"];
+            /**
+             * Format: int64
+             * @description Транзакции, добавленные в историю (уже перенесённые не повторяются)
+             */
+            payments: number;
         };
         BotSlotInputBody: {
             /** @description id аддона с правом bot или пусто */
@@ -5190,6 +5284,14 @@ export interface components {
             /** @enum {string} */
             provider: "github" | "telegram";
         };
+        ImportBotInputBody: {
+            /** @enum {string} */
+            kind: "bedolaga";
+            /** @description Ключ Web API бота */
+            token: string;
+            /** @description Адрес Web API бота: https://bot.example.com или http://127.0.0.1:8080 */
+            url: string;
+        };
         ImportRunInputBody: {
             /** @enum {string} */
             kind: "marzban" | "pasarguard" | "remnawave" | "3xui";
@@ -5204,15 +5306,35 @@ export interface components {
             username?: string;
         };
         ImportSource: {
-            /** @enum {string} */
-            kind: "marzban" | "pasarguard" | "remnawave" | "3xui";
+            /**
+             * @description bedolaga — бот продаж: аккаунты, балансы и история поверх уже перенесённых пользователей Remnawave; переносится через POST /api/v1/import/bot
+             * @enum {string}
+             */
+            kind: "marzban" | "pasarguard" | "remnawave" | "3xui" | "bedolaga";
             password?: string;
-            /** @description Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина */
+            /** @description Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина; Bedolaga: ключ его Web API (X-API-Key) */
             token?: string;
             /** @description Адрес старой панели: https://panel.example.com, у 3x-ui — с его секретным путём; http:// — только для этого сервера или локальной сети */
             url: string;
             /** @description Marzban, PasarGuard, 3x-ui: логин администратора */
             username?: string;
+        };
+        ImportedPaymentView: {
+            /**
+             * Format: int64
+             * @description В копейках (сотых) валюты, как в боте
+             */
+            amount: number;
+            /** Format: date-time */
+            created_at: string;
+            currency: string;
+            description?: string;
+            /** @description Тип в боте: deposit, subscription_payment, refund, withdrawal, referral_reward и другие */
+            kind: string;
+            /** @description Способ оплаты в боте */
+            method?: string;
+            /** @description Откуда: bedolaga */
+            source: string;
         };
         InactiveOutputBody: {
             /**
@@ -5371,6 +5493,8 @@ export interface components {
             op: "and" | "or";
         };
         JobState: {
+            bot_preview?: components["schemas"]["BotPreview"];
+            bot_report?: components["schemas"]["BotReport"];
             /** Format: int64 */
             done: number;
             /** @description Код ошибки, когда state = failed */
@@ -5379,6 +5503,8 @@ export interface components {
             finished?: string;
             /** @description Панель и её адрес (без пути и данных для входа) */
             from?: string;
+            /** @description Откуда: marzban, pasarguard, remnawave, 3xui или bedolaga */
+            kind?: string;
             /** @enum {string} */
             mode?: "preview" | "import";
             preview?: components["schemas"]["Preview"];
@@ -11048,6 +11174,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "import-bot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportBotInputBody"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobState"];
+                };
             };
             /** @description Error */
             default: {
