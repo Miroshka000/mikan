@@ -9,13 +9,18 @@ import { t, type Key } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { Select } from "../../../components/select";
+import { money } from "../../../lib/format";
 
 type Kind = "marzban" | "pasarguard" | "remnawave" | "3xui";
 const KINDS: Kind[] = ["marzban", "pasarguard", "remnawave", "3xui"];
+// What the import card reads: the panels, and a sales bot on top of its Remnawave.
+type Source = Kind | "bedolaga";
+const SOURCES: Source[] = [...KINDS, "bedolaga"];
 // Where each panel keeps its subscription links, for the old-links path.
 const OLD_PATH: Record<Kind, string> = { marzban: "sub", pasarguard: "sub", remnawave: "api/sub", "3xui": "sub" };
 // The token field of each panel that has one: its label and hint.
-const TOKEN: Partial<Record<Kind, [Key, Key]>> = {
+const TOKEN: Partial<Record<Source, [Key, Key]>> = {
+  bedolaga: ["settings.import.botToken", "settings.import.botTokenHint"],
   pasarguard: ["settings.import.apiKey", "settings.import.apiKeyHint"],
   remnawave: ["settings.import.token", "settings.import.tokenHint"],
   "3xui": ["settings.import.xuiToken", "settings.import.xuiTokenHint"],
@@ -27,7 +32,7 @@ export function ImportCard() {
   const qc = useQueryClient();
   const toast = useToast();
   const tariffs = useTariffs();
-  const [src, setSrc] = useState({ kind: "marzban" as Kind, url: "", username: "", password: "", token: "" });
+  const [src, setSrc] = useState({ kind: "marzban" as Source, url: "", username: "", password: "", token: "" });
   const [tariff, setTariff] = useState<number | "">("");
   const job = useQuery({
     queryKey: ["import-status"],
@@ -64,10 +69,21 @@ export function ImportCard() {
   };
   const preview = st?.mode === "preview" && st.state === "done" ? st.preview : undefined;
   const report = st?.mode === "import" ? st.report : undefined;
+  const botPreview = st?.mode === "preview" && st.state === "done" ? st.bot_preview : undefined;
+  const botReport = st?.mode === "import" ? st.bot_report : undefined;
+  const bot = src.kind === "bedolaga";
+  const runBot = useMutation({
+    mutationFn: () => unwrap(api.POST("/api/v1/import/bot", { body: { kind: "bedolaga", url: src.url.trim(), token: src.token.trim() } })),
+    onSuccess: (s) => {
+      started(s);
+      toast.ok(t("settings.import.started"));
+    },
+    onError: (e) => toast.error(errorText(e)),
+  });
   // Filed links open only once the next card has the old path (and a signing panel's secret).
   const legacy = useQuery({ queryKey: ["legacy-links"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/import/legacy", { signal })), enabled: !!report?.links });
   const linksOff = !!report?.links && !!legacy.data && !legacyActive(legacy.data);
-  const usesPassword = src.kind !== "remnawave";
+  const usesPassword = src.kind !== "remnawave" && !bot;
   const token = TOKEN[src.kind];
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
@@ -75,15 +91,16 @@ export function ImportCard() {
         <CardHead title={t("settings.import.title")} sub={t("settings.import.sub")} />
         <Field label={t("settings.import.kind")} htmlFor="imp-kind">
           <Select id="imp-kind" className="input" value={src.kind} onChange={set("kind")} disabled={running}>
-            {KINDS.map((k) => (
+            {SOURCES.map((k) => (
               <option key={k} value={k}>
                 {t(`settings.import.kinds.${k}`)}
               </option>
             ))}
           </Select>
         </Field>
-        <Field label={t("settings.import.url")} htmlFor="imp-url" hint={t(src.kind === "3xui" ? "settings.import.xuiUrlHint" : "settings.import.urlHint")}>
-          <input id="imp-url" className="input" value={src.url} onChange={set("url")} placeholder={src.kind === "3xui" ? "https://panel.example.com:2053/path" : "https://panel.example.com"} autoComplete="off" disabled={running} />
+        {bot ? <div className="banner info mb-3">{t("settings.import.botIntro")}</div> : null}
+        <Field label={t("settings.import.url")} htmlFor="imp-url" hint={t(bot ? "settings.import.botUrlHint" : src.kind === "3xui" ? "settings.import.xuiUrlHint" : "settings.import.urlHint")}>
+          <input id="imp-url" className="input" value={src.url} onChange={set("url")} placeholder={bot ? "http://127.0.0.1:8080" : src.kind === "3xui" ? "https://panel.example.com:2053/path" : "https://panel.example.com"} autoComplete="off" disabled={running} />
         </Field>
         {usesPassword ? (
           <div className="grid gap-x-3 sm:grid-cols-2">
@@ -132,6 +149,32 @@ export function ImportCard() {
             <Button type="button" variant="primary" loading={run.isPending} disabled={tariff === "" || preview.new === 0} onClick={() => run.mutate()}>
               {t("settings.import.run", { n: preview.new })}
             </Button>
+          </div>
+        ) : null}
+        {botPreview ? (
+          <div className="panel-soft mt-3 p-3 text-[13px]">
+            <div className="font-medium">{t("settings.import.botFound", { total: botPreview.accounts, matched: botPreview.matched, links: botPreview.links })}</div>
+            <Names label="settings.import.botOwned" list={botPreview.owned} />
+            <Names label="settings.import.botUnmatched" list={botPreview.unmatched} bad />
+            {botPreview.currency ? (
+              <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.import.botBalances", { n: botPreview.balances, amount: money(botPreview.balance_total, botPreview.currency) })}</div>
+            ) : (
+              <div className="banner warn my-2">{t("settings.import.botNoCurrency")}</div>
+            )}
+            {botPreview.carried ? <div className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.import.botCarried", { n: botPreview.carried })}</div> : null}
+            <div className="mt-1 mb-2 text-xs text-[var(--ink-500)]">{t("settings.import.botPayments", { n: botPreview.payments })}</div>
+            <Button type="button" variant="primary" loading={runBot.isPending} disabled={!bot || botPreview.accounts === 0} onClick={() => runBot.mutate()}>
+              {t("settings.import.botRun")}
+            </Button>
+          </div>
+        ) : null}
+        {botReport ? (
+          <div className="panel-soft mt-3 p-3 text-[13px]">
+            <div className="font-medium">
+              {t("settings.import.botReport", { accounts: botReport.accounts, links: botReport.links, balances: botReport.balances, amount: money(botReport.balance_total, botReport.currency), payments: botReport.payments })}
+            </div>
+            <Names label="settings.import.botOwned" list={botReport.owned} />
+            <Names label="settings.import.botFailed" list={botReport.failed} bad />
           </div>
         ) : null}
         {report ? (

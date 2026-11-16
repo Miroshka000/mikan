@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -70,6 +71,7 @@ type importReport struct {
 }
 
 type jobState struct {
+	raw     string
 	Mode    string        `json:"mode"`
 	State   string        `json:"state"`
 	Error   string        `json:"error"`
@@ -92,6 +94,7 @@ func waitJob(t *testing.T, h *harness, api string, csrf map[string]string) jobSt
 		if err := json.Unmarshal(body, &st); err != nil {
 			t.Fatal(err)
 		}
+		st.raw = string(body)
 		if st.State == "done" || st.State == "failed" {
 			return st
 		}
@@ -281,6 +284,69 @@ func TestImportFromRemnawaveKeepsShortUUIDLinks(t *testing.T) {
 	}
 }
 
+// Bedolaga on top of its Remnawave: the account owns the subscription its link names, its
+// balance comes once into mikan's balance and its history is there to read.
+func TestImportFromBedolagaOverRemnawave(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	conf := billing.DefaultConfig
+	conf.Balance.Currency = "RUB"
+	if err := settings.Set(ctx, settings.New(h.st.Q), billing.KeyConfig, conf); err != nil {
+		t.Fatal(err)
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	api := "/" + adminPath + "/api/v1"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	tariffs, _ := h.st.Q.ListTariffs(ctx)
+	rw := fakeRemnawave(t, []map[string]any{
+		{"id": 1, "shortUuid": "Abc123Def456Ghi7", "username": "masha", "status": "ACTIVE", "trafficLimitBytes": 0, "expireAt": "2099-12-31T00:00:00.000Z",
+			"userTraffic": map[string]any{"usedTrafficBytes": 0, "lifetimeUsedTrafficBytes": 0}},
+	})
+	if r := runImport(t, h, api, csrf, map[string]any{"kind": "remnawave", "url": rw.URL, "token": "rw-token", "tariff_id": tariffs[1].ID}); r.Created != 1 {
+		t.Fatalf("remnawave: %+v", r)
+	}
+	bot := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "bot-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var items []map[string]any
+		switch r.URL.Path {
+		case "/users":
+			items = []map[string]any{{"id": 1, "telegram_id": 777, "username": "masha_tg", "status": "active", "balance_kopeks": 12345, "created_at": "2025-01-01T00:00:00",
+				"subscriptions": []any{map[string]any{"subscription_url": "https://sub.example.com/Abc123Def456Ghi7"}}}}
+		case "/transactions":
+			items = []map[string]any{{"id": 5, "user_id": 1, "type": "deposit", "amount_kopeks": 20000, "payment_method": "yookassa", "is_completed": true, "created_at": "2025-01-02T00:00:00"}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "total": len(items)})
+	}))
+	t.Cleanup(bot.Close)
+	src := map[string]any{"kind": "bedolaga", "url": bot.URL, "token": "bot-key"}
+	st := runPreview(t, h, api, csrf, src)
+	if st.State != "done" || !strings.Contains(st.raw, `"bot_preview":{"accounts":1,"matched":1,"links":1`) || !strings.Contains(st.raw, `"balance_total":12345`) {
+		t.Fatalf("preview: %+v", st)
+	}
+	if resp, body := h.do(http.MethodPost, api+"/import/bot", src, csrf); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("start: %d %s", resp.StatusCode, body)
+	}
+	if st := waitJob(t, h, api, csrf); st.State != "done" || !strings.Contains(st.raw, `"links":1`) || !strings.Contains(st.raw, `"payments":1`) {
+		t.Fatalf("import: %+v", st)
+	}
+	list, _ := h.st.Q.ListUsers(ctx)
+	if l, err := h.st.Q.GetTgLink(ctx, list[len(list)-1].ID); err != nil || l.TgID != 777 {
+		t.Fatalf("masha's owner: %+v %v", l, err)
+	}
+	_, body := h.do(http.MethodGet, api+"/balances/777", nil, csrf)
+	if !strings.Contains(string(body), `"balance":12345`) || !strings.Contains(string(body), `"kind":"deposit"`) || !strings.Contains(string(body), `"method":"yookassa"`) {
+		t.Fatalf("balance: %s", body)
+	}
+}
+
 // 3x-ui (a version without CSRF) at its secret path: the clients of one subId become one
 // user, a client only on vmess is reported and not made, and the subId opens the old link.
 func TestImportFrom3xUIKeepsSubIDLinks(t *testing.T) {
@@ -413,7 +479,7 @@ func TestImportIsSessionOnly(t *testing.T) {
 	k := newKeyHarness(t)
 	for _, c := range []struct{ method, path string }{
 		{http.MethodPost, "/import/preview"}, {http.MethodPost, "/import"}, {http.MethodGet, "/import/status"}, {http.MethodDelete, "/import"},
-		{http.MethodGet, "/import/legacy"}, {http.MethodPatch, "/import/legacy"},
+		{http.MethodGet, "/import/legacy"}, {http.MethodPatch, "/import/legacy"}, {http.MethodPost, "/import/bot"},
 	} {
 		resp, body := k.asKey(k.full, c.method, c.path, map[string]any{})
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(body), "session_only") {

@@ -208,6 +208,26 @@ type FreePlan struct {
 	CreatedAt int64
 }
 
+type ImportedAccount struct {
+	Source string
+	TgID   int64
+	Amount int64
+	At     int64
+}
+
+type ImportedPayment struct {
+	ID          int64
+	Source      string
+	ExternalID  string
+	TgID        int64
+	Kind        string
+	Amount      int64
+	Currency    string
+	Method      string
+	Description string
+	CreatedAt   int64
+}
+
 type Inbound struct {
 	ID          int64
 	NodeID      int64

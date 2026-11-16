@@ -20,11 +20,19 @@ import (
 // for the request and kept nowhere.
 
 type importSource struct {
-	Kind     string `json:"kind" enum:"marzban,pasarguard,remnawave,3xui"`
+	Kind     string `json:"kind" enum:"marzban,pasarguard,remnawave,3xui,bedolaga" doc:"bedolaga — бот продаж: аккаунты, балансы и история поверх уже перенесённых пользователей Remnawave; переносится через POST /api/v1/import/bot"`
 	URL      string `json:"url" maxLength:"300" doc:"Адрес старой панели: https://panel.example.com, у 3x-ui — с его секретным путём; http:// — только для этого сервера или локальной сети"`
 	Username string `json:"username,omitempty" maxLength:"200" doc:"Marzban, PasarGuard, 3x-ui: логин администратора"`
 	Password string `json:"password,omitempty" maxLength:"500"`
-	Token    string `json:"token,omitempty" maxLength:"4096" doc:"Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина"`
+	Token    string `json:"token,omitempty" maxLength:"4096" doc:"Remnawave: API-токен; PasarGuard: API-ключ вместо логина; 3x-ui: API-токен вместо логина; Bedolaga: ключ его Web API (X-API-Key)"`
+}
+
+type importBotInput struct {
+	Body struct {
+		Kind  string `json:"kind" enum:"bedolaga"`
+		URL   string `json:"url" maxLength:"300" doc:"Адрес Web API бота: https://bot.example.com или http://127.0.0.1:8080"`
+		Token string `json:"token" maxLength:"4096" doc:"Ключ Web API бота"`
+	}
 }
 
 func (s importSource) source() panelimport.Source {
@@ -81,6 +89,9 @@ func (h *handlers) registerImport() {
 		Description: "Уже созданные пользователи остаются, их список — в отчёте.", Tags: tags, DefaultStatus: http.StatusNoContent}, h.importCancel)
 	huma.Register(h.api, huma.Operation{OperationID: "import-run", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/import", Summary: "Перенести пользователей из другой панели",
 		Description: "Импорт идёт в фоне: ответ 202 сразу, ход и итог — в GET /api/v1/import/status.", Tags: tags, DefaultStatus: http.StatusAccepted}, h.importRun)
+	huma.Register(h.api, huma.Operation{OperationID: "import-bot", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPost, Path: "/api/v1/import/bot", Summary: "Перенести аккаунты из бота продаж",
+		Description: "Telegram-аккаунты бота становятся владельцами своих подписок, их балансы переносятся один раз, завершённые транзакции — в историю. Идёт в фоне: ответ 202 сразу, ход и итог — в GET /api/v1/import/status (bot_report).",
+		Tags:        tags, DefaultStatus: http.StatusAccepted}, h.importBot)
 	huma.Register(h.api, huma.Operation{OperationID: "import-status", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodGet, Path: "/api/v1/import/status", Summary: "Ход импорта", Tags: tags}, h.importStatus)
 	huma.Register(h.api, huma.Operation{OperationID: "get-legacy-links", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodGet, Path: "/api/v1/import/legacy", Summary: "Старые ссылки подписки", Tags: tags}, h.getLegacy)
 	huma.Register(h.api, huma.Operation{OperationID: "update-legacy-links", Metadata: sessionOnly, Extensions: sessionOnlyExt, Method: http.MethodPatch, Path: "/api/v1/import/legacy", Summary: "Настроить старые ссылки подписки", Tags: tags}, h.updateLegacy)
@@ -104,7 +115,21 @@ func (h *handlers) importPreview(ctx context.Context, in *importPreviewInput) (*
 	if err := h.kindConflict(ctx, in.Body.Kind); err != nil {
 		return nil, err
 	}
+	if in.Body.Kind == string(panelimport.Bedolaga) {
+		return h.startJob(func() error { return h.d.Importer.PreviewBot(in.Body.source(), in.Body.host()) })
+	}
 	return h.startJob(func() error { return h.d.Importer.Preview(in.Body.source(), in.Body.host()) })
+}
+
+func (h *handlers) importBot(ctx context.Context, in *importBotInput) (*importStateOutput, error) {
+	b := in.Body
+	src := importSource{Kind: b.Kind, URL: b.URL, Token: b.Token}
+	admin := sessionOf(ctx).AdminID
+	out, err := h.startJob(func() error { return h.d.Importer.StartBot(src.source(), src.host(), admin) })
+	if err == nil {
+		h.audit(ctx, admin, "import.bot", "users", "", map[string]any{"from": src.host()})
+	}
+	return out, err
 }
 
 func (h *handlers) importCancel(ctx context.Context, _ *struct{}) (*struct{}, error) {
