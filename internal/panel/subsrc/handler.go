@@ -51,9 +51,11 @@ type Config struct {
 	LogDays int
 }
 
-// Binder hands devices their keys (domain.Devices).
+// Binder hands devices their keys (domain.Devices). Admit tells what Bind would do, and
+// does nothing: a preview's.
 type Binder interface {
 	Bind(ctx context.Context, u db.User, in domain.DeviceInfo, requireHWID bool) (db.Slot, error)
+	Admit(ctx context.Context, u db.User, in domain.DeviceInfo, requireHWID bool) (string, error)
 	Unbind(ctx context.Context, userID, deviceID int64, bySubscriber bool) error
 	UnbindState(ctx context.Context, userID int64) (domain.UnbindState, error)
 	Rename(ctx context.Context, userID, deviceID int64, name string) (string, error)
@@ -115,9 +117,11 @@ func (h *Handler) warn(key, msg string, args ...any) { h.profiles.Warn(key, msg,
 func (h *Handler) SetShop(s *billing.Service) { h.shop = s }
 func (h *Handler) SetPromo(s *promo.Service)  { h.promos = s }
 
-// balancer narrows the nodes a client's subscription shows (domain.Balancer.Nodes).
+// balancer narrows the nodes a client's subscription shows (domain.Balancer.Nodes); Peek
+// does it placing nobody, for a preview.
 type balancer interface {
 	Nodes(ctx context.Context, userID int64, on map[int64]bool) (map[int64]bool, error)
+	Peek(ctx context.Context, userID int64, on map[int64]bool) (map[int64]bool, error)
 }
 
 // SetBalancer keeps each client on one node of every balance group.

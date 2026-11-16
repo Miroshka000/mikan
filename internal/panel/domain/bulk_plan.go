@@ -34,6 +34,8 @@ type BulkChange struct {
 	State string // the user's State now
 	// Expires is the term's end after BulkExtend (the user's own otherwise).
 	Expires sql.NullInt64
+	// Group is the user's group of its own now, for BulkGroup (0: none).
+	Group int64
 }
 
 // BulkPlan works out Bulk(ids, action, opt) without doing it: the same rules, the same
@@ -58,12 +60,18 @@ func (s *Users) BulkPlan(ctx context.Context, ids []int64, action string, opt Bu
 	if err != nil {
 		return BulkPlan{}, err
 	}
+	var groups map[int64]int64
+	if action == BulkGroup {
+		if groups, err = userGroupsOf(ctx, s.st.Q, found); err != nil {
+			return BulkPlan{}, err
+		}
+	}
 	for _, u := range users {
-		c := BulkChange{User: u, State: State(u, grants.Main(u.ID), now), Expires: u.ExpiresAt}
+		c := BulkChange{User: u, State: State(u, grants.Main(u.ID), now), Expires: u.ExpiresAt, Group: groups[u.ID]}
 		if CanConnect(c.State) {
 			p.Active++
 		}
-		if !bulkChanges(u, action, opt) {
+		if !bulkChanges(u, action, opt, groups) {
 			continue
 		}
 		if action == BulkExtend {
@@ -84,9 +92,23 @@ func (s *Users) BulkPlan(ctx context.Context, ids []int64, action string, opt Bu
 	return p, nil
 }
 
+// userGroupsOf is the group of its own of each of the users ids that has one.
+func userGroupsOf(ctx context.Context, q *db.Queries, ids []int64) (map[int64]int64, error) {
+	rows, err := q.ListUserGroupIDsOf(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]int64, len(rows))
+	for _, r := range rows {
+		out[r.UserID] = r.GroupID
+	}
+	return out, nil
+}
+
 // bulkChanges says whether action changes u at all. An extension, a new traffic period and a
-// deletion change everyone; the rest leave alone who is that way already.
-func bulkChanges(u db.User, action string, opt BulkOpt) bool {
+// deletion change everyone; the rest leave alone who is that way already. groups is the group
+// of its own of each user, for BulkGroup.
+func bulkChanges(u db.User, action string, opt BulkOpt, groups map[int64]int64) bool {
 	switch action {
 	case BulkDisable:
 		return u.Status != "disabled"
@@ -98,6 +120,12 @@ func bulkChanges(u db.User, action string, opt BulkOpt) bool {
 		return u.Hidden != 0
 	case BulkMove:
 		return u.FolderID != NullInt(opt.Folder)
+	case BulkGroup:
+		want := int64(0)
+		if opt.Group != nil {
+			want = *opt.Group
+		}
+		return groups[u.ID] != want
 	}
 	return true
 }

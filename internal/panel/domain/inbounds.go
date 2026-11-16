@@ -363,6 +363,11 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 		}
 	}
 	err = s.st.Tx(ctx, func(q *db.Queries) error {
+		if p.defaultHost != nil {
+			if err := p.defaultHost.lock(ctx, q); err != nil {
+				return err
+			}
+		}
 		cur, err := q.GetInbound(ctx, id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrUnknownInbound

@@ -62,7 +62,10 @@ type UserView struct {
 	TorrentBan    *time.Time    `json:"torrent_ban" doc:"До какого времени действует бан блокировщика торрентов; null — бана нет"`
 	Source        string        `json:"source" enum:"admin,bot,trial,free,import" doc:"Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется"`
 	FolderID      *int64        `json:"folder_id" doc:"Папка пользователя; null — вне папок"`
-	Hidden        bool          `json:"hidden" doc:"Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются"`
+	GroupID       *int64        `json:"group_id" doc:"Своя группа клиента, заданная в карточке; null — группа его тарифа"`
+	// EffectiveGroupID is the group the user is in: its own, or its tariff's.
+	EffectiveGroupID *int64 `json:"effective_group_id" doc:"Группа, в которой клиент сейчас: своя (group_id) или его тарифа; null — ни в какой. От неё зависят серверы и адреса, которые он видит"`
+	Hidden           bool   `json:"hidden" doc:"Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются"`
 	// StartsOnConnect: the term waits for the first connection (domain/starts.go).
 	StartsOnConnect bool `json:"starts_on_connect" doc:"Срок ждёт первого подключения: до него стоит на месте, expires_at уходит вперёд вместе с часами (обновляется раз в 10 минут), подписка показывает весь срок"`
 	// NextTariff is the tariff the subscription moves to once its term ends.
@@ -84,6 +87,34 @@ type userEnv struct {
 	waiting map[int64]bool
 	next    map[int64]domain.NextTariff
 	fields  map[int64]map[string]string // the admin's own fields, by user
+	// members is the group of its own of each of the answer's users that has one (groupsOf),
+	// tariffGroups the group of every tariff that has one: a user without a group of its own
+	// is in its tariff's (domain.GroupOf).
+	members      map[int64]int64
+	tariffGroups map[int64]int64
+}
+
+// groupsOf reads the groups of their own of the users of ids into e: one read for the whole
+// answer.
+func (h *handlers) groupsOf(ctx context.Context, e *userEnv, ids []int64) error {
+	rows, err := h.d.Store.Q.ListUserGroupIDsOf(ctx, ids)
+	if err != nil {
+		return err
+	}
+	e.members = make(map[int64]int64, len(rows))
+	for _, r := range rows {
+		e.members[r.UserID] = r.GroupID
+	}
+	return nil
+}
+
+// groupOf is the group u is in: its own, or its tariff's.
+func (e userEnv) groupOf(u db.User) int64 {
+	tariff := int64(0)
+	if u.TariffID.Valid {
+		tariff = e.tariffGroups[u.TariffID.Int64]
+	}
+	return domain.GroupOf(e.members[u.ID], tariff)
 }
 
 // lifecycleOf reads the lifecycle of the users of ids into e: two small tables, one read
@@ -108,6 +139,10 @@ func (h *handlers) userEnv(ctx context.Context) userEnv {
 		e.subBase = h.d.SubBase(ctx)
 	}
 	e.online = h.online()
+	// Without them every user shows only the group of its own.
+	if g, err := domain.TariffGroupIDs(ctx, h.d.Store.Q); err == nil {
+		e.tariffGroups = g
+	}
 	// The list still shows without them: a ban is a note on a user, not the user.
 	if h.d.Settings == nil {
 		return e
@@ -162,6 +197,12 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 	n, ok := env.next[u.ID]
 	v.NextTariff = nextView(n, ok)
 	v.CustomFields = fieldsOrEmpty(env.fields[u.ID])
+	if g, ok := env.members[u.ID]; ok {
+		v.GroupID = &g
+	}
+	if g := env.groupOf(u); g != 0 {
+		v.EffectiveGroupID = &g
+	}
 	return v
 }
 
@@ -196,6 +237,7 @@ type listUsersInput struct {
 	State  string `query:"state" enum:"all,active,expiring,limited,expired,disabled,attention" default:"all" doc:"attention — исчерпан лимит, истекают и истекли, в этом порядке: одним запросом для обзора"`
 	Query  string `query:"q" maxLength:"100" doc:"Поиск по имени, контакту, заметке и меткам. Оператору поддержки без показа подписчиков закрыт: 403 support_denied"`
 	Folder string `query:"folder" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
+	Group  string `query:"group" maxLength:"20" default:"all" doc:"all — любая; none — ни в какой группе; число — id группы. Группа клиента — своя или его тарифа (effective_group_id)"`
 	Source string `query:"source" enum:"all,admin,bot,trial,free,import" default:"all" doc:"Откуда пользователь, см. source у пользователя"`
 	Hidden string `query:"hidden" enum:"hide,show,only" default:"show" doc:"show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые"`
 	Limit  int    `query:"limit" minimum:"1" maximum:"500" default:"100"`
@@ -215,11 +257,12 @@ type listUsersOutput struct {
 	Body struct {
 		Items  []UserView `json:"items"`
 		Total  int        `json:"total" doc:"Сколько подходит под фильтр"`
-		Counts UserCounts `json:"counts" doc:"Пользователи по состояниям среди подходящих под папку, источник и скрытых; состояние и поиск не учитываются"`
+		Counts UserCounts `json:"counts" doc:"Пользователи по состояниям среди подходящих под папку, группу, источник и скрытых; состояние и поиск не учитываются"`
 		// Each facet is counted with the other filters applied and its own left out, so a
 		// chip says how many users it would show.
-		FolderCounts map[string]int `json:"folder_counts" doc:"Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под источник и скрытых"`
-		SourceCounts map[string]int `json:"source_counts" doc:"Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку и скрытых"`
+		FolderCounts map[string]int `json:"folder_counts" doc:"Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под группу, источник и скрытых"`
+		GroupCounts  map[string]int `json:"group_counts" doc:"Пользователи по группам (ключ — id группы, none — ни в какой) среди подходящих под папку, источник и скрытых"`
+		SourceCounts map[string]int `json:"source_counts" doc:"Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку, группу и скрытых"`
 		UsersTotal   int            `json:"users_total" doc:"Все пользователи панели, как бы ни был задан фильтр"`
 		HiddenTotal  int            `json:"hidden_total" doc:"Сколько из них скрыто"`
 	}
@@ -267,6 +310,7 @@ type patchUserInput struct {
 		TariffID         *int64            `json:"tariff_id,omitempty" minimum:"1" doc:"Применить тариф: лимиты из тарифа, срок — от сегодня"`
 		Hidden           *bool             `json:"hidden,omitempty" doc:"Скрыть пользователя из списка или вернуть в него; доступ он не теряет"`
 		FolderID         *int64            `json:"folder_id,omitempty" minimum:"0" doc:"Положить в папку; 0 — убрать из папки"`
+		GroupID          *int64            `json:"group_id,omitempty" minimum:"0" doc:"Своя группа клиента: от неё зависят серверы и адреса, которые он видит; 0 — убрать свою, клиент вернётся в группу тарифа"`
 		CustomFields     map[string]string `json:"custom_fields,omitempty" maxProperties:"30" doc:"Значения своих полей по ключу, только названные; пустая строка стирает значение"`
 		StartsOnConnect  *bool             `json:"starts_on_connect,omitempty" doc:"true — срок ждёт первого подключения (только у не подключавшегося, со сроком впереди: иначе 422 already_connected, no_term_end, term_ended); false — запустить ждущий срок сейчас. Дата окончания, заданная вручную (expires_at, never_expires), тоже запускает его и остаётся как задана"`
 	}
@@ -285,9 +329,10 @@ type bulkInput struct {
 		IDs    []int64     `json:"ids,omitempty" maxItems:"1000" doc:"Пользователи по id; задаётся либо ids, либо filter"`
 		Filter *BulkFilter `json:"filter,omitempty" doc:"Все, кто подходит под фильтр списка пользователей (те же параметры и тот же смысл, что у GET /users), сколько бы их ни было; задаётся либо ids, либо filter"`
 		Expect string      `json:"expect,omitempty" pattern:"^[0-9a-f]{64}$" doc:"Только с filter, и для действия обязательно: digest из предпросмотра с тем же filter. Если под фильтр сейчас подходят не ровно те же пользователи (другое число или хоть один другой) — 409 filter_changed, и ничего не сделано. Предпросмотр его значение не проверяет"`
-		Action string      `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ"`
+		Action string      `json:"action" enum:"extend,reset,disable,enable,delete,hide,unhide,move,group" doc:"hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ. group даёт клиентам свою группу: от неё зависят серверы и адреса, которые они видят"`
 		Days   int64       `json:"days,omitempty" minimum:"0" maximum:"3650" doc:"Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней"`
 		Folder int64       `json:"folder_id,omitempty" minimum:"0" doc:"Для move: папка; 0 или не задано — убрать из папок"`
+		Group  int64       `json:"group_id,omitempty" minimum:"0" doc:"Для group: группа; 0 или не задано — убрать свою группу, клиенты вернутся в группы своих тарифов"`
 	}
 }
 
@@ -296,6 +341,7 @@ type BulkFilter struct {
 	State  string `json:"state,omitempty" enum:"all,active,expiring,limited,expired,disabled,attention" default:"all"`
 	Query  string `json:"q,omitempty" maxLength:"100" doc:"Оператору поддержки без показа подписчиков закрыт: 403 support_denied"`
 	Folder string `json:"folder,omitempty" maxLength:"20" default:"all" doc:"all — любая; none — вне папок; число — id папки"`
+	Group  string `json:"group,omitempty" maxLength:"20" default:"all" doc:"all — любая; none — ни в какой группе; число — id группы (своей или тарифа)"`
 	Source string `json:"source,omitempty" enum:"all,admin,bot,trial,free,import" default:"all"`
 	Hidden string `json:"hidden,omitempty" enum:"hide,show,only" default:"show" doc:"Как у списка: по умолчанию вместе со скрытыми"`
 }
@@ -315,6 +361,7 @@ type BulkSample struct {
 	ExpiresAfter *time.Time `json:"expires_after,omitempty" doc:"extend: новый конец срока"`
 	Used         int64      `json:"used" doc:"Израсходовано за период: reset начинает период заново"`
 	FolderID     *int64     `json:"folder_id"`
+	GroupID      *int64     `json:"group_id" doc:"Только для group: своя группа клиента сейчас"`
 }
 
 // BulkAtStake is what the users a deletion reaches hold, as the removal of the inactive
@@ -489,6 +536,15 @@ type userFilter struct {
 	folder                folderFilter
 	// fields are the values of the users' own fields the search looks through too (searchText).
 	fields map[int64][]string
+	// group is the group a user is in (its own, or its tariff's: env.groupOf), as the folder
+	// filter reads it: invalid is none.
+	group folderFilter
+	env   userEnv // every user's own group and every tariff's, for the group a user is in
+}
+
+// userFilterIn is what newUserFilter reads, every field as the list's parameter of its name.
+type userFilterIn struct {
+	State, Query, Folder, Group, Source, Hidden string
 }
 
 // newUserFilter reads a filter whose fields are at at ("query." for the list, "body.filter."
@@ -496,19 +552,38 @@ type userFilter struct {
 // or tag tells with its total and the ids it finds whether the text is in a subscriber,
 // however the answer is masked: an operator who may not see the subscribers does not search
 // them.
-func newUserFilter(ctx context.Context, at, state, query, folder, source, hidden string) (userFilter, error) {
-	f := userFilter{state: cmp.Or(state, "all"), source: cmp.Or(source, "all"), hidden: cmp.Or(hidden, "show"), query: strings.ToLower(strings.TrimSpace(query))}
+func newUserFilter(ctx context.Context, q *db.Queries, at string, in userFilterIn) (userFilter, error) {
+	f := userFilter{state: cmp.Or(in.State, "all"), source: cmp.Or(in.Source, "all"), hidden: cmp.Or(in.Hidden, "show"), query: strings.ToLower(strings.TrimSpace(in.Query))}
 	if f.query != "" && hidesPeople(ctx) {
 		return userFilter{}, huma.Error403Forbidden("support_denied")
 	}
 	var err error
-	f.folder, err = parseFolderFilter(folder, at+"folder")
+	if f.folder, err = parseFolderFilter(in.Folder, at+"folder"); err != nil {
+		return f, err
+	}
+	if f.group, err = parseFolderFilter(in.Group, at+"group"); err != nil {
+		return f, fieldErrValue(at+"group", "bad_group", in.Group)
+	}
+	if f.env.members, err = domain.UserGroupIDs(ctx, q); err != nil {
+		return f, err
+	}
+	f.env.tariffGroups, err = domain.TariffGroupIDs(ctx, q)
 	return f, err
 }
 
+// groupKey is the key of the group u is in in group_counts.
+func (f userFilter) groupKey(u db.User) string {
+	if g := f.env.groupOf(u); g != 0 {
+		return strconv.FormatInt(g, 10)
+	}
+	return "none"
+}
+
 // facets are the parts of f the list counts users by, each on its own.
-func (f userFilter) facets(u db.User) (okHidden, okFolder, okSource bool) {
-	return hiddenMatches(f.hidden, u), f.folder.matches(u), f.source == "all" || f.source == u.Source
+func (f userFilter) facets(u db.User) (okHidden, okFolder, okGroup, okSource bool) {
+	g := f.env.groupOf(u)
+	okGroup = f.group.any || f.group.id == sql.NullInt64{Int64: g, Valid: g != 0}
+	return hiddenMatches(f.hidden, u), f.folder.matches(u), okGroup, f.source == "all" || f.source == u.Source
 }
 
 // wants is the rest of f, for a user whose facets match and whose state is st: the state
@@ -552,7 +627,7 @@ func (h *handlers) matchingIDs(ctx context.Context, f userFilter) ([]int64, erro
 	}
 	ids := []int64{}
 	for _, u := range users {
-		if okHidden, okFolder, okSource := f.facets(u); okHidden && okFolder && okSource && f.wants(u, domain.State(u, grants.Main(u.ID), now)) {
+		if okHidden, okFolder, okGroup, okSource := f.facets(u); okHidden && okFolder && okGroup && okSource && f.wants(u, domain.State(u, grants.Main(u.ID), now)) {
 			ids = append(ids, u.ID)
 		}
 	}
@@ -561,7 +636,7 @@ func (h *handlers) matchingIDs(ctx context.Context, f userFilter) ([]int64, erro
 
 func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUsersOutput, error) {
 	// Only the page's users get their slots read.
-	f, err := newUserFilter(ctx, "query.", in.State, in.Query, in.Folder, in.Source, in.Hidden)
+	f, err := newUserFilter(ctx, h.d.Store.Q, "query.", userFilterIn{State: in.State, Query: in.Query, Folder: in.Folder, Group: in.Group, Source: in.Source, Hidden: in.Hidden})
 	if err != nil {
 		return nil, err
 	}
@@ -591,6 +666,14 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 	for _, f := range folders {
 		b.FolderCounts[strconv.FormatInt(f.ID, 10)] = 0
 	}
+	b.GroupCounts = map[string]int{"none": 0}
+	groups, err := h.d.Store.Q.ListGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range groups {
+		b.GroupCounts[strconv.FormatInt(g.ID, 10)] = 0
+	}
 	var matched []db.User
 	for _, u := range users {
 		b.UsersTotal++
@@ -598,14 +681,17 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 			b.HiddenTotal++
 		}
 		// Each part of the filter on its own; a count leaves out only its own part.
-		okHidden, okFolder, okSource := f.facets(u)
-		if okHidden && okSource {
+		okHidden, okFolder, okGroup, okSource := f.facets(u)
+		if okHidden && okGroup && okSource {
 			b.FolderCounts[folderKey(u)]++
 		}
-		if okHidden && okFolder {
+		if okHidden && okFolder && okSource {
+			b.GroupCounts[f.groupKey(u)]++
+		}
+		if okHidden && okFolder && okGroup {
 			b.SourceCounts[u.Source]++
 		}
-		if !okHidden || !okFolder || !okSource {
+		if !okHidden || !okFolder || !okGroup || !okSource {
 			continue
 		}
 		st := domain.State(u, grants.Main(u.ID), now)
@@ -659,6 +745,9 @@ func (h *handlers) listUsers(ctx context.Context, in *listUsersInput) (*listUser
 		if err := h.lifecycleOf(ctx, &env, ids); err != nil {
 			return nil, err
 		}
+		if err := h.groupsOf(ctx, &env, ids); err != nil {
+			return nil, err
+		}
 		for _, u := range page {
 			out.Body.Items = append(out.Body.Items, h.viewUser(u, names[u.ID], bound[u.ID], grants, env))
 		}
@@ -684,6 +773,9 @@ func (h *handlers) userResult(ctx context.Context, u db.User, err error) (*userO
 	}
 	env := h.userEnv(ctx)
 	if err := h.lifecycleOf(ctx, &env, []int64{u.ID}); err != nil {
+		return nil, err
+	}
+	if err := h.groupsOf(ctx, &env, []int64{u.ID}); err != nil {
 		return nil, err
 	}
 	return &userOutput{Body: h.viewUser(u, slots, bound, grants, env)}, nil
@@ -742,6 +834,13 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 			p.ClearFolder = true
 		} else {
 			p.FolderID = b.FolderID
+		}
+	}
+	if b.GroupID != nil {
+		if *b.GroupID == 0 {
+			p.ClearGroup = true
+		} else {
+			p.GroupID = b.GroupID
 		}
 	}
 	if b.BillingDay != nil {
@@ -1003,6 +1102,9 @@ func bulkOpt(in *bulkInput) domain.BulkOpt {
 	if in.Body.Action == domain.BulkMove && in.Body.Folder > 0 {
 		opt.Folder = &in.Body.Folder
 	}
+	if in.Body.Action == domain.BulkGroup && in.Body.Group > 0 {
+		opt.Group = &in.Body.Group
+	}
 	return opt
 }
 
@@ -1026,7 +1128,7 @@ func (h *handlers) bulkTargets(ctx context.Context, in *bulkInput) ([]int64, err
 		return b.IDs, nil
 	}
 	f := b.Filter
-	uf, err := newUserFilter(ctx, "body.filter.", f.State, f.Query, f.Folder, f.Source, f.Hidden)
+	uf, err := newUserFilter(ctx, h.d.Store.Q, "body.filter.", userFilterIn{State: f.State, Query: f.Query, Folder: f.Folder, Group: f.Group, Source: f.Source, Hidden: f.Hidden})
 	if err != nil {
 		return nil, err
 	}
@@ -1069,6 +1171,13 @@ func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreview
 			return nil, err
 		}
 	}
+	if opt.Group != nil {
+		if _, err := h.d.Store.Q.GetGroup(ctx, *opt.Group); errors.Is(err, sql.ErrNoRows) {
+			return nil, fieldErr("body.group_id", "group_not_found")
+		} else if err != nil {
+			return nil, err
+		}
+	}
 	plan, err := h.d.Users.BulkPlan(ctx, ids, in.Body.Action, opt)
 	if err != nil {
 		return nil, mapDomainErr(err)
@@ -1080,6 +1189,9 @@ func (h *handlers) bulkPreview(ctx context.Context, in *bulkInput) (*bulkPreview
 	for _, c := range plan.Sample {
 		s := BulkSample{UserID: c.User.ID, UserName: c.User.Name, State: c.State, ExpiresAt: store.TimePtr(c.User.ExpiresAt),
 			Used: c.User.UsedUp + c.User.UsedDown, FolderID: store.Int64Ptr(c.User.FolderID)}
+		if c.Group != 0 {
+			s.GroupID = &c.Group
+		}
 		if in.Body.Action == domain.BulkExtend {
 			s.ExpiresAfter = store.TimePtr(c.Expires)
 		}
@@ -1116,6 +1228,9 @@ func (h *handlers) bulkUsers(ctx context.Context, in *bulkInput) (*bulkOutput, e
 	}
 	if opt.Folder != nil {
 		details["folder"] = *opt.Folder
+	}
+	if opt.Group != nil {
+		details["group"] = *opt.Group
 	}
 	n, err := h.d.Users.Bulk(ctx, ids, in.Body.Action, opt)
 	if err != nil {

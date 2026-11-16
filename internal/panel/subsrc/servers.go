@@ -18,7 +18,7 @@ func (h *Handler) sampleProxies(ctx context.Context, groups *submodel.GroupNames
 	if err != nil {
 		return nil, cfg, err
 	}
-	r, err := h.reach(ctx, db.User{}, cfg, domain.GrantsLeft{})
+	r, err := h.reach(ctx, db.User{}, cfg, domain.GrantsLeft{}, true)
 	if err != nil {
 		return nil, cfg, err
 	}

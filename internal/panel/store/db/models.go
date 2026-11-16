@@ -292,6 +292,8 @@ type InboundHost struct {
 	States      []string
 	Trial       string
 	Sort        int64
+	GroupMode   string
+	Groups      []int64
 }
 
 type InboundReach struct {
@@ -859,6 +861,36 @@ type UserFolder struct {
 	Emoji     string
 	Sort      int64
 	CreatedAt int64
+}
+
+type UserGroup struct {
+	ID            int64
+	Name          string
+	Color         string
+	Emoji         string
+	Sort          int64
+	ChosenServers int64
+	CreatedAt     int64
+}
+
+type UserGroupInbound struct {
+	GroupID   int64
+	InboundID int64
+}
+
+type UserGroupMember struct {
+	UserID  int64
+	GroupID int64
+}
+
+type UserGroupNode struct {
+	GroupID int64
+	NodeID  int64
+}
+
+type UserGroupTariff struct {
+	TariffID int64
+	GroupID  int64
 }
 
 type UserNextTariff struct {

@@ -215,6 +215,8 @@ type HostView struct {
 	SNIs      []string `json:"snis" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же"`
 	States    []string `json:"states" enum:"active,limited,expired,disabled" doc:"Кому адрес выдаётся по статусу подписки (истекающая — активная); пусто — всем"`
 	Trial     string   `json:"trial" doc:"only — только пробным, never — всем, кроме пробных; пусто — всем"`
+	GroupMode string   `json:"group_mode" doc:"Кому адрес выдаётся по группе клиента: only — только клиентам групп groups, never — всем, кроме них; пусто — всем"`
+	Groups    []int64  `json:"groups" doc:"Группы для group_mode, по id; при only без групп (все удалены) адрес не выдаётся никому"`
 }
 
 // HostMux is the multiplexing of a host's clients: sing-mux, over one connection of the
@@ -242,11 +244,22 @@ type HostInput struct {
 	SNIs        []string `json:"snis,omitempty" maxItems:"16" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же; только где можно задать sni"`
 	States      []string `json:"states,omitempty" maxItems:"4" enum:"active,limited,expired,disabled" doc:"Выдавать адрес только подпискам в этих статусах (истекающая — активная); пусто или все — всем. Скрытый адрес по умолчанию тоже не выдаётся"`
 	Trial       string   `json:"trial,omitempty" maxLength:"8" doc:"only — только пробным (пришли с пробного и ничего не оплатили сверх него), never — всем, кроме пробных; пусто — всем"`
+	GroupMode   string   `json:"group_mode,omitempty" maxLength:"8" doc:"only — только клиентам групп groups, never — всем, кроме них; пусто — всем. Группа клиента — своя или его тарифа"`
+	Groups      []int64  `json:"groups,omitempty" maxItems:"100" doc:"Группы для group_mode, по id; с режимом нужна хотя бы одна"`
 }
 
 func (b HostInput) host() domain.Host {
 	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint,
-		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name, Addresses: b.Addresses, SNIs: b.SNIs, States: b.States, Trial: b.Trial}
+		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name, Addresses: b.Addresses, SNIs: b.SNIs, States: b.States, Trial: b.Trial,
+		GroupMode: b.GroupMode, Groups: b.Groups}
+}
+
+// int64sOrEmpty is list, an empty one for none: the API shows [] rather than null.
+func int64sOrEmpty(list []int64) []int64 {
+	if list == nil {
+		return []int64{}
+	}
+	return list
 }
 
 type hostsOutput struct{ Body []HostView }
@@ -282,7 +295,8 @@ func viewHost(r db.InboundHost) HostView {
 		alpn = []string{}
 	}
 	return HostView{Addresses: strsOrEmpty(r.Addresses), SNIs: strsOrEmpty(r.Snis), ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint,
-		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Name: r.Name, States: strsOrEmpty(r.States), Trial: r.Trial}
+		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Name: r.Name, States: strsOrEmpty(r.States), Trial: r.Trial,
+		GroupMode: r.GroupMode, Groups: int64sOrEmpty(r.Groups)}
 }
 
 func (h *handlers) listInboundHosts(ctx context.Context, in *userIDInput) (*hostsOutput, error) {
@@ -362,7 +376,8 @@ func (h *handlers) auditHost(ctx context.Context, action string, inboundID int64
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, action, "inbound", name, map[string]any{"host_id": r.ID, "default": r.Position == 0,
 		"address": r.Address, "port": r.Port, "sni": r.Sni, "host": r.Host, "fingerprint": r.Fingerprint,
-		"alpn": r.Alpn, "ip_version": r.IpVersion, "mux": r.Mux, "mux_protocol": r.MuxProtocol, "mux_padding": r.MuxPadding, "cdn": r.Cdn})
+		"alpn": r.Alpn, "ip_version": r.IpVersion, "mux": r.Mux, "mux_protocol": r.MuxProtocol, "mux_padding": r.MuxPadding, "cdn": r.Cdn,
+		"group_mode": r.GroupMode, "groups": r.Groups})
 }
 
 // hostError maps the domain's refusals of a host to the API's codes: a field the inbound's
@@ -376,6 +391,10 @@ func hostError(err error) error {
 		return huma.Error409Conflict("default_host")
 	case errors.As(err, &edit):
 		return fieldErr("body."+edit.Field, edit.Err.Code)
+	}
+	// A group named that does not exist (domain.LockGroups).
+	if fe, ok := fieldFromDomain(err); ok {
+		return fe
 	}
 	return inboundError(err, false)
 }

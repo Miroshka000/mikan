@@ -147,7 +147,7 @@ func (e *sourceEnv) pooled(in db.Inbound, u db.User, mode string, limit sql.Null
 // names are the names of what u reaches, in order.
 func (e *sourceEnv) names(u db.User) []string {
 	e.t.Helper()
-	r, err := e.h.reach(e.ctx, u, e.cfg, nil)
+	r, err := e.h.reach(e.ctx, u, e.cfg, nil, false)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -269,6 +269,10 @@ type failingBalancer struct{ asked map[int64]bool }
 func (f *failingBalancer) Nodes(_ context.Context, _ int64, on map[int64]bool) (map[int64]bool, error) {
 	f.asked = on
 	return nil, errors.New("balancer down")
+}
+
+func (f *failingBalancer) Peek(ctx context.Context, userID int64, on map[int64]bool) (map[int64]bool, error) {
+	return f.Nodes(ctx, userID, on)
 }
 
 // A balancer that fails leaves the group whole rather than the client without servers.

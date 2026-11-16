@@ -920,7 +920,15 @@
       "field_limit": "There are too many fields already: delete the ones you do not use",
       "unknown_field": "There is no such field: reload the page",
       "bad_field_value": "The value does not fit this field",
-      "field_order_mismatch": "The list of fields has changed: reload the page and try again"
+      "field_order_mismatch": "The list of fields has changed: reload the page and try again",
+      "group_not_found": "There is no such group: reload the page",
+      "group_name_taken": "A group with this name already exists",
+      "group_limit": "There are 100 groups already: delete the ones not needed",
+      "group_order_mismatch": "The list of groups changed: reload the page and try again",
+      "host_groups_empty": "Pick at least one group",
+      "host_group_mode": "Unknown group mode",
+      "host_groups_long": "Too many groups: at most 100",
+      "bad_group": "Wrong group in the filter"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to mikan; otherwise free the port",
@@ -1136,7 +1144,8 @@
         "enable": "{n, plural, one {Enable # client?} other {Enable # clients?}}",
         "hide": "{n, plural, one {Hide # client from the list?} other {Hide # clients from the list?}}",
         "unhide": "{n, plural, one {Bring # client back to the list?} other {Bring # clients back to the list?}}",
-        "move": "{n, plural, one {Move # client?} other {Move # clients?}}"
+        "move": "{n, plural, one {Move # client?} other {Move # clients?}}",
+        "group": "{n, plural, one {Change the group of # client?} other {Change the group of # clients?}}"
       },
       "text": {
         "extend": "Each by one period from their end date: to the next billing day, 30 days without one. Disabled clients are turned on.",
@@ -1145,7 +1154,8 @@
         "enable": "Their subscriptions work again with the same term and traffic. Whoever's term has ended or traffic has run out stays without access until extended.",
         "hide": "They leave the list; their subscriptions keep working.",
         "unhide": "They are shown in the list again.",
-        "move": "Their folder changes; their subscriptions do not."
+        "move": "Their folder changes; their subscriptions do not.",
+        "group": "The clients will see the servers and addresses of their new group; the nodes learn of it at once. “As in the plan” puts them back in their plans' groups."
       },
       "confirm": {
         "extend": "Extend",
@@ -1154,7 +1164,8 @@
         "enable": "Enable",
         "hide": "Hide",
         "unhide": "Bring back",
-        "move": "Move"
+        "move": "Move",
+        "group": "Change"
       },
       "nothing": "Nothing to change: all of the selected are that way already.",
       "alreadyOff": "Already disabled: {n}.",
@@ -1179,8 +1190,20 @@
       "delete": "Deleted: {n}",
       "move": "Moved: {n}",
       "hide": "Hidden: {n}",
-      "unhide": "Back in the list: {n}"
-    }
+      "unhide": "Back in the list: {n}",
+      "group": "Group changed: {n}"
+    },
+    "manageGroups": "Groups",
+    "groupsLabel": "Group",
+    "groupFilter": "Filter by group",
+    "groupsAll": "All",
+    "groupsNone": "No group",
+    "groupEmptyTitle": "Nobody in this group yet",
+    "groupEmptyText": "A client gets into a group from its card, by a bulk action or through its plan.",
+    "noGroupEmptyTitle": "Every client is in a group",
+    "noGroupEmptyText": "Nobody is left without a group.",
+    "groupMenu": "Give a group",
+    "toGroup": "To group"
   },
   "lifecycle": {
     "open": "Rules",
@@ -1225,8 +1248,8 @@
   },
   "folders": {
     "title": "Folders",
-    "meta": "Groups of clients",
-    "intro": "A folder gathers clients into a group: family, friends, customers. A client is in one folder at most. Folders do not change the subscription or access.",
+    "meta": "To keep the list in order",
+    "intro": "A folder gathers clients to keep the list in order: family, friends, customers. A client is in one folder at most. Folders do not change the subscription or access: groups do.",
     "new": "New folder",
     "name": "Name",
     "namePlaceholder": "For example, Family",
@@ -1257,6 +1280,50 @@
     "deleteTitle": "Delete folder “{name}”?",
     "deleteText": "{n, plural, =0 {The folder is empty.} one {Its client stays, outside any folder.} other {Its clients stay, outside any folder.}}",
     "badge": "Folder: {name}"
+  },
+  "groups": {
+    "title": "Client groups",
+    "meta": "What a group's clients see",
+    "intro": "A group decides what its clients see: servers of its own instead of the plan's, and the addresses given out by group. A client is in one group at most: its own, set on its card, or its plan's. The card's own list of protocols wins over the group.",
+    "new": "New group",
+    "namePlaceholder": "For example, VIP",
+    "add": "Add group",
+    "none": "No groups yet. Make the first one above.",
+    "listLabel": "List of groups",
+    "users": "{n, plural, =0 {Nobody} one {# client} other {# clients}}",
+    "tariffs": "{n, plural, one {# plan} other {# plans}}",
+    "servers": "Servers",
+    "serversHint": "Servers of its own replace the plan's for every client of the group and reach the nodes at once.",
+    "serversPick": "Tick at least one node or protocol.",
+    "serversTariff": "As in the client's plan",
+    "serversChosen": "Its own",
+    "serversTariffShort": "plan's servers",
+    "serversOwnShort": "own servers: {n}",
+    "hostsShort": "addresses by group: {n}",
+    "hostsTitle": "Addresses for clients",
+    "hostsHint": "Who gets an address is set at the address: Protocols, the Configure button, the Addresses for clients block, its Groups field.",
+    "hostsNone": "No address is given out by this group: its clients get the same addresses as everyone.",
+    "hostsLabel": "Addresses given out by this group",
+    "hostModes": {
+      "only": "groups only",
+      "never": "all but this group"
+    },
+    "hostsEdit": "Open Protocols",
+    "created": "Group “{name}” created",
+    "saved": "Group saved",
+    "deleted": "Group “{name}” deleted",
+    "edit": "Edit group “{name}”",
+    "delete": "Delete group “{name}”",
+    "deleteTitle": "Delete group “{name}”?",
+    "deleteText": "{n, plural, =0 {The group is empty.} one {Its client goes back to its plan's servers.} other {Its clients go back to their plans' servers.}} Plans stay, without the group.",
+    "deleteHosts": "{n, plural, one {An address given out only to this group will not be given to anyone until other groups are picked for it.} other {# addresses given out only to this group will not be given to anyone until other groups are picked for them.}}",
+    "badge": "Group: {name}",
+    "badgeTariff": "Plan's group: {name}",
+    "asTariff": "As in the plan",
+    "asGroup": "As in the group",
+    "notAsGroup": "A list of their own, not as in the group: changes of the group do not reach it.",
+    "serversByGroup": "The servers come from the group “{name}”, not from the plan.",
+    "notInGroup": "not in the group"
   },
   "nodeClients": {
     "title": "Node clients",
@@ -1518,7 +1585,88 @@
         "blocked": "Refused",
         "dropped": "Cut"
       }
-    }
+    },
+    "preview": {
+      "title": "What the client gets",
+      "sub": "The answer to a request of this subscription from an app with these headers, by the same rules, templates, group and addresses as a real fetch. Nothing changes: the keys are placeholders, no device is bound and the request is not logged.",
+      "agent": "User-Agent",
+      "agentHint": "How the app names itself in the request: “Happ/3.6.0”, “sing-box 1.12.0”. Empty: a request without one.",
+      "recent": "The client's apps",
+      "format": "Format in the link",
+      "formatHint": "As a link with ?format=. Usually there is none: the headers choose the format.",
+      "formats": {
+        "auto": "Not set",
+        "clash": "Clash (mihomo)",
+        "singbox": "sing-box",
+        "xray": "Xray (JSON)",
+        "uri": "Links",
+        "html": "Subscription page"
+      },
+      "run": "Show the answer",
+      "answer": "Answer",
+      "outcomeError": "Error",
+      "status": "code {code}",
+      "closed": "connection closed without an answer",
+      "formatLabel": "Format",
+      "templateFailed": "“{name}” did not render for this client, the built-in profile went out",
+      "stubLabel": "Why a stub",
+      "stub": {
+        "unsupported": "a rule or the list of apps turned the app away",
+        "device_limit": "every place for devices is taken",
+        "no_hwid": "the app sent no device ID, and one is required",
+        "device_banned": "the device is banned",
+        "device_unbound": "the client unbound this device a short while ago",
+        "inactive": "the subscription does not work: its notice instead of the servers",
+        "no_proxies": "no servers the app can use"
+      },
+      "deviceLabel": "Device",
+      "device": {
+        "known": "bound already, keeps its place",
+        "new": "takes a new place",
+        "shared": "the shared place of apps without a device ID",
+        "inactive": "the subscription does not work, takes no place"
+      },
+      "servers": "Servers",
+      "serversGroup": "the group's own servers",
+      "serversTariff": "by the tariff",
+      "serversOwn": "the card's own list of protocols",
+      "serversAll": "every server of the panel",
+      "proxies": "Servers in the answer: {n}",
+      "proxiesNone": "No servers in the answer.",
+      "leftTitle": "Left out of the answer",
+      "leftNone": "Every server of the client is in the answer.",
+      "left": {
+        "not_own": "Not in the card's own list of protocols",
+        "not_in_group": "Not among the group's servers",
+        "not_in_tariff": "Not among the tariff's servers",
+        "pool_shut": "The server group is closed or out of traffic",
+        "inbound_off": "The protocol is off",
+        "node_off": "The node is off",
+        "balance": "Balancing keeps the client on another node",
+        "hidden": "No address of the node goes to the client",
+        "host_state": "The address goes to clients of another state",
+        "host_trial": "The address goes to trial clients only, or to everyone but them",
+        "host_group": "The address goes to other groups",
+        "app": "The app cannot use this protocol",
+        "broken": "The protocol did not render"
+      },
+      "headers": "Answer headers",
+      "body": "The whole answer",
+      "bodySub": "As the app gets it, only the keys are placeholders and the link's token is hidden.",
+      "htmlNote": "The app gets the subscription page: open the subscription link in a browser to see it.",
+      "copy": "Copy",
+      "copied": "Answer copied",
+      "download": "Download",
+      "cut": "The answer is longer than 2 MiB: its start is shown."
+    },
+    "group": "Group",
+    "noGroup": "No group",
+    "groupOwn": "Its own group",
+    "groupViaTariff": "Through the plan “{tariff}”",
+    "groupNoneHint": "Sees its plan's servers",
+    "groupCleared": "Own group removed: the plan's group applies",
+    "groupSet": "Group changed",
+    "groupOverTariff": "Its own group wins over the plan's group “{group}”."
   },
   "tariffs": {
     "subtitle": "Templates for granting access in one click. The servers, and closing or opening a group, reach the issued subscriptions at once, the rest with a renewal or with \"Apply to the issued subscriptions\".",
@@ -1651,7 +1799,11 @@
       "confirm": "Apply",
       "done": "Applied: {n, plural, one {# subscription} other {# subscriptions}}",
       "none": "No subscriptions on this plan yet"
-    }
+    },
+    "clientGroup": "Client group",
+    "clientGroupHint": "The plan's buyers and trial users go to this group unless their card gives them one of their own.",
+    "clientGroupServers": "The group “{name}” has servers of its own: the plan's clients see those, not the ones chosen above.",
+    "clientGroupNone": "No group"
   },
   "presets": {
     "vless_reality_xhttp": "Main one for Russia: looks like plain HTTPS and keeps few connections",
@@ -2007,6 +2159,16 @@
         "all": "Everyone",
         "only": "Trial only",
         "never": "Everyone but the trial"
+      },
+      "groups": "Groups",
+      "groupsHint": "A client's group: its own from the card, or its plan's.",
+      "groupsNone": "To give an address to some clients only, make groups: Clients, the Groups button.",
+      "groupsOrphan": "The groups of this address are deleted: nobody gets it. Pick groups or Everyone.",
+      "groupsPick": "The address's groups",
+      "groupModes": {
+        "all": "Everyone",
+        "only": "Chosen groups only",
+        "never": "Everyone but the chosen groups"
       }
     }
   },
@@ -5853,7 +6015,8 @@
       "traffic_detail": "Traffic by site",
       "updates": "Updates",
       "user": "Clients",
-      "webhook": "Webhooks"
+      "webhook": "Webhooks",
+      "group": "Client groups"
     },
     "action": {
       "auth": {
@@ -5959,7 +6122,8 @@
       "certificate": "certificate {id}",
       "users": "clients {id}",
       "sub_page_image": "subscription page image {id}",
-      "webhook": "webhook #{id}"
+      "webhook": "webhook #{id}",
+      "group": "group #{id}"
     }
   },
   "tags": {

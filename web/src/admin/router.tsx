@@ -23,6 +23,12 @@ function page<M extends Record<string, unknown>, K extends keyof M & string>(loa
   return Object.assign(Page, { preload: Lazy.preload });
 }
 
+/** A filter of the users' list that is "none" or an id; anything else is no filter. */
+function noneOrId(v: unknown): number | "none" | undefined {
+  if (v === "none") return "none";
+  return (typeof v === "number" || typeof v === "string") && Number.isSafeInteger(Number(v)) && Number(v) >= 1 ? Number(v) : undefined;
+}
+
 export function createAppRouter(queryClient: QueryClient) {
   const root = createRootRouteWithContext<{ queryClient: QueryClient }>()({ component: () => <Outlet /> });
 
@@ -83,8 +89,9 @@ export function createAppRouter(queryClient: QueryClient) {
       q: typeof s.q === "string" ? s.q : "",
       user: typeof s.user === "number" ? s.user : Number(s.user) || undefined,
       create: s.create === true || s.create === "true" ? true : undefined,
-      // A folder is "none" or an id; anything else in a hand-made link is dropped.
-      folder: s.folder === "none" ? "none" : (typeof s.folder === "number" || typeof s.folder === "string") && Number.isSafeInteger(Number(s.folder)) && Number(s.folder) >= 1 ? Number(s.folder) : undefined,
+      // A folder or a group is "none" or an id; anything else in a hand-made link is dropped.
+      folder: noneOrId(s.folder),
+      group: noneOrId(s.group),
       source: USER_SOURCES.includes(s.source as (typeof USER_SOURCES)[number]) && s.source !== "all" ? (s.source as UsersSearch["source"]) : undefined,
       hidden: s.hidden === "show" || s.hidden === "only" ? s.hidden : undefined,
     }),

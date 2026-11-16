@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Gift, Plus, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas, type Tariff } from "../../../api/client";
-import { qk, useInbounds, usePackages, usePaymentSettings, usePools } from "../../../api/hooks";
+import { qk, useGroups, useInbounds, usePackages, usePaymentSettings, usePools } from "../../../api/hooks";
 import { Drawer, DrawerFooter } from "../../../components/overlay";
 import { SwitchRow } from "../../../components/switch";
 import { useToast } from "../../../components/toast";
@@ -19,6 +19,7 @@ import { canBuy, fitsTariff, servedGroups, serversHas, type TariffQuotas } from 
 import { draftOf, GroupModesField, settingsOf, type GroupDraft } from "../pools";
 import { byNode, serversBody, serversDraftOf, TariffServersTree, type ServersDraft } from "../servers-tree";
 import { DeviceModePicker, modeOf, type DeviceMode } from "../user/device-mode";
+import { ClientGroupField } from "./client-group";
 
 /** What the server accepts of a description for buyers (domain.CleanDescription). */
 const DESCRIPTION_MAX = 300;
@@ -47,6 +48,8 @@ type TariffForm = {
   servers: ServersDraft;
   groups: Record<number, GroupDraft>;
   gifts: Set<number>;
+  // The group of the tariff's clients without one of their own (0: none).
+  clientGroup: number;
   stars: string;
   rub: string;
   // The terms after the first: days, or months with a billing day, and their prices.
@@ -85,6 +88,7 @@ function formOf(tr: Tariff | null): TariffForm {
     // The view lists every group with the tariff's mode; a new tariff has them all on the main traffic.
     groups: Object.fromEntries((tr?.pools ?? []).map((p) => [p.pool_id, draftOf(p)])),
     gifts: new Set(tr?.gifts ?? []),
+    clientGroup: tr?.group_id ?? 0,
     stars: tr?.price_stars != null ? String(tr.price_stars) : "",
     rub: tr?.price_rub != null ? String(tr.price_rub / 100) : "",
     devMax: String(tr?.extra_devices.max ?? 0),
@@ -105,7 +109,8 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
   const qc = useQueryClient();
   const toast = useToast();
   const [form, set, replace] = useFields(() => formOf(null));
-  const { name, gb, unlimited, duration, term, monthsN, billingDay, devices, devicesUnlimited, deviceMode, speed, speedUnlimited, reset, price, description, onSale, servers, groups, gifts, stars, rub, more, devMax, devStars, devRub, carry, waits } = form;
+  const { name, gb, unlimited, duration, term, monthsN, billingDay, devices, devicesUnlimited, deviceMode, speed, speedUnlimited, reset, price, description, onSale, servers, groups, gifts, clientGroup, stars, rub, more, devMax, devStars, devRub, carry, waits } =
+    form;
   // A term with an end is one a subscription can wait to start.
   const ends = term === "day" ? Number(monthsN) > 0 : Number(duration) > 0;
   const allPools = usePools();
@@ -113,9 +118,14 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
   const selling = usePaymentSettings().data?.enabled === true;
   const allPackages = usePackages();
   const inbounds = useInbounds();
+  const clientGroups = useGroups();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // The clients' group stands in for the tariff's servers once it chose its own: what a
+  // client of the tariff stands on, which the gifts are held to (as the server holds them).
+  const byGroup = clientGroups.data?.find((g) => g.id === clientGroup && !g.servers.as_tariff);
+  const stands = byGroup ? { all: false, nodes: byGroup.servers.nodes, inbounds: byGroup.servers.inbounds } : servers;
   // What the form gives now: the packages that add to it can be gifts and be bought.
-  const draft: TariffQuotas = { trafficLimited: !unlimited, groups, served: inbounds.data ? servedGroups(servers, inbounds.data) : undefined };
+  const draft: TariffQuotas = { trafficLimited: !unlimited, groups, served: inbounds.data ? servedGroups(stands, inbounds.data) : undefined };
   const tariffId = tariff && tariff !== "new" ? tariff.id : 0;
   const giftable = (allPackages.data ?? []).filter((p) => fitsTariff(p, draft));
   const buyable = (allPackages.data ?? []).filter((p) => canBuy(p, fitsTariff(p, draft), tariffId));
@@ -211,6 +221,8 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
       terms,
       on_sale: onSale,
       servers: serversBody(servers),
+      // Sent when it changes: the nodes are told of every group a tariff is given.
+      group_id: clientGroup !== (tariff && tariff !== "new" ? (tariff.group_id ?? 0) : 0) ? clientGroup : undefined,
       // What has not loaded is not sent: a missing field keeps the tariff's own, an empty
       // list would wipe its groups and gifts (and open its closed groups to everyone).
       pools: allPools.isSuccess ? groupSettings.settings : undefined,
@@ -386,6 +398,7 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
               </div>
             )}
           </Field>
+          <ClientGroupField value={clientGroup} onChange={set.clientGroup} error={errors.group_id} />
           {allPools.isPending ? (
             <Field label={t("pools.tariffLimits")}>
               <Skeleton style={{ height: 88 }} />

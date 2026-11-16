@@ -14,6 +14,7 @@ import { ExitDnsFields, exitDnsDraftOf, useSaveExitDns, type ExitDnsDraft } from
 import { RulesEditor } from "./rules";
 import { CoreBalance, tidyServers } from "./balance";
 import { useSaveSettings } from "./shared";
+import { CoreNotes } from "./core-notes";
 import { Select } from "../../../components/select";
 
 type Routes = Schemas["Routes"];
@@ -502,8 +503,6 @@ function PreviewCard({ mode, routes, rules }: { mode: Schemas["SettingsView"]["s
   );
 }
 
-const CORE_NAMES: Record<Schemas["Note"]["core"], string> = { mihomo: "Clash", singbox: "sing-box", xray: "Xray" };
-
 /** What the sing-box and Xray apps make of the profile: the nearest kind of a group they have none of, and what they leave out. */
 function PreviewNotes({ notes }: { notes: Schemas["Note"][] }) {
   return (
@@ -512,14 +511,7 @@ function PreviewNotes({ notes }: { notes: Schemas["Note"][] }) {
         {t("settings.routesNotesTitle")}
       </h3>
       <p className="mt-1 text-xs text-[var(--ink-500)]">{t("settings.routesNotesSub")}</p>
-      <ul className="mt-2 flex flex-col gap-2">
-        {notes.map((n) => (
-          <li key={`${n.core}/${n.group}/${n.code}`} className="panel-soft flex flex-wrap gap-x-2 gap-y-1 p-3 text-[13px]">
-            <span className="font-medium">{CORE_NAMES[n.core]}</span>
-            <span className="min-w-0 break-words text-[var(--ink-700)]">{t(`settings.routesNotes.${n.code}`, { group: n.group })}</span>
-          </li>
-        ))}
-      </ul>
+      <CoreNotes notes={notes} className="mt-2" />
     </section>
   );
 }

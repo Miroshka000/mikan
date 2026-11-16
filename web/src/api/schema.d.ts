@@ -940,6 +940,62 @@ export interface paths {
         patch: operations["update-folder"];
         trace?: never;
     };
+    "/api/v1/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Группы клиентов */
+        get: operations["list-groups"];
+        put?: never;
+        /** Создать группу клиентов */
+        post: operations["create-group"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/groups/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Порядок групп клиентов */
+        put: operations["order-groups"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/groups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Удалить группу: её клиенты и тарифы остаются без неё
+         * @description Клиенты группы возвращаются к серверам тарифа. Адрес, который выдавался только этой группе, больше не выдаётся никому, пока ему не выберут другие группы.
+         */
+        delete: operations["delete-group"];
+        options?: never;
+        head?: never;
+        /** Изменить группу клиентов */
+        patch: operations["update-group"];
+        trace?: never;
+    };
     "/api/v1/import": {
         parameters: {
             query?: never;
@@ -3582,6 +3638,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{id}/sub-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Что получит клиент: ответ на запрос его подписки
+         * @description Ничего не меняет: ключи — заглушки, устройство места не занимает, балансировка клиента никуда не ставит, журнал запросов не пишется.
+         */
+        post: operations["user-sub-preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{id}/telegram": {
         parameters: {
             query?: never;
@@ -4347,6 +4423,11 @@ export interface components {
              */
             folder: string;
             /**
+             * @description all — любая; none — ни в какой группе; число — id группы (своей или тарифа)
+             * @default all
+             */
+            group: string;
+            /**
              * @description Как у списка: по умолчанию вместе со скрытыми
              * @default show
              * @enum {string}
@@ -4367,10 +4448,10 @@ export interface components {
         };
         BulkInputBody: {
             /**
-             * @description hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ
+             * @description hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ. group даёт клиентам свою группу: от неё зависят серверы и адреса, которые они видят
              * @enum {string}
              */
-            action: "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move";
+            action: "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move" | "group";
             /**
              * Format: int64
              * @description Для extend; не задано — на один период: до следующего дня оплаты или на 30 дней
@@ -4385,6 +4466,11 @@ export interface components {
              * @description Для move: папка; 0 или не задано — убрать из папок
              */
             folder_id?: number;
+            /**
+             * Format: int64
+             * @description Для group: группа; 0 или не задано — убрать свою группу, клиенты вернутся в группы своих тарифов
+             */
+            group_id?: number;
             /** @description Пользователи по id; задаётся либо ids, либо filter */
             ids?: number[];
         };
@@ -4435,6 +4521,11 @@ export interface components {
             expires_at: string | null;
             /** Format: int64 */
             folder_id: number | null;
+            /**
+             * Format: int64
+             * @description Только для group: своя группа клиента сейчас
+             */
+            group_id: number | null;
             /** @enum {string} */
             state: "active" | "expiring" | "limited" | "expired" | "disabled";
             /**
@@ -4780,6 +4871,17 @@ export interface components {
             color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
             emoji?: string;
             name: string;
+        };
+        CreateGroupInputBody: {
+            /**
+             * @description Не задан — gray
+             * @enum {string}
+             */
+            color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            emoji?: string;
+            name: string;
+            /** @description Не передан — как в тарифе */
+            servers?: components["schemas"]["GroupServersBody"];
         };
         CreateInboundInputBody: {
             /** @description Шаблон листенера (YAML) для preset=custom */
@@ -5235,6 +5337,26 @@ export interface components {
             /** @enum {string} */
             op: "and" | "or";
         };
+        GroupHostView: {
+            /** @description Пусто — адрес ноды */
+            address: string;
+            /** @description Адрес по умолчанию: из настроек подключения */
+            default: boolean;
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            inbound_id: number;
+            inbound_name: string;
+            /**
+             * @description only — адрес выдаётся только клиентам названных групп, never — всем, кроме них
+             * @enum {string}
+             */
+            mode: "only" | "never";
+            /** @description Своё имя адреса в подписке; пусто — имя подключения */
+            name: string;
+            /** Format: int64 */
+            node_id: number;
+        };
         GroupInTariff: {
             /** @enum {string} */
             mode: "main" | "own" | "unlimited" | "closed";
@@ -5250,9 +5372,52 @@ export interface components {
             /** @description Все подключения группы: перечисленные переходят в неё из других групп, остальные её подключения возвращаются к основным серверам */
             inbound_ids: number[];
         };
+        GroupServers: {
+            /** @description Серверы как в тарифе клиента; false — только выбранные ноды и протоколы, вместо тарифных. Свой список протоколов в карточке клиента сильнее и того и другого */
+            as_tariff: boolean;
+            /** @description Отдельные протоколы */
+            inbounds: number[];
+            /** @description Ноды целиком, с протоколами, которые на них появятся потом */
+            nodes: number[];
+        };
+        GroupServersBody: {
+            /** @description Серверы как в тарифе клиента; false — только выбранные, хотя бы одна нода или протокол */
+            as_tariff: boolean;
+            /** @description Отдельные протоколы */
+            inbounds?: number[];
+            /** @description Ноды целиком, с протоколами, которые на них появятся потом */
+            nodes?: number[];
+        };
         GroupTariffsInputBody: {
             /** @description Тарифы, в которых группа меняется; остальные тарифы держат её как раньше. Закрытие и открытие группы действует сразу на клиентов тарифа */
             tariffs: components["schemas"]["GroupInTariff"][];
+        };
+        GroupView: {
+            /** @enum {string} */
+            color: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            /** @description Значок перед названием; может быть пустым */
+            emoji: string;
+            /** @description Адреса для клиентов, которые выдаются по группам и называют эту */
+            hosts: components["schemas"]["GroupHostView"][];
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /**
+             * Format: int64
+             * @description Из них в группе своей группой, заданной в карточке
+             */
+            own_users: number;
+            servers: components["schemas"]["GroupServers"];
+            /**
+             * Format: int64
+             * @description Сколько тарифов, кроме архивных, кладут своих клиентов в эту группу
+             */
+            tariffs: number;
+            /**
+             * Format: int64
+             * @description Сколько клиентов в группе: своей группой и через тариф, скрытые тоже
+             */
+            users: number;
         };
         HappLinkOutputBody: {
             /** @description happ://crypt5/…: Happ открывает подписку, не показывая её адрес; пусто — шифрованная ссылка выключена */
@@ -5273,6 +5438,10 @@ export interface components {
             cdn?: boolean;
             /** @description Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек */
             fingerprint: string;
+            /** @description only — только клиентам групп groups, never — всем, кроме них; пусто — всем. Группа клиента — своя или его тарифа */
+            group_mode?: string;
+            /** @description Группы для group_mode, по id; с режимом нужна хотя бы одна */
+            groups?: number[];
             /** @description HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере */
             host: string;
             /** @description Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении */
@@ -5347,6 +5516,10 @@ export interface components {
             default: boolean;
             /** @description Отпечаток TLS (uTLS); пусто — общий из настроек */
             fingerprint: string;
+            /** @description Кому адрес выдаётся по группе клиента: only — только клиентам групп groups, never — всем, кроме них; пусто — всем */
+            group_mode: string;
+            /** @description Группы для group_mode, по id; при only без групп (все удалены) адрес не выдаётся никому */
+            groups: number[];
             /** @description HTTP Host у клиентов (WebSocket, XHTTP); пусто — как на сервере */
             host: string;
             /** Format: int64 */
@@ -5675,10 +5848,14 @@ export interface components {
             names: string[];
         };
         ListUsersOutputBody: {
-            /** @description Пользователи по состояниям среди подходящих под папку, источник и скрытых; состояние и поиск не учитываются */
+            /** @description Пользователи по состояниям среди подходящих под папку, группу, источник и скрытых; состояние и поиск не учитываются */
             counts: components["schemas"]["UserCounts"];
-            /** @description Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под источник и скрытых */
+            /** @description Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под группу, источник и скрытых */
             folder_counts: {
+                [key: string]: number;
+            };
+            /** @description Пользователи по группам (ключ — id группы, none — ни в какой) среди подходящих под папку, источник и скрытых */
+            group_counts: {
                 [key: string]: number;
             };
             /**
@@ -5687,7 +5864,7 @@ export interface components {
              */
             hidden_total: number;
             items: components["schemas"]["UserView"][];
-            /** @description Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку и скрытых */
+            /** @description Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку, группу и скрытых */
             source_counts: {
                 [key: string]: number;
             };
@@ -6336,6 +6513,10 @@ export interface components {
             /** @description Все папки, каждая один раз, в том порядке, в каком их показывает список */
             ids: number[];
         };
+        OrderGroupsInputBody: {
+            /** @description Все группы, каждая один раз, в том порядке, в каком их показывать */
+            ids: number[];
+        };
         OrderNodesInputBody: {
             /** @description Все ноды панели, каждая один раз. Их серверы встают в подписках блоками в этом порядке, серверы одной ноды — как шли */
             ids: number[];
@@ -6638,6 +6819,15 @@ export interface components {
             emoji?: string;
             name?: string;
         };
+        PatchGroupInputBody: {
+            /** @enum {string} */
+            color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
+            /** @description Пустая строка убирает значок */
+            emoji?: string;
+            name?: string;
+            /** @description Не передан — без изменений. Действует сразу на всех клиентов группы */
+            servers?: components["schemas"]["GroupServersBody"];
+        };
         PatchInboundInputBody: {
             /** @description Нельзя включить, пока у подключения свой адрес (listen) */
             auto_port?: boolean;
@@ -6901,6 +7091,11 @@ export interface components {
              * @description Положить в папку; 0 — убрать из папки
              */
             folder_id?: number;
+            /**
+             * Format: int64
+             * @description Своя группа клиента: от неё зависят серверы и адреса, которые он видит; 0 — убрать свою, клиент вернётся в группу тарифа
+             */
+            group_id?: number;
             /** @description Скрыть пользователя из списка или вернуть в него; доступ он не теряет */
             hidden?: boolean;
             inbounds?: number[];
@@ -8103,7 +8298,7 @@ export interface components {
             cdn: boolean;
             /** @description Адрес по умолчанию: тот, что задаёт само подключение */
             default: boolean;
-            /** @description Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них */
+            /** @description Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них, или по группам клиентов */
             for_some: boolean;
             /**
              * Format: int64
@@ -8137,6 +8332,130 @@ export interface components {
             /** @description Страница по умолчанию — к ней ведёт «Сбросить» */
             defaults: components["schemas"]["Page"];
             logo?: components["schemas"]["PageAsset"];
+        };
+        SubPreview: {
+            /** @description Известное приложение по User-Agent; пусто — неизвестное */
+            app_id: string;
+            app_name: string;
+            /** @description Тело ответа: профиль с ключами-заглушками, ссылки — раскрытыми из base64; токен ссылки скрыт. Пусто для страницы подписки */
+            body: string;
+            /** @description Тело длиннее 2 МиБ и обрезано */
+            body_cut?: boolean;
+            /** @description Серверы клиента — свои серверы его группы */
+            by_group: boolean;
+            /**
+             * @description Что получит устройство: known — привязано и останется, new — займёт новое место, shared — общее место приложений без ID, inactive — подписка не работает, места не займёт; пусто — до ключей не дошло
+             * @enum {string}
+             */
+            device: "" | "known" | "new" | "shared" | "inactive";
+            /**
+             * @description Формат ответа: clash, singbox, xray, uri, html (страница подписки); пусто — правило ответило без профиля
+             * @enum {string}
+             */
+            format: "" | "clash" | "singbox" | "uri" | "xray" | "html";
+            /**
+             * Format: int64
+             * @description Группа, в которой клиент сейчас
+             */
+            group_id: number | null;
+            /** @description Заголовки ответа, по имени */
+            headers: components["schemas"]["SubPreviewHeader"][];
+            /** @description Что из серверов панели в ответ не попало, и почему */
+            left: components["schemas"]["SubPreviewLeft"][];
+            /** @description Что ядро формата (sing-box, Xray) делает с профилем по-своему или опускает */
+            notes: components["schemas"]["Note"][];
+            /**
+             * @description error — панель не смогла ответить, причина в её журнале
+             * @enum {string}
+             */
+            outcome: "served" | "stub" | "blocked" | "dropped" | "error";
+            /** @description Серверы клиента — свой список протоколов карточки */
+            own: boolean;
+            /**
+             * Format: int64
+             * @description Место сработавшего правила в списке, с 1; 0 — не правило из списка
+             */
+            position: number;
+            /** @description Серверы в ответе, по порядку */
+            proxies: components["schemas"]["SubPreviewProxy"][];
+            /** @enum {string} */
+            respond: "serve" | "stub" | "403" | "404" | "html" | "drop";
+            /** @description Что решило: имя правила ответа, builtin:ssr, builtin:old, apps (список приложений); пусто — ничего */
+            rule: string;
+            /**
+             * Format: int64
+             * @description Код ответа; 0 — соединение закрыто без ответа
+             */
+            status: number;
+            /**
+             * @description Почему вместо серверов ушла заглушка: unsupported, device_limit, no_hwid, device_banned, device_unbound, inactive, no_proxies; пусто — заглушки нет
+             * @enum {string}
+             */
+            stub: "" | "unsupported" | "device_limit" | "no_hwid" | "device_banned" | "device_unbound" | "inactive" | "no_proxies";
+            /** @description Свой шаблон, из которого собран профиль; null — встроенный профиль */
+            template: components["schemas"]["SubPreviewTemplate"];
+            /** @description Шаблон не собрался для этого клиента, ушёл встроенный профиль */
+            template_failed: boolean;
+        };
+        SubPreviewHeader: {
+            name: string;
+            /** @description Значение вида base64:… как текст */
+            text?: string;
+            value: string;
+        };
+        SubPreviewInputBody: {
+            /**
+             * @description Формат, который называет ссылка (?format=); не задан — как решат заголовки
+             * @enum {string}
+             */
+            format?: "clash" | "singbox" | "uri" | "xray" | "html";
+            /** @description Остальные заголовки запроса: X-Hwid, X-Device-Os, Accept, Host, свои */
+            headers?: components["schemas"]["Header"][];
+            /** @description User-Agent приложения; пусто — запрос без него */
+            user_agent: string;
+        };
+        SubPreviewLeft: {
+            /** @description Адрес; пусто у адреса — адрес ноды */
+            address?: string;
+            /** @description Для broken: почему */
+            error?: string;
+            /**
+             * Format: int64
+             * @description Адрес для клиентов; не задан — протокол целиком
+             */
+            host_id?: number;
+            /** @description Своё имя адреса в подписке */
+            host_name?: string;
+            /** Format: int64 */
+            inbound_id: number;
+            /** @description Имя протокола в подписке */
+            inbound_name: string;
+            /** Format: int64 */
+            node_id: number;
+            /**
+             * @description inbound_off — протокол выключен, node_off — нода выключена, not_own — нет в своём списке протоколов карточки, not_in_group — нет в серверах группы, not_in_tariff — нет в серверах тарифа, pool_shut — группа серверов закрыта или её трафик кончился, hidden — на ноде клиенту не выдаётся ни один адрес, balance — балансировка держит клиента на другой ноде, host_state, host_trial, host_group — адрес выдаётся другим статусам, пробным или группам, app — приложение не умеет этот протокол, broken — протокол не собрался
+             * @enum {string}
+             */
+            reason: "inbound_off" | "node_off" | "not_own" | "not_in_group" | "not_in_tariff" | "pool_shut" | "hidden" | "balance" | "host_state" | "host_trial" | "host_group" | "app" | "broken";
+        };
+        SubPreviewProxy: {
+            name: string;
+            /** Format: int64 */
+            node_id: number;
+            /** Format: int64 */
+            port: number;
+            /** @description Диапазон портов Hysteria2 */
+            ports?: string;
+            server: string;
+            /** @description Протокол: vless, hysteria2, tuic… */
+            type: string;
+        };
+        SubPreviewTemplate: {
+            /** @enum {string} */
+            core: "mihomo" | "singbox" | "xray";
+            /** Format: int64 */
+            id: number;
+            name: string;
         };
         SubRuleLimits: {
             /** Format: int64 */
@@ -8362,6 +8681,11 @@ export interface components {
             extra_devices?: components["schemas"]["ExtraDevices"];
             /** @description Пакеты трафика в подарок при каждой оплате тарифа; каждый должен добавлять к квоте, которую тариф даёт: к основному трафику с лимитом или к группе со своим лимитом. Не передан — без изменений */
             gifts?: number[];
+            /**
+             * Format: int64
+             * @description Группа для клиентов тарифа без своей группы; 0 — никакой. Не передан — без изменений (у нового тарифа — никакой). Действует сразу на всех клиентов тарифа
+             */
+            group_id?: number;
             name: string;
             /** @description Продавать в боте и Mini App; нужна хотя бы одна цена */
             on_sale?: boolean;
@@ -8428,6 +8752,11 @@ export interface components {
             extra_devices: components["schemas"]["ExtraDevices"];
             /** @description Пакеты трафика в подарок при каждой оплате тарифа: покупке и продлении */
             gifts: number[];
+            /**
+             * Format: int64
+             * @description Группа, в которой клиенты тарифа без своей группы: покупатели и пробные попадают в неё сами; null — ни в какой
+             */
+            group_id: number | null;
             /** Format: int64 */
             id: number;
             name: string;
@@ -8448,7 +8777,7 @@ export interface components {
             price_stars: number | null;
             /** @enum {string} */
             reset_strategy: "none" | "month_start" | "period";
-            /** @description Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём */
+            /** @description Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём, клиент в группе со своими серверами видит серверы группы */
             servers: components["schemas"]["ServersView"];
             /** Format: int64 */
             sort: number;
@@ -8980,6 +9309,11 @@ export interface components {
              * @enum {string}
              */
             device_mode: "bound" | "online";
+            /**
+             * Format: int64
+             * @description Группа, в которой клиент сейчас: своя (group_id) или его тарифа; null — ни в какой. От неё зависят серверы и адреса, которые он видит
+             */
+            effective_group_id: number | null;
             /** Format: date-time */
             expires_at: string | null;
             /**
@@ -8987,6 +9321,11 @@ export interface components {
              * @description Папка пользователя; null — вне папок
              */
             folder_id: number | null;
+            /**
+             * Format: int64
+             * @description Своя группа клиента, заданная в карточке; null — группа его тарифа
+             */
+            group_id: number | null;
             /** @description Скрыт из списка пользователей. Только прячет строку: подписка, оплата и ноды работают как у всех, счётчики обзора не меняются */
             hidden: boolean;
             /** Format: int64 */
@@ -11443,6 +11782,163 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FolderView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGroupInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "order-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderGroupsInputBody"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchGroupInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupView"];
                 };
             };
             /** @description Error */
@@ -16811,6 +17307,8 @@ export interface operations {
                 q?: string;
                 /** @description all — любая; none — вне папок; число — id папки */
                 folder?: string;
+                /** @description all — любая; none — ни в какой группе; число — id группы. Группа клиента — своя или его тарифа (effective_group_id) */
+                group?: string;
                 /** @description Откуда пользователь, см. source у пользователя */
                 source?: "all" | "admin" | "bot" | "trial" | "free" | "import";
                 /** @description show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые */
@@ -17733,6 +18231,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserSubLogOutputBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "user-sub-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubPreviewInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubPreview"];
                 };
             };
             /** @description Error */

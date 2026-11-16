@@ -37,6 +37,11 @@ type subscription struct {
 	// asks for first; reach is what the user may use, read by Inbounds, before Groups.
 	grants domain.GrantsLeft
 	reach  reach
+	// dry is a preview's subscription (PreviewUser): it takes no device's place, places the
+	// client in no balance group and records neither the fetch nor the request. admitted is
+	// what its device would get (domain.Admit*), once Keys is asked.
+	dry      bool
+	admitted string
 }
 
 func (s *subscription) Config() serve.Config { return s.cfg.Config }
@@ -62,6 +67,9 @@ func (s *subscription) Bot(ctx context.Context) string {
 }
 
 func (s *subscription) Keys(ctx context.Context, dev serve.Device) (proto.Slot, error) {
+	if s.dry {
+		return s.dryKeys(ctx, dev)
+	}
 	slot, err := s.slot(ctx, dev)
 	if err != nil {
 		return proto.Slot{}, deviceError(err)
@@ -111,35 +119,41 @@ func deviceError(err error) error {
 }
 
 func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error) {
-	r, err := s.h.reach(ctx, s.u, s.cfg, s.grants)
+	r, err := s.h.reach(ctx, s.u, s.cfg, s.grants, s.dry)
 	if err != nil {
 		return nil, err
 	}
-	s.reach = r
 	hosts, err := s.h.hosts(ctx, r.inbounds)
 	if err != nil {
 		return nil, err
 	}
-	hidden, err := s.h.hidden(ctx, s.u, hosts, r.grants)
+	hidden, err := s.h.hidden(ctx, s.u, hosts, r.grants, r.group)
 	if err != nil {
 		return nil, err
 	}
 	out := inbounds(r.inbounds, hosts)
-	for i := range out {
+	for i, in := range r.inbounds {
 		for j := range out[i].Hosts {
-			out[i].Hosts[j].Hidden = hidden[out[i].Hosts[j].ID]
+			host := &out[i].Hosts[j]
+			why := hidden[host.ID]
+			host.Hidden = why != ""
+			if why != "" {
+				r.left = append(r.left, Left{Inbound: in, Host: host.ID, Address: host.Address, HostName: host.Name, Reason: why})
+			}
 		}
 	}
+	s.reach = r
 	return out, nil
 }
 
-// hidden are the ids of the hosts the user is not shown (domain.HostShows), by the state of
-// the subscription, whose packages have grants left. Whether the user is on the trial is
+// hidden are the hosts the user is not shown, by id, with why (Left*): by the state of the
+// subscription, whose packages have grants left, and the trial (domain.HostShows), and by
+// group, the one the user is in (domain.HostShowsGroup). Whether the user is on the trial is
 // read only when a host asks it.
-func (h *Handler) hidden(ctx context.Context, u db.User, hosts map[int64][]db.InboundHost, grants domain.GrantsLeft) (map[int64]bool, error) {
+func (h *Handler) hidden(ctx context.Context, u db.User, hosts map[int64][]db.InboundHost, grants domain.GrantsLeft, group int64) (map[int64]string, error) {
 	state := domain.State(u, grants.Main(u.ID), h.now())
 	var trial *bool
-	out := map[int64]bool{}
+	out := map[int64]string{}
 	for _, list := range hosts {
 		for _, host := range list {
 			if host.Trial != "" && trial == nil {
@@ -149,8 +163,13 @@ func (h *Handler) hidden(ctx context.Context, u db.User, hosts map[int64][]db.In
 				}
 				trial = &t
 			}
-			if !domain.HostShows(host.States, host.Trial, state, trial != nil && *trial) {
-				out[host.ID] = true
+			switch {
+			case !domain.HostShows(host.States, "", state, false):
+				out[host.ID] = LeftHostState
+			case !domain.HostShows(nil, host.Trial, state, trial != nil && *trial):
+				out[host.ID] = LeftHostTrial
+			case !domain.HostShowsGroup(host.GroupMode, host.Groups, group):
+				out[host.ID] = LeftHostGroup
 			}
 		}
 	}
@@ -159,8 +178,12 @@ func (h *Handler) hidden(ctx context.Context, u db.User, hosts map[int64][]db.In
 
 // Fetched: the block detector trusts a device only once it took a profile with an
 // inbound's current port and target (see autotune.Detect). The handler tells it once the
-// profile went out, with a context the client's hanging up does not cancel.
+// profile went out, with a context the client's hanging up does not cancel. A preview's
+// fetch is no fetch of a device's.
 func (s *subscription) Fetched(ctx context.Context, ip string) {
+	if s.dry {
+		return
+	}
 	_ = s.h.st.Q.RecordSubFetch(ctx, db.RecordSubFetchParams{UserID: s.u.ID, Ip: ip, FetchedAt: s.h.now().Unix()})
 }
 
@@ -191,21 +214,26 @@ type reach struct {
 	all      []db.Inbound // every inbound of the panel
 	access   domain.Access
 	grants   domain.GrantsLeft
+	group    int64        // the group the user is in (domain.GroupOf); 0: none
+	byGroup  bool         // the user stands on its group's own servers
 	inbounds []db.Inbound // the user's, in display order
+	// left are the inbounds of all the user does not get, with why, and, once Inbounds read
+	// them, the hosts of its inbounds it is not shown: what a preview tells.
+	left []Left
 }
 
 // reach lists what u may use. grants is what is left of u's grants when the caller read it
-// already; nil reads it.
-func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domain.GrantsLeft) (reach, error) {
+// already; nil reads it. dry places u in no balance group: a preview's (Balancer.Peek).
+func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domain.GrantsLeft, dry bool) (reach, error) {
 	all, err := h.st.Q.ListInbounds(ctx)
 	if err != nil {
 		return reach{}, err
 	}
-	servers, err := domain.TariffServers(ctx, h.st.Q, u.TariffID)
+	stand, err := domain.UserServers(ctx, h.st.Q, u)
 	if err != nil {
 		return reach{}, err
 	}
-	access := domain.AccessOf(u, servers)
+	access := domain.AccessOf(u, stand.Servers)
 	if grants == nil {
 		if grants, err = domain.UserGrantsLeft(ctx, h.st.Q, u.ID, h.now()); err != nil {
 			return reach{}, err
@@ -216,7 +244,8 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 	if err != nil {
 		return reach{}, err
 	}
-	out := reach{all: all, access: access, grants: grants}
+	group := stand.Group
+	out := reach{all: all, access: access, grants: grants, group: group, byGroup: stand.ByGroup}
 	// serves: the client may use in now, and its group, if any, still serves the client.
 	serves := func(in db.Inbound) bool { return access.Usable(in) && !(in.PoolID.Valid && spent[in.PoolID.Int64]) }
 	on := map[int64]bool{}
@@ -235,15 +264,20 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 	}
 	// One node of each balance group: the client's own. A balancer that fails shows the
 	// group whole rather than leave the client without servers.
+	var dark map[int64]bool
 	if h.balance != nil && u.ID != 0 {
-		// A node where every host is hidden from the client (Host.States, Host.Trial) gives it
-		// nothing: no candidate either, or the group could place the client on it and leave
-		// it without the group's servers. A client placed on such a node is placed anew, and
-		// stays there once the node shows it something again.
-		if err := h.dropHidden(ctx, u, all, serves, nodes, grants); err != nil {
+		// A node where every host is hidden from the client (Host.States, Host.Trial, its
+		// groups) gives it nothing: no candidate either, or the group could place the client
+		// on it and leave it without the group's servers. A client placed on such a node is
+		// placed anew, and stays there once the node shows it something again.
+		if dark, err = h.dropHidden(ctx, u, all, serves, nodes, grants, group); err != nil {
 			return reach{}, err
 		}
-		if picked, err := h.balance.Nodes(ctx, u.ID, nodes); err != nil {
+		place := h.balance.Nodes
+		if dry {
+			place = h.balance.Peek
+		}
+		if picked, err := place(ctx, u.ID, nodes); err != nil {
 			h.warn("balance", "subscriptions: load balancing", "err", err)
 		} else {
 			nodes = picked
@@ -251,6 +285,7 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 	}
 	for _, in := range all {
 		if !nodes[in.NodeID] || !serves(in) {
+			out.left = append(out.left, Left{Inbound: in, Reason: leftWhy(in, out, on, spent, dark)})
 			continue
 		}
 		out.inbounds = append(out.inbounds, in)
@@ -258,9 +293,10 @@ func (h *Handler) reach(ctx context.Context, u db.User, cfg Config, grants domai
 	return out, nil
 }
 
-// dropHidden takes out of nodes those where u is shown no host of an inbound it may use
-// (serves); an inbound without hosts is reached at its template's.
-func (h *Handler) dropHidden(ctx context.Context, u db.User, all []db.Inbound, serves func(db.Inbound) bool, nodes map[int64]bool, grants domain.GrantsLeft) error {
+// dropHidden takes out of nodes those where u, of group, is shown no host of an inbound it
+// may use (serves), and says which it took; an inbound without hosts is reached at its
+// template's.
+func (h *Handler) dropHidden(ctx context.Context, u db.User, all []db.Inbound, serves func(db.Inbound) bool, nodes map[int64]bool, grants domain.GrantsLeft, group int64) (map[int64]bool, error) {
 	var ins []db.Inbound
 	for _, in := range all {
 		if nodes[in.NodeID] && serves(in) {
@@ -269,28 +305,30 @@ func (h *Handler) dropHidden(ctx context.Context, u db.User, all []db.Inbound, s
 	}
 	hosts, err := h.hosts(ctx, ins)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	hidden, err := h.hidden(ctx, u, hosts, grants)
+	hidden, err := h.hidden(ctx, u, hosts, grants, group)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(hidden) == 0 {
-		return nil
+		return nil, nil
 	}
 	shows := map[int64]bool{}
 	for _, in := range ins {
 		list := hosts[in.ID]
-		if len(list) == 0 || slices.ContainsFunc(list, func(x db.InboundHost) bool { return !hidden[x.ID] }) {
+		if len(list) == 0 || slices.ContainsFunc(list, func(x db.InboundHost) bool { return hidden[x.ID] == "" }) {
 			shows[in.NodeID] = true
 		}
 	}
+	dropped := map[int64]bool{}
 	for id := range nodes {
 		if !shows[id] {
 			delete(nodes, id)
+			dropped[id] = true
 		}
 	}
-	return nil
+	return dropped, nil
 }
 
 // Inbound is in as the subscription module sees it, reached at hosts.

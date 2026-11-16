@@ -24,6 +24,8 @@ type exchange struct {
 	// abort: the connection could not be closed from inside the handler, so the handler
 	// ends it by aborting once the request is logged.
 	abort bool
+	// trace keeps the way the answer went for a Preview; nil for a fetch of a client.
+	trace *trace
 }
 
 // refuse answers a request a rule turned away: with the status or the page it names, or

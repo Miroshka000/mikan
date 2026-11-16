@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Schemas } from "../api/client";
 import { t } from "../i18n";
-import { cleanRule, ruleLabel } from "./sub-rules";
+import { cleanRule, namedHeaders, ruleLabel } from "./sub-rules";
 
 const rule = (action: Schemas["Action"]): Schemas["Rule"] => ({ name: "  r  ", enabled: true, when: { op: "and", conds: [], groups: [] }, do: action });
 
@@ -30,5 +30,20 @@ describe("ruleLabel", () => {
     expect(ruleLabel("apps")).toBe(t("settings.subRules.rule.apps"));
     expect(ruleLabel("")).toBe(t("settings.subRules.rule.none"));
     expect(ruleLabel("no curl")).toBe("no curl");
+  });
+});
+
+describe("namedHeaders", () => {
+  it("sends the rows with a name, the name trimmed and the value as written", () => {
+    expect(
+      namedHeaders([
+        { name: " X-Hwid ", value: " abc " },
+        { name: "  ", value: "lost" },
+        { name: "Accept", value: "" },
+      ]),
+    ).toEqual([
+      { name: "X-Hwid", value: " abc " },
+      { name: "Accept", value: "" },
+    ]);
   });
 });

@@ -23,27 +23,47 @@ var AllServers = Servers{All: true}
 // Has says whether the tariff includes inbound in.
 func (s Servers) Has(in db.Inbound) bool { return s.All || s.Nodes[in.NodeID] || s.Inbounds[in.ID] }
 
-// TariffServers are the servers of tariff id; no tariff includes every server.
+// TariffServers are the servers of tariff id; no tariff includes every server. They are the
+// tariff's own: what a client of the tariff stands on is TariffClientServers.
 func TariffServers(ctx context.Context, q *db.Queries, id sql.NullInt64) (Servers, error) {
+	t, ok, err := tariffOf(ctx, q, id)
+	if err != nil || !ok {
+		return AllServers, err
+	}
+	return tariffServers(ctx, q, t)
+}
+
+// tariffOf is tariff id; false when there is none (no id, or a tariff that is gone).
+func tariffOf(ctx context.Context, q *db.Queries, id sql.NullInt64) (db.Tariff, bool, error) {
 	if !id.Valid {
-		return AllServers, nil
+		return db.Tariff{}, false, nil
 	}
 	t, err := q.GetTariff(ctx, id.Int64)
 	if errors.Is(err, sql.ErrNoRows) {
+		return db.Tariff{}, false, nil
+	}
+	return t, err == nil, err
+}
+
+// tariffServers are the servers tariff t includes itself.
+func tariffServers(ctx context.Context, q *db.Queries, t db.Tariff) (Servers, error) {
+	if t.ChosenServers == 0 {
 		return AllServers, nil
 	}
-	if err != nil || t.ChosenServers == 0 {
-		return AllServers, err
-	}
+	return chosenServers(func() ([]int64, error) { return q.ListTariffNodes(ctx, t.ID) }, func() ([]int64, error) { return q.ListTariffInbounds(ctx, t.ID) })
+}
+
+// chosenServers are the chosen servers nodes and inbounds list.
+func chosenServers(nodes, inbounds func() ([]int64, error)) (Servers, error) {
 	s := Servers{Nodes: map[int64]bool{}, Inbounds: map[int64]bool{}}
-	nodes, err := q.ListTariffNodes(ctx, t.ID)
+	ns, err := nodes()
 	if err != nil {
 		return s, err
 	}
-	for _, n := range nodes {
+	for _, n := range ns {
 		s.Nodes[n] = true
 	}
-	ins, err := q.ListTariffInbounds(ctx, t.ID)
+	ins, err := inbounds()
 	if err != nil {
 		return s, err
 	}
@@ -107,14 +127,39 @@ type ServersInput struct {
 // SetTariffServers makes in the servers of tariff id on q's transaction. Chosen servers
 // name at least one node or protocol, each of them existing.
 func SetTariffServers(ctx context.Context, q *db.Queries, id int64, in ServersInput) error {
-	if err := q.ClearTariffNodes(ctx, id); err != nil {
-		return err
-	}
-	if err := q.ClearTariffInbounds(ctx, id); err != nil {
+	return writeServers(ctx, q, in, serverChoice{
+		clear: func() error {
+			if err := q.ClearTariffNodes(ctx, id); err != nil {
+				return err
+			}
+			return q.ClearTariffInbounds(ctx, id)
+		},
+		node: func(n int64) error { return q.AddTariffNode(ctx, db.AddTariffNodeParams{TariffID: id, NodeID: n}) },
+		inbound: func(i int64) error {
+			return q.AddTariffInbound(ctx, db.AddTariffInboundParams{TariffID: id, InboundID: i})
+		},
+		chosen: func(on bool) error {
+			return q.SetTariffChosenServers(ctx, db.SetTariffChosenServersParams{ID: id, ChosenServers: Flag(on)})
+		},
+	})
+}
+
+// serverChoice is where a choice of servers is written: a tariff's rows or a group's.
+type serverChoice struct {
+	clear   func() error
+	node    func(id int64) error
+	inbound func(id int64) error
+	chosen  func(on bool) error
+}
+
+// writeServers makes in the servers of w on q's transaction. Chosen servers name at least one
+// node or protocol, each of them existing.
+func writeServers(ctx context.Context, q *db.Queries, in ServersInput, w serverChoice) error {
+	if err := w.clear(); err != nil {
 		return err
 	}
 	if in.All {
-		return q.SetTariffChosenServers(ctx, db.SetTariffChosenServersParams{ID: id, ChosenServers: 0})
+		return w.chosen(false)
 	}
 	if len(in.Nodes) == 0 && len(in.Inbounds) == 0 {
 		return fieldErr("servers", "servers_empty")
@@ -125,7 +170,7 @@ func SetTariffServers(ctx context.Context, q *db.Queries, id int64, in ServersIn
 		} else if err != nil {
 			return err
 		}
-		if err := q.AddTariffNode(ctx, db.AddTariffNodeParams{TariffID: id, NodeID: n}); err != nil {
+		if err := w.node(n); err != nil {
 			return err
 		}
 	}
@@ -135,21 +180,21 @@ func SetTariffServers(ctx context.Context, q *db.Queries, id int64, in ServersIn
 		} else if err != nil {
 			return err
 		}
-		if err := q.AddTariffInbound(ctx, db.AddTariffInboundParams{TariffID: id, InboundID: i}); err != nil {
+		if err := w.inbound(i); err != nil {
 			return err
 		}
 	}
-	return q.SetTariffChosenServers(ctx, db.SetTariffChosenServersParams{ID: id, ChosenServers: 1})
+	return w.chosen(true)
 }
 
 // Access is what a client may connect to: the protocols the client's card lists, when it
-// lists any, over the servers of the client's tariff.
+// lists any, over the servers the client stands on: its group's or its tariff's (UserServers).
 type Access struct {
 	own     map[int64]bool
 	servers Servers
 }
 
-// AccessOf is u's access with s, the servers of u's tariff.
+// AccessOf is u's access with s, the servers u stands on (UserServers, ServerBook.Of).
 func AccessOf(u db.User, s Servers) Access {
 	a := Access{servers: s}
 	if ids := DecodeInbounds(u.Inbounds); len(ids) > 0 {
@@ -172,6 +217,9 @@ func (a Access) Allows(in db.Inbound) bool {
 // Usable says whether the client may connect to in now: it is on and the access allows it.
 func (a Access) Usable(in db.Inbound) bool { return in.Enabled != 0 && a.Allows(in) }
 
+// Own says whether the protocols the client's card lists decide, not the servers it stands on.
+func (a Access) Own() bool { return a.own != nil }
+
 // Groups are the server groups the access reaches: those with a protocol of ins the client
 // may connect to now. A package or a gift of a group outside them is traffic the client has
 // nothing to spend on, and a group's page shows nothing of one it cannot reach.
@@ -193,7 +241,7 @@ func (s Servers) Groups(ins []db.Inbound) map[int64]bool {
 
 // UserGroups are the server groups u reaches (Access.Groups), read from q.
 func UserGroups(ctx context.Context, q *db.Queries, u db.User) (map[int64]bool, error) {
-	servers, err := TariffServers(ctx, q, u.TariffID)
+	stand, err := UserServers(ctx, q, u)
 	if err != nil {
 		return nil, err
 	}
@@ -201,12 +249,13 @@ func UserGroups(ctx context.Context, q *db.Queries, u db.User) (map[int64]bool, 
 	if err != nil {
 		return nil, err
 	}
-	return AccessOf(u, servers).Groups(ins), nil
+	return AccessOf(u, stand.Servers).Groups(ins), nil
 }
 
-// TariffGroups are the server groups the servers of tariff t serve (Servers.Groups).
+// TariffGroups are the server groups served by the servers a client of tariff t stands on
+// (TariffClientServers, Servers.Groups).
 func TariffGroups(ctx context.Context, q *db.Queries, t db.Tariff) (map[int64]bool, error) {
-	servers, err := TariffServers(ctx, q, sql.NullInt64{Int64: t.ID, Valid: true})
+	servers, err := TariffClientServers(ctx, q, t)
 	if err != nil {
 		return nil, err
 	}

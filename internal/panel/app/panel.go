@@ -392,6 +392,9 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}
 	deps.HappLink = func(ctx context.Context, u db.User) (string, error) { return subHandler.HappLink(ctx, u) }
 	deps.ServerNames = func(ctx context.Context) (map[int64]string, error) { return subHandler.ServerNames(ctx) }
+	deps.SubPreview = func(ctx context.Context, u db.User, in subsrc.PreviewInput) (subsrc.UserPreview, error) {
+		return subHandler.PreviewUser(ctx, u, in)
+	}
 	// What hangs on the panel's address follows it, whoever changed it.
 	p.address = &addressFollower{set: set, formers: o.Formers, certs: o.Certs, subCerts: o.SubCerts, names: o.Names, nodes: p.Nodes,
 		inbounds: deps.Inbounds, gateway: p.Gateway, log: o.Log, now: o.Now}

@@ -104,6 +104,9 @@ type Deps struct {
 	// ServerNames are the names a client given every server sees, by host id
 	// (subsrc.Handler.ServerNames); nil: the order of the subscription shows none.
 	ServerNames func(ctx context.Context) (map[int64]string, error)
+	// SubPreview is what an app would get of a user's subscription, nothing changed
+	// (subsrc.Handler.PreviewUser); nil: the panel serves no subscriptions.
+	SubPreview func(ctx context.Context, u db.User, in subsrc.PreviewInput) (subsrc.UserPreview, error)
 	// Nodes is the live side of the nodes; nil when the panel runs without them.
 	Nodes NodeRuntime
 	// PanelCert is the client certificate remote nodes pin; their join keys carry its hash.
@@ -351,6 +354,8 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerUsers()
 	h.registerFolders()
 	h.registerCustomFields()
+	h.registerGroups()
+	h.registerSubPreview()
 	h.registerHapp()
 	h.registerCatalog()
 	h.registerInbounds()

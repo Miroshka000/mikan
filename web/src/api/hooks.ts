@@ -63,6 +63,7 @@ export const qk = {
   userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
   customFields: ["custom-fields"] as const,
+  groups: ["groups"] as const,
   lifecycle: ["lifecycle"] as const,
   // Under the users: a change of any of them may move who the removal reaches.
   inactive: (days: number) => ["users", "inactive", days] as const,
@@ -80,13 +81,20 @@ export const meQuery = {
 
 /** What the list is asked for: left out, a part of the filter is "any" (hidden: everyone, as
  * the API has it; the Users page asks for "hide"). */
-type UsersFilter = Pick<UsersSearch, "q" | "folder" | "source"> & {
+type UsersFilter = Pick<UsersSearch, "q" | "folder" | "group" | "source"> & {
   /** "attention": out of traffic, expiring and expired in that order, for the overview. */
   state: UsersSearch["state"] | "attention";
   hidden?: "hide" | "show" | "only";
 };
 
-const usersQuery = (f: UsersFilter) => ({ state: f.state, q: f.q || undefined, folder: f.folder === undefined ? undefined : String(f.folder), source: f.source, hidden: f.hidden });
+const usersQuery = (f: UsersFilter) => ({
+  state: f.state,
+  q: f.q || undefined,
+  folder: f.folder === undefined ? undefined : String(f.folder),
+  group: f.group === undefined ? undefined : String(f.group),
+  source: f.source,
+  hidden: f.hidden,
+});
 
 /** A card that shows a few users asks for just those. */
 export function useUsers(f: UsersFilter, o: { limit: number; refetchInterval?: number }) {
@@ -350,8 +358,9 @@ export function useUserMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TRe
       }
       void qc.invalidateQueries({ queryKey: qk.users });
       void qc.invalidateQueries({ queryKey: qk.overview });
-      // A user moved in or out of a folder changes its count.
+      // A user moved in or out of a folder or a group changes its count.
       void qc.invalidateQueries({ queryKey: qk.folders });
+      void qc.invalidateQueries({ queryKey: qk.groups });
     },
   });
 }
@@ -428,6 +437,33 @@ export const folderActions = {
   update: ({ id, body }: { id: number; body: Schemas["PatchFolderInputBody"] }) => unwrap(api.PATCH("/api/v1/folders/{id}", { params: { path: { id } }, body })),
   remove: (id: number) => unwrap(api.DELETE("/api/v1/folders/{id}", { params: { path: { id } } })),
   order: (ids: number[]) => unwrap(api.PUT("/api/v1/folders/order", { body: { ids } })),
+};
+
+/** The groups of clients: each with its clients, tariffs, servers and the addresses shown by it. */
+export function useGroups() {
+  return useQuery({ queryKey: qk.groups, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/groups", { signal })) });
+}
+
+/** A group decides what its clients see: the users, the tariffs (their groups) and the
+ * addresses' audiences are read again with the groups. */
+export function useGroupMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk.groups });
+      void qc.invalidateQueries({ queryKey: qk.users });
+      void qc.invalidateQueries({ queryKey: qk.tariffs });
+      void qc.invalidateQueries({ queryKey: qk.inbounds });
+    },
+  });
+}
+
+export const groupActions = {
+  create: (body: Schemas["CreateGroupInputBody"]) => unwrap(api.POST("/api/v1/groups", { body })),
+  update: ({ id, body }: { id: number; body: Schemas["PatchGroupInputBody"] }) => unwrap(api.PATCH("/api/v1/groups/{id}", { params: { path: { id } }, body })),
+  remove: (id: number) => unwrap(api.DELETE("/api/v1/groups/{id}", { params: { path: { id } } })),
+  order: (ids: number[]) => unwrap(api.PUT("/api/v1/groups/order", { body: { ids } })),
 };
 
 /** One node's traffic by the hour (24 h, 7 days) or by the day (30 days). */

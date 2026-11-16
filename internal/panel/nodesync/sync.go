@@ -532,7 +532,7 @@ func (s *Syncer) policiesFrom(snap *snapshot) (epoch string, out []nodeapi.Polic
 	for _, u := range snap.users {
 		names := slotsOf[u.ID]
 		sort.Strings(names)
-		access := domain.AccessOf(u, domain.ServersOf(snap.servers, u.TariffID))
+		access := domain.AccessOf(u, snap.servers.Of(u))
 		for _, name := range names {
 			p := userPolicy(u, grants.Main(u.ID), name, seq, now, here, access, shut[u.ID], others[name])
 			p.Pools = userPoolQuotas(u.ID, rows[u.ID], groupsHere, p.QuotaRemaining, grants)
@@ -549,7 +549,7 @@ func (s *Syncer) policiesFrom(snap *snapshot) (epoch string, out []nodeapi.Polic
 
 // userPolicy is the user's rules for one of the user's slots; grants is what is left of
 // the user's main grants, added to the quota, here the node's inbounds by id, access what
-// the user may connect to (the card's protocols or the tariff's servers) and shut the
+// the user may connect to (the card's protocols, its group's or its tariff's servers) and shut the
 // inbounds here the user's tariff leaves out (a closed group).
 func userPolicy(u db.User, grants int64, name string, seq int64, now time.Time, here []db.Inbound, access domain.Access, shut map[int64]bool, otherIPs []string) nodeapi.Policy {
 	// A user whose main traffic ran out still gets in: the node turns away the inbounds that

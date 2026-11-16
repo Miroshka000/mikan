@@ -9,8 +9,9 @@ export const USER_SOURCES = ["all", "admin", "bot", "trial", "free", "import"] a
 export const USER_HIDDEN = ["hide", "show", "only"] as const;
 /**
  * The filters of the users list live in the URL, so a reload or a shared link keeps them.
- * What is the default (any folder, any source, hidden left off) is left out of it.
- * folder: "none" (outside folders) or a folder's id.
+ * What is the default (any folder, any group, any source, hidden left off) is left out of it.
+ * folder: "none" (outside folders) or a folder's id; group: "none" (in no group) or the id
+ * of the group a client is in, its own or its tariff's.
  */
 export type UsersSearch = {
   state: "all" | User["state"];
@@ -18,6 +19,7 @@ export type UsersSearch = {
   user?: number;
   create?: true;
   folder?: number | "none";
+  group?: number | "none";
   source?: Exclude<(typeof USER_SOURCES)[number], "all">;
   hidden?: Exclude<(typeof USER_HIDDEN)[number], "hide">;
 };

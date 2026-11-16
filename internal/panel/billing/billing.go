@@ -343,7 +343,7 @@ func (s *Service) contents(ctx context.Context, ts []db.Tariff) (map[int64][]Off
 	if err != nil {
 		return nil, nil, err
 	}
-	servers, err := domain.AllTariffServers(ctx, q)
+	servers, err := domain.LoadServerBook(ctx, q)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -373,7 +373,7 @@ func (s *Service) contents(ctx context.Context, ts []db.Tariff) (map[int64][]Off
 	}
 	groups, gifts := map[int64][]OfferGroup{}, map[int64][]OfferGift{}
 	for _, t := range ts {
-		serves := domain.ServersOf(servers, sql.NullInt64{Int64: t.ID, Valid: true}).Groups(ins)
+		serves := servers.OfTariff(t.ID).Groups(ins)
 		for _, p := range pools {
 			if serves[p.ID] {
 				mode, limit := domain.TariffPoolMode(byTariff[t.ID], p.ID)

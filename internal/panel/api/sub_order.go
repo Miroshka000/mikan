@@ -21,7 +21,7 @@ type SubOrderItem struct {
 	CDN       bool   `json:"cdn" doc:"Клиенты ходят через CDN"`
 	Name      string `json:"name" doc:"Имя сервера в приложении клиента, которому доступно всё; переменные — как написаны. У сервера, который клиенты сейчас не получают, — его собственное имя или имя подключения, без флага ноды"`
 	Served    bool   `json:"served" doc:"Клиенты получают этот сервер сейчас: подключение и нода включены"`
-	ForSome   bool   `json:"for_some" doc:"Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них"`
+	ForSome   bool   `json:"for_some" doc:"Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них, или по группам клиентов"`
 }
 
 type subOrderOutput struct{ Body []SubOrderItem }
@@ -72,7 +72,7 @@ func (h *handlers) listServerOrder(ctx context.Context, _ *struct{}) (*subOrderO
 			}
 		}
 		out = append(out, SubOrderItem{HostID: host.ID, InboundID: host.InboundID, NodeID: r.NodeID, Default: host.Position == 0,
-			Address: host.Address, Port: int(host.Port), CDN: host.Cdn, Name: name, Served: served, ForSome: domain.HostForSome(host.States, host.Trial)})
+			Address: host.Address, Port: int(host.Port), CDN: host.Cdn, Name: name, Served: served, ForSome: domain.HostForSome(host.States, host.Trial, host.GroupMode)})
 	}
 	return &subOrderOutput{Body: out}, nil
 }

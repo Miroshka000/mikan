@@ -61,6 +61,7 @@ func StubFormat(f string) string {
 // server named after the reason, so the app shows it where the servers would be, and the
 // headers Happ-like apps read. The request log gets the format the stub goes out in.
 func (h *Handler) stub(w http.ResponseWriter, cfg Config, ex *exchange, reason error) {
+	ex.trace.stubbed(reason)
 	ex.format = StubFormat(ex.format)
 	format := ex.format
 	en := textutil.Lang(cfg.Lang).En()

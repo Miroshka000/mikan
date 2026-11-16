@@ -59,6 +59,11 @@ type Host struct {
 	// subscriptions, never to them, or "" to both. A user not shown it does not get it.
 	States []string
 	Trial  string
+	// GroupMode and Groups say who it is shown to by group (HostShowsGroup): of
+	// HostGroupModes, to the clients of Groups alone or to every client but theirs; "": to
+	// every client, and no Groups.
+	GroupMode string
+	Groups    []int64
 }
 
 // HostChoicesMax bounds a host's more addresses and TLS names each.
@@ -85,10 +90,11 @@ func HostShows(states []string, trialOf string, state string, trial bool) bool {
 	return trialOf == "" || trialOf == "only" && trial || trialOf == "never" && !trial
 }
 
-// HostForSome says whether a host of states and trial goes to some users only (HostShows):
-// not to every state, or to the trial's or the others' alone.
-func HostForSome(states []string, trialOf string) bool {
-	if trialOf != "" {
+// HostForSome says whether a host of states, trial and group mode goes to some users only
+// (HostShows, HostShowsGroup): not to every state, to the trial's or the others' alone, or by
+// group.
+func HostForSome(states []string, trialOf, groupMode string) bool {
+	if trialOf != "" || groupMode != "" {
 		return true
 	}
 	return len(states) > 0 && slices.ContainsFunc(HostStates, func(s string) bool { return !slices.Contains(states, s) })
@@ -143,6 +149,10 @@ func (s *Inbounds) AddHost(ctx context.Context, id int64, h Host) (db.InboundHos
 		if err := checkHost(in.Config, h); err != nil {
 			return err
 		}
+		// The groups before the inbound: a group's deletion takes its row, then the hosts'.
+		if err := LockGroups(ctx, q, "groups", h.Groups...); err != nil {
+			return err
+		}
 		if _, err := q.LockInbound(ctx, id); err != nil {
 			return err
 		}
@@ -151,7 +161,8 @@ func (s *Inbounds) AddHost(ctx context.Context, id int64, h Host) (db.InboundHos
 			return err
 		}
 		row, err = q.AddInboundHost(ctx, db.AddInboundHostParams{InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial,
+			GroupMode: h.GroupMode, Groups: h.Groups})
 		return err
 	})
 	return row, err
@@ -196,8 +207,12 @@ func (s *Inbounds) UpdateHost(ctx context.Context, id, hostID int64, h Host) (db
 		if err := checkHost(in.Config, h); err != nil {
 			return err
 		}
+		if err := LockGroups(ctx, q, "groups", h.Groups...); err != nil {
+			return err
+		}
 		row, err = q.UpdateInboundHost(ctx, db.UpdateInboundHostParams{ID: hostID, InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
-			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial})
+			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial,
+			GroupMode: h.GroupMode, Groups: h.Groups})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrUnknownHost
 		}
@@ -249,9 +264,17 @@ type defaultHost struct {
 	h  Host
 }
 
+// write writes the fields; the groups they name are locked first in the transaction (lock).
 func (d defaultHost) write(ctx context.Context, q *db.Queries, inboundID int64) error {
 	return q.SetInboundHostOptions(ctx, db.SetInboundHostOptionsParams{ID: d.id, InboundID: inboundID,
-		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name, Addresses: d.h.Addresses, Snis: d.h.SNIs, States: d.h.States, Trial: d.h.Trial})
+		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name, Addresses: d.h.Addresses, Snis: d.h.SNIs, States: d.h.States, Trial: d.h.Trial,
+		GroupMode: d.h.GroupMode, Groups: d.h.Groups})
+}
+
+// lock keeps the groups the fields name until the transaction ends: first in it, as a group's
+// deletion takes its row before the hosts'.
+func (d defaultHost) lock(ctx context.Context, q *db.Queries) error {
+	return LockGroups(ctx, q, "groups", d.h.Groups...)
 }
 
 // trimmed is h as it is saved: each ALPN once, in the order given, and no protocol or
@@ -278,6 +301,8 @@ func (h Host) trimmed() Host {
 		states = []string{}
 	}
 	h.States, h.Trial = states, strings.TrimSpace(h.Trial)
+	h.GroupMode = strings.TrimSpace(h.GroupMode)
+	h.Groups = hostGroups(h.GroupMode, h.Groups)
 	alpn := []string{}
 	for _, a := range h.ALPN {
 		if a = strings.ToLower(strings.TrimSpace(a)); a != "" && !slices.Contains(alpn, a) {
@@ -368,9 +393,7 @@ func checkHostOptions(config string, h Host) error {
 // named by the field. A field that a later change of the template no longer takes stays
 // saved; the subscriptions are to leave it out.
 func hostOptions(t proto.Template, h Host) error {
-	refuse := func(field, code string) error {
-		return &EditError{Field: field, Err: &proto.Error{Code: code, Field: field}}
-	}
+	refuse := hostRefusal
 	// The more addresses and names are held to the rules of the host's own.
 	if len(h.Addresses) > HostChoicesMax {
 		return refuse("addresses", "host_choices_long")
@@ -395,6 +418,9 @@ func hostOptions(t proto.Template, h Host) error {
 	}
 	if h.Trial != "" && !slices.Contains(HostTrials, h.Trial) {
 		return refuse("trial", "host_trial")
+	}
+	if err := checkHostGroups(h.GroupMode, h.Groups); err != nil {
+		return err
 	}
 	for _, a := range h.ALPN {
 		if !slices.Contains(HostALPN, a) {
@@ -464,6 +490,11 @@ func hostOptions(t proto.Template, h Host) error {
 		}
 	}
 	return nil
+}
+
+// hostRefusal refuses a host's own field as an *EditError named by the field.
+func hostRefusal(field, code string) error {
+	return &EditError{Field: field, Err: &proto.Error{Code: code, Field: field}}
 }
 
 // hostError names a refusal of the template's client endpoint by the host's field.

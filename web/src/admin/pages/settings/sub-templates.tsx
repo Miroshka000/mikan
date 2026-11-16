@@ -14,6 +14,7 @@ import { t, tMaybe, useLocale } from "../../../i18n";
 import { useDebounced } from "../../../lib/debounce";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { bytes, dateShort } from "../../../lib/format";
+import { CoreNotes } from "./core-notes";
 
 const ConfigEditor = lazy(() => import("../../../components/config-editor"));
 
@@ -416,16 +417,7 @@ function LivePreview({ core, body }: { core: Core; body: string }) {
           </div>
         ) : preview.data ? (
           <>
-            {preview.data.notes.length > 0 ? (
-              <ul className="mb-3 flex flex-col gap-2">
-                {preview.data.notes.map((n) => (
-                  <li key={`${n.core}/${n.group}/${n.code}`} className="panel-soft flex flex-wrap gap-x-2 gap-y-1 p-3 text-[13px]">
-                    <span className="font-medium">{coreName(n.core)}</span>
-                    <span className="min-w-0 break-words text-[var(--ink-700)]">{t(`settings.routesNotes.${n.code}`, { group: n.group })}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+            {preview.data.notes.length > 0 ? <CoreNotes notes={preview.data.notes} className="mb-3" /> : null}
             <pre className="panel-soft mono max-h-[70vh] overflow-auto p-3 text-[12px] leading-[1.45]" style={{ opacity: waiting ? 0.6 : 1 }}>
               {preview.data.profile}
             </pre>

@@ -467,6 +467,10 @@ type Patch struct {
 	// FolderID puts the user into a folder; ClearFolder takes the user out of theirs.
 	FolderID    *int64
 	ClearFolder bool
+	// GroupID puts the user into a group of its own; ClearGroup takes it out of its own, back
+	// to its tariff's (GroupOf). The group decides what the user may connect to (UserServers).
+	GroupID    *int64
+	ClearGroup bool
 	// Extend adds a term to the expiry the transaction reads, so a payment that lands
 	// meanwhile is not overwritten by an absolute date worked out before it.
 	Extend *Extension
@@ -542,9 +546,14 @@ func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) 
 // updateOn applies a patch on q's transaction; the caller tells the nodes.
 func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) (db.User, error) {
 	// The folder is locked before the user's row, as a deleted folder locks its own first
-	// and then its users': the two never wait for each other in a circle.
+	// and then its users': the two never wait for each other in a circle. So is the group.
 	if p.FolderID != nil {
 		if err := lockFolder(ctx, q, *p.FolderID); err != nil {
+			return db.User{}, err
+		}
+	}
+	if p.GroupID != nil && !p.ClearGroup {
+		if err := LockGroups(ctx, q, "group_id", *p.GroupID); err != nil {
 			return db.User{}, err
 		}
 	}
@@ -678,6 +687,17 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 			out.FolderID = NullInt(p.FolderID)
 		}
 		if err := q.SetUserFolder(ctx, db.SetUserFolderParams{FolderID: out.FolderID, UpdatedAt: now, ID: id}); err != nil {
+			return out, err
+		}
+	}
+	if p.GroupID != nil || p.ClearGroup {
+		var err error
+		if p.GroupID != nil && !p.ClearGroup {
+			err = q.SetUserGroup(ctx, db.SetUserGroupParams{UserID: id, GroupID: *p.GroupID})
+		} else {
+			err = q.ClearUserGroup(ctx, id)
+		}
+		if err != nil {
 			return out, err
 		}
 	}
@@ -863,6 +883,8 @@ const (
 	BulkHide   = "hide"
 	BulkUnhide = "unhide"
 	BulkMove   = "move"
+	// BulkGroup puts the users into a group of their own: what they may connect to follows it.
+	BulkGroup = "group"
 )
 
 // BulkOpt is what an action needs besides the users.
@@ -871,6 +893,9 @@ type BulkOpt struct {
 	Days int64
 	// Folder is where BulkMove puts the users; nil takes them out of their folders.
 	Folder *int64
+	// Group is the group BulkGroup gives the users; nil takes them out of their own groups,
+	// back to their tariffs'.
+	Group *int64
 }
 
 // extension is what BulkExtend adds to each user's term.
@@ -879,7 +904,7 @@ func (o BulkOpt) extension() Extension { return Extension{Days: o.Days, Period: 
 // checkBulk refuses an action Bulk does not know, and one it knows with a bad option.
 func checkBulk(action string, opt BulkOpt) error {
 	switch action {
-	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove:
+	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove, BulkGroup:
 	default:
 		return fmt.Errorf("bulk action %q", action)
 	}
@@ -913,9 +938,15 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	done := 0
 	err := s.st.TxRC(ctx, func(q *db.Queries) error {
 		done = 0
-		// The folder first, then the users: the order a deleted folder takes its own.
+		// The folder first, then the users: the order a deleted folder takes its own. The group
+		// too.
 		if action == BulkMove && opt.Folder != nil {
 			if err := lockFolder(ctx, q, *opt.Folder); err != nil {
+				return err
+			}
+		}
+		if action == BulkGroup && opt.Group != nil {
+			if err := LockGroups(ctx, q, "group_id", *opt.Group); err != nil {
 				return err
 			}
 		}
@@ -955,6 +986,12 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 		case BulkMove:
 			folder := NullInt(opt.Folder)
 			err = q.SetUsersFolder(ctx, db.SetUsersFolderParams{FolderID: folder, UpdatedAt: now.Unix(), Ids: found})
+		case BulkGroup:
+			if opt.Group != nil {
+				err = q.SetUsersGroup(ctx, db.SetUsersGroupParams{Ids: found, GroupID: *opt.Group})
+			} else {
+				err = q.ClearUsersGroup(ctx, found)
+			}
 		}
 		if err != nil {
 			return err

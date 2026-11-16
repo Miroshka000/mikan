@@ -1,6 +1,11 @@
 import type { Schemas } from "../api/client";
 import { t } from "../i18n";
 
+/** The headers of a request to try as it is sent: the rows with a name, the name trimmed. */
+export function namedHeaders(headers: Schemas["Header"][]): Schemas["Header"][] {
+  return headers.filter((h) => h.name.trim() !== "").map((h) => ({ name: h.name.trim(), value: h.value }));
+}
+
 /**
  * What decided a request, in words. The API names an admin's rule by its own name and the
  * panel's decisions by a key: "builtin:ssr" and "builtin:old" are the built-in rules,

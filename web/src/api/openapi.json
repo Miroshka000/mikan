@@ -1501,6 +1501,12 @@
             "maxLength": 20,
             "type": "string"
           },
+          "group": {
+            "default": "all",
+            "description": "all — любая; none — ни в какой группе; число — id группы (своей или тарифа)",
+            "maxLength": 20,
+            "type": "string"
+          },
           "hidden": {
             "default": "show",
             "description": "Как у списка: по умолчанию вместе со скрытыми",
@@ -1548,7 +1554,7 @@
         "additionalProperties": false,
         "properties": {
           "action": {
-            "description": "hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ",
+            "description": "hide и unhide прячут пользователей из списка и возвращают, move кладёт в папку: ни то ни другое не меняет доступ. group даёт клиентам свою группу: от неё зависят серверы и адреса, которые они видят",
             "enum": [
               "extend",
               "reset",
@@ -1557,7 +1563,8 @@
               "delete",
               "hide",
               "unhide",
-              "move"
+              "move",
+              "group"
             ],
             "type": "string"
           },
@@ -1579,6 +1586,12 @@
           },
           "folder_id": {
             "description": "Для move: папка; 0 или не задано — убрать из папок",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "group_id": {
+            "description": "Для group: группа; 0 или не задано — убрать свою группу, клиенты вернутся в группы своих тарифов",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -1687,6 +1700,14 @@
               "null"
             ]
           },
+          "group_id": {
+            "description": "Только для group: своя группа клиента сейчас",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "state": {
             "enum": [
               "active",
@@ -1716,7 +1737,8 @@
           "state",
           "expires_at",
           "used",
-          "folder_id"
+          "folder_id",
+          "group_id"
         ],
         "type": "object"
       },
@@ -2648,6 +2670,43 @@
             "maxLength": 40,
             "minLength": 1,
             "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "CreateGroupInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "description": "Не задан — gray",
+            "enum": [
+              "gray",
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "teal",
+              "blue",
+              "purple",
+              "pink"
+            ],
+            "type": "string"
+          },
+          "emoji": {
+            "maxLength": 16,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "servers": {
+            "$ref": "#/components/schemas/GroupServersBody",
+            "description": "Не передан — как в тарифе"
           }
         },
         "required": [
@@ -3961,6 +4020,57 @@
         ],
         "type": "object"
       },
+      "GroupHostView": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "Пусто — адрес ноды",
+            "type": "string"
+          },
+          "default": {
+            "description": "Адрес по умолчанию: из настроек подключения",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound_name": {
+            "type": "string"
+          },
+          "mode": {
+            "description": "only — адрес выдаётся только клиентам названных групп, never — всем, кроме них",
+            "enum": [
+              "only",
+              "never"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "description": "Своё имя адреса в подписке; пусто — имя подключения",
+            "type": "string"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "inbound_id",
+          "node_id",
+          "inbound_name",
+          "default",
+          "address",
+          "name",
+          "mode"
+        ],
+        "type": "object"
+      },
       "GroupInTariff": {
         "additionalProperties": false,
         "properties": {
@@ -4009,6 +4119,68 @@
         ],
         "type": "object"
       },
+      "GroupServers": {
+        "additionalProperties": false,
+        "properties": {
+          "as_tariff": {
+            "description": "Серверы как в тарифе клиента; false — только выбранные ноды и протоколы, вместо тарифных. Свой список протоколов в карточке клиента сильнее и того и другого",
+            "type": "boolean"
+          },
+          "inbounds": {
+            "description": "Отдельные протоколы",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "description": "Ноды целиком, с протоколами, которые на них появятся потом",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_tariff",
+          "nodes",
+          "inbounds"
+        ],
+        "type": "object"
+      },
+      "GroupServersBody": {
+        "additionalProperties": false,
+        "properties": {
+          "as_tariff": {
+            "description": "Серверы как в тарифе клиента; false — только выбранные, хотя бы одна нода или протокол",
+            "type": "boolean"
+          },
+          "inbounds": {
+            "description": "Отдельные протоколы",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "maxItems": 2000,
+            "type": "array"
+          },
+          "nodes": {
+            "description": "Ноды целиком, с протоколами, которые на них появятся потом",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_tariff"
+        ],
+        "type": "object"
+      },
       "GroupTariffsInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -4023,6 +4195,73 @@
         },
         "required": [
           "tariffs"
+        ],
+        "type": "object"
+      },
+      "GroupView": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "enum": [
+              "gray",
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "teal",
+              "blue",
+              "purple",
+              "pink"
+            ],
+            "type": "string"
+          },
+          "emoji": {
+            "description": "Значок перед названием; может быть пустым",
+            "type": "string"
+          },
+          "hosts": {
+            "description": "Адреса для клиентов, которые выдаются по группам и называют эту",
+            "items": {
+              "$ref": "#/components/schemas/GroupHostView"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "own_users": {
+            "description": "Из них в группе своей группой, заданной в карточке",
+            "format": "int64",
+            "type": "integer"
+          },
+          "servers": {
+            "$ref": "#/components/schemas/GroupServers"
+          },
+          "tariffs": {
+            "description": "Сколько тарифов, кроме архивных, кладут своих клиентов в эту группу",
+            "format": "int64",
+            "type": "integer"
+          },
+          "users": {
+            "description": "Сколько клиентов в группе: своей группой и через тариф, скрытые тоже",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "emoji",
+          "users",
+          "own_users",
+          "tariffs",
+          "servers",
+          "hosts"
         ],
         "type": "object"
       },
@@ -4090,6 +4329,20 @@
             "description": "Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек",
             "maxLength": 32,
             "type": "string"
+          },
+          "group_mode": {
+            "description": "only — только клиентам групп groups, never — всем, кроме них; пусто — всем. Группа клиента — своя или его тарифа",
+            "maxLength": 8,
+            "type": "string"
+          },
+          "groups": {
+            "description": "Группы для group_mode, по id; с режимом нужна хотя бы одна",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "type": "array"
           },
           "host": {
             "description": "HTTP Host у клиентов: VLESS и Trojan по WebSocket и XHTTP; пусто — как на сервере",
@@ -4326,6 +4579,18 @@
             "description": "Отпечаток TLS (uTLS); пусто — общий из настроек",
             "type": "string"
           },
+          "group_mode": {
+            "description": "Кому адрес выдаётся по группе клиента: only — только клиентам групп groups, never — всем, кроме них; пусто — всем",
+            "type": "string"
+          },
+          "groups": {
+            "description": "Группы для group_mode, по id; при only без групп (все удалены) адрес не выдаётся никому",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
           "host": {
             "description": "HTTP Host у клиентов (WebSocket, XHTTP); пусто — как на сервере",
             "type": "string"
@@ -4396,7 +4661,9 @@
           "addresses",
           "snis",
           "states",
-          "trial"
+          "trial",
+          "group_mode",
+          "groups"
         ],
         "type": "object"
       },
@@ -5233,14 +5500,22 @@
         "properties": {
           "counts": {
             "$ref": "#/components/schemas/UserCounts",
-            "description": "Пользователи по состояниям среди подходящих под папку, источник и скрытых; состояние и поиск не учитываются"
+            "description": "Пользователи по состояниям среди подходящих под папку, группу, источник и скрытых; состояние и поиск не учитываются"
           },
           "folder_counts": {
             "additionalProperties": {
               "format": "int64",
               "type": "integer"
             },
-            "description": "Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под источник и скрытых",
+            "description": "Пользователи по папкам (ключ — id папки, none — вне папок) среди подходящих под группу, источник и скрытых",
+            "type": "object"
+          },
+          "group_counts": {
+            "additionalProperties": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "description": "Пользователи по группам (ключ — id группы, none — ни в какой) среди подходящих под папку, источник и скрытых",
             "type": "object"
           },
           "hidden_total": {
@@ -5259,7 +5534,7 @@
               "format": "int64",
               "type": "integer"
             },
-            "description": "Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку и скрытых",
+            "description": "Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку, группу и скрытых",
             "type": "object"
           },
           "total": {
@@ -5278,6 +5553,7 @@
           "total",
           "counts",
           "folder_counts",
+          "group_counts",
           "source_counts",
           "users_total",
           "hidden_total"
@@ -6911,6 +7187,25 @@
         ],
         "type": "object"
       },
+      "OrderGroupsInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "description": "Все группы, каждая один раз, в том порядке, в каком их показывать",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "type": "object"
+      },
       "OrderNodesInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -7834,6 +8129,40 @@
         },
         "type": "object"
       },
+      "PatchGroupInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "enum": [
+              "gray",
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "teal",
+              "blue",
+              "purple",
+              "pink"
+            ],
+            "type": "string"
+          },
+          "emoji": {
+            "description": "Пустая строка убирает значок",
+            "maxLength": 16,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "type": "string"
+          },
+          "servers": {
+            "$ref": "#/components/schemas/GroupServersBody",
+            "description": "Не передан — без изменений. Действует сразу на всех клиентов группы"
+          }
+        },
+        "type": "object"
+      },
       "PatchInboundInputBody": {
         "additionalProperties": false,
         "properties": {
@@ -8477,6 +8806,12 @@
           },
           "folder_id": {
             "description": "Положить в папку; 0 — убрать из папки",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "group_id": {
+            "description": "Своя группа клиента: от неё зависят серверы и адреса, которые он видит; 0 — убрать свою, клиент вернётся в группу тарифа",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -11825,7 +12160,7 @@
             "type": "boolean"
           },
           "for_some": {
-            "description": "Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них",
+            "description": "Адрес выдают не всем: только части статусов подписки, только пробным или всем, кроме них, или по группам клиентов",
             "type": "boolean"
           },
           "host_id": {
@@ -11900,6 +12235,348 @@
           "defaults",
           "brand",
           "brand_accent"
+        ],
+        "type": "object"
+      },
+      "SubPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "app_id": {
+            "description": "Известное приложение по User-Agent; пусто — неизвестное",
+            "type": "string"
+          },
+          "app_name": {
+            "type": "string"
+          },
+          "body": {
+            "description": "Тело ответа: профиль с ключами-заглушками, ссылки — раскрытыми из base64; токен ссылки скрыт. Пусто для страницы подписки",
+            "type": "string"
+          },
+          "body_cut": {
+            "description": "Тело длиннее 2 МиБ и обрезано",
+            "type": "boolean"
+          },
+          "by_group": {
+            "description": "Серверы клиента — свои серверы его группы",
+            "type": "boolean"
+          },
+          "device": {
+            "description": "Что получит устройство: known — привязано и останется, new — займёт новое место, shared — общее место приложений без ID, inactive — подписка не работает, места не займёт; пусто — до ключей не дошло",
+            "enum": [
+              "",
+              "known",
+              "new",
+              "shared",
+              "inactive"
+            ],
+            "type": "string"
+          },
+          "format": {
+            "description": "Формат ответа: clash, singbox, xray, uri, html (страница подписки); пусто — правило ответило без профиля",
+            "enum": [
+              "",
+              "clash",
+              "singbox",
+              "uri",
+              "xray",
+              "html"
+            ],
+            "type": "string"
+          },
+          "group_id": {
+            "description": "Группа, в которой клиент сейчас",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "headers": {
+            "description": "Заголовки ответа, по имени",
+            "items": {
+              "$ref": "#/components/schemas/SubPreviewHeader"
+            },
+            "type": "array"
+          },
+          "left": {
+            "description": "Что из серверов панели в ответ не попало, и почему",
+            "items": {
+              "$ref": "#/components/schemas/SubPreviewLeft"
+            },
+            "type": "array"
+          },
+          "notes": {
+            "description": "Что ядро формата (sing-box, Xray) делает с профилем по-своему или опускает",
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "type": "array"
+          },
+          "outcome": {
+            "description": "error — панель не смогла ответить, причина в её журнале",
+            "enum": [
+              "served",
+              "stub",
+              "blocked",
+              "dropped",
+              "error"
+            ],
+            "type": "string"
+          },
+          "own": {
+            "description": "Серверы клиента — свой список протоколов карточки",
+            "type": "boolean"
+          },
+          "position": {
+            "description": "Место сработавшего правила в списке, с 1; 0 — не правило из списка",
+            "format": "int64",
+            "type": "integer"
+          },
+          "proxies": {
+            "description": "Серверы в ответе, по порядку",
+            "items": {
+              "$ref": "#/components/schemas/SubPreviewProxy"
+            },
+            "type": "array"
+          },
+          "respond": {
+            "enum": [
+              "serve",
+              "stub",
+              "403",
+              "404",
+              "html",
+              "drop"
+            ],
+            "type": "string"
+          },
+          "rule": {
+            "description": "Что решило: имя правила ответа, builtin:ssr, builtin:old, apps (список приложений); пусто — ничего",
+            "type": "string"
+          },
+          "status": {
+            "description": "Код ответа; 0 — соединение закрыто без ответа",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stub": {
+            "description": "Почему вместо серверов ушла заглушка: unsupported, device_limit, no_hwid, device_banned, device_unbound, inactive, no_proxies; пусто — заглушки нет",
+            "enum": [
+              "",
+              "unsupported",
+              "device_limit",
+              "no_hwid",
+              "device_banned",
+              "device_unbound",
+              "inactive",
+              "no_proxies"
+            ],
+            "type": "string"
+          },
+          "template": {
+            "$ref": "#/components/schemas/SubPreviewTemplate",
+            "description": "Свой шаблон, из которого собран профиль; null — встроенный профиль"
+          },
+          "template_failed": {
+            "description": "Шаблон не собрался для этого клиента, ушёл встроенный профиль",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "outcome",
+          "app_id",
+          "app_name",
+          "rule",
+          "position",
+          "respond",
+          "format",
+          "template",
+          "template_failed",
+          "stub",
+          "device",
+          "group_id",
+          "by_group",
+          "own",
+          "headers",
+          "proxies",
+          "left",
+          "notes",
+          "body"
+        ],
+        "type": "object"
+      },
+      "SubPreviewHeader": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "text": {
+            "description": "Значение вида base64:… как текст",
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "type": "object"
+      },
+      "SubPreviewInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "description": "Формат, который называет ссылка (?format=); не задан — как решат заголовки",
+            "enum": [
+              "clash",
+              "singbox",
+              "uri",
+              "xray",
+              "html"
+            ],
+            "type": "string"
+          },
+          "headers": {
+            "description": "Остальные заголовки запроса: X-Hwid, X-Device-Os, Accept, Host, свои",
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "maxItems": 30,
+            "type": "array"
+          },
+          "user_agent": {
+            "description": "User-Agent приложения; пусто — запрос без него",
+            "maxLength": 1024,
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_agent"
+        ],
+        "type": "object"
+      },
+      "SubPreviewLeft": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "Адрес; пусто у адреса — адрес ноды",
+            "type": "string"
+          },
+          "error": {
+            "description": "Для broken: почему",
+            "type": "string"
+          },
+          "host_id": {
+            "description": "Адрес для клиентов; не задан — протокол целиком",
+            "format": "int64",
+            "type": "integer"
+          },
+          "host_name": {
+            "description": "Своё имя адреса в подписке",
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inbound_name": {
+            "description": "Имя протокола в подписке",
+            "type": "string"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "reason": {
+            "description": "inbound_off — протокол выключен, node_off — нода выключена, not_own — нет в своём списке протоколов карточки, not_in_group — нет в серверах группы, not_in_tariff — нет в серверах тарифа, pool_shut — группа серверов закрыта или её трафик кончился, hidden — на ноде клиенту не выдаётся ни один адрес, balance — балансировка держит клиента на другой ноде, host_state, host_trial, host_group — адрес выдаётся другим статусам, пробным или группам, app — приложение не умеет этот протокол, broken — протокол не собрался",
+            "enum": [
+              "inbound_off",
+              "node_off",
+              "not_own",
+              "not_in_group",
+              "not_in_tariff",
+              "pool_shut",
+              "hidden",
+              "balance",
+              "host_state",
+              "host_trial",
+              "host_group",
+              "app",
+              "broken"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "inbound_id",
+          "inbound_name",
+          "node_id",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "SubPreviewProxy": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "node_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "port": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ports": {
+            "description": "Диапазон портов Hysteria2",
+            "type": "string"
+          },
+          "server": {
+            "type": "string"
+          },
+          "type": {
+            "description": "Протокол: vless, hysteria2, tuic…",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "server",
+          "port",
+          "node_id"
+        ],
+        "type": "object"
+      },
+      "SubPreviewTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "core": {
+            "enum": [
+              "mihomo",
+              "singbox",
+              "xray"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "core",
+          "name"
         ],
         "type": "object"
       },
@@ -12513,6 +13190,12 @@
             "maxItems": 20,
             "type": "array"
           },
+          "group_id": {
+            "description": "Группа для клиентов тарифа без своей группы; 0 — никакой. Не передан — без изменений (у нового тарифа — никакой). Действует сразу на всех клиентов тарифа",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "name": {
             "maxLength": 60,
             "minLength": 1,
@@ -12653,6 +13336,14 @@
             },
             "type": "array"
           },
+          "group_id": {
+            "description": "Группа, в которой клиенты тарифа без своей группы: покупатели и пробные попадают в неё сами; null — ни в какой",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "id": {
             "format": "int64",
             "type": "integer"
@@ -12700,7 +13391,7 @@
           },
           "servers": {
             "$ref": "#/components/schemas/ServersView",
-            "description": "Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём"
+            "description": "Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём, клиент в группе со своими серверами видит серверы группы"
           },
           "sort": {
             "format": "int64",
@@ -12757,6 +13448,7 @@
           "terms",
           "extra_devices",
           "servers",
+          "group_id",
           "pools",
           "gifts",
           "subscribers",
@@ -14039,6 +14731,14 @@
             ],
             "type": "string"
           },
+          "effective_group_id": {
+            "description": "Группа, в которой клиент сейчас: своя (group_id) или его тарифа; null — ни в какой. От неё зависят серверы и адреса, которые он видит",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "expires_at": {
             "format": "date-time",
             "type": [
@@ -14048,6 +14748,14 @@
           },
           "folder_id": {
             "description": "Папка пользователя; null — вне папок",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "group_id": {
+            "description": "Своя группа клиента, заданная в карточке; null — группа его тарифа",
             "format": "int64",
             "type": [
               "integer",
@@ -14237,6 +14945,8 @@
           "torrent_ban",
           "source",
           "folder_id",
+          "group_id",
+          "effective_group_id",
           "hidden",
           "starts_on_connect",
           "next_tariff",
@@ -17659,6 +18369,201 @@
           }
         },
         "summary": "Изменить папку",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/groups": {
+      "get": {
+        "operationId": "list-groups",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GroupView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Группы клиентов",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "create-group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Создать группу клиентов",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/groups/order": {
+      "put": {
+        "operationId": "order-groups",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderGroupsInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Порядок групп клиентов",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/groups/{id}": {
+      "delete": {
+        "description": "Клиенты группы возвращаются к серверам тарифа. Адрес, который выдавался только этой группе, больше не выдаётся никому, пока ему не выберут другие группы.",
+        "operationId": "delete-group",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить группу: её клиенты и тарифы остаются без неё",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "update-group",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchGroupInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить группу клиентов",
         "tags": [
           "users"
         ]
@@ -24814,6 +25719,18 @@
             }
           },
           {
+            "description": "all — любая; none — ни в какой группе; число — id группы. Группа клиента — своя или его тарифа (effective_group_id)",
+            "explode": false,
+            "in": "query",
+            "name": "group",
+            "schema": {
+              "default": "all",
+              "description": "all — любая; none — ни в какой группе; число — id группы. Группа клиента — своя или его тарифа (effective_group_id)",
+              "maxLength": 20,
+              "type": "string"
+            }
+          },
+          {
             "description": "Откуда пользователь, см. source у пользователя",
             "explode": false,
             "in": "query",
@@ -26210,6 +27127,60 @@
           }
         },
         "summary": "Журнал запросов подписки пользователя",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/sub-preview": {
+      "post": {
+        "description": "Ничего не меняет: ключи — заглушки, устройство места не занимает, балансировка клиента никуда не ставит, журнал запросов не пишется.",
+        "operationId": "user-sub-preview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubPreviewInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubPreview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Что получит клиент: ответ на запрос его подписки",
         "tags": [
           "users"
         ]

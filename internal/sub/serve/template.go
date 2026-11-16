@@ -64,13 +64,15 @@ func pickTemplate(ts []model.Template, c model.Core, named int64) (model.Templat
 
 // render is the profile of renders of the template t, or the built-in one (of the zero
 // Template) when t does not render for this user: saved templates are checked, and one that
-// went bad for some user must not leave the user's apps without a profile.
-func (h *Handler) render(t model.Template, of func(model.Template) ([]byte, error)) ([]byte, error) {
+// went bad for some user must not leave the user's apps without a profile. ex's trace hears
+// of the fall back.
+func (h *Handler) render(ex *exchange, t model.Template, of func(model.Template) ([]byte, error)) ([]byte, error) {
 	body, err := of(t)
 	var te *model.TemplateError
 	if errors.As(err, &te) && t.Body != "" {
 		h.Warn("template/"+strconv.FormatInt(t.ID, 10)+"/"+te.Code, "subscription: an own template does not render, the built-in profile goes out",
 			"template", t.ID, "core", t.Core, "err", err)
+		ex.trace.fellBack()
 		return of(model.Template{})
 	}
 	return body, err

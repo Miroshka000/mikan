@@ -161,7 +161,8 @@ func LoadPolicy(ctx context.Context, q *db.Queries, set *settings.Settings, log 
 // best effort and takes its own time, so that a client that hung up after its answer does
 // not leave it unwritten.
 func (s *subscription) Record(ctx context.Context, e serve.LogEntry) {
-	if s.cfg.LogDays <= 0 {
+	// A preview's request is the admin's, not the subscription's.
+	if s.cfg.LogDays <= 0 || s.dry {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)

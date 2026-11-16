@@ -1,19 +1,15 @@
 import { useMutation } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
 import { useSubTemplates } from "../../../api/hooks";
 import { Card } from "../../../components/layout";
 import { Button, Field, Pill } from "../../../components/ui";
 import { t } from "../../../i18n";
-import { cleanRule, ruleLabel } from "../../../lib/sub-rules";
-import { HEADER_LIST } from "./sub-rules-when";
+import { cleanRule, namedHeaders, ruleLabel } from "../../../lib/sub-rules";
+import { RequestHeaders } from "./request-headers";
 
 type Header = Schemas["Header"];
 type Result = Schemas["SubRuleTest"];
-
-// Headers a request most often differs by, one tap to add.
-const QUICK = ["X-Device-Os", "X-Hwid", "Accept"] as const;
 
 /**
  * Which rule fires on a request: paste a User-Agent and the headers that matter, and see the
@@ -26,13 +22,12 @@ export function RuleTester({ rules, builtin, onResult }: { rules: Schemas["Rule"
     mutationFn: () =>
       unwrap(
         api.POST("/api/v1/sub-rules/test", {
-          body: { user_agent: agent.trim(), headers: headers.filter((h) => h.name.trim() !== "").map((h) => ({ name: h.name.trim(), value: h.value })), rules: rules.map(cleanRule), builtin },
+          body: { user_agent: agent.trim(), headers: namedHeaders(headers), rules: rules.map(cleanRule), builtin },
         }),
       ),
     onSuccess: (r) => onResult(r.position),
     onError: () => onResult(0),
   });
-  const setHeader = (i: number, patch: Partial<Header>) => setHeaders((hs) => hs.map((h, j) => (j === i ? { ...h, ...patch } : h)));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     run.mutate();
@@ -43,28 +38,7 @@ export function RuleTester({ rules, builtin, onResult }: { rules: Schemas["Rule"
         <Field label={t("settings.subRules.test.agent")} htmlFor="rule-test-agent" hint={t("settings.subRules.test.agentHint")}>
           <input id="rule-test-agent" className="input mono" value={agent} maxLength={1024} spellCheck={false} autoCapitalize="off" autoComplete="off" placeholder="Happ/3.6.0 (iOS 18.1)" onChange={(e) => setAgent(e.target.value)} />
         </Field>
-        {headers.length > 0 ? (
-          <ul className="mb-3 flex flex-col gap-2">
-            {headers.map((h, i) => (
-              <li key={i} className="flex flex-wrap items-center gap-2">
-                <input className="input mono w-[168px]" list={HEADER_LIST} value={h.name} maxLength={64} spellCheck={false} autoCapitalize="off" aria-label={t("settings.subRules.header")} onChange={(e) => setHeader(i, { name: e.target.value })} />
-                <input className="input mono min-w-[160px] flex-1" value={h.value} maxLength={512} spellCheck={false} autoCapitalize="off" aria-label={t("settings.subRules.value")} onChange={(e) => setHeader(i, { value: e.target.value })} />
-                <Button size="sm" variant="ghost" aria-label={t("settings.subRules.test.removeHeader")} title={t("settings.subRules.test.removeHeader")} onClick={() => setHeaders((hs) => hs.filter((_, j) => j !== i))}>
-                  <X size={16} aria-hidden />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label={t("settings.subRules.test.headers")}>
-          <span className="text-xs text-[var(--ink-500)]">{t("settings.subRules.test.headers")}</span>
-          {QUICK.map((name) => (
-            <button key={name} type="button" className="chip-btn" disabled={headers.length >= 30} onClick={() => setHeaders((hs) => [...hs, { name, value: "" }])}>
-              <Plus size={12} className="mr-1 inline" aria-hidden />
-              <span className="mono">{name}</span>
-            </button>
-          ))}
-        </div>
+        <RequestHeaders headers={headers} onChange={setHeaders} />
         <Button type="submit" variant="primary" loading={run.isPending}>
           {t("settings.subRules.test.run")}
         </Button>

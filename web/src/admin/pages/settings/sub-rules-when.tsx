@@ -15,9 +15,9 @@ const HEADERS = ["User-Agent", "X-Device-Os", "X-Hwid", "X-Device-Model", "X-Ver
 export const HEADER_LIST = "sub-rule-headers";
 
 /** The headers a condition is most often about, offered by the header fields (they take any name). */
-export function HeaderNames() {
+export function HeaderNames({ id = HEADER_LIST }: { id?: string }) {
   return (
-    <datalist id={HEADER_LIST}>
+    <datalist id={id}>
       {HEADERS.map((h) => (
         <option key={h} value={h} />
       ))}

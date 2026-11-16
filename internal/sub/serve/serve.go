@@ -349,8 +349,10 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		internalError(w)
 		return ""
 	}
+	ex.trace.gave(ins)
 	app := apps.DetectApp(ua)
 	ins = build.ForApp(ins, app, u.State.CanConnect())
+	ex.trace.keep(ins)
 	// The names of hosts may have the variables too.
 	var names map[string]string
 	if texts := build.HostNames(ins); len(texts) > 0 {
@@ -358,32 +360,38 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	}
 	proxies := build.Proxies(build.Profile{Keys: keys, Inbounds: ins, Nodes: cfg.Nodes, Fingerprint: cfg.Fingerprint, Vars: names, Seed: u.Token, Groups: cfg.Groups.WithDefaults(cfg.Lang),
 		Skip: func(in model.Inbound, err error) {
+			ex.trace.skip(in, err)
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
 		}})
+	ex.trace.made(proxies)
 	prof := cfg.Profile(proxies)
 	tpl := ProfileTemplate(cfg.Templates, format, dec.Action.Template, app)
+	ex.trace.template(tpl)
 	switch format {
 	case FormatClash:
 		prof.Rules, prof.App = mihomo.RulesFor(cfg.Rules, app), app
-		body, ps, err := h.clashProfile(prof, cfg, tpl)
+		body, ps, err := h.clashProfile(ex, prof, cfg, tpl)
 		if err != nil {
 			return h.profileFailed(w, cfg, ex, err)
 		}
+		ex.trace.profile(prof, ps)
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, profileTitle(cfg, vars))
 		_, _ = w.Write(body)
 	case FormatSingBox:
-		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return singbox.Render(ctx, prof, cfg.Groups, cfg.Mode, t) })
+		body, err := h.render(ex, tpl, func(t model.Template) ([]byte, error) { return singbox.Render(ctx, prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
 			return h.profileFailed(w, cfg, ex, err)
 		}
+		ex.trace.profile(prof, proxies)
 		profileHeaders(hd, format, profileTitle(cfg, vars))
 		_, _ = w.Write(body)
 	case FormatXray:
-		body, err := h.render(tpl, func(t model.Template) ([]byte, error) { return xray.Render(prof, cfg.Groups, cfg.Mode, t) })
+		body, err := h.render(ex, tpl, func(t model.Template) ([]byte, error) { return xray.Render(prof, cfg.Groups, cfg.Mode, t) })
 		if err != nil {
 			return h.profileFailed(w, cfg, ex, err)
 		}
+		ex.trace.profile(prof, proxies)
 		profileHeaders(hd, format, "")
 		_, _ = w.Write(body)
 	default:
@@ -391,6 +399,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		if err != nil {
 			return h.profileFailed(w, cfg, ex, err)
 		}
+		ex.trace.profile(prof, ps)
 		h.groupsHeader(ctx, hd, r, sub, ps)
 		profileHeaders(hd, format, "")
 		_, _ = w.Write(xray.Encode(links))
@@ -403,9 +412,9 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 
 // clashProfile is the Clash profile of prof made of t (render), and the panel's proxies in
 // it: of the built-in profile, prof's own.
-func (h *Handler) clashProfile(prof profile.Profile, cfg Config, t model.Template) ([]byte, []model.Proxy, error) {
+func (h *Handler) clashProfile(ex *exchange, prof profile.Profile, cfg Config, t model.Template) ([]byte, []model.Proxy, error) {
 	var ps []model.Proxy
-	body, err := h.render(t, func(t model.Template) (body []byte, err error) {
+	body, err := h.render(ex, t, func(t model.Template) (body []byte, err error) {
 		if t.Body == "" {
 			ps = prof.Proxies
 			return mihomo.Render(prof, cfg.Groups.WithDefaults(cfg.Lang), cfg.Mode)

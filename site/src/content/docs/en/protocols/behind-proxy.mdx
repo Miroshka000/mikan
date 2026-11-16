@@ -30,6 +30,8 @@ The **More addresses** and **More SNIs** fields (one per line, up to 16) give an
 
 The **Shown by status** and **Trial** fields decide who gets the address in the subscription. The statuses are active (expiring too), limit reached, expired and disabled; none or all: everyone. Trial: everyone, trial only, or everyone but the trial; a client on the trial came from the trial and paid for nothing beyond it (the admin lengthening it does not end it). That way the trial gets a server of its own, or expired clients an address with a renewal page. Inactive subscriptions get servers only when the notice in place of servers is off in the subscription settings. The default address can be hidden too: the client then gets the others alone, and a protocol with every address hidden is left out for it. The subscription preview shows every address.
 
+The **Groups** field gives the address out by the [client group](/mikan/en/billing/groups/): to everyone, to the chosen groups only, or to everyone but them. A client is in its own group from the card or in its plan's; a client in no group is in none of them. This way an address behind a CDN can go to mobile clients alone, or a service address can be kept from the trial group. When every group of an address set to the chosen groups only is deleted, nobody gets the address until other groups are picked: the panel says so under the field.
+
 The API is the same: `GET`, `POST /api/v1/inbounds/{id}/hosts` and `PUT`, `DELETE /api/v1/inbounds/{id}/hosts/{host_id}`. Like the address for clients, addresses are changed only in the admin's session, not with an API key.
 
 ## nginx stream example

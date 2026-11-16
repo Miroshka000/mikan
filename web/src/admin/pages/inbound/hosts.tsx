@@ -13,11 +13,12 @@ import { t } from "../../../i18n";
 import { fingerprintLabel } from "../../../lib/fingerprints";
 import { onFormError } from "../../../lib/fields";
 import { TITLE_VARS, unknownVars } from "../../../lib/title-vars";
+import { hostGroupsBody, HostGroupsField, type HostGroups } from "./host-groups";
 
 type Host = Schemas["HostView"];
 
 /** A host's own fields as its inputs hold them: those no template holds, the default host's too. */
-type OwnForm = { name: string; addresses: string; snis: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean; states: string[]; trial: string };
+type OwnForm = HostGroups & { name: string; addresses: string; snis: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean; states: string[]; trial: string };
 
 /** A host as its inputs hold it; id 0 is one not saved yet. */
 type HostForm = OwnForm & { id: number; address: string; port: string; sni: string; host: string; fingerprint: string };
@@ -40,8 +41,30 @@ const formOf = (h: Host): HostForm => ({
   cdn: h.cdn,
   states: h.states,
   trial: h.trial,
+  groupMode: h.group_mode,
+  groups: h.groups,
 });
-const emptyForm: HostForm = { id: 0, address: "", port: "", sni: "", host: "", fingerprint: "", name: "", addresses: "", snis: "", alpn: [], ipVersion: "", mux: false, muxProtocol: "", muxPadding: false, cdn: false, states: [], trial: "" };
+const emptyForm: HostForm = {
+  id: 0,
+  address: "",
+  port: "",
+  sni: "",
+  host: "",
+  fingerprint: "",
+  name: "",
+  addresses: "",
+  snis: "",
+  alpn: [],
+  ipVersion: "",
+  mux: false,
+  muxProtocol: "",
+  muxPadding: false,
+  cdn: false,
+  states: [],
+  trial: "",
+  groupMode: "",
+  groups: [],
+};
 
 const IP_VERSIONS = ["ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"] as const;
 const MUX_PROTOCOLS = ["smux", "yamux", "h2mux"];
@@ -69,8 +92,9 @@ function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
 const lines = (s: string) => s.split(/[\s,]+/).filter(Boolean);
 
 /** The own fields of a form as the API takes them. */
-function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "addresses" | "snis" | "alpn" | "ip_version" | "mux" | "cdn" | "states" | "trial"> {
+function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "addresses" | "snis" | "alpn" | "ip_version" | "mux" | "cdn" | "states" | "trial" | "group_mode" | "groups"> {
   return {
+    ...hostGroupsBody(f),
     name: f.name.trim(),
     addresses: lines(f.addresses),
     snis: can.sni ? lines(f.snis) : [],
@@ -294,6 +318,7 @@ function OwnFields({ uid, f, set, can, errors, inbound }: { uid: string; f: OwnF
           ))}
         </Select>
       </Field>
+      <HostGroupsField uid={uid} value={f} onChange={({ groupMode, groups }) => set({ groupMode, groups })} errors={errors} />
     </>
   );
 }

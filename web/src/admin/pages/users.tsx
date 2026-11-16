@@ -2,10 +2,10 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CalendarClock, CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CalendarClock, CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, UsersRound, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { basePath, errorText, type Schemas, type Tariff, type User } from "../../api/client";
-import { userActions, useFolders, useOverview, useSettings, useTariffs, useUserMutation, useUsersPages } from "../../api/hooks";
+import { userActions, useFolders, useGroups, useOverview, useSettings, useTariffs, useUserMutation, useUsersPages } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { FloatingBar } from "../../components/layout";
 import { QueryBoundary } from "../../components/query";
@@ -21,6 +21,10 @@ import { LifecycleDrawer } from "./lifecycle";
 import { CreateUserDrawer } from "./user-create";
 import { UserDrawer } from "./user-drawer";
 import { FolderBadge, FolderMark, FolderMenuItems, FoldersDrawer, type Folder } from "./user-folders";
+import { GroupBadge } from "./groups/badge";
+import { GroupsDrawer } from "./groups/drawer";
+import { GroupMenuItems } from "./groups/menu-items";
+import type { Group } from "./groups/model";
 
 /** A row of chips: one line to scroll sideways on a phone, wrapping on a wide screen. */
 const CHIP_ROW = "-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0";
@@ -59,13 +63,15 @@ function emptyText(s: UsersSearch, total: number, hidden: number): { title: stri
   if (s.hidden === "only") return { title: t("users.hiddenEmptyTitle"), text: t("users.hiddenEmptyText") };
   if (typeof s.folder === "number") return { title: t("users.folderEmptyTitle"), text: t("users.folderEmptyText") };
   if (s.folder === "none") return { title: t("users.noFolderEmptyTitle"), text: t("users.noFolderEmptyText") };
+  if (typeof s.group === "number") return { title: t("users.groupEmptyTitle"), text: t("users.groupEmptyText") };
+  if (s.group === "none") return { title: t("users.noGroupEmptyTitle"), text: t("users.noGroupEmptyText") };
   if (s.source) return { title: t("users.sourceEmptyTitle"), text: t("users.sourceEmptyText") };
   if (s.hidden === undefined && hidden === total) return { title: t("users.allHiddenTitle"), text: t("users.allHiddenText") };
   return { title: t("users.notFoundTitle"), text: t("users.notFoundGroup") };
 }
 
-/** Where a user comes from, folder and hidden mark: the small print under the name. */
-function Labels({ u, folder }: { u: User; folder?: Folder }) {
+/** Where a user comes from, folder, group and hidden mark: the small print under the name. */
+function Labels({ u, folder, group }: { u: User; folder?: Folder; group?: Group }) {
   return (
     <>
       {u.source !== "admin" ? (
@@ -74,6 +80,7 @@ function Labels({ u, folder }: { u: User; folder?: Folder }) {
         </span>
       ) : null}
       {folder ? <FolderBadge folder={folder} /> : null}
+      {group ? <GroupBadge group={group} viaTariff={u.group_id == null} /> : null}
       {u.hidden ? (
         <span className="tag gap-1" title={t("users.hiddenBadge")}>
           <EyeOff size={12} aria-hidden />
@@ -91,13 +98,15 @@ export function UsersPage() {
   // replaces it.
   const { text: q, setText: setQ, clear: clearQ } = useUrlSearchText(search.q, (next) => void navigate({ search: (s) => ({ ...s, q: next }), replace: true }));
   // The list hides the hidden unless asked: the API's own default shows everyone.
-  const users = useUsersPages({ state: search.state, q: search.q, folder: search.folder, source: search.source, hidden: search.hidden ?? "hide" });
+  const users = useUsersPages({ state: search.state, q: search.q, folder: search.folder, group: search.group, source: search.source, hidden: search.hidden ?? "hide" });
   // Every page tells the same counts of the whole filter: the first one's are shown.
   const first = users.data?.pages[0];
   const tariffs = useTariffs();
   const folders = useFolders();
+  const groups = useGroups();
   const overview = useOverview({ poll: false });
   const [managing, setManaging] = useState(false);
+  const [grouping, setGrouping] = useState(false);
   const [rules, setRules] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   // Everyone the filter matches rather than the rows ticked: the bulk action sends the filter
@@ -116,10 +125,19 @@ export function UsersPage() {
       void navigate({ search: (s) => ({ ...s, folder: undefined }), replace: true });
     }
   }, [folders.data, search.folder, navigate]);
+  // A group that is gone is no filter either.
+  useEffect(() => {
+    const list = groups.data;
+    if (typeof search.group === "number" && list && !list.some((g) => g.id === search.group)) {
+      void navigate({ search: (s) => ({ ...s, group: undefined }), replace: true });
+    }
+  }, [groups.data, search.group, navigate]);
 
   const tariffById = useMemo(() => new Map((tariffs.data ?? []).map((tr) => [tr.id, tr])), [tariffs.data]);
   const folderList = useMemo(() => folders.data ?? [], [folders.data]);
   const folderById = useMemo(() => new Map(folderList.map((f) => [f.id, f])), [folderList]);
+  const groupList = useMemo(() => groups.data ?? [], [groups.data]);
+  const groupById = useMemo(() => new Map(groupList.map((g) => [g.id, g])), [groupList]);
   const counts = first?.counts;
   const items = useMemo(() => pagedItems(users.data?.pages ?? []), [users.data]);
   // What a bulk action touches is what the admin sees ticked: a row that left the list (a
@@ -161,14 +179,16 @@ export function UsersPage() {
   const hiddenTotal = first?.hidden_total ?? 0;
   const sourceCounts = first?.source_counts;
   const folderCounts = first?.folder_counts;
+  const groupCounts = first?.group_counts;
   const sum = (m?: Record<string, number>) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
-  // Folders and sources are rows of their own only once there is something to tell apart:
-  // a panel that never made a folder or took a user from elsewhere sees neither.
+  // Folders, groups and sources are rows of their own only once there is something to tell
+  // apart: a panel that never made a folder or took a user from elsewhere sees neither.
   const showFolders = folderList.length > 0 || search.folder !== undefined;
+  const showGroups = groupList.length > 0 || search.group !== undefined;
   const showSources = (sourceCounts && sum(sourceCounts) - sourceCounts.admin! > 0) || search.source !== undefined;
   const showHidden = hiddenTotal > 0 || search.hidden !== undefined;
   // The filters of the menu that are on, beside the state chips and the search.
-  const extra = (search.folder !== undefined ? 1 : 0) + (search.source ? 1 : 0) + (search.hidden ? 1 : 0);
+  const extra = (search.folder !== undefined ? 1 : 0) + (search.group !== undefined ? 1 : 0) + (search.source ? 1 : 0) + (search.hidden ? 1 : 0);
 
   return (
     <>
@@ -184,6 +204,10 @@ export function UsersPage() {
             <Button onClick={() => setManaging(true)} aria-label={t("users.manageFolders")}>
               <FolderCog size={18} aria-hidden />
               <span className="max-[760px]:hidden">{t("users.manageFolders")}</span>
+            </Button>
+            <Button onClick={() => setGrouping(true)} aria-label={t("users.manageGroups")}>
+              <UsersRound size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("users.manageGroups")}</span>
             </Button>
             <Button variant="primary" onClick={() => void navigate({ search: (s) => ({ ...s, create: true, user: undefined }) })}>
               <Plus size={18} aria-hidden />
@@ -207,7 +231,7 @@ export function UsersPage() {
               <Search size={16} aria-hidden />
               <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => typeQ(e.target.value)} aria-label={t("users.searchLabel")} />
             </label>
-            {showFolders || showSources || showHidden ? (
+            {showFolders || showGroups || showSources || showHidden ? (
               <Menu.Root>
                 <Menu.Trigger asChild>
                   <button type="button" className="chip h-10 shrink-0" aria-pressed={extra > 0}>
@@ -230,9 +254,22 @@ export function UsersPage() {
                         </Menu.RadioGroup>
                       </>
                     ) : null}
-                    {showSources ? (
+                    {showGroups ? (
                       <>
                         {showFolders ? <Menu.Separator className="menu-sep" /> : null}
+                        <Menu.Label className="menu-label">{t("users.groupsLabel")}</Menu.Label>
+                        <Menu.RadioGroup value={search.group === undefined ? "all" : String(search.group)} onValueChange={(v) => setFilter({ group: v === "all" ? undefined : v === "none" ? "none" : Number(v) })} aria-label={t("users.groupFilter")}>
+                          <FilterItem value="all" label={t("users.groupsAll")} count={groupCounts ? sum(groupCounts) : undefined} />
+                          <FilterItem value="none" label={t("users.groupsNone")} count={groupCounts ? (groupCounts.none ?? 0) : undefined} />
+                          {groupList.map((g) => (
+                            <FilterItem key={g.id} value={String(g.id)} label={g.name} mark={<FolderMark folder={g} />} count={groupCounts ? (groupCounts[g.id] ?? 0) : undefined} />
+                          ))}
+                        </Menu.RadioGroup>
+                      </>
+                    ) : null}
+                    {showSources ? (
+                      <>
+                        {showFolders || showGroups ? <Menu.Separator className="menu-sep" /> : null}
                         <Menu.Label className="menu-label">{t("users.sourceLabel")}</Menu.Label>
                         <Menu.RadioGroup value={search.source ?? "all"} onValueChange={(v) => setFilter({ source: v === "all" ? undefined : (v as UsersSearch["source"]) })} aria-label={t("users.sourceFilter")}>
                           {USER_SOURCES.map((s) => (
@@ -243,7 +280,7 @@ export function UsersPage() {
                     ) : null}
                     {showHidden ? (
                       <>
-                        {showFolders || showSources ? <Menu.Separator className="menu-sep" /> : null}
+                        {showFolders || showGroups || showSources ? <Menu.Separator className="menu-sep" /> : null}
                         <Menu.Label className="menu-label">{t("users.hiddenChip", { n: hiddenTotal })}</Menu.Label>
                         <Menu.RadioGroup value={search.hidden ?? "hide"} onValueChange={(v) => setFilter({ hidden: v === "hide" ? undefined : (v as UsersSearch["hidden"]) })} aria-label={t("users.hiddenMenu")}>
                           {USER_HIDDEN.map((m) => (
@@ -264,6 +301,12 @@ export function UsersPage() {
               <ActiveFilter
                 label={`${t("users.foldersLabel")}: ${search.folder === "none" ? t("users.foldersNone") : (folderById.get(search.folder)?.name ?? "")}`}
                 onClear={() => setFilter({ folder: undefined })}
+              />
+            ) : null}
+            {search.group !== undefined ? (
+              <ActiveFilter
+                label={`${t("users.groupsLabel")}: ${search.group === "none" ? t("users.groupsNone") : (groupById.get(search.group)?.name ?? "")}`}
+                onClear={() => setFilter({ group: undefined })}
               />
             ) : null}
             {search.source ? <ActiveFilter label={`${t("users.sourceLabel")}: ${t(`users.sources.${search.source}`)}`} onClear={() => setFilter({ source: undefined })} /> : null}
@@ -294,7 +337,14 @@ export function UsersPage() {
                 {narrow ? (
                   <div className="flex flex-col gap-2">
                     {items.map((u) => (
-                      <UserCard key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} onOpen={openUser} />
+                      <UserCard
+                        key={u.id}
+                        u={u}
+                        tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined}
+                        folder={u.folder_id ? folderById.get(u.folder_id) : undefined}
+                        group={u.effective_group_id ? groupById.get(u.effective_group_id) : undefined}
+                        onOpen={openUser}
+                      />
                     ))}
                   </div>
                 ) : (
@@ -344,6 +394,7 @@ export function UsersPage() {
                             tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined}
                             next={u.next_tariff ? tariffById.get(u.next_tariff.tariff_id) : undefined}
                             folder={u.folder_id ? folderById.get(u.folder_id) : undefined}
+                            group={u.effective_group_id ? groupById.get(u.effective_group_id) : undefined}
                             selected={selected.has(u.id)}
                             binding={binding}
                             onToggle={toggle}
@@ -371,8 +422,9 @@ export function UsersPage() {
         </QueryBoundary>
       </section>
 
-      <BulkBar chosen={chosen} matching={byFilter && first ? { filter: bulkFilter(search), total: first.total } : undefined} clear={clear} folders={folderList} />
+      <BulkBar chosen={chosen} matching={byFilter && first ? { filter: bulkFilter(search), total: first.total } : undefined} clear={clear} folders={folderList} groups={groupList} />
       <FoldersDrawer open={managing} onOpenChange={setManaging} />
+      <GroupsDrawer open={grouping} onOpenChange={setGrouping} />
       <LifecycleDrawer open={rules} onOpenChange={setRules} />
       <CreateUserDrawer
         open={!!search.create}
@@ -462,6 +514,7 @@ const UserRow = memo(function UserRow({
   tariff,
   next,
   folder,
+  group,
   selected,
   binding,
   onToggle,
@@ -472,6 +525,8 @@ const UserRow = memo(function UserRow({
   /** The tariff the user moves to when the term ends. */
   next?: Tariff;
   folder?: Folder;
+  /** The group the user is in: its own or its tariff's. */
+  group?: Group;
   selected: boolean;
   binding: boolean;
   onToggle: (id: number) => void;
@@ -504,7 +559,7 @@ const UserRow = memo(function UserRow({
                   {tag}
                 </span>
               ))}
-              <Labels u={u} folder={folder} />
+              <Labels u={u} folder={folder} group={group} />
             </div>
           </div>
         </div>
@@ -538,7 +593,7 @@ const UserRow = memo(function UserRow({
   );
 });
 
-const UserCard = memo(function UserCard({ u, tariff, folder, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; onOpen: (id: number) => void }) {
+const UserCard = memo(function UserCard({ u, tariff, folder, group, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; group?: Group; onOpen: (id: number) => void }) {
   useLocale();
   const e = expiryText(u.expires_at);
   return (
@@ -552,9 +607,9 @@ const UserCard = memo(function UserCard({ u, tariff, folder, onOpen }: { u: User
         <div className="truncate text-xs text-[var(--ink-500)]">
           {tariff?.name ?? t("users.noTariff")} · {u.starts_on_connect ? t("users.waits") : e.text}
         </div>
-        {u.source !== "admin" || folder || u.hidden ? (
+        {u.source !== "admin" || folder || group || u.hidden ? (
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-            <Labels u={u} folder={folder} />
+            <Labels u={u} folder={folder} group={group} />
           </div>
         ) : null}
       </div>
@@ -590,14 +645,22 @@ function TableSkeleton() {
   );
 }
 
-type BulkAction = "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move";
+type BulkAction = "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move" | "group";
 
-type MoveTo = { folder_id?: number };
+/** Where move and group put the users: a folder, a group of their own; none takes them out. */
+type MoveTo = { folder_id?: number; group_id?: number };
 
 /** The list's filter in the URL as a bulk action by filter takes it: what the list asks for
  * (the page leaves the hidden out unless asked), the defaults written out. */
 function bulkFilter(s: UsersSearch): Schemas["BulkFilter"] {
-  return { state: s.state, q: s.q || undefined, folder: s.folder === undefined ? "all" : String(s.folder), source: s.source ?? "all", hidden: s.hidden ?? "hide" };
+  return {
+    state: s.state,
+    q: s.q || undefined,
+    folder: s.folder === undefined ? "all" : String(s.folder),
+    group: s.group === undefined ? "all" : String(s.group),
+    source: s.source ?? "all",
+    hidden: s.hidden ?? "hide",
+  };
 }
 
 /** What the bulk preview found for an action the admin is asked to confirm, and the body the
@@ -608,7 +671,7 @@ type Asked = { action: BulkAction; body: Schemas["BulkInputBody"]; byFilter: boo
 /** Everyone the list's filter matches, as the list counted them. */
 type Matching = { filter: Schemas["BulkFilter"]; total: number };
 
-function BulkBar({ chosen, matching, clear, folders }: { chosen: User[]; matching?: Matching; clear: () => void; folders: Folder[] }) {
+function BulkBar({ chosen, matching, clear, folders, groups }: { chosen: User[]; matching?: Matching; clear: () => void; folders: Folder[]; groups: Group[] }) {
   const toast = useToast();
   const bulk = useUserMutation(userActions.bulk);
   // What changes a subscription is shown before it is done: the server says how many it
@@ -681,6 +744,22 @@ function BulkBar({ chosen, matching, clear, folders }: { chosen: User[]; matchin
             <Menu.Portal>
               <Menu.Content className="menu glass-strong" side="top" align="center" sideOffset={8}>
                 <FolderMenuItems folders={folders} onPick={(id) => now("move", id === null ? undefined : { folder_id: id })} />
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu.Root>
+        ) : null}
+        {groups.length > 0 ? (
+          // A group decides what its clients see: the change is counted and confirmed first.
+          <Menu.Root>
+            <Menu.Trigger asChild>
+              <Button size="sm" loading={running("group")} disabled={busy} aria-label={t("users.groupMenu")}>
+                <UsersRound size={16} aria-hidden />
+                <span className="max-sm:hidden">{t("users.toGroup")}</span>
+              </Button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content className="menu glass-strong" side="top" align="center" sideOffset={8}>
+                <GroupMenuItems groups={groups} onPick={(id) => ask("group", id === null ? undefined : { group_id: id })} />
               </Menu.Content>
             </Menu.Portal>
           </Menu.Root>

@@ -346,7 +346,7 @@ func (t *Tuner) load(ctx context.Context) (*world, error) {
 	if err != nil {
 		return nil, err
 	}
-	servers, err := domain.AllTariffServers(ctx, q)
+	servers, err := domain.LoadServerBook(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +372,7 @@ func (t *Tuner) load(ctx context.Context) (*world, error) {
 	}
 	allowed := make(map[int64][]int64, len(users))
 	for _, u := range users {
-		access := domain.AccessOf(u, domain.ServersOf(servers, u.TariffID))
+		access := domain.AccessOf(u, servers.Of(u))
 		if out := spent[u.ID]; len(out) > 0 {
 			ids := []int64{}
 			for _, in := range inbounds {

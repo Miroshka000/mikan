@@ -15,11 +15,13 @@ import { PoolsSection, TariffSection, TrafficSection } from "./user/traffic";
 import { ExpirySection } from "./user/expiry";
 import { NoteSection, ProtocolsSection, SubscriptionSection, TelegramSection } from "./user/access";
 import { DevicesSection } from "./user/devices";
+import { GroupSection } from "./user/group";
 import { NodesSection } from "./user/nodes";
 import { OrganiseSection } from "./user/organise";
 import { TorrentSection } from "./user/torrent";
 import { SitesSection } from "./user/sites";
 import { SubLogSection } from "./user/sub-log";
+import { PreviewSection } from "./user/preview/section";
 import { UserFieldsSection } from "./custom-fields";
 
 export function UserDrawer({ id, onClose }: { id?: number; onClose: () => void }) {
@@ -171,7 +173,9 @@ function UserBody({ u, onDeleted, onRename }: { u: User; onDeleted: () => void; 
       <NodesSection u={u} />
       <SitesSection u={u} />
       <SubLogSection u={u} />
+      <PreviewSection key={u.id} u={u} />
       <TariffSection u={u} />
+      <GroupSection u={u} />
       <NoteSection u={u} />
       <UserFieldsSection u={u} />
       <Disclosure title={t("userDrawer.advanced")} sub={t("userDrawer.advancedSub")}>
