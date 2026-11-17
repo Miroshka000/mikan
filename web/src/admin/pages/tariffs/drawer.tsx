@@ -20,6 +20,7 @@ import { draftOf, GroupModesField, settingsOf, type GroupDraft } from "../pools"
 import { byNode, serversBody, serversDraftOf, TariffServersTree, type ServersDraft } from "../servers-tree";
 import { DeviceModePicker, modeOf, type DeviceMode } from "../user/device-mode";
 import { ClientGroupField } from "./client-group";
+import { renewsTraffic, resetOf, resetToSave } from "./model";
 
 /** What the server accepts of a description for buyers (domain.CleanDescription). */
 const DESCRIPTION_MAX = 300;
@@ -80,7 +81,7 @@ function formOf(tr: Tariff | null): TariffForm {
     deviceMode: tr ? modeOf(tr) : "bound",
     speedUnlimited: tr?.speed_limit == null,
     speed: String(tr?.speed_limit ?? 100),
-    reset: tr?.reset_strategy ?? "period",
+    reset: resetOf(tr),
     price: tr?.price_label ?? "",
     description: tr?.description ?? "",
     onSale: tr?.on_sale ?? false,
@@ -126,6 +127,9 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
   const stands = byGroup ? { all: false, nodes: byGroup.servers.nodes, inbounds: byGroup.servers.inbounds } : servers;
   // What the form gives now: the packages that add to it can be gifts and be bought.
   const draft: TariffQuotas = { trafficLimited: !unlimited, groups, served: inbounds.data ? servedGroups(stands, inbounds.data) : undefined };
+  // When to reset is asked while a period has traffic to give anew: the main traffic with a
+  // limit, or a group with a limit of its own (with the main traffic unlimited, only these).
+  const renews = renewsTraffic(draft);
   const tariffId = tariff && tariff !== "new" ? tariff.id : 0;
   const giftable = (allPackages.data ?? []).filter((p) => fitsTariff(p, draft));
   const buyable = (allPackages.data ?? []).filter((p) => canBuy(p, fitsTariff(p, draft), tariffId));
@@ -213,7 +217,7 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
       device_limit: devicesUnlimited ? undefined : devN,
       device_mode: deviceMode,
       speed_limit: speedUnlimited ? undefined : speedN,
-      reset_strategy: unlimited ? "none" : reset,
+      reset_strategy: resetToSave(draft, reset),
       price_label: price.trim() || undefined,
       description: description.trim() || undefined,
       price_stars: stars.trim() ? starsN : undefined,
@@ -343,8 +347,8 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
             </label>
           </div>
         </Field>
-        {!unlimited ? (
-          <Field label={t("tariffs.whenReset")} hint={t("tariffs.whenResetHint")}>
+        {renews ? (
+          <Field label={t("tariffs.whenReset")} hint={unlimited ? t("tariffs.whenResetGroupsHint") : t("tariffs.whenResetHint")}>
             <Segmented
               label={t("tariffs.reset")}
               value={reset}
