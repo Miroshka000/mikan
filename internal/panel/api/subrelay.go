@@ -41,7 +41,7 @@ func SubscriptionRelay(d Deps, sub http.Handler) func(http.ResponseWriter, *http
 		key, err := d.Store.Q.GetAPIKeyByHash(r.Context(), hashAPIKey(token))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			d.Log.Error("subscription key lookup", "err", err)
-			http.Error(w, "subscription service unavailable", 500)
+			http.Error(w, "subscription service unavailable", 503)
 			return true
 		}
 		if err != nil || (key.ExpiresAt.Valid && key.ExpiresAt.Int64 <= now.Unix()) {
@@ -73,7 +73,7 @@ func SubscriptionRelay(d Deps, sub http.Handler) func(http.ResponseWriter, *http
 		r.Header.Del("X-Mikan-Client-IP")
 		ep, err := d.Settings.SubEndpoint(r.Context())
 		if err != nil {
-			http.Error(w, "internal error", 500)
+			http.Error(w, "subscription service unavailable", 503)
 			return true
 		}
 		if ep.Host != "" {
