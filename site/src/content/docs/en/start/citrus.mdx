@@ -1,0 +1,45 @@
+---
+title: The Citrus core
+description: Citrus is the core of mikan's nodes, our fork of mihomo. What it does, how it differs from mihomo, and where to read about it.
+---
+
+[Citrus](https://github.com/getmikan/Citrus) is the core mikan's nodes run on. It is our fork of [mihomo](https://github.com/MetaCubeX/mihomo) (Clash Meta) under GPL-3.0, with its history and authorship kept. It has its own site with the full documentation: [getmikan.github.io/Citrus](https://getmikan.github.io/Citrus/) (in Russian and English).
+
+A mikan node embeds Citrus as a library, so there is nothing to install or configure on its own. Updating the panel and the nodes updates the core.
+
+## Why a fork
+
+A VPN service's panel needs more from a core than a client app does:
+- knowing how much each user moved;
+- limiting users on the server;
+- changing users without restarting the node.
+
+mihomo is first of all a core for client apps, and it has none of this. So Citrus carries the server side mikan needs, and keeps mihomo's config format for clients.
+
+## What it does for mikan
+
+- **Traffic per user.** The core counts every user's bytes on every inbound, mux substreams and UDP included. The byte-exact accounting of plans and charts is built on it. See [User traffic](https://getmikan.github.io/Citrus/en/start/user-stats/).
+- **Limits on the server.** Speed, one shared speed for all of a person's devices, connections, addresses, a traffic quota and an expiry. They hold on the node, and no client config gets around them. See [User limits](https://getmikan.github.io/Citrus/en/start/user-limits/).
+- **Users on the fly.** No restart is needed. An added user connects at once, a removed one has their connections closed, and nobody else notices. See [Inbound users on the fly](https://getmikan.github.io/Citrus/en/start/inbound-users/).
+- **An event stream.** The node says when a quota runs out, a listener does not start or a provider fails to update, so the panel does not have to poll. See [Event stream](https://getmikan.github.io/Citrus/en/start/events/).
+- **Metrics** for Prometheus, and `/healthz` and `/readyz` health checks.
+- **Xray compatibility.** Automated tests run Citrus's server protocols against real Xray clients and mihomo releases. That is why a mikan subscription works both in Xray-based apps (Happ, v2RayTun, v2rayNG) and in Clash apps. See [Compatibility](https://getmikan.github.io/Citrus/en/compatibility/).
+- **Post-quantum REALITY**, the same as Xray's, for the apps that support it.
+
+## How it differs from mihomo
+
+The config format is mihomo's, and most configs run unchanged. The differences:
+
+- **Old protocols are removed:** VMess, ShadowsocksR, Hysteria v1, TUIC v4, Shadowsocks stream ciphers and v2ray-plugin. A config with them does not load and names the replacement; nodes with them in a subscription are skipped.
+- **Stricter defaults:**
+  - the controller API on a network address needs a `secret`;
+  - TLS inbounds require TLS 1.2 or newer;
+  - handshakes have a deadline;
+  - users of server inbounds cannot reach the server's local network.
+- **Its own forks** of the TLS, uTLS, HTTP and smux libraries, with fixes and speedups.
+
+The full list with examples is in [Migrating from mihomo](https://getmikan.github.io/Citrus/en/migration/). What is done and what comes next is in the [roadmap](https://getmikan.github.io/Citrus/en/roadmap/) and the [changelog](https://getmikan.github.io/Citrus/en/changelog/).
+
+## For apps
+
+Citrus also works as a client core on Windows, macOS, Linux and Android; MikanApp, for one, runs on it. Its own HTTP requests carry the User-Agent `clash.meta/<version> citrus/<version>`, so panels recognize it as an ordinary mihomo client. Builds are in the [GitHub releases](https://github.com/getmikan/Citrus/releases).
