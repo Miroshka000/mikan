@@ -71,3 +71,24 @@ func TestSubDomainCertificate(t *testing.T) {
 		t.Fatalf("the domain removed: %+v", m.Status())
 	}
 }
+
+// An external edge owns ACME; the panel never orders its domain's certificate.
+func TestExternalSubHasNoACMEIdentifier(t *testing.T) {
+	ctx := t.Context()
+	st, err := storetest.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	set := settings.New(st.Q)
+	if err := settings.Set(ctx, set, settings.KeySubDomain, "edge.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := settings.Set(ctx, set, settings.KeySubExternal, true); err != nil {
+		t.Fatal(err)
+	}
+	m := NewSub(t.TempDir(), &tlscert.Holder{}, set, acmechallenge.New("127.0.0.1:0"), slog.New(slog.DiscardHandler), time.Now)
+	if name, err := m.identifier(ctx); err != nil || name != "" {
+		t.Fatalf("external ACME identifier=%q err=%v", name, err)
+	}
+}

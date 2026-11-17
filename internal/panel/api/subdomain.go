@@ -47,7 +47,17 @@ func (h *handlers) checkSubDomain(ctx context.Context, b *patchSettingsBody) ([]
 	if b.SubDomain != nil {
 		dom = strings.TrimSpace(*b.SubDomain)
 	}
+	external, _, err := settings.Get[bool](ctx, h.d.Settings, settings.KeySubExternal)
+	if err != nil {
+		return nil, err
+	}
+	if b.SubExternal != nil {
+		external = *b.SubExternal
+	}
 	if dom == "" {
+		if external {
+			return []*huma.ErrorDetail{fieldDetail("body.sub_domain", "sub_domain_required", nil)}, nil
+		}
 		return nil, nil
 	}
 	panelDomain, err := h.d.Settings.String(ctx, settings.KeyDomain)
@@ -60,7 +70,10 @@ func (h *handlers) checkSubDomain(ctx context.Context, b *patchSettingsBody) ([]
 	if strings.EqualFold(dom, panelDomain) {
 		return []*huma.ErrorDetail{fieldDetail("body.sub_domain", "sub_domain_panel", nil)}, nil
 	}
-	if dom == cur && b.PublicHost == nil {
+	if external {
+		return nil, nil
+	}
+	if dom == cur && b.PublicHost == nil && b.SubExternal == nil {
 		return nil, nil
 	}
 	host := ""

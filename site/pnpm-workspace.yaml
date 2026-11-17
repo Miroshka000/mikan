@@ -9,3 +9,5 @@ minimumReleaseAgeExclude:
 overrides:
   # postcss-nested 6 pins postcss-selector-parser 6: quadratic flat selector parsing, fixed in 7.1.6.
   postcss-selector-parser: ^7.1.6
+  # httpsnippet (starlight-openapi) pins 4.0.4: CRLF injection through multipart field names, fixed in 4.0.6.
+  form-data: ^4.0.6

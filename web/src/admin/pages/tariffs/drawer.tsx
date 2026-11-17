@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Gift, Plus, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { api, errorText, unwrap, type Schemas, type Tariff } from "../../../api/client";
-import { qk, useInbounds, usePackages, usePaymentSettings, usePools } from "../../../api/hooks";
+import { qk, useGroups, useInbounds, usePackages, usePaymentSettings, usePools } from "../../../api/hooks";
 import { Drawer, DrawerFooter } from "../../../components/overlay";
 import { SwitchRow } from "../../../components/switch";
 import { useToast } from "../../../components/toast";
@@ -15,10 +15,13 @@ import { onFormError } from "../../../lib/fields";
 import { bytes, days, GiB, months, termMonths } from "../../../lib/format";
 import { isKopecks, isStars, parseDecimal, rubKopecks } from "../../../lib/validate";
 import { packageLine } from "../packages";
-import { canBuy, fitsTariff, servedGroups, serversHas, type TariffQuotas } from "../sale-rules";
+import { canBuy, fitsTariff, quotasOf, servedGroups, serversHas, type TariffQuotas } from "../sale-rules";
 import { draftOf, GroupModesField, settingsOf, type GroupDraft } from "../pools";
+import { ResetPicker } from "../reset-picker";
+import { renewsTraffic, resetToSave, startReset } from "../reset-rules";
 import { byNode, serversBody, serversDraftOf, TariffServersTree, type ServersDraft } from "../servers-tree";
 import { DeviceModePicker, modeOf, type DeviceMode } from "../user/device-mode";
+import { ClientGroupField } from "./client-group";
 
 /** What the server accepts of a description for buyers (domain.CleanDescription). */
 const DESCRIPTION_MAX = 300;
@@ -47,6 +50,8 @@ type TariffForm = {
   servers: ServersDraft;
   groups: Record<number, GroupDraft>;
   gifts: Set<number>;
+  // The group of the tariff's clients without one of their own (0: none).
+  clientGroup: number;
   stars: string;
   rub: string;
   // The terms after the first: days, or months with a billing day, and their prices.
@@ -55,6 +60,10 @@ type TariffForm = {
   devMax: string;
   devStars: string;
   devRub: string;
+  // The tariff's own part of the lifecycle: the carry-over over the panel's rule, and a term
+  // that starts at the first connection.
+  carry: Tariff["carry_over"];
+  waits: boolean;
 };
 
 /** The form of tariff tr; a new one's without. The one place that maps a tariff to the form. */
@@ -73,7 +82,7 @@ function formOf(tr: Tariff | null): TariffForm {
     deviceMode: tr ? modeOf(tr) : "bound",
     speedUnlimited: tr?.speed_limit == null,
     speed: String(tr?.speed_limit ?? 100),
-    reset: tr?.reset_strategy ?? "period",
+    reset: tr ? startReset(quotasOf(tr), tr.reset_strategy) : "period",
     price: tr?.price_label ?? "",
     description: tr?.description ?? "",
     onSale: tr?.on_sale ?? false,
@@ -81,11 +90,14 @@ function formOf(tr: Tariff | null): TariffForm {
     // The view lists every group with the tariff's mode; a new tariff has them all on the main traffic.
     groups: Object.fromEntries((tr?.pools ?? []).map((p) => [p.pool_id, draftOf(p)])),
     gifts: new Set(tr?.gifts ?? []),
+    clientGroup: tr?.group_id ?? 0,
     stars: tr?.price_stars != null ? String(tr.price_stars) : "",
     rub: tr?.price_rub != null ? String(tr.price_rub / 100) : "",
     devMax: String(tr?.extra_devices.max ?? 0),
     devStars: tr?.extra_devices.price_stars != null ? String(tr.extra_devices.price_stars) : "",
     devRub: tr?.extra_devices.price_rub != null ? String(tr.extra_devices.price_rub / 100) : "",
+    carry: tr?.carry_over ?? "inherit",
+    waits: tr?.starts_on_connect ?? false,
     more: (tr?.terms ?? []).slice(1).map((x) => ({
       key: nextKey++,
       days: tr?.billing_day != null ? (x.days ? String(termMonths(x.days)) : "0") : String(x.days),
@@ -99,15 +111,26 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
   const qc = useQueryClient();
   const toast = useToast();
   const [form, set, replace] = useFields(() => formOf(null));
-  const { name, gb, unlimited, duration, term, monthsN, billingDay, devices, devicesUnlimited, deviceMode, speed, speedUnlimited, reset, price, description, onSale, servers, groups, gifts, stars, rub, more, devMax, devStars, devRub } = form;
+  const { name, gb, unlimited, duration, term, monthsN, billingDay, devices, devicesUnlimited, deviceMode, speed, speedUnlimited, reset, price, description, onSale, servers, groups, gifts, clientGroup, stars, rub, more, devMax, devStars, devRub, carry, waits } =
+    form;
+  // A term with an end is one a subscription can wait to start.
+  const ends = term === "day" ? Number(monthsN) > 0 : Number(duration) > 0;
   const allPools = usePools();
   // With selling off the sale block is hidden; its values stay as they were.
   const selling = usePaymentSettings().data?.enabled === true;
   const allPackages = usePackages();
   const inbounds = useInbounds();
+  const clientGroups = useGroups();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // The clients' group stands in for the tariff's servers once it chose its own: what a
+  // client of the tariff stands on, which the gifts are held to (as the server holds them).
+  const byGroup = clientGroups.data?.find((g) => g.id === clientGroup && !g.servers.as_tariff);
+  const stands = byGroup ? { all: false, nodes: byGroup.servers.nodes, inbounds: byGroup.servers.inbounds } : servers;
   // What the form gives now: the packages that add to it can be gifts and be bought.
-  const draft: TariffQuotas = { trafficLimited: !unlimited, groups, served: inbounds.data ? servedGroups(servers, inbounds.data) : undefined };
+  const draft: TariffQuotas = { trafficLimited: !unlimited, groups, served: inbounds.data ? servedGroups(stands, inbounds.data) : undefined };
+  // When to reset is asked while a period has traffic to give anew: the main traffic with a
+  // limit, or a group with a limit of its own (with the main traffic unlimited, only these).
+  const renews = renewsTraffic(draft);
   const tariffId = tariff && tariff !== "new" ? tariff.id : 0;
   const giftable = (allPackages.data ?? []).filter((p) => fitsTariff(p, draft));
   const buyable = (allPackages.data ?? []).filter((p) => canBuy(p, fitsTariff(p, draft), tariffId));
@@ -195,7 +218,7 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
       device_limit: devicesUnlimited ? undefined : devN,
       device_mode: deviceMode,
       speed_limit: speedUnlimited ? undefined : speedN,
-      reset_strategy: unlimited ? "none" : reset,
+      reset_strategy: resetToSave(draft, reset),
       price_label: price.trim() || undefined,
       description: description.trim() || undefined,
       price_stars: stars.trim() ? starsN : undefined,
@@ -203,6 +226,8 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
       terms,
       on_sale: onSale,
       servers: serversBody(servers),
+      // Sent when it changes: the nodes are told of every group a tariff is given.
+      group_id: clientGroup !== (tariff && tariff !== "new" ? (tariff.group_id ?? 0) : 0) ? clientGroup : undefined,
       // What has not loaded is not sent: a missing field keeps the tariff's own, an empty
       // list would wipe its groups and gifts (and open its closed groups to everyone).
       pools: allPools.isSuccess ? groupSettings.settings : undefined,
@@ -218,6 +243,8 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
         : { max: devMaxN, price_stars: devStars.trim() ? devStarsN : null, price_rub: devRub.trim() ? devRubN : null },
       // PUT replaces the tariff: keep its place in the list.
       sort: tariff && tariff !== "new" ? tariff.sort : undefined,
+      carry_over: carry,
+      starts_on_connect: waits && ends,
     });
   };
 
@@ -288,6 +315,7 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
             </div>
           )}
         </Field>
+        {ends ? <SwitchRow className="mb-4 py-0" label={t("tariffs.waits")} sub={t("tariffs.waitsSub")} checked={waits} onChange={set.waits} /> : null}
         {term === "day" ? (
           <Field label={t("tariffs.billingDay")} htmlFor="t-bday" hint={t("tariffs.billingDayHint")} error={errors.billing_day}>
             <div className="flex items-center gap-2">
@@ -320,16 +348,21 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
             </label>
           </div>
         </Field>
+        {renews ? (
+          <Field label={t("tariffs.whenReset")} hint={unlimited ? t("tariffs.whenResetGroupsHint") : t("tariffs.whenResetHint")}>
+            <ResetPicker value={reset} onChange={set.reset} billingDay={term === "day" && Number(billingDay) >= 1 && Number(billingDay) <= 31 ? Number(billingDay) : null} />
+          </Field>
+        ) : null}
         {!unlimited ? (
-          <Field label={t("tariffs.whenReset")} hint={t("tariffs.whenResetHint")}>
+          <Field label={t("tariffs.carry")} hint={t("tariffs.carryHint")}>
             <Segmented
-              label={t("tariffs.reset")}
-              value={reset}
-              onChange={set.reset}
+              label={t("tariffs.carry")}
+              value={carry}
+              onChange={set.carry}
               options={[
-                { value: "period", label: t("tariffs.resetEvery30") },
-                { value: "month_start", label: term === "day" && Number(billingDay) >= 1 && Number(billingDay) <= 31 ? t("tariffs.resetOnDayShort", { d: Number(billingDay) }) : t("tariffs.resetMonthStart") },
-                { value: "none", label: t("tariffs.resetNever") },
+                { value: "inherit", label: t("tariffs.carryInherit") },
+                { value: "on", label: t("tariffs.carryOn") },
+                { value: "off", label: t("tariffs.carryOff") },
               ]}
             />
           </Field>
@@ -361,6 +394,7 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
               </div>
             )}
           </Field>
+          <ClientGroupField value={clientGroup} onChange={set.clientGroup} error={errors.group_id} />
           {allPools.isPending ? (
             <Field label={t("pools.tariffLimits")}>
               <Skeleton style={{ height: 88 }} />

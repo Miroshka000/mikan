@@ -82,6 +82,36 @@ func LoadUnbindRules(ctx context.Context, set *settings.Settings) (UnbindRules, 
 	return r, nil
 }
 
+// UnbindRulesOf are the rules the subscriber of userID unbinds by: its group's own when the
+// group has them (GroupAppearance.Unbind), else the panel's. A group's rules stored broken
+// are the panel's too.
+func UnbindRulesOf(ctx context.Context, q *db.Queries, set *settings.Settings, userID int64) (UnbindRules, error) {
+	u, err := q.GetUser(ctx, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return LoadUnbindRules(ctx, set)
+	}
+	if err != nil {
+		return DefaultUnbindRules, err
+	}
+	group, err := UserGroup(ctx, q, u)
+	if err != nil {
+		return DefaultUnbindRules, err
+	}
+	if group != 0 {
+		raw, err := q.GetGroupUnbindRules(ctx, group)
+		switch {
+		case err == nil && raw.Valid:
+			var r UnbindRules
+			if json.Unmarshal([]byte(raw.String), &r) == nil && r.Validate() == nil {
+				return r, nil
+			}
+		case err != nil && !errors.Is(err, sql.ErrNoRows):
+			return DefaultUnbindRules, err
+		}
+	}
+	return LoadUnbindRules(ctx, set)
+}
+
 // UnbindState is what the subscriber may do now under the rules.
 type UnbindState struct {
 	Rules UnbindRules
@@ -115,7 +145,7 @@ func (e *UnboundError) Is(target error) bool { return target == ErrDeviceUnbound
 
 // UnbindState of userID now.
 func (d *Devices) UnbindState(ctx context.Context, userID int64) (UnbindState, error) {
-	rules, err := LoadUnbindRules(ctx, d.set)
+	rules, err := UnbindRulesOf(ctx, d.st.Q, d.set, userID)
 	if err != nil {
 		return UnbindState{Rules: rules}, err
 	}

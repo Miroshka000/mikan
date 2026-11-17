@@ -201,7 +201,7 @@ func TestSupportTerminalSession(t *testing.T) {
 	if resp, body := op.enter(g.Token); resp.StatusCode != http.StatusOK {
 		t.Fatalf("enter: %d %s", resp.StatusCode, body)
 	}
-	for _, how := range []struct {
+	for i, how := range []struct {
 		name string
 		open func() (*term, *http.Response, error)
 	}{
@@ -242,6 +242,9 @@ func TestSupportTerminalSession(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("%s: the agent's session stayed open", name)
 		}
+		// The panel frees the terminal after the agent sees the stream end, and writes the end
+		// last: the next session opens after that line, or it would find the terminal busy.
+		waitAudit(t, s.harness, "support.terminal.end", i+1)
 	}
 
 	starts := waitAudit(t, s.harness, "support.terminal.start", 2)
@@ -376,7 +379,7 @@ func TestSupportTerminalEndsWithTheGrant(t *testing.T) {
 			s.terminalGrant(nil)
 		}, "revoked"},
 		"expired": {func(s *terminalHarness, g grantReply) {
-			s.now = s.now.Add(7 * time.Hour)
+			s.advance(7 * time.Hour)
 			if err := s.p.Support.Sweep(context.Background()); err != nil {
 				s.t.Fatal(err)
 			}
@@ -634,4 +637,35 @@ func TestSupportTerminalNotices(t *testing.T) {
 			t.Error("a token is in a message")
 		}
 	}
+}
+
+// Receiving "end" must permit reconnect even while the old WebSocket closing
+// handshake is waiting for its client. This used to retain the hub's busy slot.
+func TestSupportTerminalReconnectBeforeCloseHandshake(t *testing.T) {
+	s := newTerminalHarness(t)
+	g := s.terminalGrant(nil)
+	client := s.newOperator().client
+	first, resp, err := s.dialTerminal(client, bearerHeader(g.Token), "panel")
+	if err != nil {
+		t.Fatalf("first: %v %v", err, resp)
+	}
+	session := s.agent.Next()
+	if first.control("ready") == nil {
+		t.Fatal("first not ready")
+	}
+	session.End("exit")
+	if first.control("end") == nil {
+		t.Fatal("first did not end")
+	}
+	// Do not read/acknowledge the first connection's closing frame yet.
+	second, resp, err := s.dialTerminal(client, bearerHeader(g.Token), "panel")
+	if err != nil {
+		t.Fatalf("reconnect: %v %v", err, resp)
+	}
+	if second.control("ready") == nil {
+		t.Fatalf("reconnect refused: %v", second.msgs)
+	}
+	_ = first.c.CloseNow()
+	_ = second.c.Close(websocket.StatusNormalClosure, "")
+	waitAudit(t, s.harness, "support.terminal.end", 2)
 }

@@ -343,7 +343,7 @@ func TestSupportAccessExpires(t *testing.T) {
 		t.Fatalf("the new grant's token: %d", resp.StatusCode)
 	}
 	// Two hours and a minute on.
-	s.now = s.now.Add(2*time.Hour + time.Minute)
+	s.advance(2*time.Hour + time.Minute)
 	if resp, _ := live.do(http.MethodGet, "/users", nil, bearerOf(spare.Token)); resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("an expired token: %d", resp.StatusCode)
 	}
@@ -373,6 +373,7 @@ func TestSupportOperatorBoundaries(t *testing.T) {
 	closed := []struct{ method, path string }{
 		{http.MethodGet, "/auth/me"}, {http.MethodGet, "/auth/sessions"}, {http.MethodPost, "/auth/password"},
 		{http.MethodPost, "/auth/totp/setup"}, {http.MethodPost, "/auth/totp/disable"}, {http.MethodPost, "/auth/logout"},
+		{http.MethodGet, "/auth/passkeys"}, {http.MethodPost, "/auth/passkeys/begin"}, {http.MethodPost, "/auth/passkeys"}, {http.MethodDelete, "/auth/passkeys/1"},
 		{http.MethodGet, "/api-keys"}, {http.MethodPost, "/api-keys"}, {http.MethodDelete, "/api-keys/1"},
 		{http.MethodGet, "/support/grants"}, {http.MethodPost, "/support/grants"}, {http.MethodDelete, "/support/grants/1"},
 		{http.MethodPost, "/settings/reset-admin-path"},
@@ -856,7 +857,7 @@ func TestSupportAdminNotices(t *testing.T) {
 	if _, code, _ := s.grant(map[string]any{"hours": 2, "level": "view"}); code != http.StatusCreated {
 		t.Fatal("second grant")
 	}
-	h.now = h.now.Add(3 * time.Hour)
+	h.advance(3 * time.Hour)
 	if err := h.p.Support.Sweep(ctx); err != nil {
 		t.Fatal(err)
 	}

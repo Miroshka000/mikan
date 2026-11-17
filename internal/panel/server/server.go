@@ -18,16 +18,25 @@ type Server struct {
 	paths  atomic.Pointer[settings.Paths]
 	admin  http.Handler
 	sub    http.Handler
-	legacy http.Handler // the old panel's links (settings.Paths.Legacy); nil: none
-	site   http.Handler // every other path (OwnSite); nil: NotFound
+	relay  func(http.ResponseWriter, *http.Request) bool // dedicated subscription key only, on the panel listener
+	legacy http.Handler                                  // the old panel's links (settings.Paths.Legacy); nil: none
+	site   http.Handler                                  // every other path (OwnSite); nil: NotFound
 	hsts   atomic.Pointer[func() bool]
 	// hello answers a node's hello and says so; whatever it does not answer is served
 	// like any unknown path (see nodehello). nil: none.
 	hello func(w http.ResponseWriter, r *http.Request) bool
+	// self answers the panel's own probe of its address (selfaddr) the same way. nil: none.
+	self func(w http.ResponseWriter, r *http.Request) bool
 }
+
+// SetSubscriptionRelay installs the authenticated mikan-sub endpoint.
+func (s *Server) SetSubscriptionRelay(h func(http.ResponseWriter, *http.Request) bool) { s.relay = h }
 
 // SetHello takes the handler of the nodes' hellos.
 func (s *Server) SetHello(h func(w http.ResponseWriter, r *http.Request) bool) { s.hello = h }
+
+// SetSelf takes the handler of the panel's own probes of its address.
+func (s *Server) SetSelf(h func(w http.ResponseWriter, r *http.Request) bool) { s.self = h }
 
 // SetLegacy takes the handler of the old panel's subscription links.
 func (s *Server) SetLegacy(h http.Handler) { s.legacy = h }
@@ -78,6 +87,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 	seg, rest, _ := strings.Cut(p[1:], "/")
 	paths := s.paths.Load()
 	switch {
+	case admin && s.relay != nil && paths.Sub != "" && secure.Equal(seg, paths.Sub) && strings.HasPrefix(rest, "relay/"):
+		r2 := r.Clone(r.Context())
+		r2.URL.Path, r2.URL.RawPath = strings.TrimPrefix(rest, "relay"), ""
+		if !s.relay(w, r2) {
+			// Without the key it is one more path under the subscriptions: their handler
+			// answers it as it answers any other one it does not know.
+			s.forward(w, r, s.sub, seg, rest, p)
+		}
 	case admin && seg != "" && paths.Admin != "" && secure.Equal(seg, paths.Admin):
 		s.forward(w, r, s.admin, seg, rest, p)
 	case seg != "" && paths.Sub != "" && secure.Equal(seg, paths.Sub):
@@ -89,6 +106,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 		r2.URL.RawPath = ""
 		s.legacy.ServeHTTP(w, r2)
 	case s.hello != nil && s.hello(w, r):
+	case s.self != nil && s.self(w, r):
 	default:
 		s.other(w, r)
 	}

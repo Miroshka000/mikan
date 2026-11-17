@@ -406,6 +406,7 @@ LEFT JOIN (SELECT user_id, SUM(remaining) AS left_bytes FROM traffic_grants
            WHERE pool_id IS NULL AND remaining > 0 AND (expires_at IS NULL OR expires_at > $1::bigint)
            GROUP BY user_id) g ON g.user_id = users.id
 WHERE COALESCE(c.blocked, 0) = 0
+  AND NOT EXISTS (SELECT 1 FROM user_starts s WHERE s.user_id = users.id)
 ORDER BY users.id
 `
 
@@ -416,7 +417,9 @@ type ListNoticeSubscriptionsRow struct {
 }
 
 // The subscriptions the bot may tell about (linked, the chat not blocked) with what is
-// left of their main grants: one read for a round of notices.
+// left of their main grants: one read for a round of notices. A term that waits for its
+// first connection is left out: nothing of it runs yet, and the expiry it shows moves on
+// with the clock, which would make every round a new notice.
 func (q *Queries) ListNoticeSubscriptions(ctx context.Context, now int64) ([]ListNoticeSubscriptionsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listNoticeSubscriptions, now)
 	if err != nil {

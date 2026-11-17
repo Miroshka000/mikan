@@ -7,6 +7,6 @@
     "shoot": "node shoot.mjs"
   },
   "devDependencies": {
-    "puppeteer-core": "^24.0.0"
+    "puppeteer-core": "^25.16.0"
   }
 }

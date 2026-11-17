@@ -13,3 +13,8 @@ SELECT user_id FROM trials WHERE tg_id = $1;
 
 -- name: CountTrials :one
 SELECT count(*) FROM trials;
+
+-- name: UserPaidBeyondTrial :one
+-- Whether the user paid for anything besides the trial: a payment refunded since included,
+-- it was a purchase.
+SELECT EXISTS (SELECT 1 FROM payments WHERE user_id = sqlc.arg(user_id)::bigint AND status IN ('paid', 'applied', 'refunded') AND kind <> 'trial');

@@ -22,7 +22,7 @@ type CopyInbound struct {
 // Copy makes a new inbound from a set-up one: the same protocol and settings, on the same
 // or another node, with keys of its own (presets.Rekey) and, when asked, another port or
 // REALITY target. It is checked like any new inbound before it is saved. The copy starts
-// direct to the internet, on all addresses, in the original's traffic pool.
+// direct to the internet, on all addresses, in the original's traffic pool, with its labels.
 func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbound, error) {
 	src, err := s.st.Q.GetInbound(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -61,8 +61,8 @@ func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbou
 			return db.Inbound{}, err
 		}
 	}
-	if !ValidPort(port) {
-		return db.Inbound{}, ErrBadPort
+	if err := checkNewPort(port); err != nil {
+		return db.Inbound{}, err
 	}
 	config := proto.Marshal(t)
 	if _, err := s.CheckTemplate(ctx, node, config, port); err != nil {
@@ -78,7 +78,7 @@ func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbou
 			return err
 		}
 		now := s.now().Unix()
-		row, err = q.CreateInbound(ctx, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, src.Name), Preset: src.Preset, Port: port,
+		row, err = createInbound(ctx, q, db.CreateInboundParams{NodeID: node.ID, Name: FreeName(existing, src.Name), Preset: src.Preset, Port: port,
 			Config: config, CreatedAt: now, UpdatedAt: now})
 		if err != nil {
 			return err
@@ -89,7 +89,18 @@ func (s *Inbounds) Copy(ctx context.Context, id int64, in CopyInbound) (db.Inbou
 			}
 			row.PoolID = src.PoolID
 		}
-		return nil
+		if src.Tags != row.Tags {
+			if err := q.SetInboundTags(ctx, db.SetInboundTagsParams{Tags: src.Tags, ID: row.ID}); err != nil {
+				return err
+			}
+			row.Tags = src.Tags
+		}
+		// The copy is reached at the same places: its default host came with the template,
+		// and takes the original's own fields of it.
+		if err := q.CopyDefaultHostOptions(ctx, db.CopyDefaultHostOptionsParams{ToInbound: row.ID, FromInbound: src.ID}); err != nil {
+			return err
+		}
+		return q.CopyInboundHosts(ctx, db.CopyInboundHostsParams{ToInbound: row.ID, FromInbound: src.ID})
 	})
 	return row, err
 }

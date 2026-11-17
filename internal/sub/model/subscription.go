@@ -1,0 +1,193 @@
+package model
+
+import (
+	"errors"
+	"strings"
+	"unicode"
+	"unicode/utf8"
+
+	"mikan/internal/textutil"
+)
+
+// Endpoint describes how clients reach one node.
+type Endpoint struct {
+	Host      string // IP or domain the client connects to
+	SNI       string // TLS server name for Hysteria2/TUIC; empty for IP-only nodes
+	PinSHA256 string // hex SHA-256 of the node's self-signed Hysteria2/TUIC certificate
+	// SNIRouter: the node shares its 443 between the inbounds marked for it, which clients
+	// reach on 443.
+	SNIRouter bool
+}
+
+// Node is one server in the subscription.
+type Node struct {
+	ID int64
+	// Name is the node's country group, e.g. "🇳🇱 Нидерланды"; with several nodes its
+	// leading flag (or the whole name) prefixes proxy names.
+	Name     string
+	Endpoint Endpoint
+	// Hosts are the node's own address and domain, kept out of the tunnel in the profiles
+	// of the clients the node serves, and of those alone: a client learns no server it has
+	// no proxy on. Empty for the panel's own node, whose hosts are the panel's.
+	Hosts []string
+	// SSOneKey: the node is older than the Shadowsocks-2022 key per user (build.Input).
+	SSOneKey bool
+	// NoAuto keeps the node's servers out of the automatic choice: the admin's word (a
+	// server for whitelist-only networks), or the node does not answer the panel.
+	NoAuto bool
+}
+
+// Inbound is one inbound of a node as the subscription sees it.
+type Inbound struct {
+	ID   int64
+	Node int64
+	Pool int64 // the inbound's server group; 0: none, the main servers
+	// Label is the inbound's name in the admin panel, which a log about it gives.
+	Label string
+	// Name is its name in the subscription: the admin's own (Named) or its protocol's.
+	Name string
+	// Named: the admin named it, and the name goes as typed, without the node's flag.
+	Named bool
+	// Port is the first port of PortSpec, the one a client dials first; 0 when PortSpec
+	// reads as no port, and the inbound is left out.
+	Port     int
+	PortSpec string // "443", or a Hysteria2 hopping range ("20000-30000")
+	Config   string // the template (proto)
+	// NoAuto keeps the inbound's servers out of the automatic choice (as Node.NoAuto).
+	NoAuto bool
+	// Hosts are the places clients reach the inbound at, the default one first; each is a
+	// proxy. The build reads the default one from the template's mikan.client, which it repeats.
+	Hosts []Host
+	// Override is where the user's group reaches the default host instead; the zero one: as
+	// everyone does.
+	Override AddressOverride
+}
+
+// AddressOverride is where a group's clients reach an inbound in place of its default
+// address: each field set goes over what the default host gives them, the rest stays.
+type AddressOverride struct {
+	Address string
+	Port    int
+	SNI     string
+	Host    string // HTTP Host of WebSocket and XHTTP
+	// Name is the proxy's name, the variables of the profile title in it as in Host.Name.
+	Name string
+	// CDN: a CDN in front shows its own certificate, so the node's is not pinned.
+	CDN bool
+}
+
+// Host is one place clients reach an inbound at; an empty field (port 0) keeps what they get
+// without it: the node's address, the inbound's port, the usual TLS name, the server's HTTP
+// Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing, the inbound's name. The host's
+// own fields (ALPN to Name) are the default host's too, and no template holds them.
+type Host struct {
+	ID int64 // the panel's, for good: a user's choice of Addresses and SNIs follows it
+	// Order is the host's place among the servers of every node (the admin's order of the
+	// subscription); 0: none, it follows the server before it.
+	Order       int64
+	Address     string
+	Port        int
+	SNI         string
+	Host        string // HTTP Host of WebSocket and XHTTP
+	Fingerprint string // uTLS profile
+	ALPN        []string
+	IPVersion   string // ipv4, ipv6, ipv4-prefer, ipv6-prefer (mihomo's ip-version)
+	Mux         bool   // sing-mux
+	MuxProtocol string // smux, yamux, h2mux; "": the app's own
+	MuxPadding  bool
+	// CDN: a CDN in front shows its own certificate, so the node's is not pinned.
+	CDN bool
+	// Name is the proxy's name, the variables of the profile title in it ({days}, {left}…)
+	// filled for the user (build.Profile.Vars); "": the inbound's.
+	Name string
+	// Addresses and SNIs are more of Address and SNI: the user gets one of the host's own
+	// and these, the same one at every update (build.Profile.Seed).
+	Addresses []string
+	SNIs      []string
+	// Hidden: the host is not for this user (the panel shows it to some states of the
+	// subscriptions, or to the trial's or the others' alone); the profile leaves it out.
+	Hidden bool
+}
+
+// GroupNames are the proxy-group names Clash-family apps show; the admin can rename them.
+type GroupNames struct {
+	Main string // selector, "VPN" by default
+	Auto string // url-test, "Авто" by default, "Auto" on a panel in English
+}
+
+// AliasGroup is the name Clash apps assume for the main group in the rules they inject
+// themselves (Koala Clash per-app routing: "PROCESS-NAME,app.exe,PROXY").
+const AliasGroup = "PROXY"
+
+// WithDefaults fills in the names the admin left empty, in the panel's default language
+// ("en", Russian otherwise).
+func (g GroupNames) WithDefaults(lang string) GroupNames {
+	if g.Main == "" {
+		g.Main = "VPN"
+	}
+	if g.Auto == "" {
+		g.Auto = "Авто"
+		if textutil.Lang(lang).En() {
+			g.Auto = "Auto"
+		}
+	}
+	return g
+}
+
+// CheckName refuses a name the admin typed for something that shows in Clash apps next to
+// the groups (a node's country group, a protocol's connection): the name must pass
+// ValidName and not repeat one of the groups, or the profile does not load. The error is a
+// code (name_blank, name_is_group…) the UI turns into words.
+func (g GroupNames) CheckName(name string) error {
+	if err := ValidName(name); err != nil {
+		return err
+	}
+	for _, x := range []string{g.Main, g.Auto, AliasGroup} {
+		if strings.EqualFold(name, x) {
+			return errors.New("name_is_group")
+		}
+	}
+	return nil
+}
+
+// reserved names are mihomo's built-in policies; a group or proxy with such a name
+// breaks the profile.
+var reserved = []string{"DIRECT", "REJECT", "REJECT-DROP", "PASS", "COMPATIBLE", "GLOBAL"}
+
+// ValidName checks a group or proxy name the admin typed. Commas are refused because
+// rules reference groups as "MATCH,<name>".
+func ValidName(s string) error {
+	switch {
+	case s == "" || strings.TrimSpace(s) != s:
+		return errors.New("name_blank")
+	case utf8.RuneCountInString(s) > 48:
+		return errors.New("name_too_long")
+	case strings.ContainsAny(s, NameBadChars):
+		return errors.New("name_bad_char")
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return errors.New("name_bad_char")
+		}
+	}
+	if Reserved(s) {
+		return errors.New("name_reserved")
+	}
+	return nil
+}
+
+// NameBadChars are the characters no name has (ValidName).
+const NameBadChars = ",\"'\\"
+
+// Reserved says whether s is one of mihomo's built-in policies, in any case.
+func Reserved(s string) bool {
+	for _, x := range reserved {
+		if strings.EqualFold(s, x) {
+			return true
+		}
+	}
+	return false
+}
+
+// ErrNoProxies: nothing of the profile is left for the app, or for any app.
+var ErrNoProxies = errors.New("no proxies")

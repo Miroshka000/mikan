@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ApiError, errorText } from "../../api/client";
 import { userActions, useTariffs, useUserMutation } from "../../api/hooks";
 import { Drawer, DrawerFooter } from "../../components/overlay";
+import { SwitchRow } from "../../components/switch";
 import { useToast } from "../../components/toast";
 import { Field, Skeleton } from "../../components/ui";
 import { t } from "../../i18n";
@@ -17,12 +18,18 @@ export function CreateUserDrawer({ open, onOpenChange, onCreated }: { open: bool
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
   const [tariffId, setTariffId] = useState<number>();
+  // Whether the term waits for the first connection: the chosen tariff's own word until the
+  // admin says otherwise for this client.
+  const [wait, setWait] = useState<boolean>();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const tariff = tariffs.data?.find((tr) => tr.id === tariffId);
+  const waits = wait ?? tariff?.starts_on_connect ?? false;
 
   useEffect(() => {
     if (!open) return;
     setName("");
     setContact("");
+    setWait(undefined);
     setErrors({});
     resetCreate();
   }, [open, resetCreate]);
@@ -45,7 +52,8 @@ export function CreateUserDrawer({ open, onOpenChange, onCreated }: { open: bool
       return;
     }
     create.mutate(
-      { name: name.trim(), contact: contact.trim() || undefined, tariff_id: tariffId },
+      // The admin's own word only: without it the tariff decides on the server, as it is then.
+      { name: name.trim(), contact: contact.trim() || undefined, tariff_id: tariffId, starts_on_connect: wait },
       {
         onSuccess: async (u) => {
           try {
@@ -92,7 +100,18 @@ export function CreateUserDrawer({ open, onOpenChange, onCreated }: { open: bool
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t("userCreate.tariff")}>
               {(tariffs.data ?? []).map((tr) => (
-                <button key={tr.id} type="button" role="radio" aria-checked={tariffId === tr.id} className={clsx("opt")} onClick={() => setTariffId(tr.id)}>
+                <button
+                  key={tr.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={tariffId === tr.id}
+                  className={clsx("opt")}
+                  onClick={() => {
+                    setTariffId(tr.id);
+                    // Another tariff has a word of its own.
+                    setWait(undefined);
+                  }}
+                >
                   <span className="font-semibold">{tr.name}</span>
                   <span className="text-xs text-[var(--ink-500)]">{tariffSummary(tr)}</span>
                   {tr.price_label ? <span className="mt-1 text-[13px] font-medium text-[var(--mikan-700)]">{tr.price_label}</span> : null}
@@ -101,6 +120,9 @@ export function CreateUserDrawer({ open, onOpenChange, onCreated }: { open: bool
             </div>
           )}
         </Field>
+        {tariff && tariff.duration_days > 0 ? (
+          <SwitchRow label={t("userCreate.wait")} sub={t("userCreate.waitSub")} checked={waits} onChange={setWait} />
+        ) : null}
       </form>
     </Drawer>
   );

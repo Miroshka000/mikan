@@ -18,7 +18,7 @@ import (
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
-	"mikan/internal/panel/subs"
+	"mikan/internal/panel/subsrc"
 	"mikan/internal/release"
 )
 
@@ -164,7 +164,7 @@ var nodeDNS = dnscheck.New()
 // nodeRules are what a node's name and domain are checked against: the same as in the
 // admin panel, the subscription's groups and public DNS.
 func nodeRules(ctx context.Context, st *store.Store) (domain.NodeRules, error) {
-	g, err := subs.LoadGroups(ctx, settings.New(st.Q))
+	g, err := subsrc.LoadGroups(ctx, settings.New(st.Q))
 	if err != nil {
 		return domain.NodeRules{}, err
 	}

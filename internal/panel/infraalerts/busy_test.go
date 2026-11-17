@@ -29,6 +29,9 @@ func (busyNodes) ScanTargets(context.Context, int64, nodeapi.TargetScanRequest) 
 	return nodeapi.TargetScan{}, nodeapi.ErrUnavailable
 }
 func (b busyNodes) Health(id int64) (nodesync.HealthView, bool) { return b.health, id == 1 }
+func (busyNodes) Probe(context.Context, int64, string) (nodeapi.ProbeResult, error) {
+	return nodeapi.ProbeResult{}, nodeapi.ErrUnavailable
+}
 
 type noChanges struct{}
 

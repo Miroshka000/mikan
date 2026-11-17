@@ -1,0 +1,31 @@
+{
+ "success": true,
+ "msg": "",
+ "obj": [
+  {
+   "id": 1,
+   "email": "anna",
+   "subId": "anna0sub0long0id",
+   "limitIp": 2,
+   "limitHwid": 5,
+   "totalGB": 10737418240,
+   "expiryTime": 1893456000000,
+   "enable": true,
+   "inboundIds": [
+    1,
+    6
+   ]
+  },
+  {
+   "id": 2,
+   "email": "boris",
+   "subId": "boris0sub0long00",
+   "limitIp": 0,
+   "limitHwid": 0,
+   "enable": false,
+   "inboundIds": [
+    1
+   ]
+  }
+ ]
+}

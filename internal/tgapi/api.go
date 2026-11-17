@@ -379,6 +379,22 @@ func (c *Client) SendTo(ctx context.Context, chat string, text string, silent bo
 	return m, err
 }
 
+// SendToTopic is SendTo for a group, into its topic thread (message_thread_id) when thread
+// is not 0. Text Telegram cannot parse goes as plain text, as Send's does.
+func (c *Client) SendToTopic(ctx context.Context, chat string, thread int64, text string) (Message, error) {
+	var m Message
+	in := htmlText(chat, text)
+	if thread != 0 {
+		in["message_thread_id"] = thread
+	}
+	err := c.call(ctx, "sendMessage", in, &m)
+	if unparsable(err) {
+		asPlain(in, text)
+		err = c.call(ctx, "sendMessage", in, &m)
+	}
+	return m, err
+}
+
 // EditTo edits a message in a channel identified by numeric id or @username.
 func (c *Client) EditTo(ctx context.Context, chat string, msg int64, text string) error {
 	in := htmlText(chat, text)
@@ -453,6 +469,25 @@ func (c *Client) SetMenuButton(ctx context.Context, text, url string) error {
 		btn = map[string]any{"type": "web_app", "text": text, "web_app": map[string]string{"url": url}}
 	}
 	return c.call(ctx, "setChatMenuButton", map[string]any{"menu_button": btn}, nil)
+}
+
+// MenuButton is the Mini App button of the private chats: its text and link, "" for both
+// while the chats show the command list.
+func (c *Client) MenuButton(ctx context.Context) (text, url string, err error) {
+	var out struct {
+		Type   string `json:"type"`
+		Text   string `json:"text"`
+		WebApp struct {
+			URL string `json:"url"`
+		} `json:"web_app"`
+	}
+	if err := c.call(ctx, "getChatMenuButton", map[string]any{}, &out); err != nil {
+		return "", "", err
+	}
+	if out.Type != "web_app" {
+		return "", "", nil
+	}
+	return out.Text, out.WebApp.URL, nil
 }
 
 // SuccessfulPayment is what Telegram reports after a Stars payment.

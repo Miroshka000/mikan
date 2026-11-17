@@ -12,6 +12,7 @@ import { serverName } from "../../lib/node-label";
 import { timeLeft } from "../../lib/format";
 import { useNow } from "../../lib/now";
 import { CardHead } from "../../components/layout";
+import { Select } from "../../components/select";
 
 const Term = lazy(() => import("../../components/term"));
 
@@ -131,13 +132,13 @@ export function TerminalTab({ who }: { who: SupportWhoami }) {
         <>
           <div className="flex flex-wrap items-end gap-3">
             <Field label={t("diag.server")} htmlFor="term-target">
-              <select id="term-target" className="input min-w-[220px]" value={target} disabled={busy} onChange={(e) => setTarget(e.target.value)}>
+              <Select id="term-target" className="input min-w-[220px]" value={target} disabled={busy} onChange={(e) => setTarget(e.target.value)}>
                 {targets.map((x) => (
                   <option key={x} value={x}>
                     {serverName(x, who.nodes)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <div ref={actions} className="mb-4 flex flex-wrap gap-2">
               {busy ? (

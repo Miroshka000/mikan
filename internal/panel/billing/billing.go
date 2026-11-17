@@ -203,7 +203,11 @@ func LoadConfig(ctx context.Context, set *settings.Settings) (Config, error) {
 func (s *Service) Config(ctx context.Context) Config {
 	c, err := s.LoadConfig(ctx)
 	if err != nil {
-		s.d.Log.Warn("billing: payment settings unreadable, selling paused", "err", err)
+		// A caller that left (a page closed before the answer) failed only its own read: the
+		// store is fine and selling goes on for everyone else.
+		if ctx.Err() == nil {
+			s.d.Log.Warn("billing: payment settings unreadable, selling paused", "err", err)
+		}
 		c.Enabled = false
 	}
 	return c
@@ -339,7 +343,7 @@ func (s *Service) contents(ctx context.Context, ts []db.Tariff) (map[int64][]Off
 	if err != nil {
 		return nil, nil, err
 	}
-	servers, err := domain.AllTariffServers(ctx, q)
+	servers, err := domain.LoadServerBook(ctx, q)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -369,7 +373,7 @@ func (s *Service) contents(ctx context.Context, ts []db.Tariff) (map[int64][]Off
 	}
 	groups, gifts := map[int64][]OfferGroup{}, map[int64][]OfferGift{}
 	for _, t := range ts {
-		serves := domain.ServersOf(servers, sql.NullInt64{Int64: t.ID, Valid: true}).Groups(ins)
+		serves := servers.OfTariff(t.ID).Groups(ins)
 		for _, p := range pools {
 			if serves[p.ID] {
 				mode, limit := domain.TariffPoolMode(byTariff[t.ID], p.ID)
@@ -951,7 +955,8 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 			}
 		}
 		if u, created, err = s.d.Users.Purchase(ctx, q, domain.PurchaseInput{UserID: userID, TariffID: pay.TariffID.Int64,
-			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), TgID: pay.TgID, ResetTraffic: reset, KeepExtraDevices: cfg.ExtraDevicesKeep}); err != nil {
+			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), TgID: pay.TgID, ResetTraffic: reset, KeepExtraDevices: cfg.ExtraDevicesKeep,
+			PaymentID: pay.ID}); err != nil {
 			return err
 		}
 		// The tariff's gifts come with every payment for it, on its transaction: a refund

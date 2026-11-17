@@ -58,6 +58,11 @@ const (
 // its hello came from.
 const IPDiffers = "ip_differs"
 
+// MovedFrom is the Result.Params entry of a node the panel moved to the address its hello
+// came from: it could not reach the node at the old one, the node answered at the new one.
+// The value is the old address.
+const MovedFrom = "moved_from"
+
 // Request is a hello.
 type Request struct {
 	Cert  string `json:"cert"`  // the node's certificate, PEM

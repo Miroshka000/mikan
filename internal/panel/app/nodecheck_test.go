@@ -100,6 +100,24 @@ func TestCheckNodeAndHello(t *testing.T) {
 	api := "/" + adminPath + "/api/v1"
 	waitFor(t, func() bool { _, ok := h.p.Nodes.Syncer(n.ID); return ok })
 
+	// The Cascade window of B sends other nodes' traffic on to the panel's node, and C once
+	// left through B: B keeps a relay and C's key, but nobody leaves through B now. The relay
+	// does not run, so the check neither dials its port nor asks about its way on.
+	if resp, body := h.do(http.MethodPatch, api+"/nodes/"+strconv.FormatInt(n.ID, 10)+"/cascade", map[string]any{"outbound": "node", "exit_node_id": 1}, csrf); resp.StatusCode != http.StatusOK {
+		t.Fatalf("B's cascade: %d %s", resp.StatusCode, body)
+	}
+	c, err := h.st.Q.CreateNode(ctx, db.CreateNodeParams{Name: "C", Address: "198.51.100.30:40000", PublicHost: "198.51.100.30", CreatedAt: 1, UpdatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := domain.UseExit(ctx, h.st.Q, c.ID, n.ID, time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	relay, err := h.st.Q.GetNodeRelay(ctx, n.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	resp, body := h.do(http.MethodPost, api+"/nodes/"+strconv.FormatInt(n.ID, 10)+"/check", nil, csrf)
 	var v checkView
 	if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &v) != nil {
@@ -108,6 +126,19 @@ func TestCheckNodeAndHello(t *testing.T) {
 	got := map[string]string{}
 	for _, it := range v.Items {
 		got[it.ID] = it.Status + "/" + it.Code + "/" + it.Fix
+		if it.ID == "relay" || it.ID == "cascade" || it.ID == "port" && (it.Params["name"] == "relay" || it.Params["port"] == relay.Port) {
+			t.Errorf("a relay nobody leaves through is checked: %+v", it)
+		}
+	}
+	var cv struct {
+		Relay *struct {
+			Sources []any `json:"sources"`
+		} `json:"relay"`
+		Exits []any `json:"exits"`
+	}
+	if resp, body := h.do(http.MethodGet, api+"/nodes/"+strconv.FormatInt(n.ID, 10)+"/cascade", nil, nil); resp.StatusCode != http.StatusOK || json.Unmarshal(body, &cv) != nil ||
+		cv.Relay == nil || len(cv.Relay.Sources) != 0 || len(cv.Exits) != 0 {
+		t.Fatalf("B's cascade without sources: %d %s", resp.StatusCode, body)
 	}
 	for id, want := range map[string]string{
 		"link":      "ok//",

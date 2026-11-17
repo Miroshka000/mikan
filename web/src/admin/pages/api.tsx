@@ -15,6 +15,7 @@ import { useCopy } from "../../lib/copy";
 import { fieldErrors } from "../../lib/fields";
 import { ago, dateShort } from "../../lib/format";
 import { CardHead } from "../../components/layout";
+import { Select } from "../../components/select";
 
 // The reference parses the whole OpenAPI spec: loaded only when the page opens.
 const ApiReference = lazy(() => import("./api-reference"));
@@ -104,7 +105,7 @@ function KeyRow({ k, onRevoke }: { k: APIKey; onRevoke: () => void }) {
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-[13px] font-medium">{k.name}</span>
-          <span className="tag">{k.scope === "full" ? t("apiPage.scopeFull") : t("apiPage.scopeRead")}</span>
+          <span className="tag">{k.scope === "subscription" ? t("apiPage.scopeSubscription") : k.scope === "full" ? t("apiPage.scopeFull") : t("apiPage.scopeRead")}</span>
           {expired ? <span className="pill bad">{t("apiPage.expired")}</span> : null}
         </div>
         <div className="mt-1 text-xs text-[var(--ink-500)]">
@@ -177,25 +178,26 @@ function NewKeyDrawer({ open, onOpenChange, onMade }: { open: boolean; onOpenCha
         <Field label={t("apiPage.name")} htmlFor="k-name" hint={t("apiPage.nameHint")} error={errors.name}>
           <input id="k-name" className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="billing-bot" autoComplete="off" aria-invalid={!!errors.name} />
         </Field>
-        <Field label={t("apiPage.scope")} hint={scope === "full" ? t("apiPage.scopeFullHint") : t("apiPage.scopeReadHint")}>
+        <Field label={t("apiPage.scope")} hint={scope === "subscription" ? t("apiPage.scopeSubscriptionHint") : scope === "full" ? t("apiPage.scopeFullHint") : t("apiPage.scopeReadHint")}>
           <Segmented
             label={t("apiPage.scope")}
             value={scope}
             onChange={setScope}
             options={[
+              { value: "subscription", label: t("apiPage.scopeSubscription") },
               { value: "read", label: t("apiPage.scopeRead") },
               { value: "full", label: t("apiPage.scopeFull") },
             ]}
           />
         </Field>
         <Field label={t("apiPage.expiry")} htmlFor="k-exp">
-          <select id="k-exp" className="input max-w-[240px]" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+          <Select id="k-exp" className="input max-w-[240px]" value={days} onChange={(e) => setDays(Number(e.target.value))}>
             {expiries.map((d) => (
               <option key={d} value={d}>
                 {d === 0 ? t("apiPage.expiryNever") : t("apiPage.expiryDays", { d })}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("apiPage.password")} htmlFor="k-pw" hint={t("apiPage.passwordHint")} error={errors.password}>
           <input id="k-pw" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" aria-invalid={!!errors.password} />

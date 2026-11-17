@@ -120,7 +120,8 @@ func (h *handlers) registerAddons() {
 
 func (h *handlers) catalog(ctx context.Context) (addons.Catalog, error) {
 	c, err := h.d.Addons.Catalog(ctx)
-	if err != nil {
+	// A request the admin left tells nothing of GitHub.
+	if err != nil && ctx.Err() == nil {
 		h.d.Log.Warn("addons: catalog", "err", err)
 	}
 	return c, err

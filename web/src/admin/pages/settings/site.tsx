@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, FileCode2, Gamepad2, Search, Server, Wrench, XCircle } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Check, ExternalLink, FileCode2, Gamepad2, LayoutTemplate, PencilRuler, Search, Server, Wrench, XCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { api, errorText, unwrap, type Schemas } from "../../../api/client";
 import { qk, useNodes } from "../../../api/hooks";
@@ -18,6 +19,7 @@ const OPTIONS: { id: Site; icon: typeof Wrench }[] = [
   { id: "", icon: XCircle },
   { id: "maintenance", icon: Wrench },
   { id: "cats", icon: Gamepad2 },
+  { id: "custom", icon: LayoutTemplate },
 ];
 
 /** The nodes the card holds; the rest open beside it, so many nodes keep the page short. */
@@ -35,6 +37,7 @@ export function SiteCard({ s }: { s: Schemas["SettingsView"] }) {
   const nodes = useNodes();
   const list = nodes.data ?? [];
   const [allNodes, setAllNodes] = useState(false);
+  const navigate = useNavigate();
   // The targets that have another page get it, all at once: the panel (null) and the nodes.
   // Those that fail are named with the first reason; the others stay saved.
   const save = useMutation({
@@ -70,6 +73,7 @@ export function SiteCard({ s }: { s: Schemas["SettingsView"] }) {
       key={n.id}
       name={nodeLabel(n)}
       value={n.front_page}
+      own={s.site_page}
       note={frontPageReady(n.version) ? undefined : t("settings.site.nodeOld", { version: n.version ?? "" })}
       disabled={save.isPending}
       onChange={(page) => save.mutate({ targets: [n], page })}
@@ -101,7 +105,8 @@ export function SiteCard({ s }: { s: Schemas["SettingsView"] }) {
               aria-checked={checked}
               className="theme-tile"
               disabled={save.isPending || !nodes.isSuccess}
-              onClick={() => !checked && toAll(o.id)}
+              // The admin's own page is made first: with none saved the tile opens the builder.
+              onClick={() => (o.id === "custom" && !s.site_page ? void navigate({ to: "/settings/site-builder" }) : !checked && toAll(o.id))}
             >
               <span className="grid h-16 place-items-center rounded-xl bg-[var(--surface)] text-[var(--ink-500)]" aria-hidden>
                 <Icon size={24} />
@@ -115,6 +120,9 @@ export function SiteCard({ s }: { s: Schemas["SettingsView"] }) {
         })}
       </div>
       {hint ? <p className="mt-3 text-xs text-[var(--ink-500)]">{hint}</p> : null}
+      <Link to="/settings/site-builder" className="btn btn-glass btn-sm mt-3">
+        <PencilRuler size={16} aria-hidden /> {t("settings.site.builder")}
+      </Link>
       <h3 className="mt-6 text-[13px] font-semibold text-[var(--ink-700)]">{t("settings.site.each")}</h3>
       {nodes.isPending ? (
         <div className="mt-2 flex flex-col gap-2" role="status" aria-busy aria-label={t("common.loading")}>
@@ -129,7 +137,7 @@ export function SiteCard({ s }: { s: Schemas["SettingsView"] }) {
       ) : (
         <>
           <ul className="row-list">
-            <SiteRow name={t("settings.site.panel")} value={s.site_template} disabled={save.isPending} onChange={(page) => save.mutate({ targets: [null], page })} />
+            <SiteRow name={t("settings.site.panel")} value={s.site_template} own={s.site_page} disabled={save.isPending} onChange={(page) => save.mutate({ targets: [null], page })} />
             {list.slice(0, NODES_SHOWN).map(nodeRow)}
           </ul>
           {list.length > NODES_SHOWN ? (
@@ -167,9 +175,10 @@ function NodesDrawer({ open, onClose, nodes, row }: { open: boolean; onClose: ()
 }
 
 /** The page of one target, saved as soon as it is pressed. */
-function SiteRow({ name, value, note, disabled, onChange }: { name: string; value: Site; note?: string; disabled: boolean; onChange: (page: Site) => void }) {
+function SiteRow({ name, value, own, note, disabled, onChange }: { name: string; value: Site; own: boolean; note?: string; disabled: boolean; onChange: (page: Site) => void }) {
   const shown = value || "none";
-  const options = OPTIONS.map((o) => ({ value: o.id || "none", label: t(`settings.site.short.${o.id || "none"}`) }));
+  // The admin's own page is offered once there is one (or where it is already chosen).
+  const options = OPTIONS.filter((o) => o.id !== "custom" || own || value === "custom").map((o) => ({ value: o.id || "none", label: t(`settings.site.short.${o.id || "none"}`) }));
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3">
       <div className="min-w-[min(100%,160px)] flex-1">

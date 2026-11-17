@@ -1,0 +1,80 @@
+---
+title: mikan and other panels
+description: How mikan differs from Remnawave, Marzban, PasarGuard and 3x-ui in the core, the nodes, subscriptions, sales and administration.
+---
+
+This comparison is built from each project's own README, code and releases on GitHub as of 17 November 2026. Panels change fast. If something here is out of date or wrong, correct this page with a PR.
+
+A "—" in the table means we did not find it in the project's README and code. That does not always mean the feature is missing entirely.
+
+## At a glance
+
+| | mikan | Remnawave | Marzban | PasarGuard | 3x-ui |
+| --- | --- | --- | --- | --- | --- |
+| Node core | Citrus (a mihomo fork) | Xray | Xray | Xray, WireGuard | Xray |
+| License | GPL-3.0 | AGPL-3.0 | AGPL-3.0 | AGPL-3.0, node GPL-3.0 | GPL-3.0 |
+| Panel written in | Go, React | TypeScript (NestJS), React | Python, React | Python, React; node in Go | Go, React |
+| Database | PostgreSQL | PostgreSQL and Valkey | SQLite, MySQL, MariaDB | SQLite, MySQL, MariaDB, PostgreSQL, TimescaleDB | SQLite, PostgreSQL |
+| Several nodes | yes | yes | yes | yes | yes |
+| Device (HWID) limit | yes | yes | — | yes | yes |
+| Subscription templates per app | yes | yes | Clash and page templates via `.env` | partly | output by User-Agent, custom pages |
+| Customer bot, sales and payment | Telegram bot and Mini App, Stars and payment addons | — | — | — | — |
+| Several admins with roles | one admin, API keys, support access | admins and API keys, two roles | work in progress upstream | yes, with roles | — |
+| Passwordless sign-in and 2FA | 2FA, passkeys, GitHub, Telegram | passkeys, OAuth2 sign-in | — | passkeys | 2FA |
+| Prometheus metrics | yes | yes | — | — | — |
+| Import from other panels | Marzban, PasarGuard, Remnawave, 3x-ui | Marzban, Marzneshin, 3x-ui (separate tool) | — | — | — |
+| Install | one command | Docker Compose | one command | one command | one command |
+| UI languages | ru, en | en, fa, ru, zh | several | en, fa, ru, zh | 14 |
+
+Marzban has had no stable release since 9 January 2025, and its `dev` branch was last changed in June 2026. The other panels released in October and November 2026.
+
+## Where mikan differs
+
+### The core
+
+The other panels are all built around Xray. mikan's nodes run on [Citrus](/mikan/en/start/citrus/), our mihomo fork. The node embeds it as a library instead of running a separate process, so:
+
+- traffic is counted per connection of every user, inside the core;
+- speed, connection and quota limits hold on the node itself;
+- users are added and removed without restarting the node.
+
+This applies to protocols where every user has a key of their own. Sudoku, Snell and Shadowsocks-2022 with ChaCha20 use one key for everyone and have no accounting or limits; see [the protocol list](/mikan/en/protocols/presets/#list).
+
+The protocols differ too. Besides VLESS REALITY, Trojan and Shadowsocks there are Hysteria2, TUIC, AnyTLS, TrustTunnel, Mieru and others from the [presets](/mikan/en/protocols/presets/). Citrus's protocols are tested against Xray and mihomo clients. Which app gets which protocol depends on the protocol: VLESS, Trojan, Hysteria2 and others reach both Xray-based apps (Happ, v2RayTun) and Clash apps, while TrustTunnel, Mieru and a few more reach Clash apps only. See [Who gets what](/mikan/en/protocols/presets/#who-gets-what).
+
+### Sales out of the box
+
+None of the four panels has customer payments in its code. Selling is left to separate bots, such as [Bedolaga](/mikan/en/operations/import/#the-bedolaga-sales-bot) for Remnawave. In mikan it is part of the panel:
+
+- a Telegram bot and a Mini App;
+- plans, a trial, promo codes, traffic packages and a balance;
+- payment with Telegram Stars and payment addons.
+
+See [Plans](/mikan/en/billing/plans/) and [Telegram bot](/mikan/en/billing/telegram/).
+
+### The subscription
+
+As in Remnawave, each app gets a format it can run: Clash, sing-box, Xray JSON or links. On top of that, mikan has:
+
+- [response rules](/mikan/en/subscriptions/clients/#response-rules) by request headers;
+- templates per core;
+- a subscription [request log](/mikan/en/subscriptions/clients/#request-log);
+- the [what the client gets](/mikan/en/subscriptions/clients/#what-the-client-gets) screen.
+
+### What mikan does not have yet
+
+- **Several admins with different rights.** Today there is one admin, plus Read and Full access API keys and temporary [support access](/mikan/en/operations/support-access/). Roles are on the [roadmap](https://github.com/users/Miroshka000/projects/2) (#283). PasarGuard has them already.
+- **WireGuard and AmneziaWG on the nodes.** PasarGuard and 3x-ui have them; for mikan they are on the roadmap (#297).
+- **More UI languages.** mikan has two, while 3x-ui has 14.
+
+## Moving over
+
+mikan imports users from Marzban, PasarGuard, Remnawave and 3x-ui, and accounts, balances and history from the Bedolaga bot. Old subscription links keep working. See [Migration](/mikan/en/start/migrate/) and [Import](/mikan/en/operations/import/).
+
+## Sources
+
+- mikan: [github.com/Miroshka000/mikan](https://github.com/Miroshka000/mikan).
+- Remnawave: [panel](https://github.com/remnawave/panel), [backend](https://github.com/remnawave/backend) (database schema, roles, metrics, templates), [node](https://github.com/remnawave/node), [migrate](https://github.com/remnawave/migrate).
+- Marzban: [README and releases](https://github.com/Gozargah/Marzban).
+- PasarGuard: [panel](https://github.com/PasarGuard/panel), [node](https://github.com/PasarGuard/node).
+- 3x-ui: [README](https://github.com/MHSanaei/3x-ui).

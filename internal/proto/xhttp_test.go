@@ -1,10 +1,7 @@
 package proto
 
 import (
-	"encoding/json"
 	"errors"
-	"net/url"
-	"strings"
 	"testing"
 )
 
@@ -158,80 +155,66 @@ func TestXHTTPSessionSettingsCheck(t *testing.T) {
 	}
 }
 
-// The session, order and data keys reach every format that carries XHTTP: the server's
-// value in mihomo's profile and in the Xray link's extra under Xray's own names; the id
-// table is the client's own. The server-only keys stay at the server.
-func TestXHTTPSessionSettingsReachTheClient(t *testing.T) {
+// What the apps send of an XHTTP template: the server's settings both ends read and the
+// apps' own over them, under the names of both cores; the server-only keys stay at the
+// server. The id table is the client's own, with mihomo's default length when it has none.
+func TestXHTTPClient(t *testing.T) {
 	tpl := xhttpTemplate(t, ", mode: packet-up")
-	err := SetXHTTP(tpl, XHTTPTuning{Mode: "packet-up", SessionPlacement: "header", SessionKey: "X-Sid", SeqPlacement: "query", SeqKey: "n",
-		UplinkDataPlacement: "cookie", UplinkDataKey: "d", StreamUpServerSecs: "5-9", MaxBufferedPosts: "50", NoSSEHeader: true,
-		SessionTable: "hex", SessionLength: "20-24"})
+	err := SetXHTTP(tpl, XHTTPTuning{Mode: "packet-up", SessionPlacement: "header", SessionKey: "X-Sid", UplinkMethod: "POST", UplinkDataPlacement: "body",
+		StreamUpServerSecs: "5-9", MaxBufferedPosts: "50", NoSSEHeader: true, SessionTable: "Alphabet", ClientUplinkMethod: "GET"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := ClientConfig(tpl, ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
+	settings, reuse := XHTTPClient(tpl)
+	got := map[string]XHTTPSetting{}
+	for _, s := range settings {
+		if _, twice := got[s.Mihomo]; twice {
+			t.Fatalf("%s twice: %v", s.Mihomo, settings)
+		}
+		got[s.Mihomo] = s
 	}
-	opts := c.Mihomo["xhttp-opts"].(map[string]any)
-	for k, want := range map[string]string{"session-placement": "header", "session-key": "X-Sid", "seq-placement": "query", "seq-key": "n",
-		"uplink-data-placement": "cookie", "uplink-data-key": "d", "session-table": "hex", "session-length": "20-24"} {
-		if opts[k] != want {
-			t.Errorf("mihomo %s = %v, want %s (%v)", k, opts[k], want, opts)
+	for mihomo, want := range map[string]XHTTPSetting{
+		"session-placement":     {"session-placement", "sessionIDPlacement", "header"},
+		"session-key":           {"session-key", "sessionIDKey", "X-Sid"},
+		"uplink-http-method":    {"uplink-http-method", "uplinkHTTPMethod", "GET"}, // the apps' own over the server's
+		"uplink-data-placement": {"uplink-data-placement", "uplinkDataPlacement", "body"},
+		"session-table":         {"session-table", "sessionIDTable", "Alphabet"},
+		"session-length":        {"session-length", "sessionIDLength", "16-32"},
+	} {
+		if got[mihomo] != want {
+			t.Errorf("%s: %+v, want %+v", mihomo, got[mihomo], want)
 		}
 	}
-	for _, k := range []string{"sc-stream-up-server-secs", "sc-max-buffered-posts", "no-sse-header"} {
-		if _, has := opts[k]; has {
-			t.Errorf("mihomo got the server's %s", k)
+	for _, k := range []string{"sc-stream-up-server-secs", "sc-max-buffered-posts", "no-sse-header", "mode"} {
+		if _, has := got[k]; has {
+			t.Errorf("the apps got the server's %s", k)
 		}
 	}
-	u, _ := url.Parse(c.URI)
-	var extra map[string]any
-	if err := json.Unmarshal([]byte(u.Query().Get("extra")), &extra); err != nil {
-		t.Fatalf("extra: %v", err)
-	}
-	for k, want := range map[string]string{"sessionIDPlacement": "header", "sessionIDKey": "X-Sid", "seqPlacement": "query", "seqKey": "n",
-		"uplinkDataPlacement": "cookie", "uplinkDataKey": "d", "sessionIDTable": "hex", "sessionIDLength": "20-24"} {
-		if extra[k] != want {
-			t.Errorf("link %s = %v, want %s (%v)", k, extra[k], want, extra)
-		}
-	}
-	for _, k := range []string{"scStreamUpServerSecs", "scMaxBufferedPosts", "noSSEHeader", "sessionPlacement", "sessionKey"} {
-		if _, has := extra[k]; has {
-			t.Errorf("link has %s", k)
-		}
+	if reuse != nil {
+		t.Fatalf("no reuse of its own: %v", reuse)
 	}
 
-	// A table without a length: Xray would find it too small, so the link says mihomo's default.
-	if err := SetXHTTP(tpl, XHTTPTuning{SessionTable: "Alphabet"}); err != nil {
+	// A reuse of the template's own replaces the cores' default whole, even one with no
+	// key the cores know.
+	if err := SetXHTTP(tpl, XHTTPTuning{MaxConnections: "2-4"}); err != nil {
 		t.Fatal(err)
 	}
-	c, _ = ClientConfig(tpl, ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	u, _ = url.Parse(c.URI)
-	extra = nil
-	_ = json.Unmarshal([]byte(u.Query().Get("extra")), &extra)
-	if o := c.Mihomo["xhttp-opts"].(map[string]any); o["session-length"] != "16-32" || extra["sessionIDLength"] != "16-32" || extra["sessionIDTable"] != "Alphabet" {
-		t.Fatalf("default length: %v %v", o, extra)
+	if _, reuse := XHTTPClient(tpl); len(reuse) != 1 || reuse[0] != (XHTTPSetting{"max-connections", "maxConnections", "2-4"}) {
+		t.Fatalf("own reuse: %v", reuse)
 	}
-
+	tpl[extKey] = map[string]any{"client": map[string]any{"xhttp": map[string]any{"xmux": map[string]any{"nope": "1"}}}}
+	if _, reuse := XHTTPClient(tpl); reuse == nil || len(reuse) != 0 {
+		t.Fatalf("an own reuse of unknown keys: %v", reuse)
+	}
 	// Nothing set: nothing sent.
-	if err := SetXHTTP(tpl, XHTTPTuning{}); err != nil {
-		t.Fatal(err)
-	}
-	c, _ = ClientConfig(tpl, ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	for _, k := range []string{"session-table", "session-length", "session-placement", "uplink-data-placement"} {
-		if _, has := c.Mihomo["xhttp-opts"].(map[string]any)[k]; has {
-			t.Errorf("defaults still send %s", k)
-		}
-	}
-	if strings.Contains(c.URI, "sessionID") {
-		t.Errorf("defaults in the link: %s", c.URI)
+	if settings, reuse := XHTTPClient(xhttpTemplate(t, "")); settings != nil || reuse != nil {
+		t.Fatalf("defaults: %v %v", settings, reuse)
 	}
 }
 
 // The apps' own upload over the server's: the node keeps POST with the data in the body,
-// the apps send GET (a CDN that passes only GET and HEAD), in mihomo's profile and in the
-// Xray link's extra. What the server would not take is refused, by field.
+// the apps send GET (a CDN that passes only GET and HEAD). What the server would not take
+// is refused, by field.
 func TestXHTTPClientUplink(t *testing.T) {
 	tpl := xhttpTemplate(t, ", mode: packet-up")
 	x := XHTTPTuning{Mode: "packet-up", UplinkMethod: "POST", UplinkDataPlacement: "body", ClientUplinkMethod: "GET", ClientUplinkPlacement: "body", ClientUplinkChunkSize: "512000"}
@@ -243,22 +226,6 @@ func TestXHTTPClientUplink(t *testing.T) {
 	}
 	if sec := tpl.section("xhttp-config"); sec["uplink-http-method"] != "POST" || sec["uplink-data-placement"] != "body" {
 		t.Fatalf("the node keeps its own: %v", sec)
-	}
-	c, err := ClientConfig(tpl, ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts := c.Mihomo["xhttp-opts"].(map[string]any)
-	if opts["uplink-http-method"] != "GET" || opts["uplink-data-placement"] != "body" || opts["uplink-chunk-size"] != "512000" {
-		t.Fatalf("mihomo: %v", opts)
-	}
-	u, _ := url.Parse(c.URI)
-	var extra map[string]any
-	if err := json.Unmarshal([]byte(u.Query().Get("extra")), &extra); err != nil {
-		t.Fatalf("extra: %v", err)
-	}
-	if extra["uplinkHTTPMethod"] != "GET" || extra["uplinkDataPlacement"] != "body" || extra["uplinkChunkSize"] != "512000" {
-		t.Fatalf("link: %v", extra)
 	}
 	if !NeedsOf(tpl).GetUplink {
 		t.Fatal("the apps' GET picks the apps that can send it")
@@ -289,39 +256,5 @@ func TestXHTTPClientUplink(t *testing.T) {
 		if !errors.As(err, &e) || e.Code != c.code || e.Field != c.field {
 			t.Errorf("%s: %v, want %s at %s", name, err, c.code, c.field)
 		}
-	}
-}
-
-// The client's own reuse settings replace the panel's, in mihomo's profile and in the
-// Xray link's extra.
-func TestXHTTPClientReuse(t *testing.T) {
-	tpl := xhttpTemplate(t, "")
-	plain, err := ClientConfig(tpl, ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r := plain.Mihomo["xhttp-opts"].(map[string]any)["reuse-settings"].(map[string]any); r["max-concurrency"] != "16-32" {
-		t.Fatalf("the panel's default: %v", r)
-	}
-	if err := SetXHTTP(tpl, XHTTPTuning{MaxConnections: "2-4", MaxReusableSecs: "600", MinPostsIntervalMs: "20"}); err != nil {
-		t.Fatal(err)
-	}
-	c, err := ClientConfig(tpl, ClientInput{Name: "X", Host: "203.0.113.7", Port: 443, Slot: slots[0]})
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts := c.Mihomo["xhttp-opts"].(map[string]any)
-	r := opts["reuse-settings"].(map[string]any)
-	if r["max-connections"] != "2-4" || r["h-max-reusable-secs"] != "600" || r["max-concurrency"] != nil || opts["sc-min-posts-interval-ms"] != "20" {
-		t.Fatalf("mihomo: %v", opts)
-	}
-	u, _ := url.Parse(c.URI)
-	var extra map[string]any
-	if err := json.Unmarshal([]byte(u.Query().Get("extra")), &extra); err != nil {
-		t.Fatalf("extra %q: %v", u.Query().Get("extra"), err)
-	}
-	xm, _ := extra["xmux"].(map[string]any)
-	if xm["maxConnections"] != "2-4" || xm["hMaxReusableSecs"] != "600" || extra["scMinPostsIntervalMs"] != "20" || strings.Contains(c.URI, "maxConcurrency") {
-		t.Fatalf("link extra: %v", extra)
 	}
 }

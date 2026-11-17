@@ -13,6 +13,9 @@ func TestConnLinesStayOutOfLogs(t *testing.T) {
 	for _, msg := range []string{
 		"[TCP] dial DIRECT (match Match/) 203.0.113.9:57314 --> [2001:db8::a]:443 error: connect: network is unreachable",
 		"[UDP] dial DIRECT (match Match/) 203.0.113.9:4000 --> example.com:443 error: dns resolve failed",
+		// The core's egress guard names the user and where they went.
+		"[TCP] dial DIRECT (match Match/) 203.0.113.9:57314 --> 198.51.100.7:5432 error: egress guard blocked 198.51.100.7: address of this host, not reachable from inbound vless (user slot-1)",
+		"[UDP] egress guard blocked 198.51.100.7: address of this host, not reachable from inbound hy2 (user slot-1), dropping the datagrams of this session to blocked addresses",
 	} {
 		if !connLine(msg) {
 			t.Errorf("per-connection line must be dropped: %q", msg)

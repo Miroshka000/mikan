@@ -13,9 +13,11 @@ Clients connect to node A, and sites see node B's address. This way you can keep
 
 ## Set up
 
-1. Open the connection on node A and in the **Way out to the internet** field choose "Via a node".
+1. On the **Protocols** page open a protocol of node A and in the **Way out to the internet** field choose "Via a node".
 2. In the **Exit node** field choose node B.
 3. Save.
+
+The **Where other nodes' traffic goes next** field in the **Cascade** window is not needed for such a cascade: it is set on the exit node when the chain is longer, see below.
 
 The panel itself opens a hidden relay on node B with a separate key for each source node. The relay listens on a TCP port: the first free one among the spare ports (2053, 2083, 2087, 2096, 2443, 3443, 4443, 5443, 6443, 7443, 8443, 9443, 10443, 11443, 12443), or a random one from 30000 to 59999 if all are taken.
 
@@ -24,6 +26,15 @@ Traffic is counted once, on the first node. A cascade does not need WARP.
 :::caution
 If the exit node is unavailable, this protocol's traffic does not go direct, the protocol simply does not work until the node is back. This way node A's address is not exposed by accident.
 :::
+
+## Relay camouflage
+
+The client's protocol does not go on between the nodes: node A connects to node B's relay over VLESS REALITY, and that connection looks like a site, as REALITY protocols do. The site is set in node B's **Cascade** window, the **Relay camouflage** field.
+
+- **Automatic** (the default). The relay takes the site of node B's REALITY protocols, the server's own domain first, and changes with them. Without such protocols the panel finds a site next to the server as soon as nodes leave through node B, and replaces it when it stops working.
+- **My own site**. The site is set by hand, with the **Check** and **Find near the server** buttons, as for a protocol.
+
+The relay keeps its keys when its site changes, and the source nodes take the new site by themselves.
 
 ## Longer chains
 
@@ -39,8 +50,12 @@ Open **Check node** on the entry node (A), see [Nodes](/mikan/en/nodes/nodes/#ch
 - **the relay on the exit node is not started**: the exit node did not bring up its port, see that node's check;
 - **the entry cannot reach the relay port on the exit** or **the exit has no internet**: the port is closed by the exit node's hoster firewall, or the exit server does not go out to the internet.
 
-On the exit node itself, if others go out through it, the check shows its relay port.
+On the exit node itself, if others go out through it now, the check shows its relay port. While nobody does, the relay is not running and the check does not show it.
 
-## If the relay port is taken
+## If the relay port is taken or dropped
 
-If another program has taken the relay's port, the relay moves to a free port by itself when the "Move to another port when it is blocked" switch is on (**Settings → General → Automatic fixes**). When the relay is not working, a notification arrives in Telegram. This works with nodes on version 0.5.0.2 and newer.
+If another program has taken the relay's port, the relay moves to a free port by itself when the "Move to another port when it is blocked" switch is on (**Settings → System → Automatic fixes**). When the relay is not working, a notification arrives in Telegram. This works with nodes on version 0.5.0.2 and newer.
+
+With the same switch the relay also moves when its port is dropped on the way between the servers: the exit node and the relay work, but the source nodes cannot reach it for half an hour in a row. This happens when a provider or censorship on the entry node's side does not let that port through. The relay goes to the next free spare port, at most once in 6 hours, and the source nodes follow by themselves. If at least one source node reaches the relay, or the exit node merely has no internet, the port stays.
+
+The port can also be set by hand: the exit node's **Cascade** window, the **Relay port** field, "My own port". Any free TCP port of the server will do, such as 443 if this node's protocols do not take it. The panel does not move a port set by hand, whether it is taken or dropped; "Automatic" brings the moves back.

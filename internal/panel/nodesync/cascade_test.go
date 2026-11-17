@@ -116,6 +116,78 @@ func TestCascadeChain(t *testing.T) {
 
 func nullID(id int64) sql.NullInt64 { return sql.NullInt64{Int64: id, Valid: true} }
 
+// A key at a relay stays when its node stops leaving through it, so that it is the same
+// when the node comes back. Until then the relay does not run, and its way on to the next
+// node, set in the Cascade window, is not built either: the node check would knock on a
+// port nobody listens on and ask about an exit the node does not have.
+func TestRelayWithoutSourcesDoesNotRun(t *testing.T) {
+	a, _, st, _, _ := setup(t)
+	ctx := context.Background()
+	q := st.Q
+	panel, _ := nodetls.Generate("mikan-panel", x509.ExtKeyUsageClientAuth, time.Now())
+	nb, _, err := domain.AddNode(ctx, st, panel, domain.NodeInput{Name: "B", Host: "198.51.100.20", APIPort: 40000}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	nc, _, err := domain.AddNode(ctx, st, panel, domain.NodeInput{Name: "C", Host: "198.51.100.30", APIPort: 40000}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := a.m.attach(t, nb.ID, Target{Node: &fakeNode{}, TLS: fakeTLS})
+	// The Cascade window of B: its relay goes on to C.
+	if err := domain.UseExit(ctx, q, nb.ID, nc.ID, time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	x, _ := q.GetNode(ctx, nb.ID)
+	if _, err := domain.EnsureRelay(ctx, q, x, time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.SetNodeRelayRoute(ctx, db.SetNodeRelayRouteParams{Outbound: "direct", ExitNodeID: nullID(nc.ID), NodeID: nb.ID}); err != nil {
+		t.Fatal(err)
+	}
+	// A once left through B: its key is there, its inbound leaves directly now.
+	if err := domain.UseExit(ctx, q, a.id, nb.ID, time.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	ins, _ := q.ListNodeInbounds(ctx, a.id)
+	mine := ins[0]
+	if mine.Enabled == 0 || mine.ExitNodeID.Valid {
+		t.Fatalf("the local inbound: %+v", mine)
+	}
+	if users, _ := q.ListRelayUsers(ctx, nb.ID); len(users) != 1 {
+		t.Fatalf("B's keys: %+v", users)
+	}
+	a.m.changes.Add(1) // the inbounds changed behind the snapshot's back
+	d, err := b.desired(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Relay != nil || len(d.Exits) != 0 {
+		t.Fatalf("B without sources: relay %+v exits %+v", d.Relay, d.Exits)
+	}
+	// A comes back with the same key: the relay and its way on to C are built again.
+	if err := q.SetInboundExit(ctx, db.SetInboundExitParams{ExitNodeID: nullID(nb.ID), Outbound: "direct", ID: mine.ID}); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := q.GetRelayUser(ctx, db.GetRelayUserParams{ExitNodeID: nb.ID, SrcNodeID: a.id})
+	a.m.changes.Add(1)
+	d, err = b.desired(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Relay == nil || len(d.Relay.Users) != 1 || d.Relay.Users[0].UUID != key || len(d.Exits) != 1 || d.Exits[0].Name != nodeapi.ExitName(nc.ID) {
+		t.Fatalf("B with A back: relay %+v exits %+v", d.Relay, d.Exits)
+	}
+	// A's inbound switched off: no source again.
+	if _, err := st.DB.ExecContext(ctx, "UPDATE inbounds SET enabled = 0 WHERE id = $1", mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	a.m.changes.Add(1)
+	if d, _ = b.desired(ctx); d.Relay != nil || len(d.Exits) != 0 {
+		t.Fatalf("B with A's inbound off: relay %+v exits %+v", d.Relay, d.Exits)
+	}
+}
+
 // The health view names the relay's port like an inbound's, so a failed relay listener is
 // read against the port it failed on, and carries what the node said listens on its
 // server: the panel keeps the relay's port and the moved inbounds' off those.
@@ -137,6 +209,14 @@ func TestHealthCarriesTheRelayPortAndHostPorts(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := domain.RelayUser(ctx, q, s.id, nb.ID); err != nil {
+		t.Fatal(err)
+	}
+	// B leaves through the local node: the relay runs.
+	bIn, err := q.CreateInbound(ctx, db.CreateInboundParams{NodeID: nb.ID, Name: "b-vless", Preset: "vless_reality_xhttp", Port: "8443", Config: "{}", CreatedAt: 1, UpdatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.SetInboundExit(ctx, db.SetInboundExitParams{ExitNodeID: nullID(s.id), Outbound: "direct", ID: bIn.ID}); err != nil {
 		t.Fatal(err)
 	}
 	s.applyState(ctx)

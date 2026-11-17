@@ -80,7 +80,7 @@ func TestMetricsAreKeptAFewSeconds(t *testing.T) {
 	if !strings.Contains(scrape(), `mikan_users{state="active"} 0`) {
 		t.Fatal("a scrape right after another is made again")
 	}
-	k.now = k.now.Add(6 * time.Second)
+	k.advance(6 * time.Second)
 	if !strings.Contains(scrape(), `mikan_users{state="active"} 1`) {
 		t.Fatal("an old text is served past its time")
 	}

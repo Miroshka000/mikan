@@ -385,8 +385,11 @@ func (h *handlers) runTerminal(rctx context.Context, c *websocket.Conn, g db.Sup
 	case errors.Is(cause, errTerminalRevoked):
 		reason = "revoked"
 	}
-	// Closing the stream is what ends the shell when the agent has not.
+	// Closing the stream is what ends the shell when the agent has not. The server is let go
+	// with it, before the operator hears of the end and before the journal's line: one who opens
+	// the next session at once must not find this one still holding the server (terminal_busy).
 	host.Close()
+	h.terms.remove(sess)
 	secs := int64(h.d.Now().Sub(started).Seconds())
 	recMu.Lock()
 	rec := recording

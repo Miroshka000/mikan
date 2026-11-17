@@ -768,6 +768,20 @@ func (q *Queries) SetGroupInbounds(ctx context.Context, arg SetGroupInboundsPara
 	return result.RowsAffected()
 }
 
+const setInboundNoAuto = `-- name: SetInboundNoAuto :exec
+UPDATE inbounds SET no_auto = $1 WHERE id = $2
+`
+
+type SetInboundNoAutoParams struct {
+	NoAuto int64
+	ID     int64
+}
+
+func (q *Queries) SetInboundNoAuto(ctx context.Context, arg SetInboundNoAutoParams) error {
+	_, err := q.db.ExecContext(ctx, setInboundNoAuto, arg.NoAuto, arg.ID)
+	return err
+}
+
 const setInboundPool = `-- name: SetInboundPool :exec
 UPDATE inbounds SET pool_id = $1 WHERE id = $2
 `
@@ -779,6 +793,20 @@ type SetInboundPoolParams struct {
 
 func (q *Queries) SetInboundPool(ctx context.Context, arg SetInboundPoolParams) error {
 	_, err := q.db.ExecContext(ctx, setInboundPool, arg.PoolID, arg.ID)
+	return err
+}
+
+const setInboundTags = `-- name: SetInboundTags :exec
+UPDATE inbounds SET tags = $1 WHERE id = $2
+`
+
+type SetInboundTagsParams struct {
+	Tags string
+	ID   int64
+}
+
+func (q *Queries) SetInboundTags(ctx context.Context, arg SetInboundTagsParams) error {
+	_, err := q.db.ExecContext(ctx, setInboundTags, arg.Tags, arg.ID)
 	return err
 }
 

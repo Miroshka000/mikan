@@ -10,13 +10,13 @@ import (
 	"mikan/internal/frontpage"
 )
 
-// The names of the built-in front pages are written in more than one place: frontpage.Templates,
-// the enum of each field of the API that carries one (a node's front_page in its view and in
-// its body, the panel's site_template in the settings and in their body), and the CHECK of
-// migration 0046. Nothing else ties them together, so a new page would be refused by one and
-// taken by another.
+// The names of the front pages are written in more than one place: frontpage.Templates and
+// frontpage.Custom, the enum of each field of the API that carries one (a node's front_page
+// in its view and in its body, the panel's site_template in the settings and in their body),
+// and the CHECK of the nodes' column (migration 0068, which took over from 0046). Nothing
+// else ties them together, so a new page would be refused by one and taken by another.
 func TestFrontPageNamesAreOneList(t *testing.T) {
-	want := append([]string{""}, frontpage.Templates...) // "" is no page
+	want := append([]string{"", frontpage.Custom}, frontpage.Templates...) // "" is no page
 	slices.Sort(want)
 
 	_, api, err := New(Deps{Now: time.Now})
@@ -45,13 +45,14 @@ func TestFrontPageNamesAreOneList(t *testing.T) {
 		t.Errorf("%d fields found, want the node's front_page twice and site_template twice: the scan lost its way", found)
 	}
 
-	raw, err := os.ReadFile("../store/postgres/0046_node_front_page.sql")
+	raw, err := os.ReadFile("../store/postgres/0068_node_front_page_custom.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The first CHECK of the file is the one the migration leaves in place.
 	check := regexp.MustCompile(`front_page IN \(([^)]*)\)`).FindSubmatch(raw)
 	if check == nil {
-		t.Fatal("0046 has no CHECK of front_page")
+		t.Fatal("0068 has no CHECK of front_page")
 	}
 	var inSQL []string
 	for _, m := range regexp.MustCompile(`'([^']*)'`).FindAllSubmatch(check[1], -1) {
@@ -59,6 +60,6 @@ func TestFrontPageNamesAreOneList(t *testing.T) {
 	}
 	slices.Sort(inSQL)
 	if !slices.Equal(inSQL, want) {
-		t.Errorf("the CHECK of 0046 takes %q, the pages are %q", inSQL, want)
+		t.Errorf("the CHECK of 0068 takes %q, the pages are %q", inSQL, want)
 	}
 }

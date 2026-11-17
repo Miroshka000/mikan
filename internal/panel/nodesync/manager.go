@@ -59,6 +59,7 @@ type Manager struct {
 
 	nodesDirty chan struct{}
 	hub        *events.Hub // woken after a node was told down or up (liveness.go); nil: no one waits
+	frontSeed  string      // the installation's seed of the front pages (SetFrontSeed); "": none
 
 	mu        sync.Mutex
 	running   map[int64]*running
@@ -117,6 +118,10 @@ func NewManager(st *store.Store, set *settings.Settings, pool *domain.Pool, conn
 // SetEvents connects the hub that wakes the addons reading the feed; call it before Run.
 func (m *Manager) SetEvents(h *events.Hub) { m.hub = h }
 
+// SetFrontSeed gives the nodes the installation's seed of the front pages
+// (DesiredState.FrontSeed); call it before Run. Without it they show the pages as written.
+func (m *Manager) SetFrontSeed(seed string) { m.frontSeed = seed }
+
 func (m *Manager) Run(ctx context.Context) {
 	m.reconcile(ctx)
 	maintain := time.NewTicker(30 * time.Second)
@@ -147,6 +152,16 @@ func (m *Manager) SlotsChanged() {
 	for _, s := range m.Syncers() {
 		s.SlotsChanged()
 	}
+}
+
+// AddressChanged follows a change of the panel's address (settings.Address): the API locks
+// take the panel's addresses anew, and every node gets its state again, the cascades into
+// the panel's own node with its new address.
+func (m *Manager) AddressChanged() {
+	m.addrMu.Lock()
+	m.addrAt = time.Time{}
+	m.addrMu.Unlock()
+	m.SlotsChanged()
 }
 
 // NodesChanged restarts syncers after a node was added, removed or re-keyed.
@@ -208,6 +223,16 @@ func (m *Manager) Online() map[string]nodeapi.Online {
 			}
 			out[slot] = cur
 		}
+	}
+	return out
+}
+
+// OnlineByNode is the live view of each node apart, by node id: where a device is online,
+// which Online merges away.
+func (m *Manager) OnlineByNode() map[int64]map[string]nodeapi.Online {
+	out := map[int64]map[string]nodeapi.Online{}
+	for _, s := range m.Syncers() {
+		out[s.id] = s.Online()
 	}
 	return out
 }
@@ -413,6 +438,46 @@ func (m *Manager) ServiceRegions(ctx context.Context, id int64) (nodeapi.Service
 		return nodeapi.ServiceRegions{}, err
 	}
 	return c.ServiceRegions(ctx)
+}
+
+// ConnReset is how closing connections went on one node: how many it closed, or why it
+// did not (a *nodeapi.StatusError 404 from a node that predates the call).
+type ConnReset struct {
+	Node   int64
+	Closed int
+	Err    error
+}
+
+// ResetSlots has node id, or every node (0), close the open connections of the slots and
+// keep their access, so the clients connect again at once. The nodes are asked at once;
+// one that cannot is in the answer with its error, the others are not held up by it.
+func (m *Manager) ResetSlots(ctx context.Context, id int64, slots []string) []ConnReset {
+	var ids []int64
+	if id != 0 {
+		ids = []int64{id}
+	} else {
+		for _, s := range m.Syncers() {
+			ids = append(ids, s.id)
+		}
+	}
+	out := make([]ConnReset, len(ids))
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Go(func() {
+			out[i].Node = id
+			c, err := clientOf[interface {
+				ResetSlots(context.Context, []string) (nodeapi.ResetResult, error)
+			}](m, id)
+			if err != nil {
+				out[i].Err = err
+				return
+			}
+			r, err := c.ResetSlots(ctx, slots)
+			out[i].Closed, out[i].Err = r.Closed, err
+		})
+	}
+	wg.Wait()
+	return out
 }
 
 // clientOf returns a node's client as T: methods beyond Node are optional, and tests

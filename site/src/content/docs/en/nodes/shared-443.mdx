@@ -34,6 +34,7 @@ The router reads the client's first message and takes the site name from it:
 - for **REALITY** these are the names of the protocol's camouflage site (its SNI);
 - for protocols **on the node's certificate** (VLESS, Trojan, AnyTLS with TLS) it is the name clients are given: the protocol's SNI or, if it has none, the node's domain;
 - an **unknown name** (and non-TLS traffic) goes to the first REALITY protocol in order and on to its camouflage site, as on a real server. A scanner that came with a strange name sees an ordinary site.
+- a **protocol behind a CDN** (its settings name a CDN's address, the "Behind a CDN" block) takes unknown names and connections with no name in place of REALITY since 0.5.2.1: a CDN comes to the server asking for a name of its own settings (the origin's host, the zone's apex, no name for an origin given as an address), and the panel cannot know it. A stranger with a name of his own gets what that protocol answers to a request that is not its client's: the node's certificate and the front page.
 
 So each protocol on the shared 443 needs a name of its own. The router cannot tell apart two REALITY protocols with the same camouflage site: give one of them another site.
 
@@ -49,3 +50,11 @@ PROXY protocol is supported by the Citrus core that the nodes run on in the beta
 - Port 443/tcp is open in the server's firewall and at the hoster.
 - A protocol with TLS on the node's certificate has the node's domain with a public certificate.
 - The client updated the subscription and got port 443.
+
+## The "Secure" preset
+
+Since 0.5.2.1 everything on this page is turned on in one action: **Settings** → **Security** → **Security presets** → "Secure" → **Show the changes**. The panel lists, node by node, what it would change: which protocols go behind the shared 443, which get a new name (the panel's domain and the subscriptions' domain; strangers' sites next to the server only with the "Find sites next to the server" button), where the SNI router, the API lock and the front page are turned on. Nothing is written until you press **Apply**.
+
+What the preset cannot do it names apart: a protocol with none of your names left, a protocol left on a stranger's site, port 443 held by a protocol that cannot share it, SSH among the "Open ports of the server". Clients connect to the old addresses until they refresh the subscription. "Standard" takes the protocols back to ports of their own the same way.
+
+The preset also turns off a protocol's automatic change of port and of camouflage site. Protocols over UDP (Hysteria2, TUIC) cannot go behind the shared port: they stay on their ports and are named in the list. For protocols with no handshake to read (Shadowsocks, Mieru, Sudoku, Snell), whose port stays silent to any probe, the preset offers turning them off with a box to tick under "If you wish".

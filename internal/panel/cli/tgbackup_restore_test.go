@@ -11,8 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -139,13 +137,9 @@ func TestTelegramBackupRestoresOnANewServer(t *testing.T) {
 	if err := live.DB.QueryRowContext(ctx, "SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&applied); err != nil {
 		t.Fatal(err)
 	}
-	// The binary's latest migration: the highest number, not the count (numbers can skip).
-	entries, _ := os.ReadDir(filepath.Join("..", "store", "postgres"))
-	for _, e := range entries {
-		num, _, _ := strings.Cut(e.Name(), "_")
-		if v, err := strconv.ParseInt(num, 10, 64); err == nil {
-			latest = max(latest, v)
-		}
+	// The binary's latest migration, SQL or Go, as the store migrates (not the files alone).
+	if latest, err = store.LatestMigration(ctx, live.DB); err != nil {
+		t.Fatal(err)
 	}
 	if applied != latest {
 		t.Errorf("schema version %d after the restore, the binary's latest migration is %d", applied, latest)

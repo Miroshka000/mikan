@@ -51,6 +51,18 @@ func (n NodeLoad) Full() bool { return n.Capacity.Valid && n.Clients >= n.Capaci
 // per balance group: the client's, placing the client first when it has none there yet.
 // Nodes outside every group are left as they are.
 func (b *Balancer) Nodes(ctx context.Context, userID int64, on map[int64]bool) (map[int64]bool, error) {
+	return b.nodes(ctx, userID, on, true)
+}
+
+// Peek is Nodes that places nobody: a client not placed in a group yet is shown the node
+// Nodes would place it on now, and nothing is written. What the admin panel's preview of a
+// subscription reads.
+func (b *Balancer) Peek(ctx context.Context, userID int64, on map[int64]bool) (map[int64]bool, error) {
+	return b.nodes(ctx, userID, on, false)
+}
+
+// nodes is Nodes; place: a client not placed yet is placed (written), else only picked.
+func (b *Balancer) nodes(ctx context.Context, userID int64, on map[int64]bool, place bool) (map[int64]bool, error) {
 	nodes, err := b.st.Q.ListNodes(ctx)
 	if err != nil {
 		return on, err
@@ -85,7 +97,7 @@ func (b *Balancer) Nodes(ctx context.Context, userID int64, on map[int64]bool) (
 	for group, members := range groups {
 		placed = placed && slices.ContainsFunc(members, func(n db.Node) bool { return n.ID == mine[group] })
 	}
-	if !placed {
+	if !placed && place {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		if mine, err = assigned(); err != nil {
@@ -110,8 +122,10 @@ func (b *Balancer) Nodes(ctx context.Context, userID int64, on map[int64]bool) (
 				}
 			}
 			keep = pick(members, loads)
-			if err := b.st.Q.AssignNode(ctx, db.AssignNodeParams{UserID: userID, BalanceGroup: group, NodeID: keep, AssignedAt: b.now().Unix()}); err != nil {
-				return on, err
+			if place {
+				if err := b.st.Q.AssignNode(ctx, db.AssignNodeParams{UserID: userID, BalanceGroup: group, NodeID: keep, AssignedAt: b.now().Unix()}); err != nil {
+					return on, err
+				}
 			}
 			loads[keep]++
 		}

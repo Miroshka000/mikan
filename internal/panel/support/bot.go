@@ -21,8 +21,9 @@ import (
 // only then opens a grant, whose link it hands to the bot itself (Attach). The link is never
 // shown to the admin, so it reaches nobody but the official support.
 
-// DefaultBotURL is the official support bot's listener.
-const DefaultBotURL = "https://vpn.aurausa.me:8790"
+// DefaultBotURL is the official support bot's listener, behind a Cloudflare Tunnel on a name
+// of its own, so the address leads to neither a VPN server nor a VPN domain.
+const DefaultBotURL = "https://mikanpanel.dpdns.org"
 
 // codeLen is the length of the code the bot gives.
 const codeLen = 8

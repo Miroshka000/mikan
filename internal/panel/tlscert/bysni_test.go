@@ -41,3 +41,47 @@ func TestBySNI(t *testing.T) {
 		t.Fatal("no subscription domain: the panel's for everyone")
 	}
 }
+
+// A former name gets its own certificate while it keeps one, the panel's otherwise; a
+// former address answers clients that name nothing; a former subscription domain still
+// reaches the subscriptions alone.
+func TestBySNIFormer(t *testing.T) {
+	now := time.Now()
+	cert := func(name string) *tls.Certificate {
+		t.Helper()
+		c, err := LoadOrCreateSelfSigned(t.TempDir(), name, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	panel, old, ip := cert("new.example.com"), cert("old.example.com"), cert("203.0.113.7")
+	b := &BySNI{Panel: &Holder{}, Sub: &Holder{}}
+	b.Panel.Set(panel)
+	get := func(name string) *tls.Certificate {
+		t.Helper()
+		c, err := b.Get(&tls.ClientHelloInfo{ServerName: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	oldHolder, ipHolder, empty := &Holder{}, &Holder{}, &Holder{}
+	oldHolder.Set(old)
+	ipHolder.Set(ip)
+	b.SetFormer(&Former{Certs: map[string]*Holder{"old.example.com": oldHolder, "": ipHolder, "gone.example.com": empty}, Sub: map[string]bool{"links.example.com": true}})
+	if get("OLD.example.com.") != old || get("") != ip || get("gone.example.com") != panel || get("new.example.com") != panel {
+		t.Fatal("certificates of the former names")
+	}
+	if !b.IsSub("Links.Example.com.") || b.IsSub("old.example.com") || b.IsSub("") {
+		t.Fatal("the former subscription domain")
+	}
+	b.SetName("sub.example.com")
+	if !b.IsSub("sub.example.com") {
+		t.Fatal("the subscription domain")
+	}
+	b.SetFormer(nil)
+	if get("old.example.com") != panel || b.IsSub("links.example.com") {
+		t.Fatal("no former names")
+	}
+}

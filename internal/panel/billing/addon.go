@@ -300,6 +300,9 @@ func (s *Service) AddonName(ctx context.Context, id, lang string) string {
 // AddonWebhookURL is where the provider sends its notifications for an adapter: the admin
 // enters it in the provider's dashboard, as for the built-in providers.
 func (s *Service) AddonWebhookURL(ctx context.Context, id, subBase string) string {
+	if s.d.SubBase != nil {
+		subBase = s.d.SubBase(ctx)
+	}
 	tok, err := s.WebhookToken(ctx)
 	if err != nil || subBase == "" {
 		return ""

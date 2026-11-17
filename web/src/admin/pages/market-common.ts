@@ -1,6 +1,6 @@
 import { Bot, LayoutPanelTop, Puzzle, type LucideIcon } from "lucide-react";
 import { api, unwrap, type Schemas } from "../../api/client";
-import { t, type Key } from "../../i18n";
+import { getLocale, t, type Key } from "../../i18n";
 import { localized } from "../../lib/localized";
 import type { State } from "./addon-row";
 
@@ -99,6 +99,9 @@ export function sourceLabel(a: MarketInstalled): string {
 export function marketName(id: string, d: Market | undefined): string {
   return localized(entryOf(id, d)?.name, id);
 }
+
+/** The site's guide to running a bot of the admin's own through the panel's Bot API proxy. */
+export const ownBotDocs = () => `https://miroshka000.github.io/mikan/${getLocale() === "en" ? "en/" : ""}api/own-bot/`;
 
 export const KIND_ICONS: Record<Kind, LucideIcon> = { bot: Bot, ui: LayoutPanelTop, generic: Puzzle };
 

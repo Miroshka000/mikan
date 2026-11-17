@@ -10,6 +10,7 @@ import { fieldErrors, onFormError } from "../../../lib/fields";
 import { destIsIP } from "../../../lib/format";
 import { nodeLabel } from "../../../lib/node-label";
 import { TargetPicker } from "./target";
+import { Select } from "../../../components/select";
 
 /**
  * Copies a set-up protocol to the same or another node: the same settings with keys of its
@@ -80,14 +81,14 @@ export function CopyDrawer({ inbound, onClose }: { inbound: Inbound | null; onCl
         </p>
         {others ? (
           <Field label={t("inbounds.copy.node")} htmlFor="cp-node" error={errors.node_id}>
-            <select id="cp-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => setNodeId(Number(e.target.value))}>
+            <Select id="cp-node" className="input max-w-[320px]" value={nodeId} onChange={(e) => setNodeId(Number(e.target.value))}>
               {(nodes.data ?? []).map((n) => (
                 <option key={n.id} value={n.id} disabled={!n.enabled}>
                   {nodeLabel(n)}
                   {n.enabled ? "" : ` — ${t("nodes.disabled")}`}
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
         ) : null}
         <Field label={t("inbounds.portLabel")} htmlFor="cp-port" hint={t("inbounds.copy.portHint", { port: inbound?.port ?? "" })} error={errors.port}>

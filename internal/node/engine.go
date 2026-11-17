@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -52,7 +53,8 @@ type Options struct {
 	Log     *slog.Logger
 	// A device (source IP) keeps its place for this long after its last connection closed.
 	DeviceRelease time.Duration
-	// AllowPrivate lets VPN users reach private and loopback networks of the server.
+	// AllowPrivate lets VPN users reach private and loopback networks of the server, with the
+	// core's egress guard off (guard.go). Test setups: their targets live on such networks.
 	AllowPrivate bool
 	// ACMEListen is where the panel's HTTP-01 challenges for this node are answered
 	// (acmechallenge.ParseListen); "" is port 80.
@@ -108,6 +110,18 @@ type Engine struct {
 
 	sys  *sysSampler
 	host hostPortsCache
+	mem  memoryLog // only TickMemory touches it
+
+	// The core's egress guard as last published (guard.go): the ports the state leaves open
+	// (nil: off), the server's public addresses they are open on, what the log last said, and
+	// whether the addresses could not be read at the last look.
+	guardMu    sync.Mutex
+	guardPorts []int
+	guardAddrs []netip.Addr
+	guardOn    bool
+	guardOpen  []netip.AddrPort
+	guardBlind bool
+	ownAddrs   func() ([]netip.Addr, error) // interfaceAddrs, unless a test swaps it
 
 	routes  string             // routesKey of what tunnel's proxies and rules hold now
 	exitDNS string             // exitDNSKey of the sniffer and resolver mihomo holds now
@@ -257,7 +271,8 @@ var (
 
 // applyBase gives the core its general settings, once per process: ApplyConfig patches
 // listeners with the stock tunnel and drops any others, so it runs with no listeners and
-// ours are patched separately in Apply; the way out and the DNS come with every Apply.
+// ours are patched separately in Apply; the way out, the DNS and the egress guard come with
+// every Apply. Until then the guard is as the core has it: on, with nothing open.
 func applyBase() error {
 	baseOnce.Do(func() {
 		base, _, err := buildConfig(nodeapi.DesiredState{}, proto.Cert{}, false, "")
@@ -338,13 +353,29 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	// The front page as a file for the inbounds on an HTTP transport (fallback-page); the
 	// router's names get it from the page held in memory (front.go).
 	front := ""
+	frontpage.SetSeed(st.FrontSeed)
+	frontpage.SetCustom([]byte(st.FrontHTML))
+	site := make([]frontpage.SiteFile, 0, len(st.FrontFiles))
+	for _, f := range st.FrontFiles {
+		site = append(site, frontpage.SiteFile{Path: f.Path, Type: f.Type, Data: f.Data})
+	}
+	frontpage.SetSite(site)
 	if page := frontpage.Page(st.FrontPage); page != nil {
-		front = filepath.Join(e.home, "front", frontpage.File(st.FrontPage))
-		if err := os.MkdirAll(filepath.Dir(front), 0o755); err != nil {
+		dir := filepath.Join(e.home, "front")
+		front = filepath.Join(dir, frontFile(st.FrontPage, page))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return nodeapi.ApplyResult{}, err
 		}
 		if err := fsutil.WriteFileAtomic(front, page, 0o644); err != nil {
 			return nodeapi.ApplyResult{}, err
+		}
+		// The pages of before: an inbound that still runs with one has read it already.
+		if old, err := os.ReadDir(dir); err == nil {
+			for _, f := range old {
+				if f.Name() != filepath.Base(front) {
+					_ = os.Remove(filepath.Join(dir, f.Name()))
+				}
+			}
 		}
 	}
 	raw, rejected, err := buildConfig(st, cert, e.allowPrivate, front)
@@ -386,6 +417,9 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 		}
 	}
 
+	// Before the listeners: a new one takes users under the guard the state asks for.
+	e.setGuard(st.OwnPorts)
+
 	e.Reg.SetSlots(st.Slots)
 	e.Reg.SetShaping(st.Shaping)
 	e.Reg.SetPolicies(st.Epoch, st.Policies)
@@ -394,6 +428,7 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 	e.Reg.SetIngress(st.Filters)
 	e.setRedirect(st.HTTPRedirect)
 	e.apiLock().set(st.APIAllow)
+	e.apiLock().setPanel(st.PanelURL)
 	e.Reg.SetDetail(st.Detail)
 	pools := map[string]string{}
 	for _, in := range st.Inbounds {
@@ -426,15 +461,11 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 		listener.PatchInboundListeners(listening, e.tun, true)
 	}
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
-	ports := make(map[string]string, len(st.Inbounds))
-	for _, in := range st.Inbounds {
-		ports[in.Name] = in.Port
-	}
 	if e.front == nil {
 		e.front = newFrontPage()
 	}
 	e.front.set(st.FrontPage, st.TLS)
-	e.setRouter(st.Router, ports)
+	e.setRouter(st.Router, st.Inbounds)
 	recreated := make([]string, 0, len(started))
 	for name := range started {
 		recreated = append(recreated, name)
@@ -718,6 +749,22 @@ func loadCounters(path string, log *slog.Logger) (counterState, error) {
 // loadState reads the saved desired state; ok is false when there is none to apply: no
 // file, or a broken one, which is kept aside. The panel then pushes the whole state, as
 // it does to any node that reports revision 0.
+// SavedPanelURL is the panel's address in the state the node saved last (DesiredState.
+// PanelURL), for what runs beside the node (mikan-node hello); "" when there is none.
+func SavedPanelURL(dataDir string) string {
+	raw, err := os.ReadFile(filepath.Join(dataDir, stateFile))
+	if err != nil {
+		return ""
+	}
+	var st struct {
+		PanelURL string `json:"panel_url"`
+	}
+	if json.Unmarshal(raw, &st) != nil {
+		return ""
+	}
+	return st.PanelURL
+}
+
 func loadState(path string, log *slog.Logger) (st nodeapi.DesiredState, ok bool, err error) {
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -780,4 +827,14 @@ func (e *Engine) Probe(ctx context.Context, proxy string) (nodeapi.ProbeResult, 
 		e.probes[proxy] = r
 	}
 	return r, true
+}
+
+// frontFile is the name of the file of the page kind: the template's name with a mark of
+// the page's own bytes. The core reads the file when an inbound starts and not again, so a
+// page that changes (another template, the installation's seed arriving after a start with
+// the state of before) must be another file: the inbounds' config changes with the name, and
+// they start anew with the new page.
+func frontFile(kind string, page []byte) string {
+	sum := sha256.Sum256(page)
+	return strings.TrimSuffix(frontpage.File(kind), ".html") + "-" + hex.EncodeToString(sum[:6]) + ".html"
 }

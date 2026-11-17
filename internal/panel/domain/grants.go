@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"mikan/internal/panel/events"
 	"mikan/internal/panel/model"
 	"mikan/internal/panel/store/db"
 )
@@ -30,7 +31,8 @@ const (
 const (
 	SourcePurchase = "purchase"
 	SourceAdmin    = "admin"
-	SourceGift     = "gift" // a gift of the tariff a payment was for (gifts.go)
+	SourceGift     = "gift"  // a gift of the tariff a payment was for (gifts.go)
+	SourceCarry    = "carry" // what a period left, carried into the next (lifecycle.go)
 )
 
 // Limits of a package or a grant.
@@ -225,6 +227,11 @@ func CountTraffic(ctx context.Context, q *db.Queries, b TrafficBatch, now time.T
 	if err := spendGrants(ctx, q, over, now); err != nil {
 		return err
 	}
+	// Counted traffic is the first connection a waiting term waits for (starts.go): its
+	// clock runs from this batch on, under the same locks.
+	if _, err := startWaiting(ctx, q, users, now, events.StartedByConnection); err != nil {
+		return err
+	}
 	if err := q.AddTrafficHourlyBatch(ctx, db.AddTrafficHourlyBatchParams{UserIds: stats.UserIds, Hour: now.Unix() / 3600, Up: stats.Up, Down: stats.Down}); err != nil {
 		return err
 	}
@@ -243,7 +250,18 @@ func CountTraffic(ctx context.Context, q *db.Queries, b TrafficBatch, now time.T
 	if up == 0 && down == 0 {
 		return nil
 	}
-	return q.AddNodeTraffic(ctx, db.AddNodeTrafficParams{NodeID: b.Node, Hour: now.Unix() / 3600, Day: now.Unix() / 86400, Up: up, Down: down})
+	if err := q.AddNodeTraffic(ctx, db.AddNodeTrafficParams{NodeID: b.Node, Hour: now.Unix() / 3600, Day: now.Unix() / 86400, Up: up, Down: down}); err != nil {
+		return err
+	}
+	// The same bytes by user on this node, and the user seen on it now: one row a pair,
+	// added to in place, for the node's clients and the user's nodes.
+	pairs := db.AddUserNodeTrafficParams{NodeID: b.Node, Now: now.Unix()}
+	for i, id := range stats.UserIds {
+		if stats.Up[i] != 0 || stats.Down[i] != 0 {
+			pairs.UserIds, pairs.Up, pairs.Down = append(pairs.UserIds, id), append(pairs.Up, stats.Up[i]), append(pairs.Down, stats.Down[i])
+		}
+	}
+	return q.AddUserNodeTraffic(ctx, pairs)
 }
 
 // mainGroupsToMain moves the traffic of the server groups that count to the user's main

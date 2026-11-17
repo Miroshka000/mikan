@@ -24,6 +24,7 @@ import { GeoTab } from "./geo-check";
 import { CheckSkeleton, ReachView, StatusMark } from "./node-check";
 import { ServerPicks, useServerPicks } from "./server-picks";
 import { CardHead } from "../../components/layout";
+import { Select } from "../../components/select";
 
 const TerminalTab = lazy(() => import("./diag-terminal").then((m) => ({ default: m.TerminalTab })));
 
@@ -68,13 +69,13 @@ export function DiagnosticsPage() {
 function ServerSelect({ servers, source, onSource, id }: { servers: { id: string; label: string }[]; source: string; onSource: (id: string) => void; id: string }) {
   return (
     <Field label={t("diag.server")} htmlFor={id}>
-      <select id={id} className="input min-w-[200px]" value={source} onChange={(e) => onSource(e.target.value)}>
+      <Select id={id} className="input min-w-[200px]" value={source} onChange={(e) => onSource(e.target.value)}>
         {servers.map((s) => (
           <option key={s.id} value={s.id}>
             {s.label}
           </option>
         ))}
-      </select>
+      </Select>
     </Field>
   );
 }
@@ -127,13 +128,13 @@ function LogsTab({ servers, source, onSource }: { servers: { id: string; label: 
           />
         </Field>
         <Field label={t("diag.logs.tail")} htmlFor="logs-tail">
-          <select id="logs-tail" className="input" value={tail} onChange={(e) => setTail(Number(e.target.value))}>
+          <Select id="logs-tail" className="input" value={tail} onChange={(e) => setTail(Number(e.target.value))}>
             {TAILS.map((n) => (
               <option key={n} value={n}>
                 {t("diag.logs.lines", { n })}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label={t("diag.logs.search")} htmlFor="logs-search">
           <label className="search-field">

@@ -52,13 +52,29 @@ func (b *Bot) config(ctx context.Context) Config { return b.d.Backend.Config(ctx
 // the input field, in the bot's language. An error means some of it is not set: the caller
 // tries again.
 func (b *Bot) Started(ctx context.Context) error {
-	cfg := b.config(ctx)
+	var cfg Config
+	var url string
+	if remote, ok := b.d.Backend.(interface {
+		ChatSetup(context.Context) (Config, string, error)
+	}); ok {
+		var err error
+		cfg, url, err = remote.ChatSetup(ctx)
+		if err != nil {
+			return err
+		}
+	} else {
+		cfg = b.config(ctx)
+		url = b.miniAppURL(ctx, cfg)
+	}
 	w := wordsFor(cfg.Lang)
-	text, url := "", b.miniAppURL(ctx, cfg)
+	text := ""
 	if url != "" {
 		text = w.menuApp
 	}
-	return errors.Join(b.d.Client.SetCommands(ctx, w.commands), b.d.Client.SetMenuButton(ctx, text, url))
+	if err := errors.Join(b.d.Client.SetCommands(ctx, w.commands), b.d.Client.SetMenuButton(ctx, text, url)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Update takes a message or a press in a private chat, the flood guard passed. It is
