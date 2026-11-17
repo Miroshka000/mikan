@@ -635,3 +635,34 @@ func TestSupportTerminalNotices(t *testing.T) {
 		}
 	}
 }
+
+// Receiving "end" must permit reconnect even while the old WebSocket closing
+// handshake is waiting for its client. This used to retain the hub's busy slot.
+func TestSupportTerminalReconnectBeforeCloseHandshake(t *testing.T) {
+	s := newTerminalHarness(t)
+	g := s.terminalGrant(nil)
+	client := s.newOperator().client
+	first, resp, err := s.dialTerminal(client, bearerHeader(g.Token), "panel")
+	if err != nil {
+		t.Fatalf("first: %v %v", err, resp)
+	}
+	session := s.agent.Next()
+	if first.control("ready") == nil {
+		t.Fatal("first not ready")
+	}
+	session.End("exit")
+	if first.control("end") == nil {
+		t.Fatal("first did not end")
+	}
+	// Do not read/acknowledge the first connection's closing frame yet.
+	second, resp, err := s.dialTerminal(client, bearerHeader(g.Token), "panel")
+	if err != nil {
+		t.Fatalf("reconnect: %v %v", err, resp)
+	}
+	if second.control("ready") == nil {
+		t.Fatalf("reconnect refused: %v", second.msgs)
+	}
+	_ = first.c.CloseNow()
+	_ = second.c.Close(websocket.StatusNormalClosure, "")
+	waitAudit(t, s.harness, "support.terminal.end", 2)
+}

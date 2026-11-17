@@ -387,6 +387,8 @@ func (h *handlers) runTerminal(rctx context.Context, c *websocket.Conn, g db.Sup
 	}
 	// Closing the stream is what ends the shell when the agent has not.
 	host.Close()
+	// Release before end/audit notifications: an immediate reconnect must see a free server.
+	h.terms.remove(sess)
 	secs := int64(h.d.Now().Sub(started).Seconds())
 	recMu.Lock()
 	rec := recording
