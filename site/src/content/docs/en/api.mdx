@@ -1,13 +1,19 @@
 ---
 title: API
-description: The panel's REST API, keys with "Read" and "Full access" scopes, OpenAPI documentation and request examples.
+description: The panel's REST API, keys with "Read" and "Full access" scopes, the methods reference, the OpenAPI file, SDKs and request examples.
 ---
 
-The panel has a REST API for bots, billing and monitoring. Its documentation is built into the panel itself.
+The panel has a REST API for bots, billing and monitoring. All the methods with their parameters and answers are in the [reference](/mikan/en/api/reference/) on this site, and the same reference is built into the panel itself. Guides: [create a user](/mikan/en/api/create-user/), [your own bot](/mikan/en/api/own-bot/), [SDK](/mikan/en/api/sdk/), [webhooks](/mikan/en/api/webhooks/), [stability and changes](/mikan/en/api/stability/).
 
 ## Where the documentation is
 
-**Settings → Security → API → Open**. The page has:
+:::note[New in 0.5.2.1]
+The methods reference on this site and the guides are new in 0.5.2.1, and so are the SDKs and webhooks.
+:::
+
+The methods reference: [all API methods](/mikan/en/api/reference/). Every method has its parameters, request body, answers and examples, and it says which key it needs.
+
+In the panel itself: **Settings → Security → API → Open**. The page has:
 
 - the API address and keys;
 - a list of all methods with parameters, responses and curl examples, and a "Try it" button for GET requests;
@@ -43,6 +49,8 @@ Authorization: Bearer mk_...
 
 Errors come in RFC 9457 format (`application/problem+json`), with the error code in the `detail` field. When fields of the request are refused (422, `detail` is `validation`), each field has its own code in `errors[].message` and the field in `errors[].location`, such as `body.port`; `errors[].value` may hold what the code names (the busy port, the line of a rule).
 
+Refusals that come with the key: 401 `unauthorized` (the key is wrong, revoked or expired; many failures from one address close the entrance for a while: 429 `rate_limited`, the time is in the `Retry-After` header), 403 `read_only_key` (a "Read" key tries to change data) and 403 `session_only` (the method is for the administrator's session only).
+
 ## Examples
 
 ```bash
@@ -64,7 +72,7 @@ curl -X POST "$BASE/users" \
   -d '{"name": "Anna", "tariff_id": 2, "contact": "@anna"}'
 ```
 
-The response has the user with an `id` and the subscription link `sub_url`.
+The response has the user with an `id` and the subscription link `sub_url`. More in [Create a user with a key](/mikan/en/api/create-user/).
 
 Extend by 30 days or by a month (one of the two is required):
 
@@ -82,34 +90,15 @@ curl -X POST "$BASE/users/42/grants" \
   -d '{"bytes": 10737418240, "lifetime": "used"}'
 ```
 
-## Main methods
+## All methods
 
-| Method | Path | What it does |
-|---|---|---|
-| GET | `/users` | list: `state`, `q`, `limit`, `offset` |
-| POST | `/users` | create a user from a plan |
-| GET, PATCH | `/users/{id}` | a user, change |
-| POST | `/users/{id}/extend` | extend: `days` or `months` |
-| POST | `/users/{id}/reset-traffic` | reset traffic |
-| POST | `/users/{id}/reissue` | reissue the link |
-| POST | `/users/{id}/grants` | add traffic |
-| POST | `/users/bulk` | an action on a group: extend, reset, disable, enable, delete |
-| GET | `/tariffs` | plans |
-| GET | `/inbounds` | connections |
-| GET | `/nodes` | nodes |
-| GET | `/stats/overview` | overview figures |
-| GET | `/stats/traffic` | server traffic: `range` 24h, 7d or 30d |
-| GET | `/metrics` | Prometheus metrics |
+The list of methods is not kept by hand: the reference is built at every build of the site from the file `web/src/api/openapi.json`, which the panel exports itself with the `mikan openapi` command. The methods are grouped by the panel's sections, and each says which key it takes: any, only "Full access", or only the administrator's session.
+
+[Open the reference](/mikan/en/api/reference/)
 
 ## Client balances and promo code statistics
 
-The panel has no screens for these methods: they are for scripts, for example to reconcile balances with your books or to build a report on promo codes.
-
-| Method | Path | What it does |
-|---|---|---|
-| GET | `/promocodes/stats` | a summary of the promo codes: how many there are and how many are active, successful activations, bonus days and bytes given, orders with a discount and the total discount |
-| GET | `/balances/{tg_id}` | a Telegram account's balance and its last 50 operations |
-| POST | `/balances/{tg_id}/adjust` | change a balance by hand: `delta` and `note` |
+The panel has no screens for these methods: they are for scripts, for example to reconcile balances with your books or to build a report on promo codes. They are the [summary of the promo codes](/mikan/en/api/reference/operations/promocode-stats/), [a Telegram account's balance with its last operations](/mikan/en/api/reference/operations/get-balance/) and [the manual change of a balance](/mikan/en/api/reference/operations/adjust-balance/).
 
 Both GET methods are open to any key, "Read" or "Full access":
 
@@ -121,5 +110,3 @@ curl -H "Authorization: Bearer $KEY" "$BASE/balances/123456789"
 The amounts of a balance and its operations come in hundredths of the currency (the `currency` of the answer): positive is money in, negative is money out. An operation's `kind` is `topup`, `spend`, `refund` or `adjust`.
 
 Changing a balance moves a client's money, so an API key cannot call it: the answer is 403 `session_only`. It is available only from the administrator's session, with a body like `{"delta": -5000, "note": "refund for the downtime"}`. `delta` is in hundredths of the currency, a negative one debits, and the balance never goes below zero (the answer is `balance_low`). `note` is required and shown to the client in the balance history. Every change goes to the audit log.
-
-For the full list with request and response bodies, see the API page in the panel.

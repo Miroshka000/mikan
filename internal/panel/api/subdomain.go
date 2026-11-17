@@ -56,7 +56,7 @@ func (h *handlers) checkSubDomain(ctx context.Context, b *patchSettingsBody) ([]
 	}
 	if dom == "" {
 		if external {
-			return []*huma.ErrorDetail{fieldDetail("body.sub_domain", "sub_domain_invalid", nil)}, nil
+			return []*huma.ErrorDetail{fieldDetail("body.sub_domain", "sub_domain_required", nil)}, nil
 		}
 		return nil, nil
 	}

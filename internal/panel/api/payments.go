@@ -277,7 +277,11 @@ func (h *handlers) updatePaymentSettings(ctx context.Context, in *patchPaymentSe
 			}
 			if bb.Currency != nil && *bb.Currency != bc.Currency {
 				// The balances hold their sums in the currency of the config: a change would
-				// read 500 rubles as 500 dollars. It waits until no money is held in them.
+				// read 500 rubles as 500 dollars. It waits until no money is held in them; the
+				// lock keeps an import from carrying money in between.
+				if err := q.LockBalanceCurrency(ctx); err != nil {
+					return err
+				}
 				held, err := q.BalanceMoneyHeld(ctx)
 				if err != nil {
 					return err

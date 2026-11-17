@@ -7,6 +7,8 @@ import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
+import { certRefusal } from "./cert-refusal";
+import { CertRefusalNote } from "./former-domains";
 import { useSaveSettings } from "./shared";
 
 type Settings = Schemas["SettingsView"];
@@ -17,7 +19,8 @@ export function SubDomainCard({ s }: { s: Settings }) {
   const save = useSaveSettings();
   const { draft, setDraft } = useDraft(s.sub_domain);
   const { draft: external, setDraft: setExternal } = useDraft(s.sub_external);
-  const error = fieldErrors(save.error).sub_domain;
+  const refusal = certRefusal(save.error, ["sub_domain"]);
+  const error = refusal ? undefined : fieldErrors(save.error).sub_domain;
   const next = draft.trim().toLowerCase();
   const changed = next !== s.sub_domain || external !== s.sub_external;
   const submit = (e: FormEvent) => {
@@ -47,6 +50,17 @@ export function SubDomainCard({ s }: { s: Settings }) {
         </Field>
         <SwitchRow label={t("settings.subDomain.external")} sub={t("settings.subDomain.externalHint")} checked={external} onChange={setExternal} />
         <p className="text-xs text-[var(--ink-500)]">{t("settings.subDomain.note")}</p>
+        {refusal && changed ? (
+          <div className="mt-3">
+            <CertRefusalNote
+              r={refusal}
+              retrying={save.isPending && !save.variables?.force_domain}
+              forcing={save.isPending && !!save.variables?.force_domain}
+              onRetry={() => save.mutate({ sub_domain: next })}
+              onForce={() => save.mutate({ sub_domain: next, force_domain: true })}
+            />
+          </div>
+        ) : null}
         <FormActions saving={save.isPending && save.variables?.sub_domain === next} disabled={!changed}>
           {s.sub_domain ? (
             <Button variant="ghost" loading={save.isPending && save.variables?.sub_domain === ""} onClick={() => save.mutate({ sub_domain: "", sub_external: false })}>

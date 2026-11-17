@@ -13,11 +13,13 @@ import (
 // Attempt is one order at a CA as the admin panel lists it: when, at which CA and how it
 // ended. The latest come first.
 type Attempt struct {
-	At     time.Time `json:"at"`
-	CA     string    `json:"ca" enum:"letsencrypt,zerossl,google"`
-	Error  string    `json:"error,omitempty" doc:"Код errors.acme; пусто — сертификат получен"`
-	Detail string    `json:"detail,omitempty" doc:"Слова центра сертификации или системы как есть"`
-	Holder string    `json:"holder,omitempty" doc:"Кто держал порт 80 (port80_busy), если это видно"`
+	At time.Time `json:"at"`
+	CA string    `json:"ca" enum:"letsencrypt,zerossl,google"`
+	// Identifier is the name ordered: the new one, when the domain is changing.
+	Identifier string `json:"identifier,omitempty" doc:"На какое имя заказан сертификат: при смене домена новое"`
+	Error      string `json:"error,omitempty" doc:"Код errors.acme; пусто — сертификат получен"`
+	Detail     string `json:"detail,omitempty" doc:"Слова центра сертификации или системы как есть"`
+	Holder     string `json:"holder,omitempty" doc:"Кто держал порт 80 (port80_busy), если это видно"`
 }
 
 // journalLen is how many attempts are kept: enough to tell a fault that keeps coming back

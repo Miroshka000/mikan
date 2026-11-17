@@ -1,15 +1,32 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ShieldCheck } from "lucide-react";
+import { Fingerprint, LogIn, ShieldCheck } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { api, ApiError, errorText, setCsrf, unwrap } from "../../api/client";
+import { api, ApiError, errorText, setCsrf, unwrap, type Schemas } from "../../api/client";
 import { qk } from "../../api/hooks";
 import { Logo } from "../../components/atmosphere";
 import { LangSwitch } from "../../components/lang";
 import { Button, Field } from "../../components/ui";
-import { t } from "../../i18n";
+import { t, tMaybe } from "../../i18n";
+import { getPasskey, passkeyCancelled, passkeysSupported } from "../../lib/passkey";
 import { localPath } from "../../lib/url";
+
+/** A sign-in through GitHub or Telegram waiting for its answer: the ticket GitHub left or Telegram's signed result. */
+type External = { via: "github"; ticket: string } | { via: "telegram"; result: string };
+
+/** What GitHub or Telegram sent the browser back with, in the address's fragment; read once and taken out of the address. */
+function takeExternal(): External | { error: string } | null {
+  const back = new URLSearchParams(window.location.hash.slice(1));
+  const ticket = back.get("github"),
+    result = back.get("tgAuthResult"),
+    error = back.get("github_error");
+  if (!ticket && !result && !error) return null;
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  if (ticket) return { via: "github", ticket };
+  if (result) return { via: "telegram", result };
+  return { error: error ?? "" };
+}
 
 export function LoginPage() {
   const { next } = useSearch({ from: "/login" });
@@ -22,6 +39,9 @@ export function LoginPage() {
   const [error, setError] = useState("");
   const [wait, setWait] = useState(0);
   const codeRef = useRef<HTMLInputElement>(null);
+  // Set while the code finishes a sign-in through GitHub or Telegram rather than the password.
+  const [external, setExternal] = useState<External | null>(null);
+  const methods = useQuery({ queryKey: ["login-methods"], queryFn: ({ signal }) => unwrap(api.GET("/api/v1/auth/login/methods", { signal })), retry: false });
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -33,15 +53,22 @@ export function LoginPage() {
     if (step === "totp") codeRef.current?.focus();
   }, [step]);
 
+  const signedIn = (me: Schemas["MeBody"]) => {
+    setCsrf(me.csrf_token);
+    qc.setQueryData(qk.me, me);
+    // Only a path of this panel: a link made to send the admin elsewhere after signing in goes to the overview.
+    const target = localPath(next);
+    void navigate({ to: target });
+  };
+
   const login = useMutation({
-    mutationFn: () => unwrap(api.POST("/api/v1/auth/login", { body: { username, password, totp: step === "totp" ? code : undefined } })),
-    onSuccess: (me) => {
-      setCsrf(me.csrf_token);
-      qc.setQueryData(qk.me, me);
-      // Only a path of this panel: a link made to send the admin elsewhere after signing in goes to the overview.
-      const target = localPath(next);
-      void navigate({ to: target });
+    mutationFn: () => {
+      const totp = step === "totp" ? code : undefined;
+      if (external?.via === "github") return unwrap(api.POST("/api/v1/auth/login/github", { body: { ticket: external.ticket, totp } }));
+      if (external?.via === "telegram") return unwrap(api.POST("/api/v1/auth/login/telegram", { body: { result: external.result, totp } }));
+      return unwrap(api.POST("/api/v1/auth/login", { body: { username, password, totp } }));
     },
+    onSuccess: signedIn,
     onError: (e) => {
       if (e instanceof ApiError && e.status === 401) {
         if (e.detail === "totp_required") {
@@ -49,10 +76,83 @@ export function LoginPage() {
           setError("");
           return;
         }
-        setError(e.detail === "invalid_totp" ? t("login.badCode") : t("login.badCredentials"));
-        if (e.detail === "invalid_totp") setCode("");
+        if (e.detail === "invalid_totp") {
+          setError(t("login.badCode"));
+          setCode("");
+          return;
+        }
+        // A sign-in through GitHub or Telegram that did not go through: its own words, back to the start.
+        if (external) {
+          setError(tMaybe(`errors.api.${e.detail}`) ?? t("login.externalFailed"));
+          setExternal(null);
+          setStep("password");
+          setCode("");
+          return;
+        }
+        setError(t("login.badCredentials"));
         return;
       }
+      if (e instanceof ApiError && e.status === 429) {
+        setWait(e.retryAfter || 60);
+        setError("");
+        return;
+      }
+      setError(errorText(e));
+    },
+  });
+
+  // A passkey stands for the password and the code: the device checks who holds it.
+  const passkey = useMutation({
+    mutationFn: async () => {
+      const begin = await unwrap(api.POST("/api/v1/auth/login/passkey/begin"));
+      const credential = await getPasskey(begin.options);
+      return unwrap(api.POST("/api/v1/auth/login/passkey", { body: { ceremony: begin.ceremony, credential } }));
+    },
+    onSuccess: signedIn,
+    onError: (e) => {
+      if (passkeyCancelled(e)) {
+        setError("");
+        return;
+      }
+      if (e instanceof ApiError && e.status === 429) {
+        setWait(e.retryAfter || 60);
+        setError("");
+        return;
+      }
+      // The browser refuses a passkey of the panel's domain at another address (its IP).
+      if (e instanceof DOMException && e.name === "SecurityError") {
+        setError(t("login.passkeyAddress"));
+        return;
+      }
+      setError(e instanceof ApiError && e.status !== 401 ? errorText(e) : t("login.passkeyFailed"));
+    },
+  });
+
+  // Back from GitHub or Telegram: the answer is in the address, once.
+  const back = useRef(false);
+  useEffect(() => {
+    if (back.current) return;
+    back.current = true;
+    const got = takeExternal();
+    if (!got) return;
+    if ("error" in got) {
+      setError(tMaybe(`errors.api.${got.error}`) ?? t("login.externalFailed"));
+      return;
+    }
+    setExternal(got);
+  }, []);
+  useEffect(() => {
+    if (external && step === "password" && !login.isPending && !login.isSuccess) login.mutate();
+    // Once per answer: login is the same mutation throughout.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [external]);
+
+  const begin = useMutation({
+    mutationFn: async (via: "github" | "telegram") => {
+      const r = via === "github" ? await unwrap(api.POST("/api/v1/auth/login/github/begin")) : await unwrap(api.POST("/api/v1/auth/login/telegram/begin"));
+      window.location.assign(r.url);
+    },
+    onError: (e) => {
       if (e instanceof ApiError && e.status === 429) {
         setWait(e.retryAfter || 60);
         setError("");
@@ -129,7 +229,7 @@ export function LoginPage() {
           </p>
         ) : null}
 
-        <Button type="submit" variant="primary" block loading={login.isPending} disabled={wait > 0 || !username || !password || (step === "totp" && code.length < 6)}>
+        <Button type="submit" variant="primary" block loading={login.isPending} disabled={wait > 0 || (!external && (!username || !password)) || (step === "totp" && code.length < 6)}>
           {step === "password" ? t("login.submit") : t("login.confirm")}
         </Button>
         {step === "totp" ? (
@@ -140,14 +240,48 @@ export function LoginPage() {
               setStep("password");
               setCode("");
               setError("");
+              setExternal(null);
             }}
           >
             {t("login.back")}
           </button>
         ) : (
-          <p className="mt-6 text-center text-xs text-[var(--ink-500)]">
-            {t("login.forgot")} <span className="mono">mikan reset-password</span>
-          </p>
+          <>
+            {passkeysSupported() ? (
+              <>
+                <div className="my-4 flex items-center gap-3 text-xs text-[var(--ink-500)]">
+                  <span className="h-px flex-1 bg-[var(--hairline)]" aria-hidden />
+                  {t("login.or")}
+                  <span className="h-px flex-1 bg-[var(--hairline)]" aria-hidden />
+                </div>
+                <Button type="button" variant="glass" block loading={passkey.isPending} disabled={wait > 0 || login.isPending} onClick={() => passkey.mutate()}>
+                  <Fingerprint size={16} aria-hidden /> {t("login.passkey")}
+                </Button>
+              </>
+            ) : null}
+            {methods.data?.github || methods.data?.telegram ? (
+              <div className="mt-3 flex flex-col gap-2">
+                {(["github", "telegram"] as const)
+                  .filter((via) => methods.data?.[via])
+                  .map((via) => (
+                    <Button
+                      key={via}
+                      type="button"
+                      variant="glass"
+                      block
+                      loading={begin.isPending && begin.variables === via}
+                      disabled={wait > 0 || login.isPending || begin.isPending}
+                      onClick={() => begin.mutate(via)}
+                    >
+                      <LogIn size={16} aria-hidden /> {t(`login.via.${via}`)}
+                    </Button>
+                  ))}
+              </div>
+            ) : null}
+            <p className="mt-6 text-center text-xs text-[var(--ink-500)]">
+              {t("login.forgot")} <span className="mono">mikan reset-password</span>
+            </p>
+          </>
         )}
       </motion.form>
     </div>

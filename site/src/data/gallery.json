@@ -1,0 +1,64 @@
+{
+  "$comment": "The community gallery (docs: operations/gallery). One entry per work; kind is one of template, rules, page, bot, addon, tool. builtin: the panel ships it. Add yours in a pull request.",
+  "items": [
+    {
+      "id": "privwl-blocked",
+      "kind": "template",
+      "title": {"ru": "privWL · только заблокированное", "en": "privWL · only what is blocked"},
+      "about": {
+        "ru": "Шаблон Clash: через VPN только заблокированное и замедленное в России, плюс диапазоны адресов, которые замедляют (Cloudflare, AWS и другие). Ловит приложения со своим DoH.",
+        "en": "A Clash template: only what is blocked or slowed down in Russia goes through the VPN, plus the slowed-down address ranges (Cloudflare, AWS and others). Catches apps with their own DoH."
+      },
+      "author": "Nemu-x",
+      "url": "https://github.com/Nemu-x/privWL-clash",
+      "license": "GPL-3.0-only",
+      "builtin": true
+    },
+    {
+      "id": "davoyan-ru-direct",
+      "kind": "template",
+      "title": {"ru": "Davoyan · Россия напрямую", "en": "Davoyan · Russia direct"},
+      "about": {
+        "ru": "Шаблон Clash: российские сайты и адреса напрямую, остальное через VPN, на списках mihomo-rule-sets вместо geo-файлов.",
+        "en": "A Clash template: Russian sites and addresses direct, the rest through the VPN, on the mihomo-rule-sets lists instead of geo files."
+      },
+      "author": "Davoyan",
+      "url": "https://github.com/Davoyan/mihomo-rule-sets",
+      "license": "GPL-3.0-only",
+      "builtin": true
+    },
+    {
+      "id": "privwl-clash",
+      "kind": "rules",
+      "title": {"ru": "privWL-clash", "en": "privWL-clash"},
+      "about": {
+        "ru": "Списки правил mihomo: заблокированные сайты и замедляемые диапазоны адресов. На них построен шаблон «privWL».",
+        "en": "mihomo rule lists: blocked sites and slowed-down address ranges. The privWL template is built on them."
+      },
+      "author": "Nemu-x",
+      "url": "https://github.com/Nemu-x/privWL-clash"
+    },
+    {
+      "id": "mihomo-rule-sets",
+      "kind": "rules",
+      "title": {"ru": "mihomo-rule-sets", "en": "mihomo-rule-sets"},
+      "about": {
+        "ru": "Наборы правил mihomo: российские домены и сети России и Беларуси. На них построен шаблон «Davoyan».",
+        "en": "mihomo rule sets: Russian domains and the networks of Russia and Belarus. The Davoyan template is built on them."
+      },
+      "author": "Davoyan",
+      "url": "https://github.com/Davoyan/mihomo-rule-sets"
+    },
+    {
+      "id": "marketplace-community",
+      "kind": "addon",
+      "title": {"ru": "Реестр аддонов сообщества", "en": "Community addon registry"},
+      "about": {
+        "ru": "Аддоны сторонних авторов, которые панель показывает во вкладке «Аддоны → Сообщество». mikan их не проверяет: прочтите страницу об аддонах сообщества.",
+        "en": "Third-party addons the panel shows under Addons → Community. mikan does not review them: read the community addons page."
+      },
+      "author": "getmikan",
+      "url": "https://github.com/getmikan/marketplace-community"
+    }
+  ]
+}

@@ -29,7 +29,7 @@ type snapshot struct {
 	slots    []db.Slot
 	grants   domain.GrantsLeft
 	pools    []db.UserPool
-	servers  map[int64]domain.Servers // the tariffs that include only chosen servers
+	servers  domain.ServerBook // what every user stands on: its group's or its tariff's servers
 	counters map[int64]counterPos
 	torrent  torrent.Config
 	bans     map[int64]int64 // user → when the torrent blocker's ban ends (unix)
@@ -90,7 +90,7 @@ func (m *Manager) readSnapshot(ctx context.Context) (s *snapshot, err error) {
 	if s.pools, err = q.ListAllUserPools(ctx); err != nil {
 		return nil, err
 	}
-	if s.servers, err = domain.AllTariffServers(ctx, q); err != nil {
+	if s.servers, err = domain.LoadServerBook(ctx, q); err != nil {
 		return nil, err
 	}
 	if s.torrent, err = torrent.Load(ctx, settings.New(q)); err != nil {

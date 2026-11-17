@@ -351,3 +351,18 @@ func (s remoteShop) SubmitTopup(ctx context.Context, tgID int64, photo string) (
 	err := s.r.call(ctx, "Shop.SubmitTopup", []any{tgID, photo}, &t)
 	return t, err
 }
+
+// ChatSetup reads both values without masking an unavailable panel as an empty menu.
+func (r *Remote) ChatSetup(ctx context.Context) (Config, string, error) {
+	var cfg Config
+	if err := r.call(ctx, "Config", nil, &cfg); err != nil {
+		return cfg, "", err
+	}
+	var url string
+	if cfg.MiniApp {
+		if err := r.call(ctx, "MiniAppURL", nil, &url); err != nil {
+			return cfg, "", err
+		}
+	}
+	return cfg, url, nil
+}

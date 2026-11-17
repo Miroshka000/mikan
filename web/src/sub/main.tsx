@@ -205,7 +205,7 @@ function SubPage() {
     history.replaceState(null, "", location.pathname + location.search);
     const app = Object.values(APPS)
       .flat()
-      .find((a) => a.name === want);
+      .find((a) => a.name === want && !current.blocked_apps?.includes(a.id));
     if (app) location.href = app.link(subURL, current.brand, current.happ_link);
   }, [current, subURL]);
 

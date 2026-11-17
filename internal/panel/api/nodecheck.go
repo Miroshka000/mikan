@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"math"
 	"net"
@@ -151,10 +150,12 @@ func (h *handlers) checkNode(ctx context.Context, in *nodeIDInput) (*checkOutput
 		add(h.helloItem(n.ID))
 	}
 	if !hv.OK {
-		// Nothing more is known of a node that does not answer, but whether its ports open.
+		// Nothing more is known of a node that does not answer, but whether its ports open
+		// and how its setup looks from outside.
 		if !local {
 			add(h.portItems(ctx, n)...)
 		}
+		add(h.exposureItems(ctx, n)...)
 		return h.checkResult(ctx, n, items, hv)
 	}
 	add(h.versionItem(n, hv))
@@ -179,6 +180,7 @@ func (h *handlers) checkNode(ctx context.Context, in *nodeIDInput) (*checkOutput
 	add(relayIt...)
 	add(cascade...)
 	add(nodeDiag...)
+	add(h.exposureItems(ctx, n)...)
 	return h.checkResult(ctx, n, items, hv)
 }
 
@@ -328,10 +330,25 @@ func (h *handlers) tcpPorts(ctx context.Context, n db.Node) []tcpPort {
 		return nil
 	}
 	relay := ""
-	if r, err := h.d.Store.Q.GetNodeRelay(ctx, n.ID); err == nil {
+	if r, ok := h.liveRelay(ctx, n.ID); ok {
 		relay = r.Port
 	}
 	return nodeTCPPorts(n, ins, relay)
+}
+
+// liveRelay is the node's relay while some node leaves through it now: only then does the
+// node run it (nodesync). A relay is kept when its sources leave, and so are their keys.
+func (h *handlers) liveRelay(ctx context.Context, id int64) (db.NodeRelay, bool) {
+	q := h.d.Store.Q
+	r, err := q.GetNodeRelay(ctx, id)
+	if err != nil {
+		return db.NodeRelay{}, false
+	}
+	users, err := domain.CurrentRelaySources(ctx, q, id)
+	if err != nil || len(users) == 0 {
+		return db.NodeRelay{}, false
+	}
+	return r, true
 }
 
 // nodeTCPPorts are the TCP ports of the node's enabled protocols and of its relay, a range at
@@ -460,7 +477,8 @@ func (h *handlers) cascadeItems(ctx context.Context, n db.Node, hv nodesync.Heal
 			names[x.ID] = x.Name
 		}
 	}
-	if r, err := q.GetNodeRelay(ctx, n.ID); err == nil {
+	r, live := h.liveRelay(ctx, n.ID)
+	if live {
 		state, why := relayListener(hv, r.Port)
 		it := CheckItem{ID: "relay", Status: nodeapi.CheckOK, Params: map[string]string{"port": r.Port}}
 		switch state {
@@ -472,8 +490,6 @@ func (h *handlers) cascadeItems(ctx context.Context, n db.Node, hv nodesync.Heal
 			it.Status, it.Code = nodeapi.CheckSkip, "unknown"
 		}
 		relay = append(relay, it)
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
 	}
 	var ids []int64
 	if ins, err := q.ListNodeInbounds(ctx, n.ID); err == nil {
@@ -483,7 +499,7 @@ func (h *handlers) cascadeItems(ctx context.Context, n db.Node, hv nodesync.Heal
 			}
 		}
 	}
-	if r, err := q.GetNodeRelay(ctx, n.ID); err == nil && r.ExitNodeID.Valid && !slices.Contains(ids, r.ExitNodeID.Int64) {
+	if live && r.ExitNodeID.Valid && !slices.Contains(ids, r.ExitNodeID.Int64) {
 		ids = append(ids, r.ExitNodeID.Int64)
 	}
 	exits = make([]CheckItem, len(ids))
@@ -500,7 +516,7 @@ func (h *handlers) exitItem(ctx context.Context, entry, exit int64, name string)
 	params := map[string]string{"exit": name, "exit_id": strconv.FormatInt(exit, 10)}
 	p, err := h.d.Nodes.Probe(ctx, entry, nodeapi.ExitName(exit))
 	if err != nil {
-		return CheckItem{ID: "cascade", Status: nodeapi.CheckSkip, Code: "old_node", Params: params, Detail: err.Error()}
+		return probeErrItem(params, err)
 	}
 	if p.OK {
 		params["ip"] = p.IP
@@ -527,6 +543,21 @@ func (h *handlers) exitItem(ctx context.Context, entry, exit int64, name string)
 			// exit has no internet itself.
 			it.Code, it.Fix = "exit_blocked", "open_port"
 		}
+	}
+	return it
+}
+
+// probeErrItem is the cascade item of a probe the entry node did not answer with a result:
+// the exit is not in its applied config yet, the node predates /v1/probe, or the call failed.
+func probeErrItem(params map[string]string, err error) CheckItem {
+	it := CheckItem{ID: "cascade", Status: nodeapi.CheckSkip, Code: "probe_failed", Params: params, Detail: err.Error()}
+	var ne *nodeapi.Error
+	var se *nodeapi.StatusError
+	switch {
+	case errors.As(err, &ne) && ne.Code == "no_such_outbound":
+		it.Status, it.Code, it.Detail = nodeapi.CheckWarn, "not_applied", ""
+	case errors.As(err, &se) && (se.Status == http.StatusNotFound || se.Status == http.StatusMethodNotAllowed):
+		it.Code, it.Fix, it.Detail = "old_node", "update_node", ""
 	}
 	return it
 }

@@ -2,17 +2,17 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-ru-dark.svg">
-  <img alt="mikan — VPN-панель на ядре mihomo" src=".github/assets/banner-ru-light.svg" width="100%">
+  <img alt="mikan — VPN-панель на ядре Citrus" src=".github/assets/banner-ru-light.svg" width="100%">
 </picture>
 
 <br>
 
-**Быстрая и красивая VPN-панель на ядре [mihomo](https://github.com/MetaCubeX/mihomo): ставится одной командой и не требует присмотра.**
+**Быстрая и красивая VPN-панель на ядре [Citrus](https://github.com/getmikan/Citrus): ставится одной командой и не требует присмотра.**
 
 [![Релиз](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=релиз&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
 [![Образ](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
 [![Лицензия](https://img.shields.io/badge/лицензия-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
-[![mihomo](https://img.shields.io/badge/ядро-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
+[![Citrus](https://img.shields.io/badge/ядро-Citrus-9e8eff?style=flat-square)](https://github.com/getmikan/Citrus)
 [![Telegram](https://img.shields.io/badge/Telegram-канал-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/mikanvpn)
 [![Telegram](https://img.shields.io/badge/Telegram-форум-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/+I2JFR7DbPow1ZmQy)
 
@@ -69,7 +69,7 @@ mikan следит, доходят ли реальные клиенты до к�
 <td valign="top">
 
 ### 📊 Учёт до байта
-mihomo встроен как библиотека, поэтому трафик считается по каждому соединению каждого пользователя, а не выборочно.
+[Citrus](https://github.com/getmikan/Citrus), наш форк mihomo, встроен как библиотека, поэтому трафик считается по каждому соединению каждого пользователя, а не выборочно.
 - Тарифы по сроку и гигабайтам, день оплаты.
 - Лимит устройств и привязка к устройствам против перепродажи ключа.
 - Блокировка торрентов: каждое соединение известно по пользователю, поэтому бан получает тот, кто качает, сразу на всех нодах, а не общий IP.
@@ -187,7 +187,7 @@ REST API с документацией прямо в панели, ключи с
 ```mermaid
 flowchart LR
     A[Браузер] -- HTTPS, секретная ссылка --> P[панель mikan<br>пользователи · тарифы · подписки]
-    P -- unix-сокет / TLS с пиннингом --> N1[нода mikan<br>внутри mihomo]
+    P -- unix-сокет / TLS с пиннингом --> N1[нода mikan<br>внутри Citrus]
     P -- TLS с пиннингом --> N2[удалённая нода]
     C[VPN-приложения] -- REALITY · QUIC · … --> N1
     C --> N2
@@ -260,7 +260,7 @@ cd installer && cargo test                    # установщик (Rust)
 
 ## Лицензия
 
-mikan — свободная программа под [GNU GPL v3](LICENSE) с дополнительными условиями из [NOTICE.md](NOTICE.md): сохранять указание авторства, не выдавать изменённую версию за оригинал, права на название и логотип не передаются. Copyright (C) 2026 Miroshka and Mikan. Внутри [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0), часть кода взята из [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0). Шрифты: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
+mikan — свободная программа под [GNU GPL v3](LICENSE) с дополнительными условиями из [NOTICE.md](NOTICE.md): сохранять указание авторства, не выдавать изменённую версию за оригинал, права на название и логотип не передаются. Copyright (C) 2026 Miroshka and Mikan. Внутри [Citrus](https://github.com/getmikan/Citrus), форк [mihomo](https://github.com/MetaCubeX/mihomo), (GPL-3.0), часть кода взята из [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0). Шрифты: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
 
 <div align="center">
 <sub>Сделано с 🍊</sub>

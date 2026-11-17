@@ -7,7 +7,7 @@ Traffic filters are a built-in tool: **Addons → Built in → Traffic filters**
 
 ## Outgoing traffic
 
-The **Outgoing traffic** card: the nodes refuse users' traffic to what is listed here. The node's own private networks and port 25 are always closed, even without this filter.
+The **Outgoing traffic** card: the nodes refuse users' traffic to what is listed here. The node's own private networks and port 25 are always closed, even without this filter, and on the server's own address only [some ports](/mikan/en/nodes/hardening/#open-ports-of-the-server) are open.
 
 - **Close the mail ports**: a VPN address that sends mail is on blacklists within hours.
 - **Ports**: one per line, ranges too, for example `6881-6889`.

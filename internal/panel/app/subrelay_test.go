@@ -11,6 +11,8 @@ import (
 	"mikan/internal/panel/dnscheck"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
+	"mikan/internal/sub/apps"
+	"mikan/internal/subrelay"
 )
 
 func TestSubscriptionRelayKey(t *testing.T) {
@@ -35,10 +37,10 @@ func TestSubscriptionRelayKey(t *testing.T) {
 	if resp.StatusCode != 201 || json.Unmarshal(body, &full) != nil {
 		t.Fatalf("full key: %d %s", resp.StatusCode, body)
 	}
-	if resp, _ := h.do("GET", "/api/subscription/abcdefghijklmnopqrstuvwx", nil, map[string]string{"Authorization": "Bearer " + full.Key}); resp.StatusCode != 403 {
+	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/abcdefghijklmnopqrstuvwx", nil, map[string]string{"Authorization": "Bearer " + full.Key}); resp.StatusCode != 404 {
 		t.Fatalf("general key reached relay: %d", resp.StatusCode)
 	}
-	if resp, _ := h.do("GET", "/api/subscription/abcdefghijklmnopqrstuvwx", nil, nil); resp.StatusCode != 401 {
+	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/abcdefghijklmnopqrstuvwx", nil, nil); resp.StatusCode != 404 {
 		t.Fatalf("admin cookie reached relay: %d", resp.StatusCode)
 	}
 
@@ -62,24 +64,36 @@ func TestSubscriptionRelayKey(t *testing.T) {
 	}
 
 	bearer["User-Agent"] = "mihomo/1.19.32"
-	if resp, body := h.do("GET", "/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 200 || len(body) == 0 {
+	if resp, body := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 200 || len(body) == 0 {
 		t.Fatalf("profile: %d %s", resp.StatusCode, body)
 	}
+	// The dev response-rule drop is transported as intent, never as an origin outage.
+	h.client.Jar = jar
+	rule := apps.Rule{Name: "edge drop", Enabled: true, When: apps.Group{Op: apps.And, Conds: []apps.Cond{{Header: "X-Edge-Rule", Op: apps.OpEquals, Value: "drop"}}, Groups: []apps.Inner{}}, Do: apps.Action{Respond: apps.RespondDrop}}
+	if resp, body := h.do("PUT", api+"/sub-rules", map[string]any{"builtin": true, "rules": []apps.Rule{rule}}, map[string]string{"X-CSRF-Token": h.csrf}); resp.StatusCode != 200 {
+		t.Fatalf("save drop rule: %d %s", resp.StatusCode, body)
+	}
+	h.client.Jar = nil
+	bearer["X-Edge-Rule"] = "drop"
+	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 204 || resp.Header.Get(subrelay.RelayActionHeader) != "drop" {
+		t.Fatalf("rule drop became an outage: %d %v", resp.StatusCode, resp.Header)
+	}
+	delete(bearer, "X-Edge-Rule")
 	// Unknown paths and unknown subscriber tokens are refused.
 	for _, p := range []string{"/admin/api/v1/users", "/../users", "/pay/test"} {
-		if resp, _ := h.do("GET", "/api/subscription"+p, nil, bearer); resp.StatusCode == 200 {
+		if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription"+p, nil, bearer); resp.StatusCode == 200 {
 			t.Errorf("relay escaped: %s", p)
 		}
 	}
-	if resp, _ := h.do("GET", "/api/subscription/abcdefghijklmnopqrstuvwx", nil, nil); resp.StatusCode != 401 {
+	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/abcdefghijklmnopqrstuvwx", nil, nil); resp.StatusCode != 404 {
 		t.Fatal(resp.StatusCode)
 	}
-	if resp, _ := h.do("GET", "/api/subscription/abcdefghijklmnopqrstuvwx", nil, bearer); resp.StatusCode != 404 {
+	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/abcdefghijklmnopqrstuvwx", nil, bearer); resp.StatusCode != 404 {
 		t.Fatal(resp.StatusCode)
 	}
 	originalTime := h.now
 	h.now = h.now.Add(48 * time.Hour)
-	if resp, _ := h.do("GET", "/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 401 {
+	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 404 {
 		t.Fatalf("expired key: %d", resp.StatusCode)
 	}
 	h.now = originalTime
@@ -91,7 +105,7 @@ func TestSubscriptionRelayKey(t *testing.T) {
 	if resp, _ := h.do("DELETE", api+"/api-keys/"+strconv.FormatInt(key.ID, 10), nil, csrf); resp.StatusCode != 204 {
 		t.Fatal(resp.StatusCode)
 	}
-	if resp, _ := h.do("GET", "/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 401 {
+	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 404 {
 		t.Fatalf("revoked key: %d", resp.StatusCode)
 	}
 }
@@ -104,7 +118,7 @@ func TestExternalSubscriptionDomain(t *testing.T) {
 		t.Fatal(resp.StatusCode)
 	}
 	set := settings.New(h.st.Q)
-	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.1", settings.KeyPanelPort: 2053} {
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.1", settings.KeyPanelPort: 2053, settings.KeySubPort: 2054} {
 		if err := settings.Set(t.Context(), set, k, v); err != nil {
 			t.Fatal(err)
 		}
@@ -112,6 +126,10 @@ func TestExternalSubscriptionDomain(t *testing.T) {
 	resp, body := h.do("PATCH", "/"+adminPath+"/api/v1/settings", map[string]any{"sub_domain": "edge.example.com", "sub_external": true}, map[string]string{"X-CSRF-Token": h.csrf})
 	if resp.StatusCode != 200 || !strings.Contains(string(body), "https://edge.example.com:443/") {
 		t.Fatalf("external domain: %d %s", resp.StatusCode, body)
+	}
+	ep, err := set.PanelSubEndpoint(t.Context())
+	if err != nil || ep.Host != "203.0.113.1" || ep.Port != 2054 {
+		t.Fatalf("payment listener followed edge: %+v %v", ep, err)
 	}
 }
 
@@ -139,8 +157,8 @@ func TestExternalDomainMustReturnHereWhenDisabled(t *testing.T) {
 func TestSubscriptionRelayDatabaseOutage(t *testing.T) {
 	h := newHarness(t)
 	h.st.Close()
-	resp, _ := h.do("GET", "/api/subscription/abcdefghijklmnopqrstuvwx", nil, map[string]string{"Authorization": "Bearer mk_" + strings.Repeat("a", 40)})
-	if resp.StatusCode != 500 {
-		t.Fatalf("database outage returned %d instead of 500", resp.StatusCode)
+	resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/abcdefghijklmnopqrstuvwx", nil, map[string]string{"Authorization": "Bearer mk_" + strings.Repeat("a", 40)})
+	if resp.StatusCode != 503 {
+		t.Fatalf("database outage returned %d instead of 503", resp.StatusCode)
 	}
 }

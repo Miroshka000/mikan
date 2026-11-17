@@ -6,7 +6,10 @@ package hostname
 
 import (
 	"net"
+	"net/netip"
 	"strings"
+
+	"mikan/internal/netaddr"
 )
 
 // Name accepts a DNS name: at most 253 characters, two labels or more of ASCII letters,
@@ -47,3 +50,13 @@ func Reserved(name string) bool {
 
 // Valid accepts an IP address or a Name.
 func Valid(s string) bool { return net.ParseIP(s) != nil || Name(s) }
+
+// Public says whether a CA can certify s: a public IP address, or a Name outside the
+// special-use zones. A carrier's NAT and Tailscale's 100.64.0.0/10 are not public: the CA
+// cannot reach them.
+func Public(s string) bool {
+	if a, err := netip.ParseAddr(s); err == nil {
+		return netaddr.IsPublic(a)
+	}
+	return Name(s) && !Reserved(s)
+}

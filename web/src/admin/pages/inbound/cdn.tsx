@@ -2,6 +2,7 @@ import type { Inbound, Schemas } from "../../../api/client";
 import { Field } from "../../../components/ui";
 import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
+import { Select } from "../../../components/select";
 
 /** The headers a CDN puts the client's address in; Cloudflare's first. */
 const HEADERS = ["CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP", "True-Client-IP"] as const;
@@ -140,13 +141,13 @@ export function CdnSettings({
           {value.realIP ? (
             <div className="mt-4">
               <Field label={t("inbounds.cdn.header")} htmlFor="ed-cdn-header" hint={t("inbounds.cdn.headerHint")} error={errors["client.cdn.header"]}>
-                <select id="ed-cdn-header" className="input max-w-[320px]" value={value.header} onChange={(e) => set({ header: e.target.value })} disabled={disabled}>
+                <Select id="ed-cdn-header" className="input max-w-[320px]" value={value.header} onChange={(e) => set({ header: e.target.value })} disabled={disabled}>
                   {HEADERS.map((h) => (
                     <option key={h} value={h}>
                       {h}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
               <Field label={t("inbounds.cdn.trusted")} htmlFor="ed-cdn-nets" hint={t("inbounds.cdn.trustedHint")} error={errors["client.cdn.trusted"]}>
                 <label className="mb-2 flex items-center gap-2 text-sm">

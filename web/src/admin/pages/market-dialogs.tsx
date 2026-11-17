@@ -1,16 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink } from "lucide-react";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { ApiError, api, errorText, unwrap, type Schemas } from "../../api/client";
 import { qk } from "../../api/hooks";
 import { Confirm, Drawer, DrawerFooter } from "../../components/overlay";
 import { useToast } from "../../components/toast";
-import { Field, Pill, Segmented } from "../../components/ui";
+import { Button, Field, Pill, Segmented } from "../../components/ui";
 import { t } from "../../i18n";
 import { fieldErrors } from "../../lib/fields";
 import { localized } from "../../lib/localized";
 import { ShieldBanner } from "./market-parts";
 import { safeHref } from "../../lib/url";
-import { ADDON_ID_RE, PERMISSIONS, actsAsAdmin, installMarket, installPayment, sortPermissions, sourceLabel, type Kind, type MarketEntry, type MarketInstalled, type MarketOrigin } from "./market-common";
+import { ADDON_ID_RE, PERMISSIONS, actsAsAdmin, installMarket, ownBotDocs, installPayment, sortPermissions, sourceLabel, type Kind, type MarketEntry, type MarketInstalled, type MarketOrigin } from "./market-common";
 
 // The dialogs of the protocol 2 addons, shared by both tabs of the addons page: approving
 // what an addon may do, its details, and an addon of the admin's own. Each one gets exactly
@@ -405,6 +406,7 @@ function OwnForm({
           options={(["bot", "ui", "generic"] as const).map((k) => ({ value: k, label: t(`market.kind.${k}`) }))}
         />
       </Field>
+      {o.kind === "bot" ? <OwnBotSteps fill={() => set({ mode: "client", url: "", permissions: o.permissions.includes("bot") ? o.permissions : ["bot", ...o.permissions] })} /> : null}
       <Field label={t("market.ownMode")} hint={t("market.ownModeHint")}>
         <Segmented
           label={t("market.ownMode")}
@@ -450,6 +452,36 @@ function OwnForm({
         )}
       </div>
     </form>
+  );
+}
+
+/**
+ * The way to a bot of the admin's own on a Telegram framework: what the panel needs, what the
+ * process is started with and the handover, with the form filled for long polling in one press.
+ * The addon's token stays in the server's state file: the panel never shows it.
+ */
+function OwnBotSteps({ fill }: { fill: () => void }) {
+  return (
+    <div className="banner info flex-col items-start" role="note">
+      <span className="font-semibold">{t("market.ownBot.title")}</span>
+      <ol className="flex list-decimal flex-col gap-1 pl-5">
+        <li>{t("market.ownBot.step1")}</li>
+        <li>{t("market.ownBot.step2")}</li>
+        <li>
+          {t("market.ownBot.step3")}
+          <code className="mono mt-1 block whitespace-pre-wrap break-all text-xs">{"MIKAN_BOT_API_URL=http://<panel_api>\nMIKAN_BOT_TOKEN=0:<panel_token>"}</code>
+        </li>
+        <li>{t("market.ownBot.step4")}</li>
+      </ol>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" onClick={fill}>
+          {t("market.ownBot.fill")}
+        </Button>
+        <a className="link-btn inline-flex items-center gap-1" href={ownBotDocs()} target="_blank" rel="noopener noreferrer">
+          {t("market.ownBot.docs")} <ExternalLink size={14} aria-hidden />
+        </a>
+      </div>
+    </div>
   );
 }
 

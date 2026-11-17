@@ -22,6 +22,9 @@ type core interface {
 	// when they were set): one pass of the core for all the changes the registry makes at
 	// once.
 	limits(set map[userKey]coreLimit, remove, fresh []userKey)
+	// closeConns closes the open connections of the users of inbounds in keys and says how
+	// many it closed; it keeps nothing out, so the clients connect again at once.
+	closeConns(keys []userKey) int
 }
 
 type userStat struct {
@@ -87,6 +90,20 @@ func (citrus) limits(set map[userKey]coreLimit, remove, fresh []userKey) {
 	}
 	// The core refuses only negative numbers and empty names; the registry makes neither.
 	_ = users.SetLimits(ls, rm)
+}
+
+// closeConns closes the connections the core tracks for each user of an inbound in keys;
+// its limits stay as they are.
+func (citrus) closeConns(keys []userKey) int {
+	byInbound := map[string][]string{}
+	for _, k := range keys {
+		byInbound[k.inbound] = append(byInbound[k.inbound], k.user)
+	}
+	closed := 0
+	for in, users := range byInbound {
+		closed += statistic.DefaultManager.CloseUserConnections(in, users...)
+	}
+	return closed
 }
 
 // coreUser is the name the core knows the slot by on an inbound: TUIC users are their

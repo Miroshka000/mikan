@@ -1,0 +1,89 @@
+# Russian sites and addresses go direct, everything else through the VPN, Telegram among
+# it. The lists are Davoyan's (https://github.com/Davoyan/mihomo-rule-sets): the Russian
+# domains gathered from several lists (MetaCubeX category-ru, itdoginfo, hydraponique)
+# and the Russian and Belarusian networks from IPinfo, MaxMind, geofeeds and the AS of
+# Russian companies, so no geosite or GeoIP file is needed for them; and the Telegram
+# domains and ranges past those, which keep it on the VPN. The template is mikan's; the
+# lists are not copied here, the apps fetch them from his repository, pinned to a commit:
+# a push to it cannot reroute the apps until the admin moves the pin.
+# In Happ and INCY (Xray configs) these lists do not work and everything goes through the
+# VPN, Russian sites too: give those apps another template with a response rule, or turn
+# their Xray configs off.
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+# As the panel's own: names resolve through the VPN, where DNS is not slowed down; the
+# Russian ones with Yandex, for the Russian sites that go direct; the servers' own names
+# straight, before the VPN is up.
+dns:
+  enable: true
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  nameserver:
+    - https://1.1.1.1/dns-query#VPN
+    - https://8.8.8.8/dns-query#VPN
+  nameserver-policy:
+    geosite:category-ru:
+      - 77.88.8.8
+      - 77.88.8.1
+  proxy-server-nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies: [Auto]
+    include-all-proxies: true
+  - name: Auto
+    type: url-test
+    include-all-proxies: true
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+rule-providers:
+  davoyan-telegram:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/Davoyan/mihomo-rule-sets/3411e9df1ecbaab886bf603dd6d16c457bc17551/domains/additional-telegram-domains.yaml
+    path: ./ruleset/davoyan-telegram.yaml
+    interval: 86400
+    proxy: VPN
+  davoyan-telegram-ip:
+    type: http
+    behavior: classical
+    format: yaml
+    url: https://raw.githubusercontent.com/Davoyan/mihomo-rule-sets/3411e9df1ecbaab886bf603dd6d16c457bc17551/domains/additional-telegram-ips.yaml
+    path: ./ruleset/davoyan-telegram-ip.yaml
+    interval: 86400
+    proxy: VPN
+  davoyan-ru:
+    type: http
+    behavior: domain
+    format: yaml
+    url: https://raw.githubusercontent.com/Davoyan/mihomo-rule-sets/3411e9df1ecbaab886bf603dd6d16c457bc17551/rules/category-ru.yaml
+    path: ./ruleset/davoyan-ru.yaml
+    interval: 86400
+    proxy: VPN
+  davoyan-ru-ip:
+    type: http
+    behavior: ipcidr
+    format: yaml
+    url: https://raw.githubusercontent.com/Davoyan/mihomo-rule-sets/3411e9df1ecbaab886bf603dd6d16c457bc17551/ip-for-ru/lists/ips-for-ru.yaml
+    path: ./ruleset/davoyan-ru-ip.yaml
+    interval: 86400
+    proxy: VPN
+rules:
+  - GEOIP,LAN,DIRECT,no-resolve
+  - RULE-SET,davoyan-telegram,VPN
+  - RULE-SET,davoyan-telegram-ip,VPN,no-resolve
+  - RULE-SET,davoyan-ru,DIRECT
+  - RULE-SET,davoyan-ru-ip,DIRECT,no-resolve
+  - MATCH,VPN

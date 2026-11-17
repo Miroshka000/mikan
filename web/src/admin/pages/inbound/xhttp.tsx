@@ -3,6 +3,7 @@ import type { Schemas } from "../../../api/client";
 import { Field, Segmented } from "../../../components/ui";
 import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
+import { Select } from "../../../components/select";
 
 export type XHTTP = Schemas["XHTTPTuning"];
 
@@ -107,12 +108,12 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
   );
   const placement = (k: "session_placement" | "seq_placement", label: string) => (
     <Field label={label} htmlFor={`x-${k}`}>
-      <select id={`x-${k}`} className="input" value={value[k] ?? ""} onChange={set(k)}>
+      <Select id={`x-${k}`} className="input" value={value[k] ?? ""} onChange={set(k)}>
         <option value="">path</option>
         <option value="query">query</option>
         <option value="header">header</option>
         <option value="cookie">cookie</option>
-      </select>
+      </Select>
     </Field>
   );
   // header and cookie carry the upload only in packet-up and only under a name.
@@ -177,20 +178,20 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
       {value.x_padding_obfs_mode ? (
         <div className="grid gap-x-3 sm:grid-cols-2">
           <Field label={t("inbounds.xhttp.placement")} htmlFor="x-placement">
-            <select id="x-placement" className="input" value={value.x_padding_placement} onChange={set("x_padding_placement")}>
+            <Select id="x-placement" className="input" value={value.x_padding_placement} onChange={set("x_padding_placement")}>
               <option value="">{t("inbounds.xhttp.byDefault")}</option>
               <option value="cookie">cookie</option>
               <option value="header">header</option>
               <option value="query">query</option>
               <option value="queryInHeader">queryInHeader</option>
-            </select>
+            </Select>
           </Field>
           <Field label={t("inbounds.xhttp.method")} htmlFor="x-method">
-            <select id="x-method" className="input" value={value.x_padding_method} onChange={set("x_padding_method")}>
+            <Select id="x-method" className="input" value={value.x_padding_method} onChange={set("x_padding_method")}>
               <option value="">{t("inbounds.xhttp.byDefault")}</option>
               <option value="repeat-x">repeat-x</option>
               <option value="tokenish">tokenish</option>
-            </select>
+            </Select>
           </Field>
           {input("x_padding_key", "x_padding", t("inbounds.xhttp.key"))}
           {input("x_padding_header", "Referer", t("inbounds.xhttp.header"))}
@@ -200,7 +201,7 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
       <h3 className="mt-3 mb-1 text-[13px] font-semibold">{t("inbounds.xhttp.upload")}</h3>
       <div className="grid gap-x-3 sm:grid-cols-3">
         <Field label={t("inbounds.xhttp.uplinkMethod")} htmlFor="x-uplink" hint={value.uplink_http_method === "GET" ? t("inbounds.xhttp.getHint") : undefined}>
-          <select
+          <Select
             id="x-uplink"
             className="input"
             value={value.uplink_http_method}
@@ -214,7 +215,7 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
             <option value="PUT">PUT</option>
             <option value="PATCH">PATCH</option>
             <option value="GET">GET</option>
-          </select>
+          </Select>
         </Field>
         {input("uplink_chunk_size", "", t("inbounds.xhttp.chunk"))}
         {input("sc_max_each_post_bytes", "1000000", t("inbounds.xhttp.maxPost"))}
@@ -228,7 +229,7 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
           htmlFor="x-client-uplink"
           hint={value.client_uplink_http_method === "GET" ? t("inbounds.xhttp.getHint") : undefined}
         >
-          <select
+          <Select
             id="x-client-uplink"
             className="input"
             value={value.client_uplink_http_method ?? ""}
@@ -242,10 +243,10 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
             <option value="PUT">PUT</option>
             <option value="PATCH">PATCH</option>
             <option value="GET">GET</option>
-          </select>
+          </Select>
         </Field>
         <Field label={t("inbounds.xhttp.dataPlace")} htmlFor="x-client-placement">
-          <select
+          <Select
             id="x-client-placement"
             className="input"
             value={value.client_uplink_data_placement ?? ""}
@@ -264,7 +265,7 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
             <option value="body">body</option>
             <option value="header">header</option>
             <option value="cookie">cookie</option>
-          </select>
+          </Select>
         </Field>
         {value.client_uplink_data_placement === "header" || value.client_uplink_data_placement === "cookie"
           ? input("client_uplink_data_key", value.client_uplink_data_placement === "header" ? "X-Data" : "x_data", t("inbounds.xhttp.key"), t("inbounds.xhttp.clientKeyHint"), false)
@@ -284,12 +285,12 @@ export function XhttpTuning({ value, onChange, error }: { value: XHTTP; onChange
           ? input("seq_key", SEQ_KEY_HINT[value.seq_placement as keyof typeof SEQ_KEY_HINT] ?? "", t("inbounds.xhttp.key"), undefined, false)
           : null}
         <Field label={t("inbounds.xhttp.dataPlace")} htmlFor="x-uplink_data_placement" hint={t("inbounds.xhttp.dataHint")}>
-          <select id="x-uplink_data_placement" className="input" value={value.uplink_data_placement ?? ""} onChange={setData}>
+          <Select id="x-uplink_data_placement" className="input" value={value.uplink_data_placement ?? ""} onChange={setData}>
             <option value="">body</option>
             <option value="header">header</option>
             <option value="cookie">cookie</option>
             <option value="auto">auto</option>
-          </select>
+          </Select>
         </Field>
         {value.uplink_data_placement === "header" || value.uplink_data_placement === "cookie"
           ? input("uplink_data_key", value.uplink_data_placement === "header" ? "X-Data" : "x_data", t("inbounds.xhttp.key"), undefined, false)

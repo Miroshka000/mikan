@@ -5,7 +5,7 @@ import { meQuery } from "../api/hooks";
 import { whoamiQuery } from "../api/support";
 import { useLocale } from "../i18n";
 import { NotFoundPage, PageLoading, RouteError } from "./route-states";
-import { ADDON_KINDS, ADDON_TABS, PAYMENT_TABS, PROMO_TABS, DIAG_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type AddonsSearch, type DiagSearch, type PaymentsSearch, type SettingsSearch, type SupportSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
+import { ADDON_KINDS, ADDON_TABS, PAYMENT_TABS, PROMO_TABS, DIAG_TABS, SETTINGS_PARTS, SETTINGS_TABS, TARIFF_TABS, TELEGRAM_TABS, USER_SOURCES, USER_STATES, type AddonsSearch, type DiagSearch, type NodesSearch, type PaymentsSearch, type SettingsSearch, type SupportSearch, type TariffsSearch, type TelegramSearch, type UsersSearch } from "./search";
 import { Shell } from "./shell";
 
 /**
@@ -21,6 +21,12 @@ function page<M extends Record<string, unknown>, K extends keyof M & string>(loa
   };
   // The router warms the chunk up when a link is hovered (defaultPreload: "intent").
   return Object.assign(Page, { preload: Lazy.preload });
+}
+
+/** A filter of the users' list that is "none" or an id; anything else is no filter. */
+function noneOrId(v: unknown): number | "none" | undefined {
+  if (v === "none") return "none";
+  return (typeof v === "number" || typeof v === "string") && Number.isSafeInteger(Number(v)) && Number(v) >= 1 ? Number(v) : undefined;
 }
 
 export function createAppRouter(queryClient: QueryClient) {
@@ -83,8 +89,9 @@ export function createAppRouter(queryClient: QueryClient) {
       q: typeof s.q === "string" ? s.q : "",
       user: typeof s.user === "number" ? s.user : Number(s.user) || undefined,
       create: s.create === true || s.create === "true" ? true : undefined,
-      // A folder is "none" or an id; anything else in a hand-made link is dropped.
-      folder: s.folder === "none" ? "none" : (typeof s.folder === "number" || typeof s.folder === "string") && Number.isSafeInteger(Number(s.folder)) && Number(s.folder) >= 1 ? Number(s.folder) : undefined,
+      // A folder or a group is "none" or an id; anything else in a hand-made link is dropped.
+      folder: noneOrId(s.folder),
+      group: noneOrId(s.group),
       source: USER_SOURCES.includes(s.source as (typeof USER_SOURCES)[number]) && s.source !== "all" ? (s.source as UsersSearch["source"]) : undefined,
       hidden: s.hidden === "show" || s.hidden === "only" ? s.hidden : undefined,
     }),
@@ -98,7 +105,15 @@ export function createAppRouter(queryClient: QueryClient) {
     }),
   });
   const inbounds = createRoute({ getParentRoute: () => app, path: "/inbounds", component: page(() => import("./pages/inbounds"), "InboundsPage") });
-  const nodes = createRoute({ getParentRoute: () => app, path: "/nodes", component: page(() => import("./pages/nodes"), "NodesPage") });
+  const nodes = createRoute({
+    getParentRoute: () => app,
+    path: "/nodes",
+    component: page(() => import("./pages/nodes"), "NodesPage"),
+    validateSearch: (s: Record<string, unknown>): NodesSearch => ({
+      node: Number.isSafeInteger(Number(s.node)) && Number(s.node) >= 1 ? Number(s.node) : undefined,
+      add: s.add === true || s.add === "true" ? true : undefined,
+    }),
+  });
   const diagnostics = createRoute({
     getParentRoute: () => app,
     path: "/diagnostics",
@@ -118,14 +133,17 @@ export function createAppRouter(queryClient: QueryClient) {
     },
     validateSearch: (s: Record<string, unknown>): SettingsSearch => {
       // Sections that moved keep their old links working: the Clash rules are a part of the
-      // routing now, its old simple view is the mode, the torrent blocker is an addon (its
-      // link goes on in beforeLoad).
+      // routing now, its old simple view is the mode, the own YAML is a subscription
+      // template, the torrent blocker is an addon (its link goes on in beforeLoad).
       if (s.tab === "rules") return { tab: "routing", part: "rules" };
       if (s.tab === "routing" && s.part === "simple") return { tab: "routing", part: "mode" };
+      if (s.tab === "routing" && s.part === "yaml") return { tab: "subscription", part: "templates" };
       if (s.tab === "routing" && s.part === "torrent") return { tab: "routing", part: "torrent" };
       const tab = SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general";
       const parts: readonly string[] | undefined = (SETTINGS_PARTS as Record<string, readonly string[]>)[tab];
-      return { tab, part: parts && typeof s.part === "string" && parts.includes(s.part) ? s.part : undefined };
+      // The page's editor edits a group's own page with the group's id; any other tab has none.
+      const group = tab === "page" ? noneOrId(s.group) : undefined;
+      return { tab, part: parts && typeof s.part === "string" && parts.includes(s.part) ? s.part : undefined, group: typeof group === "number" ? group : undefined };
     },
   });
   // The addons: what is installed (the bot, payment methods, pages, the built-in tools) and
@@ -199,10 +217,12 @@ export function createAppRouter(queryClient: QueryClient) {
     }),
   });
   const apiDocs = createRoute({ getParentRoute: () => app, path: "/settings/api", component: page(() => import("./pages/api"), "ApiPage") });
+  const siteBuilder = createRoute({ getParentRoute: () => app, path: "/settings/site-builder", component: page(() => import("./pages/site-builder"), "SiteBuilderPage") });
+  const webhooks = createRoute({ getParentRoute: () => app, path: "/settings/webhooks", component: page(() => import("./pages/webhooks"), "WebhooksPage") });
   // The API section lived in the sidebar until 0.4.2: old links land on its new place.
   const apiDocsOld = createRoute({ getParentRoute: () => app, path: "/api-docs", beforeLoad: () => { throw redirect({ to: "/settings/api" }); } });
 
-  const routeTree = root.addChildren([login, supportEnter, app.addChildren([dashboard, users, tariffs, inbounds, nodes, diagnostics, promocodes, payments, addons, telegram, torrent, filters, market, addonApp, telegramOld, apiDocs, apiDocsOld, settings])]);
+  const routeTree = root.addChildren([login, supportEnter, app.addChildren([dashboard, users, tariffs, inbounds, nodes, diagnostics, promocodes, payments, addons, telegram, torrent, filters, market, addonApp, telegramOld, apiDocs, apiDocsOld, siteBuilder, webhooks, settings])]);
   return createRouter({
     routeTree,
     basepath: basePath || "/",

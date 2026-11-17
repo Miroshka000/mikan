@@ -1,0 +1,144 @@
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: warning
+ipv6: false
+unified-delay: true
+tcp-concurrent: true
+dns:
+  enable: true
+  ipv6: false
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+proxies:
+  - name: VLESS TLS
+    type: vless
+    server: vpn.example.com
+    port: 443
+    client-fingerprint: chrome
+    network: tcp
+    servername: vpn.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  - name: VLESS WS
+    type: vless
+    server: vpn.example.com
+    port: 2053
+    client-fingerprint: chrome
+    network: ws
+    servername: vpn.example.com
+    tls: true
+    udp: true
+    uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+    ws-opts:
+      path: /golden-ws
+  - name: Hysteria2 Gecko
+    type: hysteria2
+    server: vpn.example.com
+    port: 8443
+    obfs: gecko
+    obfs-max-packet-size: 1100
+    obfs-min-packet-size: 600
+    obfs-password: golden-gecko-password
+    password: S3cr3t+/=
+    sni: vpn.example.com
+  - name: Shadowsocks 2022
+    type: ss
+    server: vpn.example.com
+    port: 8388
+    cipher: 2022-blake3-aes-128-gcm
+    password: AAECAwQFBgcICQoLDA0ODw==:rkvHPGi04pBDvWELP95stw==
+    udp: true
+    udp-over-tcp: true
+    udp-over-tcp-version: 2
+  - name: TrustTunnel
+    type: trusttunnel
+    server: vpn.example.com
+    port: 4443
+    client-fingerprint: chrome
+    password: S3cr3t+/=
+    sni: vpn.example.com
+    udp: true
+    username: s000001
+  - name: ShadowQUIC
+    type: shadowquic
+    server: vpn.example.com
+    port: 4444
+    alpn:
+      - h3
+    password: S3cr3t+/=
+    sni: www.google.com
+    udp: true
+    username: s000001
+  - name: Mieru
+    type: mieru
+    server: vpn.example.com
+    port: 2999
+    password: S3cr3t+/=
+    transport: TCP
+    udp: true
+    username: s000001
+  - name: Sudoku
+    type: sudoku
+    server: vpn.example.com
+    port: 3000
+    aead-method: chacha20-poly1305
+    enable-pure-downlink: false
+    key: 6f1a44b8-c4e1-4a36-9d62-0b4ddc4c7c4f
+    padding-max: 7
+    padding-min: 2
+    table-type: prefer_ascii
+    udp: true
+  - name: Snell
+    type: snell
+    server: vpn.example.com
+    port: 3001
+    psk: p5k-Secret
+    udp: true
+    version: 3
+proxy-groups:
+  - name: VPN
+    type: select
+    proxies:
+      - Auto
+      - VLESS TLS
+      - VLESS WS
+      - Hysteria2 Gecko
+      - Shadowsocks 2022
+      - TrustTunnel
+      - ShadowQUIC
+      - Mieru
+      - Sudoku
+      - Snell
+  - name: Auto
+    type: url-test
+    proxies:
+      - VLESS TLS
+      - VLESS WS
+      - Hysteria2 Gecko
+      - Shadowsocks 2022
+      - TrustTunnel
+      - ShadowQUIC
+      - Mieru
+      - Sudoku
+      - Snell
+    interval: 300
+    tolerance: 50
+    url: https://www.gstatic.com/generate_204
+  - name: PROXY
+    type: select
+    proxies:
+      - VPN
+    hidden: true
+rules:
+  - DOMAIN,vpn.example.com,DIRECT
+  - GEOIP,LAN,DIRECT,no-resolve
+  - MATCH,VPN
+  - MATCH,REJECT

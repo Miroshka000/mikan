@@ -12,7 +12,7 @@ import (
 	"mikan/internal/panel/store/storetest"
 )
 
-// A reset ends every session and every API key of the admin: it is what the owner runs on
+// A reset ends every session, API key and passkey of the admin: it is what the owner runs on
 // the server after a hijacked session, and a key made from that session would outlive it.
 func TestResetPasswordRevokesSessionsAndKeys(t *testing.T) {
 	ctx := context.Background()
@@ -33,6 +33,14 @@ func TestResetPasswordRevokesSessionsAndKeys(t *testing.T) {
 	if _, err := st.Q.CreateAPIKey(ctx, db.CreateAPIKeyParams{AdminID: a.ID, Name: "ci", Prefix: "mk_abcdefg", Hash: "h", Scope: "full", CreatedAt: now.Unix()}); err != nil {
 		t.Fatal(err)
 	}
+	for _, id := range []string{"key-1", "key-2"} {
+		if _, err := st.Q.CreateAdminPasskey(ctx, db.CreateAdminPasskeyParams{AdminID: a.ID, CredentialID: []byte(id), Name: id, Credential: "{}", CreatedAt: now.Unix()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := st.Q.CreateAdminIdentity(ctx, db.CreateAdminIdentityParams{AdminID: a.ID, Provider: "github", Subject: "42", Name: "octo", CreatedAt: now.Unix()}); err != nil {
+		t.Fatal(err)
+	}
 	var out bytes.Buffer
 	if err := resetPassword(ctx, st, []string{"--password-stdin"}, strings.NewReader("brand-new-password\n"), &out); err != nil {
 		t.Fatal(err)
@@ -43,7 +51,13 @@ func TestResetPasswordRevokesSessionsAndKeys(t *testing.T) {
 	if rows, _ := st.Q.ListAdminSessions(ctx, a.ID); len(rows) != 0 {
 		t.Fatalf("%d sessions survived the reset", len(rows))
 	}
-	if !strings.Contains(out.String(), "1 API keys are revoked") || strings.Contains(out.String(), "brand-new-password") {
+	if rows, _ := st.Q.ListAdminPasskeys(ctx, a.ID); len(rows) != 0 {
+		t.Fatalf("%d passkeys survived the reset", len(rows))
+	}
+	if rows, _ := st.Q.ListAdminIdentities(ctx, a.ID); len(rows) != 0 {
+		t.Fatalf("%d linked accounts survived the reset", len(rows))
+	}
+	if !strings.Contains(out.String(), "1 API keys, 2 passkeys and 1 linked accounts are revoked") || strings.Contains(out.String(), "brand-new-password") {
 		t.Fatalf("output: %q", out.String())
 	}
 	got, _ := st.Q.GetAdmin(ctx, a.ID)

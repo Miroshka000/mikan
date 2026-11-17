@@ -41,11 +41,23 @@ type BalanceOpView struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// ImportedPaymentView is a transaction of the account in a sales bot it came from.
+type ImportedPaymentView struct {
+	Source      string    `json:"source" doc:"Откуда: bedolaga"`
+	Kind        string    `json:"kind" doc:"Тип в боте: deposit, subscription_payment, refund, withdrawal, referral_reward и другие"`
+	Amount      int64     `json:"amount" doc:"В копейках (сотых) валюты, как в боте"`
+	Currency    string    `json:"currency"`
+	Method      string    `json:"method,omitempty" doc:"Способ оплаты в боте"`
+	Description string    `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
 type BalanceView struct {
-	TgID     int64           `json:"tg_id"`
-	Balance  int64           `json:"balance"`
-	Currency string          `json:"currency"`
-	Ops      []BalanceOpView `json:"ops"`
+	TgID     int64                 `json:"tg_id"`
+	Balance  int64                 `json:"balance"`
+	Currency string                `json:"currency"`
+	Ops      []BalanceOpView       `json:"ops"`
+	Imported []ImportedPaymentView `json:"imported" doc:"История из бота продаж, откуда перенесён аккаунт: последние 50; это не платежи mikan"`
 }
 
 type listTopupsInput struct {
@@ -145,7 +157,7 @@ func (h *handlers) decideTopup(ctx context.Context, in *decideTopupInput) (*topu
 }
 
 func (h *handlers) balanceView(ctx context.Context, tgID int64) (BalanceView, error) {
-	v := BalanceView{TgID: tgID, Currency: h.d.Billing.Config(ctx).Balance.Currency, Ops: []BalanceOpView{}}
+	v := BalanceView{TgID: tgID, Currency: h.d.Billing.Config(ctx).Balance.Currency, Ops: []BalanceOpView{}, Imported: []ImportedPaymentView{}}
 	var err error
 	if v.Balance, err = h.d.Billing.BalanceOf(ctx, tgID); err != nil {
 		return v, err
@@ -156,6 +168,14 @@ func (h *handlers) balanceView(ctx context.Context, tgID int64) (BalanceView, er
 	}
 	for _, op := range ops {
 		v.Ops = append(v.Ops, BalanceOpView{ID: op.ID, Amount: op.Amount, Kind: op.Kind, PaymentID: store.Int64Ptr(op.PaymentID), Note: op.Note, CreatedAt: store.Time(op.CreatedAt)})
+	}
+	old, err := h.d.Store.Q.ListImportedPayments(ctx, db.ListImportedPaymentsParams{TgID: tgID, Limit: 50})
+	if err != nil {
+		return v, err
+	}
+	for _, p := range old {
+		v.Imported = append(v.Imported, ImportedPaymentView{Source: p.Source, Kind: p.Kind, Amount: p.Amount, Currency: p.Currency, Method: p.Method,
+			Description: p.Description, CreatedAt: store.Time(p.CreatedAt)})
 	}
 	return v, nil
 }

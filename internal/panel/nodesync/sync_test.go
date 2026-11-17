@@ -601,6 +601,47 @@ func TestSNIRouterFrontPage(t *testing.T) {
 	}
 }
 
+// An inbound behind a CDN takes every name no route has, and a ClientHello with no name:
+// the CDN connects to the node asking for the origin by a name of its own settings, which
+// the panel cannot know. The inbounds keep their own names, REALITY among them, and the
+// page keeps the node's own domain.
+func TestSNIRouterBehindACDN(t *testing.T) {
+	in := func(name, cfg string) nodeapi.Inbound {
+		return nodeapi.Inbound{Name: name, Port: "8443", Config: []byte(cfg)}
+	}
+	reality := in("reality", `{"type":"vless","reality-config":{"server-names":["site.example.org"]},"mikan":{"sni443":true}}`)
+	cdn := in("cdn", `{"type":"vless","xhttp-config":{"path":"/x"},"mikan":{"tls":"node","sni443":true,"client":{"server":"cdn.example.com","sni":"cdn.example.com"}}}`)
+	plain := in("tls", `{"type":"trojan","mikan":{"tls":"node","sni443":true}}`)
+
+	r := sniRouter([]nodeapi.Inbound{reality, cdn}, "", true)
+	if r == nil || r.Default != "cdn" || len(r.Stub) != 0 {
+		t.Fatalf("behind a CDN: default %q, stub %v", r.Default, r.Stub)
+	}
+	if len(r.Routes) != 2 || r.Routes[0].Inbound != "reality" || !slices.Equal(r.Routes[0].Names, []string{"site.example.org"}) ||
+		r.Routes[1].Inbound != "cdn" || !slices.Equal(r.Routes[1].Names, []string{"cdn.example.com"}) {
+		t.Fatalf("the inbounds keep their own names: %+v", r.Routes)
+	}
+	// The same whatever the order the inbounds come in.
+	if r := sniRouter([]nodeapi.Inbound{cdn, reality}, "", true); r.Default != "cdn" {
+		t.Fatalf("the CDN's inbound first: default %q", r.Default)
+	}
+	// The node's own domain still shows the page; only the nameless hello goes to the CDN's inbound.
+	if r := sniRouter([]nodeapi.Inbound{reality, cdn}, "node.example.net", true); r.Default != "cdn" || !slices.Equal(r.Stub, []string{"node.example.net"}) {
+		t.Fatalf("with a domain of the node's own: default %q, stub %v", r.Default, r.Stub)
+	}
+	// An inbound on the node's certificate that clients reach straight is no origin of a CDN:
+	// any other name goes to REALITY as before, and the page takes the nameless hello.
+	if r := sniRouter([]nodeapi.Inbound{reality, plain}, "node.example.net", true); r.Default != "reality" || !slices.Equal(r.Stub, []string{""}) {
+		t.Fatalf("no CDN: default %q, stub %v", r.Default, r.Stub)
+	}
+	// A REALITY inbound whose clients are given another address does not count either:
+	// nothing in front of it could finish a REALITY handshake in its place.
+	moved := in("moved", `{"type":"vless","reality-config":{"server-names":["other.example.org"]},"mikan":{"sni443":true,"client":{"server":"entry.example.com"}}}`)
+	if r := sniRouter([]nodeapi.Inbound{moved, reality}, "", false); r.Default != "moved" {
+		t.Fatalf("REALITY only: default %q, want the first of them", r.Default)
+	}
+}
+
 // A switch of a node's own (the 301 on port 80, the sums by site, the SNI router) is a
 // change of state the node must get, even with nothing else changed.
 func TestStateKeyHoldsTheNodeSwitches(t *testing.T) {

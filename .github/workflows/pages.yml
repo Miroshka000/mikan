@@ -1,8 +1,8 @@
 name: pages
 
 # The documentation site (site/) on GitHub Pages: miroshka000.github.io/mikan. It is built
-# from main, when the site, the changelog or the goals it is generated from or the screenshots it shows
-# change, or by hand. Settings → Pages → Source must be "GitHub Actions".
+# from main, when the site, the changelog, the API spec or the goals it is generated from or the
+# screenshots it shows change, or by hand. Settings → Pages → Source must be "GitHub Actions".
 #
 # Every action is pinned to a commit (the comment is the version it was), as in ci.yml.
 on:
@@ -11,6 +11,7 @@ on:
     paths:
       - site/**
       - CHANGELOG.md
+      - web/src/api/openapi.json
       - .github/goals.json
       - .github/assets/screens/**
       - .github/workflows/pages.yml

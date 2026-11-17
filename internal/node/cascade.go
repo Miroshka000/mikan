@@ -22,8 +22,10 @@ func listenerNames(st nodeapi.DesiredState) map[string]bool {
 	return present
 }
 
-// relayListener is the hidden VLESS REALITY door other nodes of the panel come in by.
-func relayListener(r *nodeapi.Relay, cert proto.Cert) (map[string]any, error) {
+// relayListener is the hidden VLESS REALITY door other nodes of the panel come in by. On the
+// panel's own node it may show the panel's own HTTPS, as the node's protocols may
+// (selfSteal, the state's SelfStealPort).
+func relayListener(r *nodeapi.Relay, cert proto.Cert, selfSteal int) (map[string]any, error) {
 	t, err := proto.FromJSON(r.Config)
 	if err != nil {
 		return nil, err
@@ -31,7 +33,7 @@ func relayListener(r *nodeapi.Relay, cert proto.Cert) (map[string]any, error) {
 	if t.Type() != "vless" || t["reality-config"] == nil {
 		return nil, fmt.Errorf("the relay is VLESS REALITY")
 	}
-	return proto.Listener(t, nodeapi.RelayListener, "", r.Port, r.Users, cert, proto.Options{})
+	return proto.Listener(t, nodeapi.RelayListener, "", r.Port, r.Users, cert, proto.Options{SelfStealPort: selfSteal})
 }
 
 // exitProxyConfig is the outbound to another node's relay. The panel builds it; the node

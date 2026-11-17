@@ -1,24 +1,30 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
+import { useMutation } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import clsx from "clsx";
-import { CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { CalendarClock, CalendarPlus, Check, ChevronRight, Eye, EyeOff, FolderCog, FolderInput, Plus, Power, RotateCcw, Search, SlidersHorizontal, Trash2, UsersRound, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { basePath, errorText, type Tariff, type User } from "../../api/client";
-import { userActions, useFolders, useOverview, useSettings, useTariffs, useUserMutation, useUsersPages } from "../../api/hooks";
+import { basePath, errorText, type Schemas, type Tariff, type User } from "../../api/client";
+import { userActions, useFolders, useGroups, useOverview, useSettings, useTariffs, useUserMutation, useUsersPages } from "../../api/hooks";
 import { Confirm } from "../../components/overlay";
 import { FloatingBar } from "../../components/layout";
 import { QueryBoundary } from "../../components/query";
 import { useToast } from "../../components/toast";
-import { Avatar, Bar, Button, EmptyState, PageHeader, Skeleton, StatePill } from "../../components/ui";
+import { Avatar, Bar, Button, EmptyState, Field, PageHeader, Skeleton, StatePill } from "../../components/ui";
 import { t, useLocale } from "../../i18n";
-import { bytes, dateShort, expiryText, num } from "../../lib/format";
+import { bytes, dateShort, days, expiryText, num, waitingDays } from "../../lib/format";
 import { useMediaQuery } from "../../lib/media";
 import { pagedItems } from "../../lib/paging";
 import { useUrlSearchText } from "../../lib/url-search";
 import { USER_HIDDEN, USER_SOURCES, USER_STATES, type UsersSearch } from "../search";
+import { LifecycleDrawer } from "./lifecycle";
 import { CreateUserDrawer } from "./user-create";
 import { UserDrawer } from "./user-drawer";
 import { FolderBadge, FolderMark, FolderMenuItems, FoldersDrawer, type Folder } from "./user-folders";
+import { GroupBadge } from "./groups/badge";
+import { GroupsDrawer } from "./groups/drawer";
+import { GroupMenuItems } from "./groups/menu-items";
+import type { Group } from "./groups/model";
 
 /** A row of chips: one line to scroll sideways on a phone, wrapping on a wide screen. */
 const CHIP_ROW = "-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0";
@@ -57,13 +63,15 @@ function emptyText(s: UsersSearch, total: number, hidden: number): { title: stri
   if (s.hidden === "only") return { title: t("users.hiddenEmptyTitle"), text: t("users.hiddenEmptyText") };
   if (typeof s.folder === "number") return { title: t("users.folderEmptyTitle"), text: t("users.folderEmptyText") };
   if (s.folder === "none") return { title: t("users.noFolderEmptyTitle"), text: t("users.noFolderEmptyText") };
+  if (typeof s.group === "number") return { title: t("users.groupEmptyTitle"), text: t("users.groupEmptyText") };
+  if (s.group === "none") return { title: t("users.noGroupEmptyTitle"), text: t("users.noGroupEmptyText") };
   if (s.source) return { title: t("users.sourceEmptyTitle"), text: t("users.sourceEmptyText") };
   if (s.hidden === undefined && hidden === total) return { title: t("users.allHiddenTitle"), text: t("users.allHiddenText") };
   return { title: t("users.notFoundTitle"), text: t("users.notFoundGroup") };
 }
 
-/** Where a user comes from, folder and hidden mark: the small print under the name. */
-function Labels({ u, folder }: { u: User; folder?: Folder }) {
+/** Where a user comes from, folder, group and hidden mark: the small print under the name. */
+function Labels({ u, folder, group }: { u: User; folder?: Folder; group?: Group }) {
   return (
     <>
       {u.source !== "admin" ? (
@@ -72,6 +80,7 @@ function Labels({ u, folder }: { u: User; folder?: Folder }) {
         </span>
       ) : null}
       {folder ? <FolderBadge folder={folder} /> : null}
+      {group ? <GroupBadge group={group} viaTariff={u.group_id == null} /> : null}
       {u.hidden ? (
         <span className="tag gap-1" title={t("users.hiddenBadge")}>
           <EyeOff size={12} aria-hidden />
@@ -89,14 +98,20 @@ export function UsersPage() {
   // replaces it.
   const { text: q, setText: setQ, clear: clearQ } = useUrlSearchText(search.q, (next) => void navigate({ search: (s) => ({ ...s, q: next }), replace: true }));
   // The list hides the hidden unless asked: the API's own default shows everyone.
-  const users = useUsersPages({ state: search.state, q: search.q, folder: search.folder, source: search.source, hidden: search.hidden ?? "hide" });
+  const users = useUsersPages({ state: search.state, q: search.q, folder: search.folder, group: search.group, source: search.source, hidden: search.hidden ?? "hide" });
   // Every page tells the same counts of the whole filter: the first one's are shown.
   const first = users.data?.pages[0];
   const tariffs = useTariffs();
   const folders = useFolders();
+  const groups = useGroups();
   const overview = useOverview({ poll: false });
   const [managing, setManaging] = useState(false);
+  const [grouping, setGrouping] = useState(false);
+  const [rules, setRules] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
+  // Everyone the filter matches rather than the rows ticked: the bulk action sends the filter
+  // and the server takes its users by it, loaded here or not.
+  const [matching, setMatching] = useState(false);
   const narrow = useMediaQuery("(max-width: 767px)");
   // With binding a place is a bound device, else an address online (see the drawer). Read
   // once here: a row of its own would be one more subscriber to the settings per user.
@@ -110,32 +125,51 @@ export function UsersPage() {
       void navigate({ search: (s) => ({ ...s, folder: undefined }), replace: true });
     }
   }, [folders.data, search.folder, navigate]);
+  // A group that is gone is no filter either.
+  useEffect(() => {
+    const list = groups.data;
+    if (typeof search.group === "number" && list && !list.some((g) => g.id === search.group)) {
+      void navigate({ search: (s) => ({ ...s, group: undefined }), replace: true });
+    }
+  }, [groups.data, search.group, navigate]);
 
   const tariffById = useMemo(() => new Map((tariffs.data ?? []).map((tr) => [tr.id, tr])), [tariffs.data]);
   const folderList = useMemo(() => folders.data ?? [], [folders.data]);
   const folderById = useMemo(() => new Map(folderList.map((f) => [f.id, f])), [folderList]);
+  const groupList = useMemo(() => groups.data ?? [], [groups.data]);
+  const groupById = useMemo(() => new Map(groupList.map((g) => [g.id, g])), [groupList]);
   const counts = first?.counts;
   const items = useMemo(() => pagedItems(users.data?.pages ?? []), [users.data]);
   // What a bulk action touches is what the admin sees ticked: a row that left the list (a
   // search, another filter, a user deleted elsewhere) drops out of the selection with it.
   const chosen = useMemo(() => items.filter((u) => selected.has(u.id)), [items, selected]);
   const allSelected = items.length > 0 && chosen.length === items.length;
+  // Once chosen, everyone matching stays chosen until a row, the filter or the search
+  // changes: the list's refresh or another page loaded leaves the choice as it is.
+  const byFilter = matching;
   const openUser = useCallback((id?: number) => void navigate({ search: (s) => ({ ...s, user: id, create: undefined }) }), [navigate]);
-  const toggle = useCallback(
-    (id: number) =>
-      setSelected((s) => {
-        const n = new Set(s);
-        if (n.has(id)) n.delete(id);
-        else n.add(id);
-        return n;
-      }),
-    [],
-  );
-  const clear = useCallback(() => setSelected(new Set()), []);
+  const toggle = useCallback((id: number) => {
+    setMatching(false);
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }, []);
+  const clear = useCallback(() => {
+    setSelected(new Set());
+    setMatching(false);
+  }, []);
   // A filter changes what the list holds: what was ticked may be gone from it.
   const setFilter = (patch: Partial<UsersSearch>) => {
     clear();
     void navigate({ search: (s) => ({ ...s, ...patch }) });
+  };
+  // Another search is another set of users: the choice of everyone matching ends with it.
+  const typeQ = (text: string) => {
+    setMatching(false);
+    setQ(text);
   };
   const resetFilters = () => {
     clearQ();
@@ -145,14 +179,16 @@ export function UsersPage() {
   const hiddenTotal = first?.hidden_total ?? 0;
   const sourceCounts = first?.source_counts;
   const folderCounts = first?.folder_counts;
+  const groupCounts = first?.group_counts;
   const sum = (m?: Record<string, number>) => Object.values(m ?? {}).reduce((a, b) => a + b, 0);
-  // Folders and sources are rows of their own only once there is something to tell apart:
-  // a panel that never made a folder or took a user from elsewhere sees neither.
+  // Folders, groups and sources are rows of their own only once there is something to tell
+  // apart: a panel that never made a folder or took a user from elsewhere sees neither.
   const showFolders = folderList.length > 0 || search.folder !== undefined;
+  const showGroups = groupList.length > 0 || search.group !== undefined;
   const showSources = (sourceCounts && sum(sourceCounts) - sourceCounts.admin! > 0) || search.source !== undefined;
   const showHidden = hiddenTotal > 0 || search.hidden !== undefined;
   // The filters of the menu that are on, beside the state chips and the search.
-  const extra = (search.folder !== undefined ? 1 : 0) + (search.source ? 1 : 0) + (search.hidden ? 1 : 0);
+  const extra = (search.folder !== undefined ? 1 : 0) + (search.group !== undefined ? 1 : 0) + (search.source ? 1 : 0) + (search.hidden ? 1 : 0);
 
   return (
     <>
@@ -161,9 +197,17 @@ export function UsersPage() {
         sub={overview.data ? `${t("users.subtitle", { n: overview.data.users_total, active: num(overview.data.users_active) })}${hiddenTotal > 0 ? ` · ${t("users.hiddenCount", { n: hiddenTotal })}` : ""}` : "…"}
         actions={
           <>
+            <Button onClick={() => setRules(true)} aria-label={t("lifecycle.open")}>
+              <CalendarClock size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("lifecycle.open")}</span>
+            </Button>
             <Button onClick={() => setManaging(true)} aria-label={t("users.manageFolders")}>
               <FolderCog size={18} aria-hidden />
               <span className="max-[760px]:hidden">{t("users.manageFolders")}</span>
+            </Button>
+            <Button onClick={() => setGrouping(true)} aria-label={t("users.manageGroups")}>
+              <UsersRound size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("users.manageGroups")}</span>
             </Button>
             <Button variant="primary" onClick={() => void navigate({ search: (s) => ({ ...s, create: true, user: undefined }) })}>
               <Plus size={18} aria-hidden />
@@ -185,9 +229,9 @@ export function UsersPage() {
           <div className="flex items-center gap-2">
             <label className="search-field">
               <Search size={16} aria-hidden />
-              <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("users.searchLabel")} />
+              <input type="search" placeholder={t("users.searchPlaceholder")} value={q} onChange={(e) => typeQ(e.target.value)} aria-label={t("users.searchLabel")} />
             </label>
-            {showFolders || showSources || showHidden ? (
+            {showFolders || showGroups || showSources || showHidden ? (
               <Menu.Root>
                 <Menu.Trigger asChild>
                   <button type="button" className="chip h-10 shrink-0" aria-pressed={extra > 0}>
@@ -210,9 +254,22 @@ export function UsersPage() {
                         </Menu.RadioGroup>
                       </>
                     ) : null}
-                    {showSources ? (
+                    {showGroups ? (
                       <>
                         {showFolders ? <Menu.Separator className="menu-sep" /> : null}
+                        <Menu.Label className="menu-label">{t("users.groupsLabel")}</Menu.Label>
+                        <Menu.RadioGroup value={search.group === undefined ? "all" : String(search.group)} onValueChange={(v) => setFilter({ group: v === "all" ? undefined : v === "none" ? "none" : Number(v) })} aria-label={t("users.groupFilter")}>
+                          <FilterItem value="all" label={t("users.groupsAll")} count={groupCounts ? sum(groupCounts) : undefined} />
+                          <FilterItem value="none" label={t("users.groupsNone")} count={groupCounts ? (groupCounts.none ?? 0) : undefined} />
+                          {groupList.map((g) => (
+                            <FilterItem key={g.id} value={String(g.id)} label={g.name} mark={<FolderMark folder={g} />} count={groupCounts ? (groupCounts[g.id] ?? 0) : undefined} />
+                          ))}
+                        </Menu.RadioGroup>
+                      </>
+                    ) : null}
+                    {showSources ? (
+                      <>
+                        {showFolders || showGroups ? <Menu.Separator className="menu-sep" /> : null}
                         <Menu.Label className="menu-label">{t("users.sourceLabel")}</Menu.Label>
                         <Menu.RadioGroup value={search.source ?? "all"} onValueChange={(v) => setFilter({ source: v === "all" ? undefined : (v as UsersSearch["source"]) })} aria-label={t("users.sourceFilter")}>
                           {USER_SOURCES.map((s) => (
@@ -223,7 +280,7 @@ export function UsersPage() {
                     ) : null}
                     {showHidden ? (
                       <>
-                        {showFolders || showSources ? <Menu.Separator className="menu-sep" /> : null}
+                        {showFolders || showGroups || showSources ? <Menu.Separator className="menu-sep" /> : null}
                         <Menu.Label className="menu-label">{t("users.hiddenChip", { n: hiddenTotal })}</Menu.Label>
                         <Menu.RadioGroup value={search.hidden ?? "hide"} onValueChange={(v) => setFilter({ hidden: v === "hide" ? undefined : (v as UsersSearch["hidden"]) })} aria-label={t("users.hiddenMenu")}>
                           {USER_HIDDEN.map((m) => (
@@ -244,6 +301,12 @@ export function UsersPage() {
               <ActiveFilter
                 label={`${t("users.foldersLabel")}: ${search.folder === "none" ? t("users.foldersNone") : (folderById.get(search.folder)?.name ?? "")}`}
                 onClear={() => setFilter({ folder: undefined })}
+              />
+            ) : null}
+            {search.group !== undefined ? (
+              <ActiveFilter
+                label={`${t("users.groupsLabel")}: ${search.group === "none" ? t("users.groupsNone") : (groupById.get(search.group)?.name ?? "")}`}
+                onClear={() => setFilter({ group: undefined })}
               />
             ) : null}
             {search.source ? <ActiveFilter label={`${t("users.sourceLabel")}: ${t(`users.sources.${search.source}`)}`} onClear={() => setFilter({ source: undefined })} /> : null}
@@ -274,33 +337,73 @@ export function UsersPage() {
                 {narrow ? (
                   <div className="flex flex-col gap-2">
                     {items.map((u) => (
-                      <UserCard key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} onOpen={openUser} />
+                      <UserCard
+                        key={u.id}
+                        u={u}
+                        tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined}
+                        folder={u.folder_id ? folderById.get(u.folder_id) : undefined}
+                        group={u.effective_group_id ? groupById.get(u.effective_group_id) : undefined}
+                        onOpen={openUser}
+                      />
                     ))}
                   </div>
                 ) : (
-                  <table className="utable">
-                    <thead>
-                      <tr>
-                        <th className="w-10">
-                          <input type="checkbox" className="check" checked={allSelected} aria-label={t("users.selectAll")} onChange={() => setSelected(allSelected ? new Set() : new Set(items.map((u) => u.id)))} />
-                        </th>
-                        <th>{t("users.colUser")}</th>
-                        <th>{t("users.colTariff")}</th>
-                        <th>{t("users.colTraffic")}</th>
-                        <th>{t("users.colExpiry")}</th>
-                        <th>{t("users.colDevices")}</th>
-                        <th>{t("users.colStatus")}</th>
-                        <th className="w-12">
-                          <span className="sr-only">{t("common.open")}</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((u) => (
-                        <UserRow key={u.id} u={u} tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined} folder={u.folder_id ? folderById.get(u.folder_id) : undefined} selected={selected.has(u.id)} binding={binding} onToggle={toggle} onOpen={openUser} />
-                      ))}
-                    </tbody>
-                  </table>
+                  <>
+                    {/* Everyone on the page ticked, and the filter holds more: the way to all of them. */}
+                    {byFilter || (allSelected && data.total > items.length) ? (
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--hairline)] px-3 py-2 text-[13px]" role="status">
+                        {byFilter ? (
+                          <>
+                            <span>{t("users.allMatchingChosen", { n: data.total })}</span>
+                            <button type="button" className="link-btn" onClick={clear}>
+                              {t("users.clearSelection")}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{t("users.pageChosen", { n: items.length })}</span>
+                            <button type="button" className="link-btn" onClick={() => setMatching(true)}>
+                              {t("users.chooseAllMatching", { n: data.total })}
+                            </button>
+                          </>
+                        )}
+                      </p>
+                    ) : null}
+                    <table className="utable">
+                      <thead>
+                        <tr>
+                          <th className="w-10">
+                            <input type="checkbox" className="check" checked={allSelected || byFilter} aria-label={t("users.selectAll")} onChange={() => (allSelected || byFilter ? clear() : setSelected(new Set(items.map((u) => u.id))))} />
+                          </th>
+                          <th>{t("users.colUser")}</th>
+                          <th>{t("users.colTariff")}</th>
+                          <th>{t("users.colTraffic")}</th>
+                          <th>{t("users.colExpiry")}</th>
+                          <th>{t("users.colDevices")}</th>
+                          <th>{t("users.colStatus")}</th>
+                          <th className="w-12">
+                            <span className="sr-only">{t("common.open")}</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((u) => (
+                          <UserRow
+                            key={u.id}
+                            u={u}
+                            tariff={u.tariff_id ? tariffById.get(u.tariff_id) : undefined}
+                            next={u.next_tariff ? tariffById.get(u.next_tariff.tariff_id) : undefined}
+                            folder={u.folder_id ? folderById.get(u.folder_id) : undefined}
+                            group={u.effective_group_id ? groupById.get(u.effective_group_id) : undefined}
+                            selected={selected.has(u.id)}
+                            binding={binding}
+                            onToggle={toggle}
+                            onOpen={openUser}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
                 )}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--hairline)] p-3 text-[13px] text-[var(--ink-500)]">
                   <span className="inline-flex flex-wrap items-center gap-3">
@@ -319,8 +422,10 @@ export function UsersPage() {
         </QueryBoundary>
       </section>
 
-      <BulkBar chosen={chosen} clear={clear} folders={folderList} />
+      <BulkBar chosen={chosen} matching={byFilter && first ? { filter: bulkFilter(search), total: first.total } : undefined} clear={clear} folders={folderList} groups={groupList} />
       <FoldersDrawer open={managing} onOpenChange={setManaging} />
+      <GroupsDrawer open={grouping} onOpenChange={setGrouping} />
+      <LifecycleDrawer open={rules} onOpenChange={setRules} />
       <CreateUserDrawer
         open={!!search.create}
         onOpenChange={(v) => void navigate({ search: (s) => ({ ...s, create: v ? true : undefined }) })}
@@ -365,6 +470,15 @@ function Usage({ u }: { u: User }) {
 
 function Expiry({ u }: { u: User }) {
   const e = expiryText(u.expires_at);
+  // A term that waits for its first connection has no date yet: its end moves on with the clock.
+  if (u.starts_on_connect && u.expires_at) {
+    return (
+      <>
+        <div className="font-medium">{t("users.waits")}</div>
+        <div className="exp-days">{t("users.waitsTerm", { term: days(waitingDays(u.expires_at)) })}</div>
+      </>
+    );
+  }
   return (
     <>
       <div className="font-medium">{u.expires_at ? t("users.until", { date: dateShort(u.expires_at) }) : t("time.forever")}</div>
@@ -395,7 +509,29 @@ function openLink(id: number, onOpen: (id: number) => void) {
 // Rows are memoized: a poll hands back the same objects for users that did not change, and
 // a tick in one checkbox then redraws that one row. Text is read at render time, so a row
 // subscribes to the language itself.
-const UserRow = memo(function UserRow({ u, tariff, folder, selected, binding, onToggle, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; selected: boolean; binding: boolean; onToggle: (id: number) => void; onOpen: (id: number) => void }) {
+const UserRow = memo(function UserRow({
+  u,
+  tariff,
+  next,
+  folder,
+  group,
+  selected,
+  binding,
+  onToggle,
+  onOpen,
+}: {
+  u: User;
+  tariff?: Tariff;
+  /** The tariff the user moves to when the term ends. */
+  next?: Tariff;
+  folder?: Folder;
+  /** The group the user is in: its own or its tariff's. */
+  group?: Group;
+  selected: boolean;
+  binding: boolean;
+  onToggle: (id: number) => void;
+  onOpen: (id: number) => void;
+}) {
   useLocale();
   // The online mode counts the addresses online at once, not the places taken.
   const devices = binding && u.device_mode !== "online" ? u.bound_devices : u.online_ips.length;
@@ -423,7 +559,7 @@ const UserRow = memo(function UserRow({ u, tariff, folder, selected, binding, on
                   {tag}
                 </span>
               ))}
-              <Labels u={u} folder={folder} />
+              <Labels u={u} folder={folder} group={group} />
             </div>
           </div>
         </div>
@@ -431,6 +567,7 @@ const UserRow = memo(function UserRow({ u, tariff, folder, selected, binding, on
       <td>
         <div className="font-medium">{tariff?.name ?? "—"}</div>
         <div className="mt-0.5 text-xs text-[var(--ink-500)]">{u.traffic_limit != null ? bytes(u.traffic_limit) : t("users.unlimited")}</div>
+        {u.next_tariff ? <div className="mt-0.5 text-xs text-[var(--ink-500)]">{t("users.nextTariff", { name: next?.name ?? `#${u.next_tariff.tariff_id}` })}</div> : null}
       </td>
       <td>
         <Usage u={u} />
@@ -456,7 +593,7 @@ const UserRow = memo(function UserRow({ u, tariff, folder, selected, binding, on
   );
 });
 
-const UserCard = memo(function UserCard({ u, tariff, folder, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; onOpen: (id: number) => void }) {
+const UserCard = memo(function UserCard({ u, tariff, folder, group, onOpen }: { u: User; tariff?: Tariff; folder?: Folder; group?: Group; onOpen: (id: number) => void }) {
   useLocale();
   const e = expiryText(u.expires_at);
   return (
@@ -468,11 +605,11 @@ const UserCard = memo(function UserCard({ u, tariff, folder, onOpen }: { u: User
           {u.online ? <span className="online-dot" role="img" aria-label={t("users.onlineNow")} /> : null}
         </div>
         <div className="truncate text-xs text-[var(--ink-500)]">
-          {tariff?.name ?? t("users.noTariff")} · {e.text}
+          {tariff?.name ?? t("users.noTariff")} · {u.starts_on_connect ? t("users.waits") : e.text}
         </div>
-        {u.source !== "admin" || folder || u.hidden ? (
+        {u.source !== "admin" || folder || group || u.hidden ? (
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-            <Labels u={u} folder={folder} />
+            <Labels u={u} folder={folder} group={group} />
           </div>
         ) : null}
       </div>
@@ -508,51 +645,91 @@ function TableSkeleton() {
   );
 }
 
-type BulkAction = "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move";
+type BulkAction = "extend" | "reset" | "disable" | "enable" | "delete" | "hide" | "unhide" | "move" | "group";
 
-/** How many names the delete confirmation lists before it says "…". */
-const NAMES_SHOWN = 5;
+/** Where move and group put the users: a folder, a group of their own; none takes them out. */
+type MoveTo = { folder_id?: number; group_id?: number };
 
-function BulkBar({ chosen, clear, folders }: { chosen: User[]; clear: () => void; folders: Folder[] }) {
+/** The list's filter in the URL as a bulk action by filter takes it: what the list asks for
+ * (the page leaves the hidden out unless asked), the defaults written out. */
+function bulkFilter(s: UsersSearch): Schemas["BulkFilter"] {
+  return {
+    state: s.state,
+    q: s.q || undefined,
+    folder: s.folder === undefined ? "all" : String(s.folder),
+    group: s.group === undefined ? "all" : String(s.group),
+    source: s.source ?? "all",
+    hidden: s.hidden ?? "hide",
+  };
+}
+
+/** What the bulk preview found for an action the admin is asked to confirm, and the body the
+ * confirmation sends: the ids or the filter previewed, by filter with the preview's digest as
+ * expect, so the action reaches the very users counted or nobody. */
+type Asked = { action: BulkAction; body: Schemas["BulkInputBody"]; byFilter: boolean; plan: Schemas["BulkPreviewOutputBody"] };
+
+/** Everyone the list's filter matches, as the list counted them. */
+type Matching = { filter: Schemas["BulkFilter"]; total: number };
+
+function BulkBar({ chosen, matching, clear, folders, groups }: { chosen: User[]; matching?: Matching; clear: () => void; folders: Folder[]; groups: Group[] }) {
   const toast = useToast();
   const bulk = useUserMutation(userActions.bulk);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const n = chosen.length;
-  const busy = bulk.isPending;
-  const running = (action: BulkAction) => busy && bulk.variables?.action === action;
+  // What changes a subscription is shown before it is done: the server says how many it
+  // changes and who the first of them are, and the admin confirms. Where a user is listed
+  // (hide, move) changes nothing of the subscription and is undone with one click: at once,
+  // for the rows ticked. By filter everything is counted and confirmed first: the admin sees
+  // the number, not the users.
+  const preview = useMutation({ mutationFn: userActions.bulkPreview });
+  const [asked, setAsked] = useState<Asked | null>(null);
+  const n = matching ? matching.total : chosen.length;
+  const target = matching ? { filter: matching.filter } : { ids: chosen.map((u) => u.id) };
+  const busy = bulk.isPending || preview.isPending;
+  const running = (action: BulkAction) => (bulk.isPending && bulk.variables?.action === action) || (preview.isPending && preview.variables?.action === action);
   // Hiding is one button that does what the chosen need: bring them back when all of them
-  // are hidden, hide them otherwise.
-  const unhide = n > 0 && chosen.every((u) => u.hidden);
-  const hideAction: BulkAction = unhide ? "unhide" : "hide";
-  const run = (action: BulkAction, extra?: { folder_id?: number }) =>
+  // are hidden (by filter: the list shows only the hidden), hide them otherwise.
+  const unhide = matching ? matching.filter.hidden === "only" : n > 0 && chosen.every((u) => u.hidden);
+  const hideAction: Asked["action"] = unhide ? "unhide" : "hide";
+  // Access is one button the same way: turn the chosen back on when all of them are off (by
+  // filter: the list shows only the disabled), turn them off otherwise. Both are confirmed.
+  const enable = matching ? matching.filter.state === "disabled" : n > 0 && chosen.every((u) => u.state === "disabled");
+  const powerAction: Asked["action"] = enable ? "enable" : "disable";
+  const run = (action: Asked["action"], body: Schemas["BulkInputBody"]) =>
     bulk.mutate(
-      { ids: chosen.map((u) => u.id), action, ...extra },
+      body,
       {
         onSuccess: (r) => {
           toast.ok(t(`users.bulkDone.${action}`, { n: r.affected }));
           clear();
-          setConfirmDelete(false);
+          setAsked(null);
         },
-        onError: (e) => toast.error(errorText(e)),
+        onError: (e) => {
+          toast.error(errorText(e));
+          // The users confirmed may be others by now (filter_changed): counted again on the next ask.
+          if (body.filter) setAsked(null);
+        },
       },
     );
-  // The confirmation of a delete has nothing to confirm once the selection is gone.
+  const ask = (action: Asked["action"], extra?: MoveTo) => {
+    const body = { ...target, action, ...extra };
+    preview.mutate(body, {
+      onSuccess: (plan) => setAsked({ action, body: body.filter ? { ...body, expect: plan.digest } : body, byFilter: !!body.filter, plan }),
+      onError: (e) => toast.error(errorText(e)),
+    });
+  };
+  const now = (action: Asked["action"], extra?: MoveTo) => (matching ? ask(action, extra) : run(action, { ...target, action, ...extra }));
+  // The confirmation has nothing to confirm once the selection is gone.
   useEffect(() => {
-    if (n === 0) setConfirmDelete(false);
+    if (n === 0) setAsked(null);
   }, [n]);
-  const names = chosen
-    .slice(0, NAMES_SHOWN)
-    .map((u) => u.name)
-    .join(", ");
   return (
     <>
       <FloatingBar open={n > 0} className="bulk-bar" label={t("users.bulkLabel")}>
-        <span className="num mr-2 font-semibold whitespace-nowrap">{t("users.selected", { n })}</span>
-        <Button size="sm" loading={running("extend")} disabled={busy} onClick={() => run("extend")} title={t("users.extendPeriodHint")}>
+        <span className="num mr-2 font-semibold whitespace-nowrap">{matching ? t("users.allMatching", { n }) : t("users.selected", { n })}</span>
+        <Button size="sm" loading={running("extend")} disabled={busy} onClick={() => ask("extend")} title={t("users.extendPeriodHint")}>
           <CalendarPlus size={16} aria-hidden />
           <span className="max-sm:hidden">{t("users.extendPeriod")}</span>
         </Button>
-        <Button size="sm" loading={running("reset")} disabled={busy} onClick={() => run("reset")} aria-label={t("users.resetTraffic")}>
+        <Button size="sm" loading={running("reset")} disabled={busy} onClick={() => ask("reset")} aria-label={t("users.resetTraffic")}>
           <RotateCcw size={16} aria-hidden />
           <span className="max-sm:hidden">{t("users.resetTraffic")}</span>
         </Button>
@@ -566,36 +743,118 @@ function BulkBar({ chosen, clear, folders }: { chosen: User[]; clear: () => void
             </Menu.Trigger>
             <Menu.Portal>
               <Menu.Content className="menu glass-strong" side="top" align="center" sideOffset={8}>
-                <FolderMenuItems folders={folders} onPick={(id) => run("move", id === null ? undefined : { folder_id: id })} />
+                <FolderMenuItems folders={folders} onPick={(id) => now("move", id === null ? undefined : { folder_id: id })} />
               </Menu.Content>
             </Menu.Portal>
           </Menu.Root>
         ) : null}
-        <Button size="sm" loading={running(hideAction)} disabled={busy} onClick={() => run(hideAction)} aria-label={unhide ? t("users.unhide") : t("users.hide")} title={unhide ? t("users.unhideHint") : t("users.hideHint")}>
+        {groups.length > 0 ? (
+          // A group decides what its clients see: the change is counted and confirmed first.
+          <Menu.Root>
+            <Menu.Trigger asChild>
+              <Button size="sm" loading={running("group")} disabled={busy} aria-label={t("users.groupMenu")}>
+                <UsersRound size={16} aria-hidden />
+                <span className="max-sm:hidden">{t("users.toGroup")}</span>
+              </Button>
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content className="menu glass-strong" side="top" align="center" sideOffset={8}>
+                <GroupMenuItems groups={groups} onPick={(id) => ask("group", id === null ? undefined : { group_id: id })} />
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu.Root>
+        ) : null}
+        <Button size="sm" loading={running(hideAction)} disabled={busy} onClick={() => now(hideAction)} aria-label={unhide ? t("users.unhide") : t("users.hide")} title={unhide ? t("users.unhideHint") : t("users.hideHint")}>
           {unhide ? <Eye size={16} aria-hidden /> : <EyeOff size={16} aria-hidden />}
           <span className="max-sm:hidden">{unhide ? t("users.unhide") : t("users.hide")}</span>
         </Button>
-        <Button size="sm" variant="danger" loading={running("disable")} disabled={busy} onClick={() => run("disable")} aria-label={t("users.disable")}>
+        <Button size="sm" variant={enable ? "glass" : "danger"} loading={running(powerAction)} disabled={busy} onClick={() => ask(powerAction)} aria-label={enable ? t("users.enable") : t("users.disable")}>
           <Power size={16} aria-hidden />
-          <span className="max-sm:hidden">{t("users.disable")}</span>
+          <span className="max-sm:hidden">{enable ? t("users.enable") : t("users.disable")}</span>
         </Button>
-        <Button size="sm" variant="danger" disabled={busy} onClick={() => setConfirmDelete(true)} aria-label={t("users.deleteSelected")}>
+        <Button size="sm" variant="danger" loading={running("delete")} disabled={busy} onClick={() => ask("delete")} aria-label={t("users.deleteSelected")}>
           <Trash2 size={16} aria-hidden />
         </Button>
         <button type="button" className="icon-btn" aria-label={t("users.clearSelection")} disabled={busy} onClick={clear}>
           <X size={16} />
         </button>
       </FloatingBar>
-      <Confirm
-        open={confirmDelete && n > 0}
-        onOpenChange={setConfirmDelete}
-        title={t("users.deleteTitle", { n })}
-        text={`${t("users.deleteText")} ${t("users.deleteWho", { names: n > NAMES_SHOWN ? `${names}…` : names })}`}
-        confirm={t("common.delete")}
-        danger
-        loading={running("delete")}
-        onConfirm={() => run("delete")}
-      />
+      {asked ? <BulkConfirm asked={asked} loading={bulk.isPending} onClose={() => setAsked(null)} onConfirm={() => run(asked.action, asked.body)} /> : null}
     </>
+  );
+}
+
+/** What a bulk action will do, as the server worked it out, for the admin to confirm: how
+ * many it changes and how many it leaves as they are, the first of those it changes, and
+ * before a deletion what goes with the users. */
+function BulkConfirm({ asked, loading, onClose, onConfirm }: { asked: Asked; loading: boolean; onClose: () => void; onConfirm: () => void }) {
+  const { action, plan, byFilter } = asked;
+  const stake = plan.at_stake;
+  // Deleting everyone a filter matches is confirmed by typing how many: a number read, not a
+  // button pressed by habit.
+  const [typed, setTyped] = useState("");
+  const typeCount = byFilter && action === "delete";
+  const notes = [
+    byFilter ? t("users.bulkConfirm.matching", { n: plan.found }) : "",
+    plan.unchanged > 0 ? t(action === "disable" ? "users.bulkConfirm.alreadyOff" : action === "enable" ? "users.bulkConfirm.alreadyOn" : "users.bulkConfirm.unchanged", { n: plan.unchanged }) : "",
+    plan.missing > 0 ? t("users.bulkConfirm.missing", { n: plan.missing }) : "",
+  ].filter(Boolean);
+  const warnings = stake
+    ? [
+        stake.active > 0 ? t("users.bulkConfirm.active", { n: stake.active }) : "",
+        stake.with_balance > 0 ? t("users.bulkConfirm.withBalance", { n: stake.with_balance }) : "",
+        stake.paying > 0 ? t("users.bulkConfirm.paying", { n: stake.paying }) : "",
+        stake.granted > 0 ? t("users.bulkConfirm.granted", { n: stake.granted }) : "",
+      ].filter(Boolean)
+    : [];
+  return (
+    <Confirm
+      open
+      onOpenChange={(v) => !v && onClose()}
+      title={action === "delete" ? t("users.deleteTitle", { n: plan.changed }) : t(`users.bulkConfirm.title.${action}`, { n: plan.changed })}
+      text={plan.changed === 0 ? t("users.bulkConfirm.nothing") : action === "delete" ? t("users.deleteText") : t(`users.bulkConfirm.text.${action}`)}
+      confirm={action === "delete" ? t("common.delete") : t(`users.bulkConfirm.confirm.${action}`)}
+      danger={action === "delete" || action === "disable"}
+      loading={loading}
+      confirmDisabled={plan.changed === 0 || (typeCount && typed.trim() !== String(plan.found))}
+      onConfirm={onConfirm}
+    >
+      {notes.length ? <p className="mt-2 text-xs text-[var(--ink-600)]">{notes.join(" ")}</p> : null}
+      {typeCount && plan.changed > 0 ? (
+        <div className="mt-3">
+          <Field label={t("users.bulkConfirm.typeCount", { n: plan.found })} htmlFor="bulk-type-count">
+            <input id="bulk-type-count" className="input num" inputMode="numeric" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)} />
+          </Field>
+        </div>
+      ) : null}
+      {warnings.length ? (
+        <ul className="banner warn mt-3 flex flex-col items-start gap-1 text-[13px]" role="alert">
+          {warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      ) : null}
+      {plan.sample.length ? (
+        <ul className="row-list mt-3 max-h-[240px] overflow-y-auto rounded-2xl border border-[var(--hairline)] px-3" aria-label={t("users.bulkConfirm.sample")}>
+          {plan.sample.map((s) => (
+            <li key={s.user_id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
+              <span className="min-w-0 truncate font-medium">{s.user_name}</span>
+              <span className="shrink-0 text-xs text-[var(--ink-600)]">
+                {action === "extend" && s.expires_after ? (
+                  <span className="num">
+                    {s.expires_at ? dateShort(s.expires_at) : t("time.forever")} → {dateShort(s.expires_after)}
+                  </span>
+                ) : action === "reset" ? (
+                  <span className="num">{t("users.bulkConfirm.used", { used: bytes(s.used) })}</span>
+                ) : (
+                  <StatePill state={s.state} />
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {plan.changed > plan.sample.length ? <p className="mt-2 text-xs text-[var(--ink-500)]">{t("users.bulkConfirm.more", { n: plan.changed - plan.sample.length })}</p> : null}
+    </Confirm>
   );
 }

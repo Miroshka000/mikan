@@ -1,0 +1,48 @@
+---
+title: API stability
+description: What the version of the panel's API is, where to look for changes between releases and how long a deprecated method or field keeps working before it is removed.
+---
+
+:::note[New in 0.5.2.1]
+The promise of API stability is new in 0.5.2.1: the version of the API, where the changes are written and how long a method lives before it is removed.
+:::
+
+This page says what scripts and integrations can rely on and what they cannot expect. All of it is about the methods of the [reference](/mikan/en/api/reference/) that an API key can call.
+
+## Version
+
+- **In the address**: `/api/v1`. Every method lies under it.
+- **In the OpenAPI file**: in the file downloaded from the panel (**Settings → Security → API → Download OpenAPI**), `info.version` is the version of that panel. The reference on the site is labeled with the newest release in the [changelog](/mikan/en/changelog/).
+- **In the SDK**: the version of the [SDK](/mikan/en/api/sdk/) is the version of the panel it is built for.
+
+## What changes without a warning
+
+Any release may bring new methods, new optional parameters of requests, new fields in answers and new values of enumerations (the `state`, for example). Read answers so that a field you do not know and a value you do not know break nothing. The Python client of the [SDK](/mikan/en/api/sdk/) is stricter: it refuses a value of an enumeration it does not know, so it is installed at the same version as the panel.
+
+## Where the changes are written
+
+Whatever breaks the calling code (a method or a field removed or renamed, a value no longer accepted) is written in the [changelog](/mikan/en/changelog/), in the release's section, as an item of its own that starts with **"API changes"**, saying what replaces the old. There is such an item in `0.5.2.0`, for instance: `POST /api/v1/tariffs/{id}/apply-pools` is replaced by `POST /api/v1/tariffs/{id}/apply`. The same text is in the release notes on GitHub and on the updates screen of the panel.
+
+The exact difference between two releases is in the spec file. Every pull request is checked: the file `web/src/api/openapi.json` must be what the code serves, or the check fails. So the difference can be seen like this:
+
+```bash
+git diff <old tag> <new tag> -- web/src/api/openapi.json
+```
+
+The check is new, so the file at an earlier tag may lag behind its code.
+
+## How long before removal
+
+A method or a field that is going to be removed is first declared deprecated, and after that it keeps working for **at least 30 days and at least one stable release**. The declaration has two parts:
+
+- an "API changes" item in the changelog with what to use instead;
+- the mark `deprecated: true` in the OpenAPI file: the reference shows it at the method or the field.
+
+The removal is written to "API changes" once more.
+
+The rule holds from the day this page appeared. Before that a method was removed at once, as `apply-pools` was in `0.5.2.0`, with its replacement in the same release.
+
+## What it does not cover
+
+- **"Session only" methods** (sign-in, sessions, keys, operations with money and clients' addresses: the reference marks them so). An API key cannot call them, they serve the panel's own screens and change with them. Changes to them are written to "API changes" too, but the term before removal does not cover them.
+- **The API of addons** (`/panel/v2` and the Bot API proxy for [your own bot](/mikan/en/api/own-bot/)): it has versions of its own, those of the addon protocol described in [PROTOCOL-v2.md](https://github.com/getmikan/marketplace/blob/main/PROTOCOL-v2.md).

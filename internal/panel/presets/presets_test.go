@@ -1,11 +1,40 @@
 package presets
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"mikan/internal/proto"
 )
+
+// The name clients send is a host name: one given with its site's port loses the port, and
+// what is no name at all is refused.
+func TestSetDestTakesANameWithoutAPort(t *testing.T) {
+	src, err := NewConfig("vless_reality_vision", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpl, _ := proto.Parse(src)
+	if err := SetDest(tpl, "127.0.0.1:21355", "cdn3.example.com:443"); err != nil {
+		t.Fatal(err)
+	}
+	if _, names := Dest(tpl); len(names) != 1 || names[0] != "cdn3.example.com" {
+		t.Errorf("a name with a port: %v", names)
+	}
+	if err := SetDest(tpl, "www.example.org:443", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, names := Dest(tpl); len(names) != 1 || names[0] != "www.example.org" {
+		t.Errorf("the host of the site: %v", names)
+	}
+	for _, bad := range []string{"cdn3 example com", "1.1.1.1", "cdn3.example.com:443:1", "localhost"} {
+		var pe *proto.Error
+		if err := SetDest(tpl, "127.0.0.1:21355", bad); !errors.As(err, &pe) || pe.Code != "reality_sni_name" {
+			t.Errorf("%q taken: %v", bad, err)
+		}
+	}
+}
 
 // A copy shares no secret with the original: every key a preset generates is new, the
 // rest of the settings stays.

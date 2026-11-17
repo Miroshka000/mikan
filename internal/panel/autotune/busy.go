@@ -204,6 +204,11 @@ func (t *Tuner) moveBusyRelay(ctx context.Context, n db.Node, failed string, por
 		t.log.Error("autotune: busy ports: relay", "node", n.ID, "err", err)
 		return
 	}
+	if r.AutoPort == 0 {
+		// The admin's port: the conflict is theirs to settle.
+		t.noteBusy(n, -n.ID, nodeapi.RelayListener, failed, BusyOff)
+		return
+	}
 	ports, err := t.nodePorts(ctx, n)
 	if err != nil {
 		t.log.Error("autotune: busy ports: node ports", "node", n.ID, "err", err)

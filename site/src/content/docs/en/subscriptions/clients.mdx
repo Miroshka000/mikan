@@ -1,0 +1,71 @@
+---
+title: Apps, response rules and the request log
+description: Which apps get the servers and how to block an app, the subscription's response rules by request headers, the rule tester, the subscription request log, and a check of what a client gets.
+---
+
+:::note[New in 0.5.2.1]
+The app list, response rules and the request log are new in 0.5.2.1.
+:::
+
+All of it is in **Settings → Subscription**: the **Apps** and **Response rules** tabs; the log's retention is set in the **General** tab.
+
+## Apps
+
+The panel tells the app by its User-Agent header and gives it a format it understands. In the **Apps** tab every known app has a switch.
+
+- A blocked app gets one entry with the stub text instead of the servers. It takes no device place and is not shown in the app catalog of the subscription page.
+- **Stub text**: one line of up to 200 characters. Name the app to install instead. Left empty, the panel writes a built-in text that lists the allowed apps.
+- Example: block Happ and keep INCY. Happ users see the stub that tells them to install INCY; every other app works as before.
+
+## Response rules
+
+The rules decide how the subscription answers a request, before anything is built for it. They are checked from the top down, and the first one that matches decides.
+
+A **condition** is a request header (User-Agent, x-device-os or any other, Host included), a comparison (equals, contains, a regular expression in RE2 syntax), and groups of conditions joined by AND or OR.
+
+The **answer** can be:
+- the subscription in a chosen format: Clash (mihomo), sing-box, links (base64) or Xray configs (JSON), with your own [template](/mikan/en/subscriptions/templates/) and extra headers;
+- the stub;
+- a 403 or 404 response;
+- your own HTML page;
+- dropping the connection silently, for scanners for example;
+- not asking for a device ID, for apps that do not send one.
+
+The built-in rules are on by default: ShadowsocksR and old Clash clients (Clash for Windows, Clash for Android, ClashX without Meta) get the stub, since they cannot use the panel's protocols anyway. A switch in the same tab turns the built-in rules off.
+
+Limits: up to 100 rules, up to 20 conditions in a rule, a condition value up to 256 characters. The panel refuses a regular expression that is too complex: simplify it or split it into several conditions.
+
+### Tester
+
+The **Response rules** tab has a tester. Paste a User-Agent and headers, and it shows which rule fires, which format and template the app gets, and what the stub text would be. It checks rules that are not saved yet too.
+
+## Request log
+
+The log records every subscription request: the time, the address, the app, the rule that fired and what the panel answered (served, stub, blocked, connection dropped). Subscription and key links are not stored in it.
+
+- The retention is set in **Settings → Subscription → General**, 14 days by default. With the log off, requests are no longer recorded, and what was recorded before is deleted within ten minutes.
+- The log is shown in the user card. It is the main tool when a client says "it does not work": you see whether the app came for the subscription and what it got.
+
+## What the client gets
+
+Below the log, the user card has a **"What the client gets"** block. It shows the answer to a subscription request from an app with the headers you set, made the way a real fetch is: by the same response rules, app list, templates, [client group](/mikan/en/billing/groups/) and addresses.
+
+- **User-Agent**: the client's latest app from the log is filled in, with buttons for the client's other apps next to it. Any other can be pasted.
+- **Headers**: X-Hwid, X-Device-Os, Accept, Host and any of your own.
+- **Format in the link**: as a link with `?format=`. Usually there is none, and the headers choose the format.
+
+The answer shows:
+
+- the outcome (served, stub, blocked, dropped), the status code, the app and the rule that fired with its place in the list;
+- the format and the template: your own or the built-in profile. When your template did not render for this client, the block says so: the built-in profile went out;
+- why a stub went out: every device place is taken, the app sent no device ID, the device is banned or was unbound a short while ago, the subscription does not work, nothing the app can use;
+- what happens to the device: bound already, takes a new place, or the shared place of apps without an ID;
+- where the client's servers come from: the card's own list of protocols, the group's own servers, the tariff or every server of the panel;
+- the servers of the answer in order and everything left out of it, with why: not among the group's or the tariff's servers, the protocol or the node is off, the server group is closed, balancing keeps the client on another node, the address goes to other groups, states or trial clients, the app cannot use the protocol, the protocol did not render;
+- the answer's headers, `base64:` values decoded;
+- what sing-box and Xray do with the profile their own way;
+- the answer itself, to copy or download as a file.
+
+The check changes nothing: the keys in the answer are placeholders, the link's token is hidden, no device is bound or takes a place, balancing places the client nowhere, and the request is not logged. A support operator gets the block only when the access has "Show client data" on.
+
+API: `POST /api/v1/users/{id}/sub-preview` with `user_agent`, `headers` (`[{"name", "value"}]`) and `format`.

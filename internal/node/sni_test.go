@@ -103,7 +103,7 @@ func TestSNIRouter(t *testing.T) {
 	}
 	r := &sniRouter{ln: ln, log: slog.New(slog.DiscardHandler)}
 	r.set(&nodeapi.SNIRouter{Routes: []nodeapi.SNIRoute{{Inbound: "a", Names: []string{"A.example.com."}}}, Default: "b"},
-		map[string]string{"a": aPort, "b": bPort})
+		[]nodeapi.Inbound{{Name: "a", Port: aPort}, {Name: "b", Port: bPort}})
 	go r.serve(nil)
 	defer r.close()
 	c := helloTo(t, ln.Addr().String(), "a.example.com")
@@ -113,7 +113,7 @@ func TestSNIRouter(t *testing.T) {
 	hitBy(t, bHits, c, "the default inbound")
 	c.Close()
 
-	r.set(&nodeapi.SNIRouter{Routes: []nodeapi.SNIRoute{{Inbound: "a", Names: []string{"a.example.com"}}}}, map[string]string{"a": aPort})
+	r.set(&nodeapi.SNIRouter{Routes: []nodeapi.SNIRoute{{Inbound: "a", Names: []string{"a.example.com"}}}}, []nodeapi.Inbound{{Name: "a", Port: aPort}})
 	plain, err := net.Dial("tcp", ln.Addr().String())
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestFrontPageOnTheRouter(t *testing.T) {
 	}
 	r := &sniRouter{ln: ln, log: slog.New(slog.DiscardHandler), front: front}
 	r.set(&nodeapi.SNIRouter{Routes: []nodeapi.SNIRoute{{Inbound: "a", Names: []string{"a.example.com"}}}, Default: "a", Stub: []string{"node.example.com", ""}},
-		map[string]string{"a": aPort})
+		[]nodeapi.Inbound{{Name: "a", Port: aPort}})
 	go r.serve(nil)
 	defer r.close()
 

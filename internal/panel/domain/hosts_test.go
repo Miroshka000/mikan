@@ -1,0 +1,446 @@
+package domain
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"mikan/internal/panel/store"
+	"mikan/internal/panel/store/db"
+	"mikan/internal/proto"
+	"mikan/internal/sub/build"
+	"mikan/internal/sub/model"
+)
+
+// One truth while subscriptions read the template: whichever way the template changes (the
+// inbound's form, its YAML, the default host itself), its mikan.client and the default host
+// say the same, and the subscription's proxy is made of that value.
+func TestDefaultHostIsTheTemplates(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	st, s := inbounds(t, &now, nil)
+	ctx := context.Background()
+	same := func(when string, id int64) db.InboundHost {
+		t.Helper()
+		in, err := st.Q.GetInbound(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hosts, err := s.Hosts(ctx, id)
+		if err != nil || len(hosts) == 0 || hosts[0].Position != 0 {
+			t.Fatalf("%s: hosts %+v %v", when, hosts, err)
+		}
+		w := store.DefaultHost(id, in.Config)
+		got := db.SetDefaultInboundHostParams{InboundID: hosts[0].InboundID, Address: hosts[0].Address, Port: hosts[0].Port, Sni: hosts[0].Sni, Host: hosts[0].Host, Fingerprint: hosts[0].Fingerprint}
+		if got != w {
+			t.Fatalf("%s: default host %+v, template %+v", when, got, w)
+		}
+		return hosts[0]
+	}
+
+	// The seeded inbounds have theirs.
+	all, err := st.Q.ListInbounds(ctx)
+	if err != nil || len(all) == 0 {
+		t.Fatal(all, err)
+	}
+	for _, in := range all {
+		same("seeded "+in.Name, in.ID)
+	}
+
+	in, err := s.Create(ctx, NewInbound{Preset: "vless_tls_ws"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := same("created", in.ID); h.Address != "" || h.Port != 0 {
+		t.Fatalf("a new inbound's default host: %+v", h)
+	}
+	if _, _, err := s.Update(ctx, in.ID, InboundPatch{Client: &ClientEndpoint{Server: "proxy.example.com", Port: 8443, SNI: "front.example.com", Host: "h.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+	if h := same("the form's client", in.ID); h.Address != "proxy.example.com" || h.Port != 8443 || h.Sni != "front.example.com" || h.Host != "h.example.com" {
+		t.Fatalf("after the form: %+v", h)
+	}
+	fp := "firefox"
+	if _, _, err := s.Update(ctx, in.ID, InboundPatch{Fingerprint: &fp}); err != nil {
+		t.Fatal(err)
+	}
+	if h := same("the form's fingerprint", in.ID); h.Fingerprint != "firefox" {
+		t.Fatalf("after the fingerprint: %+v", h)
+	}
+	cur, _ := st.Q.GetInbound(ctx, in.ID)
+	yaml := strings.Replace(cur.Config, "proxy.example.com", "yaml.example.com", 1)
+	if yaml == cur.Config {
+		t.Fatalf("no address in %q", cur.Config)
+	}
+	if _, _, err := s.Update(ctx, in.ID, InboundPatch{Config: &yaml}); err != nil {
+		t.Fatal(err)
+	}
+	def := same("the YAML", in.ID)
+	if def.Address != "yaml.example.com" {
+		t.Fatalf("after the YAML: %+v", def)
+	}
+
+	// The default host changed through the hosts goes into the template, and the proxy is
+	// made of it.
+	if _, err := s.UpdateHost(ctx, in.ID, def.ID, Host{Address: " edge.example.com ", Port: 2053, SNI: "edge.example.com", Fingerprint: "safari"}); err != nil {
+		t.Fatal(err)
+	}
+	def = same("the default host", in.ID)
+	if def.Address != "edge.example.com" || def.Port != 2053 || def.Host != "" || def.Fingerprint != "safari" {
+		t.Fatalf("after the default host: %+v", def)
+	}
+	cur, _ = st.Q.GetInbound(ctx, in.ID)
+	ps := build.Proxies(build.Profile{Keys: proto.Slot{Name: "u", UUID: "00000000-0000-0000-0000-000000000001", Secret: "s"},
+		Inbounds: []model.Inbound{{ID: cur.ID, Node: 1, Name: "ws", Port: 443, PortSpec: cur.Port, Config: cur.Config}},
+		Nodes:    []model.Node{{ID: 1, Name: "n", Endpoint: model.Endpoint{Host: "198.51.100.1"}}}})
+	if len(ps) != 1 || ps[0].Server != "edge.example.com" || ps[0].Port != 2053 || ps[0].TLS == nil || ps[0].TLS.SNI != "edge.example.com" || ps[0].TLS.Fingerprint != "safari" {
+		t.Fatalf("the proxy of the default host: %+v", ps)
+	}
+
+	// A refusal of the template is named by the host's field, and changes nothing.
+	reality, err := s.Create(ctx, NewInbound{Preset: "trojan_reality"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rdef := same("reality", reality.ID)
+	var edit *EditError
+	if _, err := s.UpdateHost(ctx, reality.ID, rdef.ID, Host{SNI: "other.example.com"}); !errors.As(err, &edit) || edit.Field != "sni" || edit.Err.Code != "config_client_sni" {
+		t.Fatalf("REALITY's default host with an SNI: %v", err)
+	}
+	same("reality after the refusal", reality.ID)
+}
+
+// The other hosts follow the default one in the order they came, are held to what the
+// inbound takes, and a copy of the inbound takes them; the default host stays.
+func TestOtherHosts(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	_, s := inbounds(t, &now, nil)
+	ctx := context.Background()
+	in, err := s.Create(ctx, NewInbound{Preset: "trojan_reality"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.AddHost(ctx, in.ID, Host{Address: "a.example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.AddHost(ctx, in.ID, Host{Address: "b.example.com", Port: 8443, Fingerprint: "ios"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Position != 1 || b.Position != 2 {
+		t.Fatalf("positions %d %d", a.Position, b.Position)
+	}
+	var edit *EditError
+	for _, c := range []struct {
+		h     Host
+		field string
+	}{
+		{Host{SNI: "x.example.com"}, "sni"}, // REALITY's name is the target's
+		{Host{Host: "x.example.com"}, "host"},
+		{Host{Address: "bad host"}, "address"},
+		{Host{Port: 70000}, "port"},
+		{Host{Fingerprint: "Not One"}, "fingerprint"},
+	} {
+		if _, err := s.AddHost(ctx, in.ID, c.h); !errors.As(err, &edit) || edit.Field != c.field {
+			t.Errorf("%+v: %v, want a refusal of %s", c.h, err, c.field)
+		}
+	}
+	if _, err := s.AddHost(ctx, 999, Host{}); !errors.Is(err, ErrUnknownInbound) {
+		t.Fatalf("a host of no inbound: %v", err)
+	}
+	if got, err := s.UpdateHost(ctx, in.ID, a.ID, Host{Address: "a2.example.com", Port: 2083}); err != nil || got.Address != "a2.example.com" || got.Port != 2083 || got.Position != 1 {
+		t.Fatalf("update: %+v %v", got, err)
+	}
+	if _, err := s.UpdateHost(ctx, in.ID, 999, Host{}); !errors.Is(err, ErrUnknownHost) {
+		t.Fatalf("an unknown host: %v", err)
+	}
+
+	copied, err := s.Copy(ctx, in.ID, CopyInbound{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hosts, err := s.Hosts(ctx, copied.ID)
+	if err != nil || len(hosts) != 3 || hosts[1].Address != "a2.example.com" || hosts[2].Address != "b.example.com" || hosts[2].Fingerprint != "ios" {
+		t.Fatalf("the copy's hosts: %+v %v", hosts, err)
+	}
+
+	hosts, _ = s.Hosts(ctx, in.ID)
+	if _, err := s.DeleteHost(ctx, in.ID, hosts[0].ID); !errors.Is(err, ErrDefaultHost) {
+		t.Fatalf("deleting the default host: %v", err)
+	}
+	if _, err := s.DeleteHost(ctx, in.ID, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// A host is its inbound's: another inbound's id does not reach it.
+	if _, err := s.DeleteHost(ctx, copied.ID, b.ID); !errors.Is(err, ErrUnknownHost) {
+		t.Fatalf("another inbound's host: %v", err)
+	}
+	c, err := s.AddHost(ctx, in.ID, Host{Address: "c.example.com"})
+	if err != nil || c.Position != 3 {
+		t.Fatalf("a host after a deleted one: %+v %v", c, err)
+	}
+	hosts, _ = s.Hosts(ctx, in.ID)
+	var order []string
+	for _, h := range hosts {
+		order = append(order, h.Address)
+	}
+	if strings.Join(order, ",") != ",b.example.com,c.example.com" {
+		t.Fatalf("order %q", order)
+	}
+}
+
+// A host's own fields (ALPN, IP version, multiplexing, CDN) are saved trimmed, held to what
+// the inbound's protocol can use, and the default host's stay through every write of the
+// template, which does not hold them, and go with a copy of the inbound.
+func TestHostOwnFields(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	_, s := inbounds(t, &now, nil)
+	ctx := context.Background()
+	ws, err := s.Create(ctx, NewInbound{Preset: "vless_tls_ws"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := s.AddHost(ctx, ws.ID, Host{Address: "edge.example.com", ALPN: []string{" H2 ", "h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true, Name: " Edge · {days} ",
+		States: []string{StateExpired, StateActive, StateExpired}, Trial: "only"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The states in their own order, each once.
+	if strings.Join(h.Alpn, ",") != "h2,http/1.1" || h.IpVersion != "ipv4-prefer" || !h.Mux || h.MuxProtocol != "smux" || !h.MuxPadding || !h.Cdn || h.Name != "Edge · {days}" ||
+		strings.Join(h.States, ",") != "active,expired" || h.Trial != "only" {
+		t.Fatalf("added: %+v", h)
+	}
+	// A multiplexing that is off keeps no protocol or padding; no ALPN is an empty list.
+	// More addresses and names are saved trimmed, each once, without the host's own.
+	h, err = s.UpdateHost(ctx, ws.ID, h.ID, Host{Address: "edge.example.com", Addresses: []string{" b.example.com ", "", "B.example.com", "Edge.example.com", "c.example.com"},
+		SNI: "s.example.com", SNIs: []string{"t.example.com"}, States: []string{StateDisabled, StateExpired, StateLimited, StateActive}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Every state is none: the host goes to everyone.
+	if strings.Join(h.Addresses, ",") != "b.example.com,c.example.com" || strings.Join(h.Snis, ",") != "t.example.com" || h.States == nil || len(h.States) != 0 || h.Trial != "" {
+		t.Fatalf("choices: %+v", h)
+	}
+	h, err = s.UpdateHost(ctx, ws.ID, h.ID, Host{Address: "edge.example.com", MuxProtocol: "yamux", MuxPadding: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn || h.Name != "" || len(h.Addresses) != 0 || len(h.Snis) != 0 {
+		t.Fatalf("cleared: %+v", h)
+	}
+
+	reality, err := s.Create(ctx, NewInbound{Preset: "trojan_reality"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	vision, err := s.Create(ctx, NewInbound{Preset: "vless_tls_vision"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	xhttp, err := s.Create(ctx, NewInbound{Preset: "vless_tls_xhttp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hy2, err := s.Create(ctx, NewInbound{Preset: "hysteria2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var edit *EditError
+	for _, c := range []struct {
+		in          db.Inbound
+		h           Host
+		field, code string
+	}{
+		{ws, Host{ALPN: []string{"spdy/3"}}, "alpn", "host_alpn"},
+		{reality, Host{ALPN: []string{"h2"}}, "alpn", "host_alpn_no_tls"}, // the target's TLS
+		{hy2, Host{ALPN: []string{"h2"}}, "alpn", "host_alpn_quic"},       // the node answers h3 alone
+		{ws, Host{ALPN: []string{"h3", "http/1.1"}}, "alpn", "host_alpn_h3_tcp"},
+		{ws, Host{ALPN: []string{"h2"}}, "alpn", "host_alpn_transport"}, // WebSocket needs HTTP/1.1
+		{ws, Host{IPVersion: "ipv5"}, "ip_version", "host_ip_version"},
+		{ws, Host{Mux: true, MuxProtocol: "mplex"}, "mux.protocol", "host_mux_protocol"},
+		{hy2, Host{Mux: true}, "mux", "host_mux_type"}, // QUIC has streams of its own
+		{xhttp, Host{Mux: true}, "mux", "host_mux_type"},
+		{vision, Host{Mux: true}, "mux", "host_mux_flow"},
+		{reality, Host{CDN: true}, "cdn", "cdn_type"},
+		{vision, Host{CDN: true}, "cdn", "cdn_transport"},
+		{ws, Host{Addresses: []string{"bad host"}}, "addresses", "config_client_server"},
+		{reality, Host{SNIs: []string{"www.bing.com"}}, "snis", "config_client_sni"}, // the target's name
+		{ws, Host{SNIs: []string{"a..b"}}, "snis", "config_client_sni"},
+		{ws, Host{Addresses: manyAddresses(HostChoicesMax + 1)}, "addresses", "host_choices_long"},
+		{ws, Host{States: []string{StateActive, StateExpiring}}, "states", "host_state"}, // an expiring one is active
+		{ws, Host{Trial: "maybe"}, "trial", "host_trial"},
+	} {
+		if _, err := s.AddHost(ctx, c.in.ID, c.h); !errors.As(err, &edit) || edit.Field != c.field || edit.Err.Code != c.code {
+			t.Errorf("%s %+v: %v, want %s %s", c.in.Preset, c.h, err, c.field, c.code)
+		}
+	}
+	// What each can use passes: ALPN on QUIC, multiplexing on REALITY's Trojan.
+	if _, err := s.AddHost(ctx, hy2.ID, Host{ALPN: []string{"h3"}, IPVersion: "ipv6"}); err != nil {
+		t.Fatalf("Hysteria2's ALPN: %v", err)
+	}
+	if _, err := s.AddHost(ctx, reality.ID, Host{Mux: true, MuxProtocol: "h2mux"}); err != nil {
+		t.Fatalf("REALITY's multiplexing: %v", err)
+	}
+
+	// The default host: its own fields through the hosts, beside the template's five.
+	hosts, err := s.Hosts(ctx, ws.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	def := hosts[0]
+	own := func(when string) {
+		t.Helper()
+		hosts, err := s.Hosts(ctx, ws.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		d := hosts[0]
+		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn || d.Name != "Main {left}" || strings.Join(d.Addresses, ",") != "front2.example.com" ||
+			strings.Join(d.States, ",") != "limited" || d.Trial != "never" {
+			t.Fatalf("%s: the default host %+v", when, d)
+		}
+	}
+	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true, Name: "Main {left}", Addresses: []string{"front2.example.com"},
+		States: []string{StateLimited}, Trial: "never"}); err != nil {
+		t.Fatal(err)
+	}
+	own("the hosts")
+	if d, _ := s.Hosts(ctx, ws.ID); d[0].Address != "front.example.com" {
+		t.Fatalf("the default host's address: %+v", d[0])
+	}
+	if _, _, err := s.Update(ctx, ws.ID, InboundPatch{Client: &ClientEndpoint{Server: "other.example.com"}}); err != nil {
+		t.Fatal(err)
+	}
+	own("the form's client")
+	fp := "firefox"
+	if _, _, err := s.Update(ctx, ws.ID, InboundPatch{Fingerprint: &fp}); err != nil {
+		t.Fatal(err)
+	}
+	own("the form's fingerprint")
+	cur, err := s.st.Q.GetInbound(ctx, ws.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Update(ctx, ws.ID, InboundPatch{Config: &cur.Config}); err != nil {
+		t.Fatal(err)
+	}
+	own("the YAML")
+	// A refusal of the default host's own field writes nothing, the template neither.
+	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "never.example.com", IPVersion: "ipv5"}); !errors.As(err, &edit) || edit.Field != "ip_version" {
+		t.Fatalf("a bad default host: %v", err)
+	}
+	own("the refusal")
+	if d, _ := s.Hosts(ctx, ws.ID); d[0].Address != "other.example.com" {
+		t.Fatalf("the refused default host's address: %+v", d[0])
+	}
+
+	copied, err := s.Copy(ctx, ws.ID, CopyInbound{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ch, err := s.Hosts(ctx, copied.ID)
+	if err != nil || len(ch) != 2 {
+		t.Fatalf("the copy's hosts: %+v %v", ch, err)
+	}
+	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn || ch[0].Name != "Main {left}" || strings.Join(ch[0].Addresses, ",") != "front2.example.com" ||
+		strings.Join(ch[0].States, ",") != "limited" || ch[0].Trial != "never" {
+		t.Fatalf("the copy's default host: %+v", ch[0])
+	}
+}
+
+// The ALPN a host may offer is what the node's listener answers, as the admin's form
+// offers it too.
+func TestHostALPNOf(t *testing.T) {
+	for src, want := range map[string]string{
+		"type: hysteria2\n":                              "h3",
+		"type: tuic\nalpn: [H2, h3, spdy/3, h2]\n":       "h2,h3",
+		"type: tuic\nalpn: [spdy/3]\n":                   "",
+		"type: vless\nws-path: /w\nmikan: {tls: node}\n": "h2,http/1.1",
+		"type: vless\nws-path: /w\n":                     "",
+	} {
+		tpl, err := proto.Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Join(HostALPNOf(tpl), ","); got != want {
+			t.Errorf("%q: %q, want %q", src, got, want)
+		}
+	}
+}
+
+// manyAddresses are n addresses, each its own.
+func manyAddresses(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = "a" + strconv.Itoa(i) + ".example.com"
+	}
+	return out
+}
+
+// A host goes to the states it names (an expiring user is an active one) and to the trial's
+// users or the others as it says.
+func TestHostShows(t *testing.T) {
+	for _, c := range []struct {
+		states      []string
+		trialOf     string
+		state       string
+		trial, want bool
+	}{
+		{nil, "", StateDisabled, true, true},
+		{[]string{StateActive}, "", StateExpiring, false, true},
+		{[]string{StateActive}, "", StateExpired, false, false},
+		{[]string{StateExpired, StateLimited}, "", StateLimited, false, true},
+		{nil, "only", StateActive, true, true},
+		{nil, "only", StateActive, false, false},
+		{nil, "never", StateActive, true, false},
+		{nil, "never", StateActive, false, true},
+		{[]string{StateExpired}, "only", StateExpired, true, true},
+		{[]string{StateExpired}, "only", StateActive, true, false},
+	} {
+		if got := HostShows(c.states, c.trialOf, c.state, c.trial); got != c.want {
+			t.Errorf("%v %q to %s (trial %v): %v", c.states, c.trialOf, c.state, c.trial, got)
+		}
+	}
+}
+
+// On the trial is a user who came of it and paid for nothing besides it: the trial's own
+// payment does not count, a purchase since does, a refunded one too.
+func TestOnTrial(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	st, users, _ := setup(t, &now)
+	ctx := context.Background()
+	tariffs, _ := st.Q.ListTariffs(ctx)
+	mk := func(name, source string) db.User {
+		t.Helper()
+		u, err := users.Create(ctx, CreateInput{Name: name, TariffID: tariffs[1].ID, Source: source})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u
+	}
+	pay := func(u db.User, kind, status string) {
+		t.Helper()
+		if _, err := st.DB.ExecContext(ctx, `INSERT INTO payments (provider, payload, tg_id, kind, user_id, tariff_id, tariff_name, amount, currency, status, created_at)
+			VALUES ('stars', $1, 555, $2, $3, $4, 'Standard', 100, 'XTR', $5, $6)`, "p-"+u.Name+"-"+kind+"-"+status, kind, u.ID, tariffs[1].ID, status, now.Unix()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	free, bought, paidTrial, refunded, pending, admin := mk("free", UserFromTrial), mk("bought", UserFromTrial), mk("paid trial", UserFromTrial),
+		mk("refunded", UserFromTrial), mk("pending", UserFromTrial), mk("admin", UserFromAdmin)
+	pay(bought, "renew", "applied")
+	pay(paidTrial, "trial", "applied")
+	pay(refunded, "package", "refunded")
+	pay(pending, "renew", "pending")
+	for _, c := range []struct {
+		u    db.User
+		want bool
+	}{{free, true}, {bought, false}, {paidTrial, true}, {refunded, false}, {pending, true}, {admin, false}} {
+		got, err := OnTrial(ctx, st.Q, c.u)
+		if err != nil || got != c.want {
+			t.Errorf("%s: %v %v, want %v", c.u.Name, got, err, c.want)
+		}
+	}
+}

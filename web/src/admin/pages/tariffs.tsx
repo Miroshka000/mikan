@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Archive, Layers, Package, Pencil, Plus, RefreshCcw, Tag } from "lucide-react";
+import { Archive, CalendarClock, Layers, Package, Pencil, Plus, RefreshCcw, Tag } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { api, errorText, unwrap, type Tariff } from "../../api/client";
 import { qk, useInbounds, useNodes, usePackages, usePaymentSettings, usePools, useTariffs } from "../../api/hooks";
@@ -13,6 +13,7 @@ import { t } from "../../i18n";
 import { bytes, days, months, rubles, termMonths } from "../../lib/format";
 import { nodeLabel } from "../../lib/node-label";
 import { TARIFF_TABS } from "../search";
+import { LifecycleDrawer } from "./lifecycle";
 import { PackagesCard } from "./packages";
 import { modeShort, PoolsCard } from "./pools";
 import { TariffDrawer } from "./tariffs/drawer";
@@ -76,6 +77,7 @@ export function TariffsPage() {
     setApplying(tr);
   };
   const [creating, setCreating] = useState<"pools" | "packages" | null>(null);
+  const [rules, setRules] = useState(false);
   const qc = useQueryClient();
   const toast = useToast();
   const remove = useMutation({
@@ -124,11 +126,17 @@ export function TariffsPage() {
         title={t("nav.tariffs")}
         sub={t("tariffs.subtitle")}
         actions={
-          // Each section adds its own kind of thing from the same place.
-          <Button variant="primary" onClick={() => (tab === "tariffs" ? setEdit("new") : setCreating(tab))}>
-            <Plus size={18} aria-hidden />
-            <span className="max-[760px]:hidden">{tab === "pools" ? t("pools.add") : tab === "packages" ? t("packages.add") : t("tariffs.new")}</span>
-          </Button>
+          <>
+            <Button onClick={() => setRules(true)} aria-label={t("lifecycle.open")}>
+              <CalendarClock size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{t("lifecycle.open")}</span>
+            </Button>
+            {/* Each section adds its own kind of thing from the same place. */}
+            <Button variant="primary" onClick={() => (tab === "tariffs" ? setEdit("new") : setCreating(tab))}>
+              <Plus size={18} aria-hidden />
+              <span className="max-[760px]:hidden">{tab === "pools" ? t("pools.add") : tab === "packages" ? t("packages.add") : t("tariffs.new")}</span>
+            </Button>
+          </>
         }
       />
       <Tabs
@@ -202,11 +210,12 @@ export function TariffsPage() {
                       </div>
                       <dl className="mt-5 grid grid-cols-2 gap-3 text-xs text-[var(--ink-500)]">
                         <Item label={t("users.colTraffic")} value={tr.traffic_limit != null ? bytes(tr.traffic_limit) : t("users.unlimited")} />
-                        <Item label={t("users.colExpiry")} value={tariffTerm(tr)} />
+                        <Item label={t("users.colExpiry")} value={tr.starts_on_connect && tr.duration_days ? t("tariffs.termFromConnect", { term: tariffTerm(tr) }) : tariffTerm(tr)} />
                         <Item label={t("users.colDevices")} value={tr.device_limit != null ? (modeOf(tr) === "online" ? t("deviceMode.shortOnline", { n: tr.device_limit }) : String(tr.device_limit)) : t("users.unlimited")} />
                         <Item label={t("tariffs.speed")} value={tr.speed_limit != null ? t("tariffs.speedShort", { n: tr.speed_limit }) : t("users.unlimited")} />
                         <Item label={t("tariffs.reset")} value={resetLabel(tr)} />
                         <Item label={t("nav.users")} value={t("tariffs.subscribers", { n: tr.subscribers })} />
+                        {tr.traffic_limit != null && tr.carry_over !== "inherit" ? <Item label={t("tariffs.carry")} value={t(`tariffs.carryShort.${tr.carry_over}`)} /> : null}
                         {tr.servers.all ? null : (
                           <div className="col-span-2">
                             <Item label={t("servers.label")} value={serversText(tr) ?? <Skeleton style={{ width: 120, height: 14 }} />} />
@@ -232,6 +241,7 @@ export function TariffsPage() {
         )}
       </Tabs>
       <TariffDrawer tariff={edit} onClose={() => setEdit(null)} />
+      <LifecycleDrawer open={rules} onOpenChange={setRules} />
       <Confirm
         open={!!archive}
         onOpenChange={(v) => !v && setArchive(null)}

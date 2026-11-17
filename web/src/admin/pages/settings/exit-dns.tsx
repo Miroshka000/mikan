@@ -10,6 +10,7 @@ import { Field } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { splitList } from "../../../lib/list";
+import { Select } from "../../../components/select";
 
 export type ExitDnsInfo = Schemas["ExitDNSInfo"];
 type Resolver = ExitDnsInfo["resolver"];
@@ -44,13 +45,13 @@ export function ExitDnsFields({ v, draft, setDraft, error }: { v: ExitDnsInfo; d
     <>
       <SwitchRow label={t("settings.exitDns.sniff")} sub={t("settings.exitDns.sniffSub")} checked={draft.sniff} onChange={(sniff) => setDraft((d) => ({ ...d, sniff }))} />
       <Field label={t("settings.exitDns.resolver")} htmlFor="exit-dns-resolver" hint={preset ? preset.join(", ") : draft.resolver === "host" ? t("settings.exitDns.resolverHint") : undefined}>
-        <select id="exit-dns-resolver" className="input max-w-[320px]" value={draft.resolver} onChange={(e) => setDraft((d) => ({ ...d, resolver: e.target.value as Resolver }))}>
+        <Select id="exit-dns-resolver" className="input max-w-[320px]" value={draft.resolver} onChange={(e) => setDraft((d) => ({ ...d, resolver: e.target.value as Resolver }))}>
           {RESOLVERS.map((r) => (
             <option key={r} value={r}>
               {t(`settings.exitDns.resolvers.${r}`)}
             </option>
           ))}
-        </select>
+        </Select>
       </Field>
       {draft.resolver === "custom" ? (
         <Field label={t("settings.exitDns.servers")} htmlFor="exit-dns-servers" hint={t("settings.exitDns.serversHint")} error={serversError}>

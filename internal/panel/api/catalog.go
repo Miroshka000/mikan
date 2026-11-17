@@ -35,11 +35,44 @@ type TariffView struct {
 	OnSale        bool          `json:"on_sale" doc:"Продаётся в боте и Mini App"`
 	Terms         []TermView    `json:"terms" doc:"Сроки, на которые продаётся тариф, по порядку; первый — тот же, что duration_days, price_stars и price_rub"`
 	ExtraDevices  ExtraDevices  `json:"extra_devices" doc:"Докупка устройств в боте и Mini App: цена одного и сколько можно докупить"`
-	Servers       ServersView   `json:"servers" doc:"Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём"`
+	Servers       ServersView   `json:"servers" doc:"Какие серверы входят в тариф: все или выбранные. Действует сразу на всех клиентов тарифа; клиент со своим списком протоколов в карточке остаётся при нём, клиент в группе со своими серверами видит серверы группы"`
+	GroupID       *int64        `json:"group_id" doc:"Группа, в которой клиенты тарифа без своей группы: покупатели и пробные попадают в неё сами; null — ни в какой"`
 	Pools         []PoolSetting `json:"pools" doc:"Как тариф держит каждую группу серверов; группа без настройки тарифа — в основном трафике. Режим и лимит действуют на новых клиентов, при продлении, смене тарифа и по «Применить к выданным подпискам»; закрытие и открытие группы действует сразу на всех клиентов тарифа"`
 	Gifts         []int64       `json:"gifts" doc:"Пакеты трафика в подарок при каждой оплате тарифа: покупке и продлении"`
 	Subscribers   int64         `json:"subscribers" doc:"Сколько подписок выдано на этом тарифе"`
 	Sort          int64         `json:"sort"`
+	// The tariff's own part of the lifecycle (domain.TariffLifecycle).
+	CarryOver       string `json:"carry_over" enum:"inherit,on,off" doc:"Перенос остатка трафика в новый период при продлении и переходе на этот тариф: inherit — как в правилах подписок, on — переносить, off — нет"`
+	StartsOnConnect bool   `json:"starts_on_connect" doc:"Срок новой подписки на этом тарифе начинается с первого подключения, а не с создания"`
+}
+
+// The tariff's word on the carry-over (TariffView.CarryOver, tariffBody.CarryOver).
+const (
+	carryInherit = "inherit"
+	carryOn      = "on"
+	carryOff     = "off"
+)
+
+// carryWord is how the API says a tariff's own carry-over.
+func carryWord(v sql.NullBool) string {
+	switch {
+	case !v.Valid:
+		return carryInherit
+	case v.Bool:
+		return carryOn
+	}
+	return carryOff
+}
+
+// carryRule is a tariff's own carry-over as the API says it.
+func carryRule(word string) sql.NullBool {
+	switch word {
+	case carryOn:
+		return sql.NullBool{Bool: true, Valid: true}
+	case carryOff:
+		return sql.NullBool{Valid: true}
+	}
+	return sql.NullBool{}
 }
 
 // ServersView is what a tariff includes: every server, or only the chosen nodes and
@@ -124,10 +157,33 @@ type tariffBody struct {
 	OnSale        bool          `json:"on_sale,omitempty" doc:"Продавать в боте и Mini App; нужна хотя бы одна цена"`
 	Terms         []termBody    `json:"terms,omitempty" maxItems:"12" doc:"Все сроки по порядку, когда тариф продаётся на несколько; тогда duration_days, price_stars и price_rub берутся из первого. Не передан — первый срок из duration_days, price_stars и price_rub, остальные без изменений"`
 	Servers       *serversBody  `json:"servers,omitempty" doc:"Какие серверы входят в тариф: все или выбранные ноды и протоколы. Не передан — без изменений (у нового тарифа — все)"`
+	GroupID       *int64        `json:"group_id,omitempty" minimum:"0" doc:"Группа для клиентов тарифа без своей группы; 0 — никакой. Не передан — без изменений (у нового тарифа — никакой). Действует сразу на всех клиентов тарифа"`
 	Pools         []PoolSetting `json:"pools,omitempty" maxItems:"100" doc:"Как тариф держит группы серверов; не названная группа — в основном трафике. Не передан — без изменений"`
 	Gifts         []int64       `json:"gifts,omitempty" maxItems:"20" doc:"Пакеты трафика в подарок при каждой оплате тарифа; каждый должен добавлять к квоте, которую тариф даёт: к основному трафику с лимитом или к группе со своим лимитом. Не передан — без изменений"`
 	ExtraDevices  *ExtraDevices `json:"extra_devices,omitempty" doc:"Докупка устройств; не передана — без изменений (у нового тарифа — нет). Нужен лимит устройств"`
 	Sort          int64         `json:"sort,omitempty"`
+	// CarryOver and StartsOnConnect: the tariff's own part of the lifecycle; left out, as it was.
+	CarryOver       string `json:"carry_over,omitempty" enum:"inherit,on,off" doc:"Перенос остатка трафика: inherit — как в правилах подписок, on, off. Не передан — без изменений (у нового тарифа — inherit)"`
+	StartsOnConnect *bool  `json:"starts_on_connect,omitempty" doc:"Срок новой подписки начинается с первого подключения. Не передан — без изменений (у нового тарифа — нет)"`
+}
+
+// setTariffLifecycle writes the tariff's own part of the lifecycle from the body on q's
+// transaction; what the body leaves out stays as it was.
+func setTariffLifecycle(ctx context.Context, q *db.Queries, id int64, b tariffBody) error {
+	if b.CarryOver == "" && b.StartsOnConnect == nil {
+		return nil
+	}
+	tl, err := domain.LoadTariffLifecycle(ctx, q, id)
+	if err != nil {
+		return err
+	}
+	if b.CarryOver != "" {
+		tl.Carry = carryRule(b.CarryOver)
+	}
+	if b.StartsOnConnect != nil {
+		tl.StartOnConnect = *b.StartsOnConnect
+	}
+	return domain.SetTariffLifecycle(ctx, q, id, tl)
 }
 
 // setExtraDevices writes the tariff's price of one more device; nil keeps it as it is.
@@ -205,6 +261,10 @@ func (h *handlers) createTariff(ctx context.Context, in *tariffInput) (*tariffOu
 	// The catalog holds no invariant across rows (a pool deleted meanwhile fails on its
 	// foreign key): READ COMMITTED.
 	err = h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+		// The group first: a group's deletion takes its row before its tariffs'.
+		if err := lockTariffGroup(ctx, q, b.GroupID); err != nil {
+			return err
+		}
 		var err error
 		t, err = q.CreateTariff(ctx, db.CreateTariffParams{Name: strings.TrimSpace(b.Name), TrafficLimit: domain.NullInt(b.TrafficLimit),
 			DurationDays: first.Days, DeviceLimit: domain.NullInt(b.DeviceLimit), ResetStrategy: b.ResetStrategy, PriceLabel: b.PriceLabel,
@@ -220,6 +280,9 @@ func (h *handlers) createTariff(ctx context.Context, in *tariffInput) (*tariffOu
 			return err
 		}
 		if err := domain.SetTariffTerms(ctx, q, t.ID, terms); err != nil {
+			return err
+		}
+		if err := setTariffLifecycle(ctx, q, t.ID, b); err != nil {
 			return err
 		}
 		return setTariffContents(ctx, q, t, b)
@@ -239,6 +302,10 @@ func (h *handlers) updateTariff(ctx context.Context, in *tariffUpdateInput) (*ta
 	}
 	var t db.Tariff
 	err = h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+		// The group first: a group's deletion takes its row before its tariffs'.
+		if err := lockTariffGroup(ctx, q, b.GroupID); err != nil {
+			return err
+		}
 		// Without terms in the body the tariff keeps the ones after the first.
 		var kept []domain.Term
 		if b.Terms == nil {
@@ -271,6 +338,9 @@ func (h *handlers) updateTariff(ctx context.Context, in *tariffUpdateInput) (*ta
 		if err := domain.SetTariffTerms(ctx, q, t.ID, terms); err != nil {
 			return err
 		}
+		if err := setTariffLifecycle(ctx, q, t.ID, b); err != nil {
+			return err
+		}
 		return setTariffContents(ctx, q, t, b)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -279,7 +349,7 @@ func (h *handlers) updateTariff(ctx context.Context, in *tariffUpdateInput) (*ta
 	if err != nil {
 		return nil, err
 	}
-	if in.Body.Pools != nil || in.Body.Servers != nil {
+	if in.Body.Pools != nil || in.Body.Servers != nil || in.Body.GroupID != nil {
 		h.d.Changes.PoliciesChanged() // a group or a server closed or opened for the tariff's users
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "tariff.update", "tariff", strconv.FormatInt(t.ID, 10), nil)
@@ -351,6 +421,13 @@ func (h *handlers) applyTariff(ctx context.Context, in *applyTariffInput) (*appl
 // out still has the tariff's own checked, since a change of a group or of the main traffic
 // may leave a gift adding to no quota.
 func setTariffContents(ctx context.Context, q *db.Queries, t db.Tariff, b tariffBody) error {
+	// The group decides the servers a client of the tariff stands on, which the gifts are
+	// checked against: it is written first (locked first of all, lockTariffGroup).
+	if b.GroupID != nil {
+		if err := domain.SetTariffGroup(ctx, q, t.ID, *b.GroupID); err != nil {
+			return err
+		}
+	}
 	if s := b.Servers; s != nil {
 		if err := domain.SetTariffServers(ctx, q, t.ID, domain.ServersInput{All: s.All, Nodes: s.Nodes, Inbounds: s.Inbounds}); err != nil {
 			return mapDomainErr(err)
@@ -373,13 +450,26 @@ func setTariffContents(ctx context.Context, q *db.Queries, t db.Tariff, b tariff
 	return nil
 }
 
+// lockTariffGroup keeps the group a tariff body names (id > 0) until the transaction ends,
+// first in it; one that does not exist is refused.
+func lockTariffGroup(ctx context.Context, q *db.Queries, id *int64) error {
+	if id == nil || *id == 0 {
+		return nil
+	}
+	return mapDomainErr(domain.LockGroups(ctx, q, "group_id", *id))
+}
+
 // catalogExtras is what the tariffs' views take besides their rows: the servers, the
-// groups, the gifts and how many subscriptions each one was given to.
+// groups, the gifts, how many subscriptions each one was given to and its own part of the
+// lifecycle.
 type catalogExtras struct {
-	servers map[int64]domain.Servers
-	groups  []db.TrafficPool
-	gifts   map[int64][]int64
-	users   map[int64]int64
+	servers   map[int64]domain.Servers
+	groups    []db.TrafficPool
+	gifts     map[int64][]int64
+	users     map[int64]int64
+	lifecycle map[int64]domain.TariffLifecycle
+	// clients is the group of each tariff's clients without one of their own, by tariff.
+	clients map[int64]int64
 }
 
 func (h *handlers) catalogExtras(ctx context.Context) (catalogExtras, error) {
@@ -387,6 +477,9 @@ func (h *handlers) catalogExtras(ctx context.Context) (catalogExtras, error) {
 	var c catalogExtras
 	var err error
 	if c.servers, err = domain.AllTariffServers(ctx, q); err != nil {
+		return c, err
+	}
+	if c.clients, err = domain.TariffGroupIDs(ctx, q); err != nil {
 		return c, err
 	}
 	if c.groups, err = q.ListTrafficPools(ctx); err != nil {
@@ -403,19 +496,25 @@ func (h *handlers) catalogExtras(ctx context.Context) (catalogExtras, error) {
 	for _, r := range counts {
 		c.users[r.TariffID] = r.Users
 	}
-	return c, nil
+	c.lifecycle, err = domain.TariffLifecycles(ctx, q)
+	return c, err
 }
 
 // fill puts the tariff's servers, groups (from rows, the tariffs' settings of groups),
 // gifts and subscriptions in v.
 func (c catalogExtras) fill(v *TariffView, rows []db.TariffPool) {
 	v.Servers = viewServers(domain.ServersOf(c.servers, sql.NullInt64{Int64: v.ID, Valid: true}))
+	if g, ok := c.clients[v.ID]; ok {
+		v.GroupID = &g
+	}
 	v.Pools = tariffPoolsOf(rows, c.groups, v.ID)
 	v.Gifts = c.gifts[v.ID]
 	if v.Gifts == nil {
 		v.Gifts = []int64{}
 	}
 	v.Subscribers = c.users[v.ID]
+	tl := c.lifecycle[v.ID]
+	v.CarryOver, v.StartsOnConnect = carryWord(tl.Carry), tl.StartOnConnect
 }
 
 // cleanDescription is the tariff's description as stored; a text that is too long or has

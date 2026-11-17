@@ -61,3 +61,13 @@ func TestReserved(t *testing.T) {
 		}
 	}
 }
+
+// A CA certifies public addresses and names outside the special-use zones, nothing else.
+func TestPublic(t *testing.T) {
+	for s, want := range map[string]bool{"vpn.example.com": true, "203.0.113.7": true, "77.238.243.225": true, "2a01:4f8::1": true,
+		"10.0.0.5": false, "100.64.1.2": false, "fd00::1": false, "node.test": false, "router.lan": false, "localhost": false, "mikan": false, "": false} {
+		if Public(s) != want {
+			t.Errorf("Public(%q) = %v", s, !want)
+		}
+	}
+}

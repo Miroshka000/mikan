@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/model"
 	"mikan/internal/panel/store"
 )
 
@@ -28,16 +29,20 @@ var (
 
 // JobState is where the job is: a preview (what an import would do) or an import.
 type JobState struct {
-	Mode     string     `json:"mode,omitempty" enum:"preview,import"`
-	State    string     `json:"state" enum:"idle,fetching,checking,importing,done,failed" doc:"idle — ещё не было; fetching — читается старая панель; importing — создаются пользователи"`
-	From     string     `json:"from,omitempty" doc:"Панель и её адрес (без пути и данных для входа)"`
-	Total    int        `json:"total"`
-	Done     int        `json:"done"`
-	Preview  *Preview   `json:"preview,omitempty"`
-	Report   *Report    `json:"report,omitempty" doc:"Что сделано; при ошибке посреди импорта — сделанное до неё"`
-	Error    string     `json:"error,omitempty" doc:"Код ошибки, когда state = failed"`
-	Started  *time.Time `json:"started,omitempty"`
-	Finished *time.Time `json:"finished,omitempty"`
+	Mode    string   `json:"mode,omitempty" enum:"preview,import"`
+	State   string   `json:"state" enum:"idle,fetching,checking,importing,done,failed" doc:"idle — ещё не было; fetching — читается старая панель; importing — создаются пользователи"`
+	From    string   `json:"from,omitempty" doc:"Панель и её адрес (без пути и данных для входа)"`
+	Total   int      `json:"total"`
+	Done    int      `json:"done"`
+	Kind    string   `json:"kind,omitempty" doc:"Откуда: marzban, pasarguard, remnawave, 3xui или bedolaga"`
+	Preview *Preview `json:"preview,omitempty"`
+	Report  *Report  `json:"report,omitempty" doc:"Что сделано; при ошибке посреди импорта — сделанное до неё"`
+	// The same for a sales bot (kind bedolaga).
+	BotPreview *BotPreview `json:"bot_preview,omitempty"`
+	BotReport  *BotReport  `json:"bot_report,omitempty"`
+	Error      string      `json:"error,omitempty" doc:"Код ошибки, когда state = failed"`
+	Started    *time.Time  `json:"started,omitempty"`
+	Finished   *time.Time  `json:"finished,omitempty"`
 }
 
 // Importer runs one job at a time, apart from the request that asked for it: a closed
@@ -52,6 +57,9 @@ type Importer struct {
 	// Done, when not nil, runs after an import that made users, also one that stopped
 	// part way (it files the old links' kind in the settings).
 	Done func(ctx context.Context, kind Kind)
+	// Balance is the setup of the accounts' balance, which a bot's balances are carried into;
+	// nil: they are not.
+	Balance BalanceSetup
 
 	mu     sync.Mutex
 	state  JobState
@@ -97,6 +105,14 @@ func (im *Importer) State() JobState {
 		p := *s.Preview
 		s.Preview = &p
 	}
+	if s.BotReport != nil {
+		r := *s.BotReport
+		s.BotReport = &r
+	}
+	if s.BotPreview != nil {
+		p := *s.BotPreview
+		s.BotPreview = &p
+	}
 	return s
 }
 
@@ -126,7 +142,21 @@ func (im *Importer) Start(src Source, tariffID int64, from string) error {
 	return im.start("import", src, tariffID, from)
 }
 
+// PreviewBot reads a sales bot and works out what its import would do, in the background.
+func (im *Importer) PreviewBot(src Source, from string) error {
+	return im.startWith("preview", src.Kind, from, func(ctx context.Context) { im.runBot(ctx, "preview", src, 0) })
+}
+
+// StartBot brings a sales bot's accounts over in the background; adminID ran it.
+func (im *Importer) StartBot(src Source, from string, adminID int64) error {
+	return im.startWith("import", src.Kind, from, func(ctx context.Context) { im.runBot(ctx, "import", src, adminID) })
+}
+
 func (im *Importer) start(mode string, src Source, tariffID int64, from string) error {
+	return im.startWith(mode, src.Kind, from, func(ctx context.Context) { im.run(ctx, mode, src, tariffID) })
+}
+
+func (im *Importer) startWith(mode string, kind Kind, from string, work func(ctx context.Context)) error {
 	im.mu.Lock()
 	defer im.mu.Unlock()
 	switch im.state.State {
@@ -139,12 +169,12 @@ func (im *Importer) start(mode string, src Source, tariffID int64, from string) 
 	ctx, cancel := context.WithTimeout(im.base, JobTimeout)
 	im.cancel = cancel
 	started := im.now()
-	im.state = JobState{Mode: mode, State: "fetching", From: from, Started: &started}
+	im.state = JobState{Mode: mode, Kind: string(kind), State: "fetching", From: from, Started: &started}
 	im.wg.Add(1)
 	go func() {
 		defer im.wg.Done()
 		defer cancel()
-		im.run(ctx, mode, src, tariffID)
+		work(ctx)
 	}()
 	return nil
 }
@@ -202,6 +232,71 @@ func (im *Importer) run(ctx context.Context, mode string, src Source, tariffID i
 	}
 	if err != nil {
 		im.log.Warn("import stopped part way", "from", src.Kind, "created", r.Created, "err", err)
+	}
+	finish(stopped(ctx, err))
+}
+
+// finisher is how a job ends: its state, and the report kept also on an error.
+func (im *Importer) finisher(set func(*JobState)) func(error) {
+	return func(err error) {
+		finished := im.now()
+		im.update(func(s *JobState) {
+			s.Finished = &finished
+			if set != nil {
+				set(s)
+			}
+			if err != nil {
+				s.State, s.Error = "failed", Code(err)
+			} else {
+				s.State = "done"
+			}
+		})
+	}
+}
+
+func (im *Importer) runBot(ctx context.Context, mode string, src Source, adminID int64) {
+	var report *BotReport
+	finish := func(err error) { im.finisher(func(s *JobState) { s.BotReport = report })(err) }
+	defer func() {
+		if p := recover(); p != nil {
+			im.log.Error("import: panic", "panic", p, "stack", string(debug.Stack()))
+			finish(fmt.Errorf("panic: %v", p))
+		}
+	}()
+	bot, err := FetchBot(ctx, im.hc, src)
+	if err != nil {
+		im.log.Warn("import", "from", src.Kind, "err", err)
+		finish(stopped(ctx, err))
+		return
+	}
+	if jobHook != nil {
+		jobHook(mode)
+	}
+	if mode == "preview" {
+		im.update(func(s *JobState) { s.State, s.Total = "checking", len(bot.Accounts) })
+		bc := model.BalanceConfig{Currency: "-"} // no balance to carry into
+		if im.Balance != nil {
+			if bc, err = im.Balance(ctx, im.st.Q); err != nil {
+				finish(err)
+				return
+			}
+		}
+		p, err := CheckBot(ctx, im.st.Q, bc, bot)
+		if err != nil {
+			finish(stopped(ctx, err))
+			return
+		}
+		im.update(func(s *JobState) { s.BotPreview = &p })
+		finish(nil)
+		return
+	}
+	im.update(func(s *JobState) { s.State, s.Total = "importing", len(bot.Accounts) })
+	r, err := ApplyBot(ctx, im.st, im.now(), im.Balance, adminID, bot, func(done int) {
+		im.update(func(s *JobState) { s.Done = done })
+	})
+	report = &r
+	if err != nil {
+		im.log.Warn("bot import stopped part way", "from", src.Kind, "accounts", r.Accounts, "err", err)
 	}
 	finish(stopped(ctx, err))
 }

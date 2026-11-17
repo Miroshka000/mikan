@@ -251,7 +251,8 @@ fn proc_listening(table: &str, port: u16, proto: Proto) -> bool {
     })
 }
 
-fn process_name(ss: &str) -> Option<String> {
+/// The first process of a line of `ss -p`.
+pub fn process_name(ss: &str) -> Option<String> {
     let start = ss.find("users:((\"")? + 9;
     let rest = &ss[start..];
     Some(rest[..rest.find('"')?].to_owned())

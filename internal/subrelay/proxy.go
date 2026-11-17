@@ -5,8 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
+	"log/slog"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -22,19 +23,25 @@ type entry struct {
 // Proxy normally validates every profile with the panel. Bounded saved profiles
 // are used only when the panel cannot answer, never in place of an explicit refusal.
 type Proxy struct {
-	upstream      *url.URL
-	token, prefix string
-	client        *http.Client
-	mu            sync.Mutex
-	cache         map[string]entry
-	profiles      map[string]savedProfile
-	profileBytes  int
-	inflight      chan struct{}
-	breaker       breaker
-	stats         counters
-	epoch         uint64
-	offlineTTL    time.Duration
-	now           func() time.Time
+	upstream                *url.URL
+	token, prefix           string
+	client                  *http.Client
+	mu                      sync.Mutex
+	cache                   map[string]entry
+	profiles                map[string]savedProfile
+	profileBytes            int
+	inflight                chan struct{}
+	breaker                 breaker
+	stats                   counters
+	epoch                   uint64
+	invalidated             map[string]uint64
+	invalidationFloor       uint64
+	profileLimit, byteLimit int
+	cacheClock              uint64
+	trustedProxies          []netip.Prefix
+	clientIPHeader          string
+	offlineTTL              time.Duration
+	now                     func() time.Time
 }
 
 func New(upstream, token, prefix string) (*Proxy, error) {
@@ -47,7 +54,7 @@ func New(upstream, token, prefix string) (*Proxy, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxResponseHeaderBytes = 64 << 10
-	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, inflight: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
+	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, invalidated: map[string]uint64{}, profileLimit: maxProfiles, byteLimit: maxProfileBytes, inflight: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -104,15 +111,10 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", 400)
 		return
 	}
-	// An allowlist keeps cookies, admin credentials and spoofed forwarding headers out.
-	for _, name := range []string{"User-Agent", "Accept", "Accept-Language", "Content-Type", "Origin", "Sec-Fetch-Site", "X-Hwid", "X-Device-Os", "X-Ver-Os", "X-Device-Model"} {
-		if v := r.Header.Values(name); len(v) > 0 {
-			req.Header[name] = v
-		}
-	}
+	// Preserve custom response-rule inputs while removing credentials and proxy metadata.
+	req.Header = forwardedHeaders(r.Header)
 	req.Header.Set("Authorization", "Bearer "+p.token)
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	req.Header.Set("X-Mikan-Client-IP", ip)
+	req.Header.Set("X-Mikan-Client-IP", p.clientIP(r))
 	key := ""
 	if profileRequest(r, rel) {
 		key = profileKey(req, r.Host)
@@ -141,6 +143,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		failed = true
 		p.stats.failures.Add(1)
+		slog.Warn("subscription upstream unavailable", "status", 502)
 		if p.offline(w, r, key) {
 			return
 		}
@@ -148,14 +151,25 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 500 && resp.StatusCode <= 599 {
+	if resp.Header.Get(RelayActionHeader) == "drop" {
+		p.forget(rel, false)
+		panic(http.ErrAbortHandler)
+	}
+	for _, path := range strings.Split(resp.Header.Get(RelayInvalidateHeader), ",") {
+		if profilePath(path) != "" {
+			p.forget(path, false)
+		}
+	}
+
+	if resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504 {
 		failed = true
 		p.stats.failures.Add(1)
 		if p.offline(w, r, key) {
 			return
 		}
 	}
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+	if resp.Header.Get(RelayErrorHeader) == "credential" {
+		slog.Warn("subscription relay credential rejected; check the dedicated key")
 		p.forget(rel, true)
 	} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 		p.forget(rel, false)
@@ -181,15 +195,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Read-only Mini App POSTs must not flush everybody's offline cache.
 		if subscriber.MatchString(rel) {
 			p.forget(rel, false)
-		} else if rel != "/tg/session" && rel != "/tg/shop" && rel != "/tg/promo-history" {
-			p.forget(rel, true)
 		}
 	}
 	h := resp.Header.Clone()
 	for _, name := range strings.Split(h.Get("Connection"), ",") {
 		h.Del(strings.TrimSpace(name))
 	}
-	for _, name := range []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade", "Set-Cookie", "Server"} {
+	for _, name := range []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade", "Set-Cookie", "Server", RelayErrorHeader, RelayActionHeader, RelayInvalidateHeader} {
 		h.Del(name)
 	}
 	e := entry{body: body, header: h, until: p.now().Add(5 * time.Minute)}

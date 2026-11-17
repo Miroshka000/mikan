@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"mime"
 	"net/http"
 	"strconv"
@@ -18,11 +19,29 @@ type savedProfile struct {
 	entry
 	path    string
 	savedAt time.Time
+	used    uint64
 }
 
 // SetOfflineTTL bounds how long a previously validated profile may survive a panel
 // outage. Configure before serving requests; zero disables offline delivery.
 func (p *Proxy) SetOfflineTTL(ttl time.Duration) { p.offlineTTL = ttl }
+
+// SetCacheLimits bounds saved device variants and their combined body/header bytes.
+// Configure before serving requests. Both limits must be positive.
+func (p *Proxy) SetCacheLimits(entries, bytes int) error {
+	if entries <= 0 || bytes <= 0 {
+		return fmt.Errorf("cache limits must be positive")
+	}
+	p.profileLimit, p.byteLimit = entries, bytes
+	return nil
+}
+
+func profilePath(path string) string {
+	if len(path) >= 25 && subscriber.MatchString(path) {
+		return path[:25]
+	}
+	return ""
+}
 
 func profileRequest(r *http.Request, rel string) bool {
 	return r.Method == http.MethodGet && len(rel) == 25 && subscriber.MatchString(rel)
@@ -64,7 +83,7 @@ func (p *Proxy) remember(key, path string, e entry, generation uint64) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.epoch != generation {
+	if p.invalidationFloor > generation || p.invalidated[path] > generation {
 		return
 	}
 	if old, ok := p.profiles[key]; ok {
@@ -77,27 +96,44 @@ func (p *Proxy) remember(key, path string, e entry, generation uint64) {
 			delete(p.profiles, k)
 		}
 	}
-	if !p.now().Before(e.until) {
+	if !p.now().Before(e.until) || profileSize(e) > p.byteLimit {
 		return
 	}
-	for len(p.profiles) >= maxProfiles || p.profileBytes+profileSize(e) > maxProfileBytes {
+	for len(p.profiles) >= p.profileLimit || p.profileBytes+profileSize(e) > p.byteLimit {
+		oldest := ""
+		var used uint64
 		for k, v := range p.profiles {
-			p.profileBytes -= profileSize(v.entry)
-			delete(p.profiles, k)
-			break
+			if oldest == "" || v.used < used {
+				oldest, used = k, v.used
+			}
 		}
+		p.profileBytes -= profileSize(p.profiles[oldest].entry)
+		delete(p.profiles, oldest)
 	}
-	p.profiles[key] = savedProfile{entry: e, path: path, savedAt: p.now()}
+	p.cacheClock++
+	p.profiles[key] = savedProfile{entry: e, path: path, savedAt: p.now(), used: p.cacheClock}
 	p.profileBytes += profileSize(e)
 }
 
 func (p *Proxy) forget(path string, all bool) {
-	if len(path) >= 25 && subscriber.MatchString(path) {
-		path = path[:25]
+	path = profilePath(path)
+	if !all && path == "" {
+		return
 	}
 	p.mu.Lock()
-	p.epoch++
 	defer p.mu.Unlock()
+	p.epoch++
+	if all {
+		p.invalidationFloor = p.epoch
+		clear(p.invalidated)
+	} else {
+		// Bounded tombstones reject old in-flight responses without affecting other tokens.
+		if len(p.invalidated) >= 1024 {
+			p.invalidationFloor = p.epoch
+			clear(p.invalidated)
+		}
+		p.invalidated[path] = p.epoch
+	}
 	for k, v := range p.profiles {
 		if all || v.path == path {
 			p.profileBytes -= profileSize(v.entry)
@@ -116,6 +152,11 @@ func (p *Proxy) offline(w http.ResponseWriter, r *http.Request, key string) bool
 		p.profileBytes -= profileSize(e.entry)
 		delete(p.profiles, key)
 		ok = false
+	}
+	if ok {
+		p.cacheClock++
+		e.used = p.cacheClock
+		p.profiles[key] = e
 	}
 	p.mu.Unlock()
 	if !ok {

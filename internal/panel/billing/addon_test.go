@@ -565,3 +565,11 @@ func TestAddonRequiredFieldOfUnknownType(t *testing.T) {
 		t.Fatalf("saved off: %v", err)
 	}
 }
+
+func TestAddonWebhookStaysOnPanelWithExternalSubscriptions(t *testing.T) {
+	e := newEnv(t)
+	e.s.d.SubBase = func(context.Context) string { return "https://panel.example:2054/sub" }
+	if got := e.s.AddonWebhookURL(t.Context(), "provider", "https://edge.example/sub"); got != "https://panel.example:2054/sub/pay/addon/provider/"+e.token {
+		t.Fatalf("payment callback points away from panel: %s", got)
+	}
+}

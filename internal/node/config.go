@@ -111,7 +111,7 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool, fr
 		keep(in.Name, l, err)
 	}
 	if st.Relay != nil {
-		l, err := relayListener(st.Relay, cert)
+		l, err := relayListener(st.Relay, cert, st.SelfStealPort)
 		keep(nodeapi.RelayListener, l, err)
 	}
 	proxies, err := outbounds(st)

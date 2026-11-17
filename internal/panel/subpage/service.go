@@ -86,6 +86,27 @@ func (s *Service) Page(ctx context.Context) (Page, error) {
 	return c, nil
 }
 
+// PageOf is the page the clients of group see: the group's own when it has one, the panel's
+// otherwise (and for group 0). A group's page that does not read is shown as the panel's.
+func (s *Service) PageOf(ctx context.Context, group int64) (Page, error) {
+	if group == 0 {
+		return s.Page(ctx)
+	}
+	raw, err := s.q.GetGroupPage(ctx, group)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && !raw.Valid {
+		return s.Page(ctx)
+	}
+	if err != nil {
+		return Default(), err
+	}
+	c := Default()
+	if json.Unmarshal([]byte(raw.String), &c) != nil {
+		return s.Page(ctx)
+	}
+	_ = Normalize(&c)
+	return c, nil
+}
+
 // PageAsset is an uploaded image without its bytes.
 type PageAsset struct {
 	Name      string `json:"name"`
@@ -129,10 +150,11 @@ type Public struct {
 	css        string
 }
 
-// Public gathers the page's data. brand and accent are the panel's (settings.KeyBrand,
-// KeyBrandAccent). An image chosen but gone shows as the default: the letter, the theme.
-func (s *Service) Public(ctx context.Context, brand, accent string) (Public, error) {
-	c, err := s.Page(ctx)
+// Public gathers the page's data, the page of group's clients (PageOf). brand and accent are
+// the panel's (settings.KeyBrand, KeyBrandAccent), and so are the images and instructions. An
+// image chosen but gone shows as the default: the letter, the theme.
+func (s *Service) Public(ctx context.Context, group int64, brand, accent string) (Public, error) {
+	c, err := s.PageOf(ctx, group)
 	if err != nil {
 		return Public{}, err
 	}

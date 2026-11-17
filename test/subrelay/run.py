@@ -70,7 +70,7 @@ def main():
             cert.chmod(0o644)
             key.chmod(0o644)
             config = directory / "pebble.json"
-            config.write_text(json.dumps({"pebble": {"listenAddress": "0.0.0.0:14000", "managementListenAddress": "0.0.0.0:15000", "certificate": "/tmp/test-ca.pem", "privateKey": "/tmp/test-key.pem", "httpPort": 80, "tlsPort": 443}}))
+            config.write_text(json.dumps({"pebble": {"listenAddress": "0.0.0.0:14000", "managementListenAddress": "0.0.0.0:15000", "certificate": "/tmp/test-ca.pem", "privateKey": "/tmp/test-key.pem", "httpPort": 80, "tlsPort": 4443}}))
             config.chmod(0o644)
             ca = prefix + "-ca"
             create(ca, "--network", network, "--network-alias", "pebble", "-p", "127.0.0.1::15000", "-e", "PEBBLE_VA_NOSLEEP=1", "-e", "PEBBLE_WFE_NONCEREJECT=0", "-e", "PEBBLE_AUTHZREUSE=0", PEBBLE, "-config", "/tmp/pebble.json")
@@ -105,13 +105,14 @@ def main():
                 options = ["--network", network]
                 if index == 0:
                     options += ["--network-alias", "sub.test"]
-                create(name, *options, "--read-only", "--cap-drop=ALL", "--cap-add=NET_BIND_SERVICE", "-p", "127.0.0.1::443", "-v", volume + ":/data/acme", "-e", "MIKAN_SUB_TOKEN=ci-subscription-token", "-v", trust_volume + ":/test-ca:ro", "-e", "SSL_CERT_FILE=/test-ca/test-ca.pem", args.image, "-upstream", "https://panel.test:8443/api/subscription", "-path", "sub", "-domain", "sub.test", "-acme-directory", "https://pebble:14000/dir", "-failure-threshold", "1", "-retry-delay", "1s", "-metrics-listen", "127.0.0.1:9091")
+                create(name, *options, "--read-only", "--cap-drop=ALL", "--cap-add=NET_BIND_SERVICE", "-p", "127.0.0.1::443", "-v", volume + ":/data/acme", "-e", "MIKAN_SUB_TOKEN=ci-subscription-token", "-v", trust_volume + ":/test-ca:ro", "-e", "SSL_CERT_FILE=/test-ca/test-ca.pem", args.image, "-upstream", "https://panel.test:8443/api/subscription", "-path", "sub", "-domain", "sub.test", "-acme-directory", "https://pebble:14000/dir", "-failure-threshold", "1", "-retry-delay", "30s", "-metrics-listen", "127.0.0.1:9091")
                 docker("start", name)
                 edges.append((name, port(name, 443)))
             def profile(number):
                 status, headers, body = fetch(number, issued_trust)
                 assert status == 200 and body == b"proxies: []\n", (status, body)
                 return headers
+            # Pebble uses an unreachable TLS-ALPN port (4443), forcing HTTP-01.
             # HTTP-01 must reach the instance currently issuing its own certificate.
             until(lambda: profile(edges[0][1]))
             print("PASS: first HTTP-01 certificate and trusted HTTPS", flush=True)
@@ -137,9 +138,13 @@ def main():
                 assert "mikan_sub_circuit_skipped_total 2" in metrics
                 assert "ci-subscription-token" not in metrics and TOKEN not in metrics and "ci-device" not in metrics
             docker("start", origin)
-            time.sleep(1.1)
+            time.sleep(30.1)
             for _, number in edges:
-                assert "X-Mikan-Offline" not in until(lambda: profile(number))
+                def online(number=number):
+                    headers = profile(number)
+                    assert "X-Mikan-Offline" not in headers
+                    return headers
+                until(online)
             print("PASS: two HTTP-01 issuances, trusted TLS, certificate restart, two-edge outage/recovery, private metrics")
     except BaseException:
         for name in containers:

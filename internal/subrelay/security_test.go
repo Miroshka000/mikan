@@ -102,8 +102,12 @@ func TestReadOnlyMiniAppKeepsOfflineProfiles(t *testing.T) {
 	p, _ := New("https://panel.example/api/subscription", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	p.remember("saved", tokenPath, entry{body: []byte("profile"), header: http.Header{"Content-Type": []string{"text/plain"}}}, p.generation())
-	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: http.NoBody}, nil
+	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		h := http.Header{}
+		if strings.HasSuffix(r.URL.Path, "/tg/reissue") {
+			h.Set(RelayInvalidateHeader, tokenPath)
+		}
+		return &http.Response{StatusCode: 200, Header: h, Body: http.NoBody}, nil
 	})}
 	for _, path := range []string{"/tg/session", "/tg/shop", "/tg/promo-history"} {
 		w := httptest.NewRecorder()
