@@ -22,6 +22,7 @@ EMPTY_LIST = {
     "total": 0,
     "counts": {"all": 0, "active": 0, "expiring": 0, "limited": 0, "expired": 0, "disabled": 0},
     "folder_counts": {},
+    "group_counts": {},
     "source_counts": {},
     "users_total": 0,
     "hidden_total": 0,
