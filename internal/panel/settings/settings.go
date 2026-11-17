@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,8 +31,9 @@ const (
 	// KeySubDomain is a domain of its own for subscription links, apart from the panel's:
 	// its own certificate (acme.NewSub), the panel's address keeps serving the links handed
 	// out before. Empty: the links are on the panel's address.
-	KeySubDomain = "sub_domain"
-	KeyACMEEmail = "acme_email"
+	KeySubDomain   = "sub_domain"
+	KeySubExternal = "sub_external" // domain is served by mikan-sub, with its own ACME
+	KeyACMEEmail   = "acme_email"
 	// KeyACMECA is the certificate authority of the panel and its nodes (acme.ValidCA);
 	// unset: Let's Encrypt. KeyACMEEABKID and KeyACMEEABHMAC are Google Trust Services'
 	// external account key; the HMAC is a secret and never shown back.
@@ -404,12 +406,40 @@ type Endpoint struct {
 	Port int
 }
 
-// URL is https://host:port, the panel's base address; "" while it has no host or port.
+// URL is the HTTPS base address, omitting port 443; "" without a host or port.
 func (e Endpoint) URL() string {
 	if e.Host == "" || e.Port <= 0 {
 		return ""
 	}
-	return "https://" + net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
+	host := net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
+	if e.Port == 443 {
+		host = strings.TrimSuffix(host, ":443")
+	}
+	return "https://" + host
+}
+
+// PanelSubEndpoint keeps local subscription domains, and uses the panel address
+// for callbacks only when subscriptions are served by an external edge.
+func (s *Settings) PanelSubEndpoint(ctx context.Context) (Endpoint, error) {
+	external, _, err := Get[bool](ctx, s, KeySubExternal)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	if !external {
+		return s.SubEndpoint(ctx)
+	}
+	ep, err := s.Endpoint(ctx)
+	if err != nil {
+		return ep, err
+	}
+	port, _, err := Get[int](ctx, s, KeySubPort)
+	if err != nil {
+		return ep, err
+	}
+	if port > 0 {
+		ep.Port = port
+	}
+	return ep, nil
 }
 
 // SubEndpoint is where subscription links point: the subscription domain and port when
@@ -419,10 +449,18 @@ func (s *Settings) SubEndpoint(ctx context.Context) (Endpoint, error) {
 	if err != nil {
 		return ep, err
 	}
+	hasSubDomain := false
 	if d, err := s.String(ctx, KeySubDomain); err != nil {
 		return ep, err
 	} else if d != "" {
 		ep.Host = d
+		hasSubDomain = true
+	}
+	if external, _, err := Get[bool](ctx, s, KeySubExternal); err != nil {
+		return ep, err
+	} else if external && hasSubDomain {
+		ep.Port = 443
+		return ep, nil
 	}
 	if p, _, err := Get[int](ctx, s, KeySubPort); err != nil {
 		return ep, err

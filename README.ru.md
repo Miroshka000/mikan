@@ -265,3 +265,5 @@ mikan — свободная программа под [GNU GPL v3](LICENSE) с 
 <div align="center">
 <sub>Сделано с 🍊</sub>
 </div>
+
+Отдельный сервер подписок: [mikan-sub](cmd/mikan-sub/README.md).

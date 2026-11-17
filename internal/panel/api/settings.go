@@ -50,6 +50,7 @@ type SettingsView struct {
 	BrandLogoURL   string `json:"brand_logo_url" doc:"Логотип: https, PNG, WebP или JPEG до 512 КБ; пусто — значок приложения"`
 	PublicHost     string `json:"public_host"`
 	Domain         string `json:"domain"`
+	SubExternal    bool   `json:"sub_external" doc:"Домен подписки обслуживает внешний mikan-sub"`
 	SubDomain      string `json:"sub_domain" doc:"Свой домен для ссылок подписки; пусто — адрес панели"`
 	// FormerDomains are the names the panel answered at before (acme.Formers).
 	FormerDomains []acme.FormerStatus `json:"former_domains" doc:"Прежние домены панели и подписок (и адрес панели, у которой не было домена): старые ссылки, вебхуки и ключи нод работают через них, пока имя ведёт на сервер"`
@@ -129,6 +130,7 @@ type patchSettingsBody = struct {
 	HappCrypt       *string              `json:"happ_crypt,omitempty" enum:"off,api,local"`
 	PublicHost      *string              `json:"public_host,omitempty" maxLength:"253"`
 	Domain          *string              `json:"domain,omitempty" maxLength:"253"`
+	SubExternal     *bool                `json:"sub_external,omitempty"`
 	SubDomain       *string              `json:"sub_domain,omitempty" maxLength:"253" doc:"Домен для ссылок подписки, отдельный от домена панели; пусто — убрать. Старые ссылки продолжают работать"`
 	ForceDomain     *bool                `json:"force_domain,omitempty" doc:"Сохранить новый домен или адрес, не дожидаясь сертификата на него (обычно панель сначала получает сертификат, а старое имя работает дальше)"`
 	QuietHourUTC    *int                 `json:"quiet_hour_utc,omitempty" minimum:"0" maximum:"23"`
@@ -234,6 +236,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	get(settings.KeyPublicHost, &v.PublicHost)
 	get(settings.KeyDomain, &v.Domain)
 	get(settings.KeySubDomain, &v.SubDomain)
+	if err == nil {
+		v.SubExternal, _, err = settings.Get[bool](ctx, h.d.Settings, settings.KeySubExternal)
+	}
 	get(settings.KeyGroupMain, &v.SubGroupMain)
 	get(settings.KeyGroupAuto, &v.SubGroupAuto)
 	get(settings.KeyRouting, &v.SubRouting)
@@ -367,7 +372,7 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 			v.FormerDomains = append(v.FormerDomains, acme.FormerStatus{Name: f.Name, Sub: f.Sub, Since: time.Unix(f.Since, 0), Kind: "none"})
 		}
 	}
-	if h.d.SubCerts != nil {
+	if h.d.SubCerts != nil && !v.SubExternal {
 		st := h.d.SubCerts.Status()
 		v.SubCertificate = &st
 	}
@@ -558,7 +563,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			}
 		}
 	}
-	if (b.SubDomain != nil || b.PublicHost != nil || b.Domain != nil) && len(details) == 0 {
+	if (b.SubDomain != nil || b.SubExternal != nil || b.PublicHost != nil || b.Domain != nil) && len(details) == 0 {
 		ds, err := h.checkSubDomain(ctx, b)
 		if err != nil {
 			return nil, err
@@ -568,7 +573,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 	}
 	// The address before the change: the names it leaves behind keep working (former names).
-	address := b.SubDomain != nil || b.PublicHost != nil || b.Domain != nil
+	address := b.SubPort != nil || b.SubExternal != nil || b.SubDomain != nil || b.PublicHost != nil || b.Domain != nil
 	prev, err := h.d.Settings.Address(ctx)
 	if err != nil {
 		return nil, err
@@ -621,18 +626,29 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		return nil, err
 	}
+	followCtx, cancelFollow := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancelFollow()
 	// What hangs on the address follows it now: the names left behind keep their
 	// certificates before the panel's own move on.
 	if address && h.d.AddressChanged != nil {
-		h.d.AddressChanged(ctx)
+		h.d.AddressChanged(followCtx)
 	}
 	// The domain is served at once: its requests, its certificate, ordered now.
-	if b.SubDomain != nil && h.d.SubDomain != nil {
-		h.d.SubDomain(strings.TrimSpace(*b.SubDomain))
-	}
-	// The bot's Mini App button points at the subscription page.
-	if (b.SubPort != nil || b.SubDomain != nil) && h.d.Gateway != nil {
-		h.d.Gateway.Reload()
+	if (b.SubDomain != nil || b.SubExternal != nil) && h.d.SubDomain != nil {
+		dom, readErr := h.d.Settings.String(followCtx, settings.KeySubDomain)
+		if readErr != nil {
+			h.d.Log.Warn("subscription domain not reloaded", "err", readErr)
+		} else {
+			external, _, readErr := settings.Get[bool](followCtx, h.d.Settings, settings.KeySubExternal)
+			if readErr != nil {
+				h.d.Log.Warn("subscription mode not reloaded", "err", readErr)
+			} else {
+				if external {
+					dom = ""
+				}
+				h.d.SubDomain(dom)
+			}
+		}
 	}
 	// The panel's own node keeps the subscription port open to its users (nodesync.ownPorts).
 	if b.SubPort != nil {
@@ -851,6 +867,9 @@ func (h *handlers) stageNewNames(ctx context.Context, prev settings.Address, b *
 	if b.PublicHost != nil {
 		next.PublicHost = strings.TrimSpace(*b.PublicHost)
 	}
+	if b.SubExternal != nil {
+		next.SubExternal = *b.SubExternal
+	}
 	if b.SubDomain != nil {
 		next.SubDomain = strings.TrimSpace(*b.SubDomain)
 	}
@@ -864,7 +883,7 @@ func (h *handlers) stageNewNames(ctx context.Context, prev settings.Address, b *
 			out = append(out, d)
 		}
 	}
-	if h.d.StageSubCert != nil && next.SubDomain != "" && !strings.EqualFold(prev.SubDomain, next.SubDomain) {
+	if h.d.StageSubCert != nil && !next.SubExternal && next.SubDomain != "" && (prev.SubExternal || !strings.EqualFold(prev.SubDomain, next.SubDomain)) {
 		if d := stagedDetail("body.sub_domain", h.d.StageSubCert(ctx, next.SubDomain, renewWait)); d != nil {
 			out = append(out, d)
 		}

@@ -164,6 +164,25 @@ func (q *Queries) GetAdminByUsername(ctx context.Context, username string) (Admi
 	return i, err
 }
 
+const getOrCreateSetting = `-- name: GetOrCreateSetting :one
+INSERT INTO settings (key, value) VALUES ($1, $2)
+ON CONFLICT (key) DO UPDATE SET key = excluded.key
+RETURNING value
+`
+
+type GetOrCreateSettingParams struct {
+	Key   string
+	Value string
+}
+
+// Keep the winner when several panel processes initialize the same internal secret.
+func (q *Queries) GetOrCreateSetting(ctx context.Context, arg GetOrCreateSettingParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getOrCreateSetting, arg.Key, arg.Value)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
 const getSession = `-- name: GetSession :one
 SELECT id_hash, admin_id, csrf_token, created_at, last_seen_at, expires_at, ip, user_agent, support_grant_id FROM sessions WHERE id_hash = $1
 `

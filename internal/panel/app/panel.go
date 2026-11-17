@@ -287,6 +287,17 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 		}
 		return ep.URL() + "/" + paths.Sub
 	}
+	panelSubBase := func(ctx context.Context) string {
+		ep, err := set.PanelSubEndpoint(ctx)
+		if err != nil || ep.URL() == "" {
+			return ""
+		}
+		paths, err := set.Paths(ctx)
+		if err != nil {
+			return ""
+		}
+		return ep.URL() + "/" + paths.Sub
+	}
 	p.Addons = addons.New(o.DataDir, o.AddonsCatalog, o.Version, o.Log, o.Now)
 	if o.AddonsCommunity != "" {
 		p.Addons.SetCommunityURL(o.AddonsCommunity)
@@ -305,7 +316,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	promos.Changed = deps.Users.Changed
 	p.Billing = billing.New(billing.Deps{Store: st, Settings: set, Users: deps.Users, Log: o.Log, Now: o.Now, TrustProxy: o.TrustProxy,
 		MaxLinks: model.MaxLinks,
-		Addons:   deps.Addons, SubBase: subBase, Promo: promos, Events: hub,
+		Addons:   deps.Addons, SubBase: panelSubBase, Promo: promos, Events: hub,
 		TopupWaiting: func(ctx context.Context, t db.Topup) { p.tellAdminOfTopup(ctx, t) }})
 	deps.Billing, deps.SubBase = p.Billing, subBase
 	// The bot may reach Telegram through a node when the panel's server cannot.
@@ -487,6 +498,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}))
 	adminMux.Handle("/", p.spa)
 	p.server = server.New(adminMux, subHandler)
+	p.server.SetSubscriptionRelay(api.SubscriptionRelay(deps, subHandler))
 	p.server.SetLegacy(subHandler.Legacy())
 	if o.DataDir != "" {
 		set := settings.New(st.Q)

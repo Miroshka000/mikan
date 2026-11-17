@@ -119,8 +119,8 @@ func Serve(ctx context.Context, cfg config.Config, version string, web fs.FS) er
 	// The subscription domain gets its own certificate; clients that name another get the
 	// panel's.
 	names := &tlscert.BySNI{Panel: holder, Sub: &tlscert.Holder{}}
-	if d, err := set.String(ctx, settings.KeySubDomain); err == nil {
-		names.SetName(d)
+	if address, err := set.Address(ctx); err == nil && !address.SubExternal {
+		names.SetName(address.SubDomain)
 	}
 	if !cfg.Dev {
 		certs = acme.New(cfg.DataDir, holder, self, set, logger, time.Now)

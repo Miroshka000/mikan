@@ -54,6 +54,7 @@ func custom(name string, session bool, get func(*patchSettingsBody) *string, wri
 }
 
 var settingFields = []settingField{
+	value("sub_external", settings.KeySubExternal, true, func(b *patchSettingsBody) *bool { return b.SubExternal }),
 	// Where clients are sent, and what they are told to trust.
 	text("public_host", settings.KeyPublicHost, true, func(b *patchSettingsBody) *string { return b.PublicHost }),
 	text("domain", settings.KeyDomain, true, func(b *patchSettingsBody) *string { return b.Domain }),

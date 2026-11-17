@@ -932,7 +932,8 @@
       "group_template": "This template is of another core, or deleted",
       "address_inbound_twice": "This protocol already has an address of the group",
       "address_empty": "Fill in at least one field, or remove the address",
-      "addresses_many": "Too many addresses in one group"
+      "addresses_many": "Too many addresses in one group",
+      "sub_domain_required": "Set a domain for external mikan-sub"
     },
     "acme": {
       "port80_busy": "Port 80 is held by another program, and the certificate authority checks the server through it. If it is nginx or Caddy, the command below lets the check through to mikan; otherwise free the port",
@@ -3125,7 +3126,7 @@
       "title": "A domain of its own for subscriptions",
       "sub": "Subscription links on a domain or subdomain of their own, not on the panel's address",
       "field": "Domain for links",
-      "hint": "Point its A record at this server. It must differ from the panel's domain ({domain}).",
+      "hint": "The subscription domain must point to this server, or to mikan-sub in external mode. Panel address: {domain}.",
       "note": "Links handed out before keep working. This domain opens subscriptions only; the admin panel stays on the panel's address. When the panel moves, move the domain: clients keep their links.",
       "off": "Remove the domain",
       "cert": "Certificate for subscriptions",
@@ -3133,7 +3134,9 @@
       "certPending": "No certificate",
       "drawerTitle": "Own certificate for subscriptions",
       "drawerLead": "A certificate and key for {domain}, from certbot for example (fullchain.pem and privkey.pem). The panel serves it only to those who come to the subscription domain.",
-      "clearText": "The subscription domain gets its certificate automatically again. Until it is issued, clients get yours."
+      "clearText": "The subscription domain gets its certificate automatically again. Until it is issued, clients get yours.",
+      "external": "External mikan-sub",
+      "externalHint": "New links use HTTPS port 443. For existing links with another port, configure that port on mikan-sub or distribute new links. The edge issues its own certificate."
     },
     "inactive": {
       "title": "When a subscription does not work",
@@ -4240,7 +4243,9 @@
     "download": "Download OpenAPI",
     "downloadHint": "openapi.json for Postman, Insomnia, Swagger UI and client generators. It carries this panel's address, which is secret, so do not publish the file.",
     "prometheus": "Prometheus and Grafana",
-    "prometheusHint": "GET /metrics gives clients, traffic, nodes and protocols in the Prometheus format. Scrape it with a read key; this is the job for prometheus.yml:"
+    "prometheusHint": "GET /metrics gives clients, traffic, nodes and protocols in the Prometheus format. Scrape it with a read key; this is the job for prometheus.yml:",
+    "scopeSubscription": "Subscriptions",
+    "scopeSubscriptionHint": "For mikan-sub only: serve subscriptions, with no access to the panel API."
   },
   "webhooks": {
     "title": "Webhooks",

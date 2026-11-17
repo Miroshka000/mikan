@@ -14,6 +14,7 @@ import (
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/subrelay"
 )
 
 // The Telegram Mini App's JSON endpoints under "/tg/": the subscription page inside Telegram,
@@ -95,6 +96,13 @@ func (h *Handler) mini(w http.ResponseWriter, r *http.Request, in miniRequest) (
 	if err != nil {
 		fail(http.StatusUnauthorized, "init_data")
 		return 0, nil, fail, false
+	}
+	if subrelay.IsRelay(r.Context()) && r.URL.Path != "/tg/shop" && r.URL.Path != "/tg/promo-history" {
+		paths := make([]string, 0, len(users))
+		for _, u := range users {
+			paths = append(paths, "/"+u.SubToken)
+		}
+		w.Header().Set(subrelay.RelayInvalidateHeader, strings.Join(paths, ","))
 	}
 	return tgID, users, fail, true
 }
