@@ -83,7 +83,7 @@ on another host and restrict origin access to that proxy. Disable CDN caching fo
 personalized pages/profiles, `/info`, and POST requests. By default, device IPs record the direct peer. To trust your reverse proxy, set
 `-trusted-proxies 10.0.0.0/24 -client-ip-header X-Forwarded-For`, or select
 `CF-Connecting-IP` and supply Cloudflare’s current CIDRs. No ranges are trusted by
- default; restrict the origin to your proxies. For X-Forwarded-For the edge walks
+default; restrict the origin to your proxies. For X-Forwarded-For the edge walks
 right to left past trusted hops; untrusted peers cannot spoof this address.
 Custom rule headers pass through, except credentials, cookies, forwarding metadata,
 `X-Mikan-*` (except the client’s `X-Mikan-Features`) and hop-by-hop headers.
@@ -170,3 +170,6 @@ instances does not work. Each edge keeps its own certificate volume and memory c
 `-acme-directory https://.../dir` selects a staging/private CA; its HTTPS certificate
 must be trusted by the OS. Empty uses Let's Encrypt. The test never disables TLS
 verification and never sends an order to a public CA.
+
+The ACME test makes TLS-ALPN unreachable, so success requires HTTP-01. Its
+`--break-http-01` negative control also breaks HTTP-01 and requires issuance to fail.

@@ -20,6 +20,7 @@ TOKEN = "abcdefghijklmnopqrstuvwx"
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", default="mikan-sub:ci")
+    parser.add_argument("--break-http-01", action="store_true", help="negative control: certificate issuance must fail with HTTP-01 unreachable")
     args = parser.parse_args()
     prefix = "mikan-sub-test-" + uuid.uuid4().hex[:10]
     network = prefix + "-net"
@@ -70,7 +71,7 @@ def main():
             cert.chmod(0o644)
             key.chmod(0o644)
             config = directory / "pebble.json"
-            config.write_text(json.dumps({"pebble": {"listenAddress": "0.0.0.0:14000", "managementListenAddress": "0.0.0.0:15000", "certificate": "/tmp/test-ca.pem", "privateKey": "/tmp/test-key.pem", "httpPort": 80, "tlsPort": 4443}}))
+            config.write_text(json.dumps({"pebble": {"listenAddress": "0.0.0.0:14000", "managementListenAddress": "0.0.0.0:15000", "certificate": "/tmp/test-ca.pem", "privateKey": "/tmp/test-key.pem", "httpPort": 81 if args.break_http_01 else 80, "tlsPort": 4443}}))
             config.chmod(0o644)
             ca = prefix + "-ca"
             create(ca, "--network", network, "--network-alias", "pebble", "-p", "127.0.0.1::15000", "-e", "PEBBLE_VA_NOSLEEP=1", "-e", "PEBBLE_WFE_NONCEREJECT=0", "-e", "PEBBLE_AUTHZREUSE=0", PEBBLE, "-config", "/tmp/pebble.json")
@@ -112,6 +113,13 @@ def main():
                 status, headers, body = fetch(number, issued_trust)
                 assert status == 200 and body == b"proxies: []\n", (status, body)
                 return headers
+            if args.break_http_01:
+                try:
+                    until(lambda: profile(edges[0][1]), seconds=12)
+                except AssertionError:
+                    print("PASS: broken HTTP-01 cannot issue a certificate (TLS-ALPN is also unreachable)", flush=True)
+                    return
+                raise AssertionError("certificate issued despite broken HTTP-01 and TLS-ALPN")
             # Pebble uses an unreachable TLS-ALPN port (4443), forcing HTTP-01.
             # HTTP-01 must reach the instance currently issuing its own certificate.
             until(lambda: profile(edges[0][1]))

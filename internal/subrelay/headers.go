@@ -69,6 +69,7 @@ func (p *Proxy) clientIP(r *http.Request) string {
 	if !p.trusted(peer) {
 		return peer.Unmap().String()
 	}
+	direct := peer.Unmap().String()
 	value := r.Header.Get(p.clientIPHeader)
 	if p.clientIPHeader == "CF-Connecting-IP" {
 		if ip, err := netip.ParseAddr(strings.TrimSpace(value)); err == nil {
@@ -80,7 +81,7 @@ func (p *Proxy) clientIP(r *http.Request) string {
 	for i := len(ips) - 1; i >= 0; i-- {
 		ip, err := netip.ParseAddr(strings.TrimSpace(ips[i]))
 		if err != nil {
-			return peer.Unmap().String()
+			return direct
 		}
 		peer = ip.Unmap()
 		if !p.trusted(peer) {

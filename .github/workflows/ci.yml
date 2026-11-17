@@ -244,3 +244,5 @@ jobs:
       # no production domains, credentials or public CA requests are involved.
       - name: ACME and two independent subscription edges
         run: python3 test/subrelay/run.py --image mikan-sub:ci
+      - name: Broken HTTP-01 must not issue a certificate
+        run: python3 test/subrelay/run.py --image mikan-sub:ci --break-http-01
