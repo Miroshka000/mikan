@@ -464,6 +464,12 @@ type Patch struct {
 	// DeviceMode changes how the device limit counts (DeviceModeBound, DeviceModeOnline);
 	// a tariff in the same patch sets it first, and this one wins.
 	DeviceMode *string
+	// ResetStrategy is when the user's traffic is reset (ValidResetStrategy): the main traffic
+	// and the groups with a limit of their own. It is the user's own until a tariff is taken
+	// again (a renewal, a change of tariff, ApplyTariffLimits), which brings the tariff's; a
+	// tariff in the same patch sets it first, and this one wins. The period that began stays,
+	// so one already over by the new rule is reset by the next scheduled check.
+	ResetStrategy *string
 	// FolderID puts the user into a folder; ClearFolder takes the user out of theirs.
 	FolderID    *int64
 	ClearFolder bool
@@ -527,6 +533,16 @@ var ErrBadSpeedLimit = errors.New("bad_speed_limit")
 // ValidSpeedLimit says whether mbps is a speed cap the panel takes.
 func ValidSpeedLimit(mbps int64) bool { return mbps >= 1 && mbps <= MaxSpeedLimit }
 
+// ValidResetStrategy says whether s is a reset the panel takes (model.NextReset): none,
+// monthly on the billing day (the 1st without one), or every period of the user's days.
+func ValidResetStrategy(s string) bool {
+	switch s {
+	case "none", "month_start", "period":
+		return true
+	}
+	return false
+}
+
 func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) {
 	var out db.User
 	err := s.st.Tx(ctx, func(q *db.Queries) (err error) {
@@ -582,6 +598,12 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		if err := ApplyTariffPools(ctx, q, u.ID, t.ID); err != nil {
 			return db.User{}, err
 		}
+	}
+	if p.ResetStrategy != nil {
+		if !ValidResetStrategy(*p.ResetStrategy) {
+			return db.User{}, fieldErr("reset_strategy", "bad_reset_strategy")
+		}
+		par.ResetStrategy = *p.ResetStrategy
 	}
 	switch {
 	case p.ClearBillingDay:

@@ -15,12 +15,13 @@ import { onFormError } from "../../../lib/fields";
 import { bytes, days, GiB, months, termMonths } from "../../../lib/format";
 import { isKopecks, isStars, parseDecimal, rubKopecks } from "../../../lib/validate";
 import { packageLine } from "../packages";
-import { canBuy, fitsTariff, servedGroups, serversHas, type TariffQuotas } from "../sale-rules";
+import { canBuy, fitsTariff, quotasOf, servedGroups, serversHas, type TariffQuotas } from "../sale-rules";
 import { draftOf, GroupModesField, settingsOf, type GroupDraft } from "../pools";
+import { ResetPicker } from "../reset-picker";
+import { renewsTraffic, resetToSave, startReset } from "../reset-rules";
 import { byNode, serversBody, serversDraftOf, TariffServersTree, type ServersDraft } from "../servers-tree";
 import { DeviceModePicker, modeOf, type DeviceMode } from "../user/device-mode";
 import { ClientGroupField } from "./client-group";
-import { renewsTraffic, resetOf, resetToSave } from "./model";
 
 /** What the server accepts of a description for buyers (domain.CleanDescription). */
 const DESCRIPTION_MAX = 300;
@@ -81,7 +82,7 @@ function formOf(tr: Tariff | null): TariffForm {
     deviceMode: tr ? modeOf(tr) : "bound",
     speedUnlimited: tr?.speed_limit == null,
     speed: String(tr?.speed_limit ?? 100),
-    reset: resetOf(tr),
+    reset: tr ? startReset(quotasOf(tr), tr.reset_strategy) : "period",
     price: tr?.price_label ?? "",
     description: tr?.description ?? "",
     onSale: tr?.on_sale ?? false,
@@ -349,16 +350,7 @@ export function TariffDrawer({ tariff, onClose }: { tariff: Tariff | "new" | nul
         </Field>
         {renews ? (
           <Field label={t("tariffs.whenReset")} hint={unlimited ? t("tariffs.whenResetGroupsHint") : t("tariffs.whenResetHint")}>
-            <Segmented
-              label={t("tariffs.reset")}
-              value={reset}
-              onChange={set.reset}
-              options={[
-                { value: "period", label: t("tariffs.resetEvery30") },
-                { value: "month_start", label: term === "day" && Number(billingDay) >= 1 && Number(billingDay) <= 31 ? t("tariffs.resetOnDayShort", { d: Number(billingDay) }) : t("tariffs.resetMonthStart") },
-                { value: "none", label: t("tariffs.resetNever") },
-              ]}
-            />
+            <ResetPicker value={reset} onChange={set.reset} billingDay={term === "day" && Number(billingDay) >= 1 && Number(billingDay) <= 31 ? Number(billingDay) : null} />
           </Field>
         ) : null}
         {!unlimited ? (

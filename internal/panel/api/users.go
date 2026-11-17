@@ -303,6 +303,7 @@ type patchUserInput struct {
 		DeviceMode       *string           `json:"device_mode,omitempty" enum:"bound,online" doc:"Как считается лимит устройств: bound: привязанные устройства, online: любое число, считаются только одновременно онлайн"`
 		SpeedLimit       *int64            `json:"speed_limit,omitempty" minimum:"1" maximum:"100000" doc:"Скорость, Мбит/с в каждую сторону"`
 		SpeedUnlimited   bool              `json:"speed_unlimited,omitempty" doc:"Снять ограничение скорости"`
+		ResetStrategy    *string           `json:"reset_strategy,omitempty" enum:"none,month_start,period" doc:"Когда обнулять трафик этому клиенту: основной и групп со своим лимитом. Продление, смена тарифа и применение тарифа к выданным подпискам снова ставят сброс тарифа; с tariff_id в том же запросе действует этот. Начавшийся период остаётся: если по новому правилу он уже прошёл, трафик обнулится при ближайшей проверке"`
 		ExpiresAt        *time.Time        `json:"expires_at,omitempty"`
 		NeverExpires     bool              `json:"never_expires,omitempty"`
 		BillingDay       *int64            `json:"billing_day,omitempty" minimum:"0" maximum:"31" doc:"День оплаты 1–31; 0 — убрать"`
@@ -825,7 +826,7 @@ func (h *handlers) updateUser(ctx context.Context, in *patchUserInput) (*userOut
 		Name: b.Name, Contact: b.Contact, Note: b.Note, Tags: b.Tags, Disabled: b.Disabled,
 		TrafficLimit: b.TrafficLimit, ClearTrafficLimit: b.TrafficUnlimited,
 		DeviceLimit: b.DeviceLimit, ClearDeviceLimit: b.DevicesUnlimited, DeviceMode: b.DeviceMode,
-		SpeedLimit: b.SpeedLimit, ClearSpeedLimit: b.SpeedUnlimited,
+		SpeedLimit: b.SpeedLimit, ClearSpeedLimit: b.SpeedUnlimited, ResetStrategy: b.ResetStrategy,
 		ExpiresAt: b.ExpiresAt, ClearExpiry: b.NeverExpires, Inbounds: b.Inbounds, TariffID: b.TariffID, Hidden: b.Hidden,
 		StartsOnConnect: b.StartsOnConnect,
 	}

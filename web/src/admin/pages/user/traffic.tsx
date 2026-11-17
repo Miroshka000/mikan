@@ -10,6 +10,8 @@ import { Bar, Button, Field, Ring } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { bytes, dateShort, days, months, termMonths } from "../../../lib/format";
 import { draftOf, GroupModesField, modeShort, settingsOf, type GroupDraft } from "../pools";
+import { ResetPicker } from "../reset-picker";
+import { renewsTraffic, resetToSend, startReset, type Reset } from "../reset-rules";
 import { tariffSummary } from "../tariffs";
 import { LimitPicker } from "./limit-picker";
 import { Section, Stat } from "./section";
@@ -269,7 +271,8 @@ export function TrafficSection({ u }: { u: User }) {
 }
 
 /** The server groups of the user: how the subscription has each one, what it used this
- * period and, with a limit of its own, how much of it is left. */
+ * period and, with a limit of its own, how much of it is left. The editor asks when the
+ * client's traffic is reset too, as a limit of its own is what makes that matter. */
 export function PoolsSection({ u }: { u: User }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -277,25 +280,41 @@ export function PoolsSection({ u }: { u: User }) {
   const pools = useQuery({ queryKey: qk.userPools(u.id), queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/pools", { params: { path: { id: u.id } }, signal })) });
   const tariffs = useTariffs();
   const [edit, setEdit] = useState<Record<number, GroupDraft> | null>(null);
+  const [reset, setReset] = useState<Reset>(u.reset_strategy);
   const [error, setError] = useState("");
   // The tariff's own setting of each group, which the editor tells the client's apart from.
   const tariff = tariffs.data?.find((x) => x.id === u.tariff_id);
   const base = tariff ? Object.fromEntries(tariff.pools.map((p) => [p.pool_id, draftOf(p)])) : undefined;
   const save = useMutation({
-    mutationFn: (settings: Schemas["PoolSetting"][]) => unwrap(api.PUT("/api/v1/users/{id}/pools", { params: { path: { id: u.id } }, body: { pools: settings } })),
+    mutationFn: async ({ settings, reset }: { settings: Schemas["PoolSetting"][]; reset?: Reset }) => {
+      // The reset first: one refused leaves the groups as they were.
+      if (reset) await userActions.update({ id: u.id, body: { reset_strategy: reset } });
+      return unwrap(api.PUT("/api/v1/users/{id}/pools", { params: { path: { id: u.id } }, body: { pools: settings } }));
+    },
     onSuccess: (v) => {
       qc.setQueryData(qk.userPools(u.id), v);
       setEdit(null);
       toast.ok(t("pools.userSaved"));
     },
     onError: (e) => toast.error(errorText(e)),
+    // A reset sent changes the client and its next reset in the card and the lists, whatever
+    // came of the groups after it.
+    onSettled: (_v, _e, sent) => {
+      if (sent.reset) void qc.invalidateQueries({ queryKey: qk.users });
+    },
   });
   if (!pools.data?.length) return null;
+  const mainLimited = u.traffic_limit != null;
+  // When to reset is asked while a period renews something of the client's: the main traffic
+  // with a limit, or a group with a limit of its own.
+  const renews = edit != null && renewsTraffic({ trafficLimited: mainLimited, groups: edit });
+  // A group's own limit that no reset renews.
+  const unrenewed = u.reset_strategy === "none" && pools.data.some((p) => p.mode === "own");
   const submit = () => {
     if (!edit) return;
     const { settings, error } = settingsOf(groups.data ?? pools.data.map((p) => ({ id: p.pool_id, name: p.name, inbounds: [], inbound_ids: [] })), edit);
     setError(error ?? "");
-    if (!error) save.mutate(settings);
+    if (!error) save.mutate({ settings, reset: resetToSend({ trafficLimited: mainLimited, groups: edit }, reset, u.reset_strategy) });
   };
   return (
     <Section
@@ -306,7 +325,9 @@ export function PoolsSection({ u }: { u: User }) {
             type="button"
             className="link-btn text-xs"
             onClick={() => {
-              setEdit(Object.fromEntries(pools.data.map((p) => [p.pool_id, draftOf(p)])));
+              const drafts = Object.fromEntries(pools.data.map((p) => [p.pool_id, draftOf(p)]));
+              setEdit(drafts);
+              setReset(startReset({ trafficLimited: mainLimited, groups: drafts }, u.reset_strategy));
               setError("");
             }}
           >
@@ -324,7 +345,14 @@ export function PoolsSection({ u }: { u: User }) {
               {error}
             </p>
           ) : null}
-          <div className="mt-3 flex gap-2">
+          {renews ? (
+            <div className="mt-4">
+              <Field label={t("tariffs.whenReset")} hint={t("pools.userResetHint")}>
+                <ResetPicker value={reset} onChange={setReset} billingDay={u.billing_day ?? null} disabled={save.isPending} />
+              </Field>
+            </div>
+          ) : null}
+          <div className={renews ? "flex gap-2" : "mt-3 flex gap-2"}>
             <Button size="sm" variant="primary" loading={save.isPending} onClick={submit}>
               {t("common.save")}
             </Button>
@@ -334,27 +362,30 @@ export function PoolsSection({ u }: { u: User }) {
           </div>
         </>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {pools.data.map((p) => {
-            const used = p.used_up + p.used_down;
-            return (
-              <li key={p.pool_id}>
-                <div className="mb-1 flex items-center justify-between gap-2 text-[13px]">
-                  <span className="font-medium">{p.name}</span>
-                  <span className="num text-xs text-[var(--ink-600)]">
-                    {p.mode === "own" && p.traffic_limit != null
-                      ? t("pools.usedOf", { used: bytes(used), limit: p.extra > 0 ? t("grants.plusPackages", { limit: bytes(p.traffic_limit), extra: bytes(p.extra) }) : bytes(p.traffic_limit) })
-                      : p.mode === "unlimited"
-                        ? t("pools.usedUnlimited", { used: bytes(used) })
-                        : modeShort(p.mode)}
-                  </span>
-                </div>
-                {p.mode === "own" && p.traffic_limit != null ? <Bar pct={Math.min(100, (used / (p.traffic_limit + p.extra)) * 100)} /> : null}
-                {p.exhausted ? <div className="mt-1 text-xs text-[var(--berry-600)]">{t("pools.exhausted")}</div> : null}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-3">
+            {pools.data.map((p) => {
+              const used = p.used_up + p.used_down;
+              return (
+                <li key={p.pool_id}>
+                  <div className="mb-1 flex items-center justify-between gap-2 text-[13px]">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="num text-xs text-[var(--ink-600)]">
+                      {p.mode === "own" && p.traffic_limit != null
+                        ? t("pools.usedOf", { used: bytes(used), limit: p.extra > 0 ? t("grants.plusPackages", { limit: bytes(p.traffic_limit), extra: bytes(p.extra) }) : bytes(p.traffic_limit) })
+                        : p.mode === "unlimited"
+                          ? t("pools.usedUnlimited", { used: bytes(used) })
+                          : modeShort(p.mode)}
+                    </span>
+                  </div>
+                  {p.mode === "own" && p.traffic_limit != null ? <Bar pct={Math.min(100, (used / (p.traffic_limit + p.extra)) * 100)} /> : null}
+                  {p.exhausted ? <div className="mt-1 text-xs text-[var(--berry-600)]">{t("pools.exhausted")}</div> : null}
+                </li>
+              );
+            })}
+          </ul>
+          {unrenewed ? <p className="mt-3 text-xs text-[var(--honey-600)]">{t("pools.userNoReset")}</p> : null}
+        </>
       )}
     </Section>
   );
