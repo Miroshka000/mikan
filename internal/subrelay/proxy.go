@@ -31,6 +31,7 @@ type Proxy struct {
 	profiles                map[string]savedProfile
 	profileBytes            int
 	inflight                chan struct{}
+	uploads                 chan struct{}
 	breaker                 breaker
 	stats                   counters
 	epoch                   uint64
@@ -41,6 +42,9 @@ type Proxy struct {
 	cacheClock              uint64
 	trustedProxies          []netip.Prefix
 	clientIPHeader          string
+	relayProof              string
+	authWarning             sync.Once
+	revokedWarning          sync.Once
 	offlineTTL              time.Duration
 	now                     func() time.Time
 }
@@ -55,7 +59,7 @@ func New(upstream, token, prefix string) (*Proxy, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxResponseHeaderBytes = 64 << 10
-	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, invalidated: map[string]uint64{}, activeProfiles: map[string]int{}, profileLimit: maxProfiles, byteLimit: maxProfileBytes, inflight: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
+	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, invalidated: map[string]uint64{}, activeProfiles: map[string]int{}, profileLimit: maxProfiles, byteLimit: maxProfileBytes, inflight: make(chan struct{}, 16), uploads: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -80,16 +84,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Bound concurrent request/response buffers under load. Cache hits need no slot.
-	select {
-	case p.inflight <- struct{}{}:
-		defer func() { <-p.inflight }()
-	default:
-		p.stats.rejected.Add(1)
-		w.Header().Set("Retry-After", "1")
-		http.Error(w, "subscription service busy", 503)
-		return
-	}
 	u := *p.upstream
 	u.Path = strings.TrimRight(u.Path, "/") + rel
 	u.RawPath, u.RawQuery = "", r.URL.RawQuery
@@ -97,15 +91,28 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if bodyReader == nil {
 		bodyReader = http.NoBody
 	}
-	requestBody, err := io.ReadAll(http.MaxBytesReader(w, bodyReader, 1<<20))
-	if err != nil {
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			http.Error(w, "request too large", 413)
-		} else {
-			http.Error(w, "bad request", 400)
+	// HTTP/2 may supply a non-NoBody reader for an already-ended, zero-length stream.
+	// Only requests which can contain bytes consume the separate bounded upload budget.
+	var requestBody []byte
+	if bodyReader != http.NoBody && r.ContentLength != 0 {
+		select {
+		case p.uploads <- struct{}{}:
+			defer func() { <-p.uploads }()
+		default:
+			p.busy(w)
+			return
 		}
-		return
+		var err error
+		requestBody, err = io.ReadAll(http.MaxBytesReader(w, bodyReader, 1<<20))
+		if err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				http.Error(w, "request too large", 413)
+			} else {
+				http.Error(w, "bad request", 400)
+			}
+			return
+		}
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), bytes.NewReader(requestBody))
 	if err != nil {
@@ -116,6 +123,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	req.Header = forwardedHeaders(r.Header)
 	req.Header.Set("Authorization", "Bearer "+p.token)
 	req.Header.Set("X-Mikan-Client-IP", p.clientIP(r))
+	select {
+	case p.inflight <- struct{}{}:
+		defer func() { <-p.inflight }()
+	default:
+		p.busy(w)
+		return
+	}
 	key := ""
 	if profileRequest(r, rel) {
 		key = profileKey(req, r.Host)
@@ -157,14 +171,26 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-	if resp.Header.Get(RelayActionHeader) == "drop" {
-		p.forget(rel, false)
-		panic(http.ErrAbortHandler)
+	stripHopHeaders(resp.Header)
+	authenticated := resp.Header.Get(RelayAuthHeader) == "1"
+	proof := resp.Header.Get(RelayProofHeader)
+	cacheAuthorized := authenticated && proof != "" && len(proof) <= 128
+	if cacheAuthorized {
+		p.mu.Lock()
+		p.relayProof = proof
+		p.mu.Unlock()
 	}
-	for _, path := range strings.Split(resp.Header.Get(RelayInvalidateHeader), ",") {
-		if profilePath(path) != "" {
-			p.forget(path, false)
+	if authenticated {
+		if resp.Header.Get(RelayActionHeader) == "drop" {
+			p.forget(rel, false)
+			panic(http.ErrAbortHandler)
 		}
+		for _, path := range strings.Split(resp.Header.Get(RelayInvalidateHeader), ",") {
+			if profilePath(path) != "" {
+				p.forget(path, false)
+			}
+		}
+
 	}
 
 	if resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504 {
@@ -174,10 +200,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if resp.Header.Get(RelayErrorHeader) == "credential" {
-		slog.Warn("subscription relay credential rejected; check the dedicated key")
+	if (!authenticated || !cacheAuthorized) && (resp.StatusCode >= 200 && resp.StatusCode < 300 || resp.StatusCode >= 400 && resp.StatusCode < 500) {
+		p.authWarning.Do(func() {
+			slog.Warn("subscription upstream omitted relay authentication metadata; check the key and proxy routing")
+		})
+	}
+	if !authenticated && (resp.StatusCode >= 200 && resp.StatusCode < 300 || resp.StatusCode >= 400 && resp.StatusCode < 500) && p.credentialsRejected(r.Context()) {
+		p.revokedWarning.Do(func() { slog.Warn("subscription relay credential rejected; check the dedicated key") })
 		p.forget(rel, true)
-	} else if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+	} else if resp.StatusCode >= 400 && resp.StatusCode < 500 || !authenticated && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		p.forget(rel, false)
 	}
 	// Buffer before sending status so truncated/oversized upstream bodies become a 502.
@@ -204,17 +235,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h := resp.Header.Clone()
-	for _, name := range strings.Split(h.Get("Connection"), ",") {
-		h.Del(strings.TrimSpace(name))
-	}
-	for _, name := range []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade", "Set-Cookie", "Server", RelayErrorHeader, RelayActionHeader, RelayInvalidateHeader} {
+	for _, name := range []string{"Set-Cookie", "Server", RelayAuthHeader, RelayProofHeader, RelayNonceHeader, RelayActionHeader, RelayInvalidateHeader, "X-Mikan-Relay-Error"} {
 		h.Del(name)
 	}
 	e := entry{body: body, header: h, until: p.now().Add(5 * time.Minute)}
-	if key != "" && resp.StatusCode == 200 {
+	if key != "" && resp.StatusCode == 200 && cacheAuthorized {
 		p.remember(key, rel, e, generation)
 	}
-	if cacheable && resp.StatusCode == 200 && len(body) <= 1<<20 {
+	if cacheable && authenticated && resp.StatusCode == 200 && len(body) <= 1<<20 {
 		p.mu.Lock()
 		if len(p.cache) >= 128 {
 			clear(p.cache)
@@ -238,4 +266,10 @@ func write(w http.ResponseWriter, e entry) {
 		w.Header()[name] = values
 	}
 	_, _ = w.Write(e.body)
+}
+
+func (p *Proxy) busy(w http.ResponseWriter) {
+	p.stats.rejected.Add(1)
+	w.Header().Set("Retry-After", "1")
+	http.Error(w, "subscription service busy", 503)
 }

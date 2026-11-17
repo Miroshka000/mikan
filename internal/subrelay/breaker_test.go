@@ -16,7 +16,7 @@ func TestCircuitFastFallbackAndRecovery(t *testing.T) {
 	calls, status := 0, 200
 	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		calls++
-		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"text/plain"}}, Body: io.NopCloser(strings.NewReader("profile"))}, nil
+		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"text/plain"}, RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}, Body: io.NopCloser(strings.NewReader("profile"))}, nil
 	})}
 	fetch := func() *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
@@ -75,7 +75,7 @@ func TestCircuitDoesNotMaskRefusal(t *testing.T) {
 	p.now = func() time.Time { return now }
 	status := 200
 	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"text/plain"}}, Body: io.NopCloser(strings.NewReader("profile"))}, nil
+		return &http.Response{StatusCode: status, Header: http.Header{"Content-Type": []string{"text/plain"}, RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}, Body: io.NopCloser(strings.NewReader("profile"))}, nil
 	})}
 	fetch := func() *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()

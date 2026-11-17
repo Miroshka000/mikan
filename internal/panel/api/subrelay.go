@@ -1,6 +1,7 @@
 package api
 
 import (
+	cryptohmac "crypto/hmac"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -17,8 +18,35 @@ import (
 // SubscriptionRelay exposes only the subscription surface to a revocable, dedicated
 // key. It accepts no admin session and no general API key.
 func SubscriptionRelay(d Deps, sub http.Handler) func(http.ResponseWriter, *http.Request) bool {
+	signer := &relayProofSigner{db: d.Store.DB}
 	return func(w http.ResponseWriter, r *http.Request) (served bool) {
-		// With no configured keys, the relay has no visible HTTP surface.
+		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || len(token) != len(apiKeyPrefix)+apiKeyLen {
+			return false
+		}
+		diagnostic := r.Method == http.MethodHead && r.URL.Path == subrelay.AuthPath && r.URL.RawQuery == ""
+		nonce := r.Header.Get(subrelay.RelayNonceHeader)
+		diagnostic = diagnostic && nonce != "" && len(nonce) <= 128
+		// Only a previously issued, token-bound ticket authenticates a revocation signal.
+		mayDiagnose := false
+		if proof := r.Header.Get(subrelay.RelayProofHeader); diagnostic && len(proof) == 43 {
+			expected, err := signer.proof(r.Context(), token, false)
+			if err != nil {
+				http.Error(w, "subscription service unavailable", 503)
+				return true
+			}
+			mayDiagnose = expected != "" && cryptohmac.Equal([]byte(expected), []byte(proof))
+		}
+		refused := func() bool {
+			if !mayDiagnose {
+				return false
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set(subrelay.RelayAuthHeader, "revoked:"+nonce)
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		}
+		// Without configured keys, strangers still see only the ordinary fallback.
 		var enabled bool
 		err := d.Store.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM api_keys WHERE scope = 'subscription' AND (expires_at IS NULL OR expires_at > $1))", d.Now().Unix()).Scan(&enabled)
 		if err != nil {
@@ -26,16 +54,12 @@ func SubscriptionRelay(d Deps, sub http.Handler) func(http.ResponseWriter, *http
 			return true
 		}
 		if !enabled {
-			return false
+			return refused()
 		}
 		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 		now := d.Now()
 		limit := "sub-key:" + auth.ClientKey(ip)
 		if ok, _ := d.IPLimit.Allowed(limit, now); !ok {
-			return false
-		}
-		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || len(token) != len(apiKeyPrefix)+apiKeyLen {
 			return false
 		}
 		key, err := d.Store.Q.GetAPIKeyByHash(r.Context(), hashAPIKey(token))
@@ -46,14 +70,26 @@ func SubscriptionRelay(d Deps, sub http.Handler) func(http.ResponseWriter, *http
 		}
 		if err != nil || (key.ExpiresAt.Valid && key.ExpiresAt.Int64 <= now.Unix()) {
 			d.IPLimit.Fail(limit, now)
-			w.Header().Set(subrelay.RelayErrorHeader, "credential")
-			return false
+			return refused()
 		}
 		if key.Scope != "subscription" {
-			w.Header().Set(subrelay.RelayErrorHeader, "credential")
-			return false
+			return refused()
 		}
+		proof, err := signer.proof(r.Context(), token, true)
+		if err != nil {
+			d.Log.Error("subscription relay proof", "err", err)
+			http.Error(w, "subscription service unavailable", 503)
+			return true
+		}
+		w.Header().Set(subrelay.RelayProofHeader, proof)
 		w.Header().Set("Cache-Control", "no-store")
+		// Success metadata is visible only after authenticating a subscription key.
+		w.Header().Set(subrelay.RelayAuthHeader, "1")
+		if diagnostic {
+			w.Header().Set(subrelay.RelayAuthHeader, nonce)
+			w.WriteHeader(http.StatusNoContent)
+			return true
+		}
 		p := r.URL.Path
 		if !subrelay.Allowed(r.Method, p) {
 			http.NotFound(w, r)

@@ -28,7 +28,7 @@ func TestOfflineProfiles(t *testing.T) {
 		if fail {
 			return nil, errors.New("panel unreachable")
 		}
-		h := http.Header{"Content-Type": []string{"text/plain"}}
+		h := http.Header{"Content-Type": []string{"text/plain"}, RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}
 		if expiry != "" {
 			h.Set("Subscription-Userinfo", "expire="+expiry)
 		}
@@ -145,7 +145,7 @@ func TestOfflineRefusesExplicitAuthorizationErrors(t *testing.T) {
 			p.SetCircuitBreaker(0, 0)
 			code := 200
 			p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-				return &http.Response{StatusCode: code, Header: http.Header{"Content-Type": []string{"text/plain"}}, Body: io.NopCloser(strings.NewReader("profile"))}, nil
+				return &http.Response{StatusCode: code, Header: http.Header{"Content-Type": []string{"text/plain"}, RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}, Body: io.NopCloser(strings.NewReader("profile"))}, nil
 			})}
 			fetch := func() *httptest.ResponseRecorder {
 				w := httptest.NewRecorder()

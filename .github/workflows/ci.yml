@@ -237,6 +237,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Check certificate test controls
+        run: python3 -m unittest discover -s test/subrelay -p '*_test.py'
       - name: Build standalone subscription edge
         run: docker build -f cmd/mikan-sub/Dockerfile -t mikan-sub:ci .
       # Pebble issues real test certificates and validates HTTP-01 over Docker DNS.

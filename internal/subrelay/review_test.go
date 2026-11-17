@@ -18,7 +18,7 @@ func edgeFetch(p *Proxy, method, path string) *httptest.ResponseRecorder {
 	return w
 }
 func profileResponse(code int) *http.Response {
-	return &http.Response{StatusCode: code, Header: http.Header{"Content-Type": []string{"text/plain"}}, Body: io.NopCloser(strings.NewReader("validated profile"))}
+	return &http.Response{StatusCode: code, Header: http.Header{"Content-Type": []string{"text/plain"}, RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}, Body: io.NopCloser(strings.NewReader("validated profile"))}
 }
 func TestMiniAppAndDeviceRefusalsKeepOtherProfiles(t *testing.T) {
 	for _, tc := range []struct {
@@ -95,11 +95,19 @@ func TestRelayCredentialFailureInvalidatesAll(t *testing.T) {
 	edgeFetch(p, "GET", otherToken)
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		resp := profileResponse(404)
-		resp.Header.Set(RelayErrorHeader, "credential")
+		resp.Header.Del(RelayAuthHeader)
+		resp.Header.Del(RelayProofHeader)
+		if strings.HasSuffix(r.URL.Path, AuthPath) {
+			if r.Header.Get(RelayProofHeader) != "test-issued-proof" {
+				t.Error("missing prior authentication ticket")
+			}
+			resp.StatusCode = 204
+			resp.Header.Set(RelayAuthHeader, "revoked:"+r.Header.Get(RelayNonceHeader))
+		}
 		return resp, nil
 	})}
 	w := edgeFetch(p, "GET", otherToken)
-	if len(p.profiles) != 0 || w.Header().Get(RelayErrorHeader) != "" {
+	if len(p.profiles) != 0 || w.Header().Get(RelayAuthHeader) != "" {
 		t.Fatal("credential revocation was not private and global")
 	}
 }

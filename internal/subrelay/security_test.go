@@ -16,7 +16,7 @@ func TestOversizedRequestNeverReachesPanel(t *testing.T) {
 	calls := 0
 	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		calls++
-		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: http.NoBody}, nil
+		return &http.Response{StatusCode: 200, Header: http.Header{RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}, Body: http.NoBody}, nil
 	})}
 	r := httptest.NewRequest("POST", "https://sub.example/sub"+tokenPath+"/devices/1/name", strings.NewReader(strings.Repeat("x", (1<<20)+1)))
 	r.ContentLength = -1 // also enforce the limit for chunked requests
@@ -51,7 +51,7 @@ func FuzzProxyCannotEscapeUpstream(f *testing.F) {
 			if r.Header.Get("Authorization") != "Bearer edge-key" || r.Header.Get("Cookie") != "" {
 				t.Fatal("credential isolation failed")
 			}
-			return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+			return &http.Response{StatusCode: 200, Header: http.Header{RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}, Body: io.NopCloser(strings.NewReader("ok"))}, nil
 		})}
 		r := httptest.NewRequest("GET", "https://sub.example/", nil)
 		r.URL.Path = "/sub" + path
@@ -69,7 +69,7 @@ func TestConcurrentRequestLimit(t *testing.T) {
 	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		started <- struct{}{}
 		<-release
-		return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("ok"))}, nil
+		return &http.Response{StatusCode: 200, Header: http.Header{RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}, Body: io.NopCloser(strings.NewReader("ok"))}, nil
 	})}
 	fetch := func() *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestReadOnlyMiniAppKeepsOfflineProfiles(t *testing.T) {
 	p.SetCircuitBreaker(0, 0)
 	p.remember("saved", tokenPath, entry{body: []byte("profile"), header: http.Header{"Content-Type": []string{"text/plain"}}}, p.generation())
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		h := http.Header{}
+		h := http.Header{RelayAuthHeader: []string{"1"}, RelayProofHeader: []string{"test-issued-proof"}}
 		if strings.HasSuffix(r.URL.Path, "/tg/reissue") {
 			h.Set(RelayInvalidateHeader, tokenPath)
 		}

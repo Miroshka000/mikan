@@ -43,10 +43,11 @@ Keep the ACME directory persistent and writable only by the service account.
 Run under a supervisor with a dedicated account; grant binding to low ports or
 forward 80/443 to the service. SIGTERM gracefully shuts down both listeners.
 
-The edge stores only its restricted API token, public assets and saved profiles in memory, and its
+The edge keeps its restricted API token, opaque diagnostic ticket, public assets and saved profiles in memory, and its
 own ACME account/certificates on disk. The relay lives below the secret admin path on the panel listener only.
-Keep the full upstream URL private. With no subscription keys, or without a valid
-key, the route uses the same 404/OwnSite response as unknown paths.
+Keep the full upstream URL private. Ordinary requests without a valid subscription key get the same 404/OwnSite
+response as unknown paths. Only an authenticated diagnostic ticket lets a previously
+authorized edge confirm that its key was revoked, without granting data access.
 Revoke an edge's key in the panel to disconnect it. Do not share ACME directories
 between concurrently running instances: terminate TLS centrally or provision each
 instance separately. Moving the edge requires changing DNS, not subscription links.
@@ -104,8 +105,14 @@ Custom rule headers pass through, except credentials, cookies, forwarding metada
   `-offline-ttl 0` disables this fallback. Offline responses include `X-Mikan-Offline: true`
   and `Cache-Control: private, no-store`. Serving a saved copy does not extend its lifetime.
 - Explicit 4xx refusals never use a saved copy and invalidate saved variants of that
-  subscription. Only a marked rejection of the relay credential clears all saved profiles;
-  ordinary Mini App 401s and device/rule 403s affect no other subscription. Intentional
+  subscription. A response from the panel confirms successful key authentication privately.
+  After successful authentication the edge receives a token-bound diagnostic ticket,
+  signed with a secret which stays in the panel DB. Unmarked replies trigger a fixed,
+  nonce-based HEAD probe using that ticket, with no subscriber inputs. Only an explicit
+  revocation signal on that authenticated diagnostic clears everybody's profiles.
+  Ordinary WAF/OwnSite replies, outages, rate limits and redirects are inconclusive. Invalid keys receive the ordinary 404/OwnSite
+  without special headers; probe metadata is stripped from public responses.
+  Ordinary Mini App 401s and device/rule 403s affect no other subscription. Intentional
   response-rule drops close the client connection and never trigger offline delivery.
   Successful subscriber mutations clear affected profiles; authenticated Mini App mutations
   name the account’s subscriptions to invalidate. Read-only Mini App POSTs
@@ -122,8 +129,8 @@ Custom rule headers pass through, except credentials, cookies, forwarding metada
   and external-mode changes; panel outages preserve the last successful menu.
 - The dedicated token cannot list users or call the normal panel API. Subscriber
   tokens and Telegram authentication still govern subscriber actions.
-- Requests are limited to 1 MiB before forwarding; responses to 8 MiB. At most 16
-  upstream requests run concurrently; overload returns 503 with `Retry-After: 1`. Upstream requests time out after
+- Requests are limited to 1 MiB before forwarding; responses to 8 MiB. Slow request bodies use a separate 16-upload budget;
+  at most 16 upstream requests run concurrently after body reads complete; overload returns 503 with `Retry-After: 1`. Upstream requests time out after
   30 seconds. Redirects are refused so the credential cannot follow another host.
 
 ## Fast offline mode and monitoring
@@ -173,3 +180,6 @@ verification and never sends an order to a public CA.
 
 The ACME test makes TLS-ALPN unreachable, so success requires HTTP-01. Its
 `--break-http-01` negative control also breaks HTTP-01 and requires issuance to fail.
+
+Update panel and edge together: the private authentication confirmation is part of
+the relay protocol, and only confirmed responses may populate its caches.

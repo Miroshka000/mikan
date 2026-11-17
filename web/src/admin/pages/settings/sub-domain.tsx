@@ -56,8 +56,8 @@ export function SubDomainCard({ s }: { s: Settings }) {
               r={refusal}
               retrying={save.isPending && !save.variables?.force_domain}
               forcing={save.isPending && !!save.variables?.force_domain}
-              onRetry={() => save.mutate({ sub_domain: next })}
-              onForce={() => save.mutate({ sub_domain: next, force_domain: true })}
+              onRetry={() => save.mutate({ sub_domain: next, sub_external: external })}
+              onForce={() => save.mutate({ sub_domain: next, sub_external: external, force_domain: true })}
             />
           </div>
         ) : null}

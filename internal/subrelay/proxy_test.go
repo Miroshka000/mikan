@@ -30,6 +30,7 @@ func TestAllowed(t *testing.T) {
 func TestProxy(t *testing.T) {
 	var profiles, assets atomic.Int32
 	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(RelayAuthHeader, "1")
 		if r.Header.Get("Authorization") != "Bearer edge-key" {
 			t.Error("edge credential missing")
 		}

@@ -11,23 +11,21 @@ import (
 
 // Relay metadata is accepted only over the authenticated panel-to-edge connection
 // and is never forwarded to subscription clients.
-const RelayErrorHeader = "X-Mikan-Relay-Error"
+const RelayAuthHeader = "X-Mikan-Relay-Authenticated"
+const RelayProofHeader = "X-Mikan-Relay-Proof"
+const RelayNonceHeader = "X-Mikan-Relay-Nonce"
+const AuthPath = "/_relay/auth"
 const RelayActionHeader = "X-Mikan-Relay-Action"
 const RelayInvalidateHeader = "X-Mikan-Relay-Invalidate"
 
 func forwardedHeaders(source http.Header) http.Header {
 	h := source.Clone()
-	for _, name := range strings.Split(h.Get("Connection"), ",") {
-		h.Del(strings.TrimSpace(name))
-	}
+	stripHopHeaders(h)
 	for name := range h {
 		n := strings.ToLower(name)
 		if n == "cookie" || n == "authorization" || n == "forwarded" || n == "x-real-ip" || n == "cf-connecting-ip" || n == "true-client-ip" || strings.HasPrefix(n, "x-forwarded-") || (strings.HasPrefix(n, "x-mikan-") && n != "x-mikan-features") {
 			h.Del(name)
 		}
-	}
-	for _, n := range []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade"} {
-		h.Del(n)
 	}
 	return h
 }
@@ -70,7 +68,7 @@ func (p *Proxy) clientIP(r *http.Request) string {
 		return peer.Unmap().String()
 	}
 	direct := peer.Unmap().String()
-	value := r.Header.Get(p.clientIPHeader)
+	value := strings.Join(r.Header.Values(p.clientIPHeader), ",")
 	if p.clientIPHeader == "CF-Connecting-IP" {
 		if ip, err := netip.ParseAddr(strings.TrimSpace(value)); err == nil {
 			return ip.Unmap().String()
@@ -98,3 +96,17 @@ func WithRelay(ctx context.Context) context.Context {
 	return context.WithValue(ctx, relayContextKey{}, true)
 }
 func IsRelay(ctx context.Context) bool { yes, _ := ctx.Value(relayContextKey{}).(bool); return yes }
+
+// Connection can span multiple field lines. Every nominated field is hop-by-hop.
+func stripHopHeaders(h http.Header) {
+	for _, line := range h.Values("Connection") {
+		for _, name := range strings.Split(line, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				h.Del(name)
+			}
+		}
+	}
+	for _, name := range []string{"Connection", "Keep-Alive", "Proxy-Authenticate", "Proxy-Authorization", "Te", "Trailer", "Transfer-Encoding", "Upgrade"} {
+		h.Del(name)
+	}
+}

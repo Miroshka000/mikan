@@ -17,6 +17,24 @@ PYTHON = "python@sha256:9ef1a599f863231c3d91e941389bfdc4a2d6070557243d54df1a4e57
 TOKEN = "abcdefghijklmnopqrstuvwx"
 
 
+def tls_handshake(number, context, name="sub.test", timeout=8):
+    with socket.create_connection(("127.0.0.1", number), timeout=timeout) as raw:
+        with context.wrap_socket(raw, server_hostname=name):
+            pass
+
+
+def require_issuance_failure(probe, seconds=12):
+    """Any trusted TLS handshake fails this control, independent of HTTP delivery."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            probe()
+        except OSError:
+            time.sleep(0.2)
+        else:
+            raise AssertionError("certificate issued despite broken HTTP-01 and TLS-ALPN")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", default="mikan-sub:ci")
@@ -112,14 +130,12 @@ def main():
             def profile(number):
                 status, headers, body = fetch(number, issued_trust)
                 assert status == 200 and body == b"proxies: []\n", (status, body)
+                assert not any(name.startswith("X-Mikan-Relay-") for name in headers), "private authentication metadata leaked"
                 return headers
             if args.break_http_01:
-                try:
-                    until(lambda: profile(edges[0][1]), seconds=12)
-                except AssertionError:
-                    print("PASS: broken HTTP-01 cannot issue a certificate (TLS-ALPN is also unreachable)", flush=True)
-                    return
-                raise AssertionError("certificate issued despite broken HTTP-01 and TLS-ALPN")
+                require_issuance_failure(lambda: tls_handshake(edges[0][1], issued_trust))
+                print("PASS: broken HTTP-01 cannot issue a certificate (TLS-ALPN is also unreachable)", flush=True)
+                return
             # Pebble uses an unreachable TLS-ALPN port (4443), forcing HTTP-01.
             # HTTP-01 must reach the instance currently issuing its own certificate.
             until(lambda: profile(edges[0][1]))
@@ -154,6 +170,19 @@ def main():
                     return headers
                 until(online)
             print("PASS: two HTTP-01 issuances, trusted TLS, certificate restart, two-edge outage/recovery, private metrics")
+            # A second saved subscription must also disappear when the edge key is revoked.
+            other_path = "/sub/" + TOKEN[::-1]
+            for _, number in edges:
+                assert fetch(number, issued_trust, other_path)[0] == 200
+            docker("exec", origin, "touch", "/tmp/revoked")
+            for _, number in edges:
+                status, headers, _ = fetch(number, issued_trust)
+                assert status == 404 and "X-Mikan-Relay-Authenticated" not in headers
+            docker("stop", origin)
+            for _, number in edges:
+                status, headers, _ = fetch(number, issued_trust, other_path)
+                assert status == 502 and "X-Mikan-Offline" not in headers, "revoked key retained another subscription"
+            print("PASS: private key verification clears all offline profiles on both edges")
     except BaseException:
         for name in containers:
             subprocess.run(["docker", "logs", "--tail", "50", name], check=False)

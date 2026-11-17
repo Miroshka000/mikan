@@ -85,6 +85,8 @@ func (b *Bot) refreshSetup(ctx context.Context, force bool) error {
 	if url != "" {
 		text = w.menuApp
 	}
+	// Either call may change Telegram before the other fails. Retry partial setups.
+	b.setupDone = false
 	if err := errors.Join(b.d.Client.SetCommands(ctx, w.commands), b.d.Client.SetMenuButton(ctx, text, url)); err != nil {
 		return err
 	}

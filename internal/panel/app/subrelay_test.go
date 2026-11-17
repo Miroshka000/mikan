@@ -64,9 +64,19 @@ func TestSubscriptionRelayKey(t *testing.T) {
 	}
 
 	bearer["User-Agent"] = "mihomo/1.19.32"
-	if resp, body := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 200 || len(body) == 0 {
-		t.Fatalf("profile: %d %s", resp.StatusCode, body)
+	profileResp, profileBody := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer)
+	if profileResp.StatusCode != 200 || len(profileBody) == 0 {
+		t.Fatalf("profile: %d %s", profileResp.StatusCode, profileBody)
 	}
+	proof := profileResp.Header.Get(subrelay.RelayProofHeader)
+	if len(proof) != 43 {
+		t.Fatal("authenticated edge did not receive its diagnostic ticket")
+	}
+	foreign := map[string]string{"Authorization": "Bearer " + full.Key, subrelay.RelayProofHeader: proof, subrelay.RelayNonceHeader: "nonce"}
+	if resp, _ := h.do("HEAD", "/"+adminPath+"/api/subscription"+subrelay.AuthPath, nil, foreign); resp.StatusCode != 404 || resp.Header.Get(subrelay.RelayAuthHeader) != "" {
+		t.Fatal("subscription ticket authenticated another API key")
+	}
+
 	// The dev response-rule drop is transported as intent, never as an origin outage.
 	h.client.Jar = jar
 	rule := apps.Rule{Name: "edge drop", Enabled: true, When: apps.Group{Op: apps.And, Conds: []apps.Cond{{Header: "X-Edge-Rule", Op: apps.OpEquals, Value: "drop"}}, Groups: []apps.Inner{}}, Do: apps.Action{Respond: apps.RespondDrop}}
@@ -92,11 +102,11 @@ func TestSubscriptionRelayKey(t *testing.T) {
 		t.Fatal(resp.StatusCode)
 	}
 	originalTime := h.now
-	h.now = h.now.Add(48 * time.Hour)
+	h.setNow(h.now.Add(48 * time.Hour))
 	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 404 {
 		t.Fatalf("expired key: %d", resp.StatusCode)
 	}
-	h.now = originalTime
+	h.setNow(originalTime)
 	h.client.Jar = jar
 	if resp, _ := h.login(password, ""); resp.StatusCode != 200 {
 		t.Fatal(resp.StatusCode)
@@ -105,8 +115,21 @@ func TestSubscriptionRelayKey(t *testing.T) {
 	if resp, _ := h.do("DELETE", api+"/api-keys/"+strconv.FormatInt(key.ID, 10), nil, csrf); resp.StatusCode != 204 {
 		t.Fatal(resp.StatusCode)
 	}
-	if resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, bearer); resp.StatusCode != 404 {
-		t.Fatalf("revoked key: %d", resp.StatusCode)
+	for _, ticket := range []string{"", strings.Repeat("x", 43), proof} {
+		headers := map[string]string{"Authorization": "Bearer " + key.Key, subrelay.RelayProofHeader: ticket, subrelay.RelayNonceHeader: "nonce"}
+		// The ticket cannot access data or alter ordinary invalid-key fallback responses.
+		resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/"+u.SubToken, nil, headers)
+		if resp.StatusCode != 404 || resp.Header.Get(subrelay.RelayAuthHeader) != "" {
+			t.Fatal("ticket bypassed subscription authorization")
+		}
+		resp, _ = h.do("HEAD", "/"+adminPath+"/api/subscription"+subrelay.AuthPath, nil, headers)
+		if ticket == proof {
+			if resp.StatusCode != 204 || resp.Header.Get(subrelay.RelayAuthHeader) != "revoked:nonce" {
+				t.Fatal("known edge did not receive a private revocation signal")
+			}
+		} else if resp.StatusCode != 404 || resp.Header.Get(subrelay.RelayAuthHeader) != "" {
+			t.Fatal("unknown key/ticket fingerprinted relay")
+		}
 	}
 }
 
@@ -160,5 +183,51 @@ func TestSubscriptionRelayDatabaseOutage(t *testing.T) {
 	resp, _ := h.do("GET", "/"+adminPath+"/api/subscription/abcdefghijklmnopqrstuvwx", nil, map[string]string{"Authorization": "Bearer mk_" + strings.Repeat("a", 40)})
 	if resp.StatusCode != 503 {
 		t.Fatalf("database outage returned %d instead of 503", resp.StatusCode)
+	}
+}
+
+func TestSubscriptionRelayUnauthorizedHasOrdinaryFallback(t *testing.T) {
+	for _, ownSite := range []bool{false, true} {
+		t.Run(strconv.FormatBool(ownSite), func(t *testing.T) {
+			h := newHarness(t)
+			if ownSite {
+				h.p.server.SetSite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(418); w.Write([]byte("ordinary own site")) }))
+			}
+			if resp, _ := h.login(password, ""); resp.StatusCode != 200 {
+				t.Fatal(resp.StatusCode)
+			}
+			api := "/" + adminPath + "/api/v1"
+			create := func(scope string) string {
+				resp, body := h.do("POST", api+"/api-keys", map[string]any{"name": scope, "scope": scope, "password": password}, map[string]string{"X-CSRF-Token": h.csrf})
+				var key struct {
+					Key string `json:"key"`
+				}
+				if resp.StatusCode != 201 || json.Unmarshal(body, &key) != nil {
+					t.Fatalf("create %s: %d %s", scope, resp.StatusCode, body)
+				}
+				return key.Key
+			}
+			subscription, full := create("subscription"), create("full")
+			baseline, body := h.do("GET", "/unknown-path", nil, nil)
+			for _, token := range []string{"", "mk_" + strings.Repeat("z", 40), full} {
+				headers := map[string]string{"Authorization": "Bearer " + token, subrelay.RelayNonceHeader: "untrusted challenge"}
+				for _, suffix := range []string{"/abcdefghijklmnopqrstuvwx", subrelay.AuthPath} {
+					resp, got := h.do("GET", "/"+adminPath+"/api/subscription"+suffix, nil, headers)
+					if resp.StatusCode != baseline.StatusCode || string(got) != string(body) {
+						t.Errorf("invalid credentials changed fallback: %d %s", resp.StatusCode, got)
+					}
+					for name := range resp.Header {
+						if strings.HasPrefix(strings.ToLower(name), "x-mikan-relay-") {
+							t.Errorf("invalid credentials exposed %s", name)
+						}
+					}
+				}
+			}
+			headers := map[string]string{"Authorization": "Bearer " + subscription, subrelay.RelayNonceHeader: "private challenge"}
+			resp, _ := h.do("HEAD", "/"+adminPath+"/api/subscription"+subrelay.AuthPath, nil, headers)
+			if resp.StatusCode != 204 || resp.Header.Get(subrelay.RelayAuthHeader) != "private challenge" {
+				t.Fatalf("authenticated probe failed: %d %v", resp.StatusCode, resp.Header)
+			}
+		})
 	}
 }
