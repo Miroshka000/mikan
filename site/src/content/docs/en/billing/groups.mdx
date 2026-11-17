@@ -1,9 +1,9 @@
 ---
 title: Client groups
-description: "What a group's clients see: servers of its own instead of the plan's, and the addresses given out by group."
+description: "What a group's clients see and how their subscription looks: servers of its own instead of the plan's, addresses by group, its own templates, texts, device rules and page."
 ---
 
-A group decides what its clients see. It may have servers of its own instead of the plan's, and addresses for clients can be given out by group. For example, a "Mobile RU" group sees only two protocols and an address behind a CDN, while "VIP" sees every server of the plan and one more address.
+A group decides what its clients see and how their subscription looks. It may have servers of its own instead of the plan's, addresses for clients can be given out by group, and the subscription's appearance can be the group's own. For example, a "Mobile RU" group sees only two protocols and connects through a CDN, while "VIP" sees every server of the plan, gets a Clash template of its own and its own subscription page.
 
 Groups are not folders: a folder only keeps the list in order and changes nothing, while a group changes the subscription and where the nodes let a client in.
 
@@ -21,7 +21,7 @@ Many clients change group at once by a bulk action: tick them in the list, **To 
 
 ## Groups and access
 
-**Clients → Groups** opens the list of groups. A group has a name, an icon and a colour, as a folder does, and **servers**:
+**Clients → Groups** opens the list of groups. The pencil button opens a group, which has two tabs: **Access** and **Appearance**. On the Access tab a group has a name, an icon and a colour, as a folder does, and **servers**:
 
 - **As in the client's plan**: the group leaves the servers alone, the client sees its plan's.
 - **Its own**: the nodes ticked, whole (with the protocols added to them later), and single protocols. They **replace** the plan's servers for every client of the group.
@@ -30,21 +30,36 @@ The order is: the client's own list of protocols on its card, then the group's o
 
 A group's servers apply at once, and not only to the subscription: the nodes let the client in on them alone. Server groups and their limits work as before: a server group closed for a client stays closed in a client group with servers of its own too. Traffic packages and the gifts of a plan are checked against the servers the plan's clients stand on: the servers of the plan's group, when it has its own.
 
-What a given client gets is checked on its card, in the **What the client gets** block: it shows the client's group, the servers of its subscription and everything left out of it, with why. More: [what the client gets](/mikan/en/subscriptions/clients/#what-the-client-gets).
+What a given client gets is checked on its card, in the **What the client gets** block: it shows the client's group, template, headers, the servers of its subscription and everything left out of it, with why. More: [what the client gets](/mikan/en/subscriptions/clients/#what-the-client-gets).
 
 ## Addresses by group
 
 Every address for clients (**Protocols** → Configure → Addresses for clients) has a **Groups** field: everyone, the chosen groups only, or everyone but them. More on addresses: [several addresses for clients](/mikan/en/protocols/behind-proxy/).
 
-In the list of groups, editing a group shows which addresses are given out by it and how: "groups only" or "all but this group".
+The Access tab shows which addresses are given out by the group and how: "groups only" or "all but this group".
+
+## Appearance
+
+The **Appearance** tab sets how the subscription of the group's clients looks. What is set there goes to the group's clients alone, over **Settings → Subscription**. An empty field and "As for everyone" take the setting for everyone and follow it.
+
+- **Templates**: a template of each core of its own, Clash, sing-box and Xray. For the group's clients it stands for the default template, and a response rule that names its own template wins over the group. More: [which template an app gets](/mikan/en/subscriptions/templates/#which-template-an-app-gets).
+- **What the apps show**: the subscription's title with its variables, the announcement and its link, the support link, and how often the apps update the subscription, in hours (hourly without a value of its own). "No announcement" takes the announcement off for the group, even when there is one for everyone.
+- **Own headers**: headers every answer of the subscription to the group's clients carries, such as an app's settings of your own. They are held to the rules of a response rule's extra headers: up to 10, no cache or length headers. A response rule's headers win.
+- **Devices**: whether a device ID is required, and unbinding rules of the group's own: how many devices a subscriber unbinds themselves and how soon an unbound one comes back. Device binding itself is the same for everyone: with it off, these rules do nothing.
+- **Addresses**: where the group's clients connect to a protocol instead of its default address. An address, port, SNI, Host, a name in the subscription and the "Behind a CDN" mark of its own can be set; an empty field keeps what is there. The address is held to the rules of a protocol's address for clients. The protocol's other addresses stay as they are: whom they go to is set at each of them.
+- **Subscription page**: the group's own page instead of the page for everyone. "Make its own" copies the page for everyone, "Open the editor" opens **Settings → Subscription page** for this group, "Back to the page for everyone" deletes its own. The brand, its colour, the images and the instructions are shared by every page. The Mini App keeps the page for everyone: the client is known there only after signing in.
+
+A group's appearance, addresses and page are changed by the admin's session only, as the subscription settings they stand for are. An API key only reads them.
 
 ## Deleting
 
-Deleting a group deletes neither clients nor plans: the clients go back to their plans' servers, the plans stay without a group. An address given to "everyone but" this group alone is given to everyone again. An address for "the chosen groups only" left with no group is given to nobody until other groups are picked for it. The delete dialog says how many such addresses there are.
+Deleting a group deletes neither clients nor plans: the clients go back to their plans' servers and appearance, or to the settings for everyone, and the plans stay without a group. The group's appearance, addresses and page go with it. An address given to "everyone but" this group alone is given to everyone again. An address for "the chosen groups only" left with no group is given to nobody until other groups are picked for it. The delete dialog says how many such addresses there are.
 
 ## API
 
 - `GET`, `POST /api/v1/groups`; `PATCH`, `DELETE /api/v1/groups/{id}`; `PUT /api/v1/groups/order`. A group's servers are its `servers` field: `{"as_tariff": false, "nodes": [...], "inbounds": [...]}`.
+- A group's appearance is its `appearance` field: `templates` (`mihomo`, `singbox`, `xray`), `title`, `announce` (an empty string: no announcement), `announce_url`, `support_url`, `update_hours`, `headers`, `require_hwid`, `unbind`, `addresses` (`inbound_id`, `address`, `port`, `sni`, `host`, `name`, `cdn`). `null` or a field left out: as for everyone. `PATCH /api/v1/groups/{id}` with `appearance` replaces the whole of it, by the admin's session only.
+- A group's own page: `GET`, `PUT`, `DELETE /api/v1/groups/{id}/page`. The body of `PUT` is that of `PUT /api/v1/sub-page` without the brand and its colour; `DELETE` gives the group the page for everyone again.
 - A client has `group_id` (its own group) and `effective_group_id` (the group it is in now: its own or its plan's). `PATCH /api/v1/users/{id}` with `group_id` sets its own group, `0` takes it off.
 - A plan has `group_id`: the group of its clients without one of their own. In `PUT /api/v1/tariffs/{id}`, `0` takes it off and a field left out keeps it.
 - The client list filters by the `group` parameter (`all`, `none` or a group's id) and counts clients by group in `group_counts`. The bulk action `group` with `group_id` gives clients their own group, and without `group_id` takes it off.

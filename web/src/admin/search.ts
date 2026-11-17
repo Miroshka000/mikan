@@ -34,7 +34,8 @@ export const SETTINGS_PARTS = {
   page:["look", "brand", "blocks", "apps", "docs", "css"],
   routing: ["mode", "lists", "rules", "dns", "advanced"],
 } as const;
-export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string };
+/** group: the subscription page's editor edits that group's own page (#290) instead of the panel's. */
+export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string; group?: number };
 
 export const TARIFF_TABS = ["tariffs", "pools", "packages"] as const;
 export type TariffsSearch = { tab: (typeof TARIFF_TABS)[number] };

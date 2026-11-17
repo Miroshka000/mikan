@@ -113,6 +113,15 @@ type Config struct {
 	// XrayJSON: the apps that run whole xray configs (apps.XrayJSON) get the xray JSON
 	// profile in place of share links; a request that names a format gets it either way.
 	XrayJSON bool
+	// UpdateHours is how often the apps fetch the subscription again (Profile-Update-Interval);
+	// 0: hourly, so a port or target the panel changed on its own reaches clients soon.
+	UpdateHours int
+	// Headers are more headers every answer with the profile or a stub carries
+	// (apps.CheckHeaders); a response rule's own go over them.
+	Headers []apps.Header
+	// Page names which of its pages the source shows as the subscription page; 0: its own.
+	// Only the source reads it (Handler.SetPage).
+	Page int64
 }
 
 // Profile is the profile of the proxies ps as cfg sets it for every core: the admin's rules
@@ -319,6 +328,7 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	h.operatorHeaders(hd, r, sub, u, cfg, count)
 	// Happ's routing profile is the one of the Clash profile the request would get.
 	appHeaders(hd, ua, cfg, Template(cfg.Templates, FormatClash, dec.Action.Template).Body)
+	ruleHeaders(hd, cfg.Headers)
 	ruleHeaders(hd, dec.Action.Headers)
 	noStore(hd)
 	if r.Method == http.MethodHead {

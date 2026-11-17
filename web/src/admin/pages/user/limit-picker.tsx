@@ -42,7 +42,8 @@ export function LimitPicker({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-[13px]">
         <span className="text-[var(--ink-600)]">{label}</span>
-        <div className="seg" role="group" aria-label={label}>
+        {/* A narrow card (a drawer on a phone) wraps the choices rather than scroll past its edge. */}
+        <div className="seg max-w-full flex-wrap" role="group" aria-label={label}>
           {presets.map((p) => (
             <button key={p} type="button" aria-pressed={value === p && typing === null} disabled={busy} onClick={() => pick(p)}>
               {format(p)}

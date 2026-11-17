@@ -873,6 +873,33 @@ type UserGroup struct {
 	CreatedAt     int64
 }
 
+type UserGroupAppearance struct {
+	GroupID         int64
+	TemplateMihomo  sql.NullInt64
+	TemplateSingbox sql.NullInt64
+	TemplateXray    sql.NullInt64
+	Title           sql.NullString
+	Announce        sql.NullString
+	AnnounceUrl     sql.NullString
+	SupportUrl      sql.NullString
+	UpdateHours     sql.NullInt64
+	Headers         string
+	RequireHwid     sql.NullBool
+	UnbindRules     sql.NullString
+	Page            sql.NullString
+}
+
+type UserGroupHost struct {
+	GroupID   int64
+	InboundID int64
+	Address   string
+	Port      int64
+	Sni       string
+	Host      string
+	Name      string
+	Cdn       bool
+}
+
 type UserGroupInbound struct {
 	GroupID   int64
 	InboundID int64

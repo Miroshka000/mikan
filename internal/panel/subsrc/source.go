@@ -25,7 +25,21 @@ func (h *Handler) Subscription(ctx context.Context, token string) (serve.Subscri
 	if err != nil {
 		return nil, err
 	}
-	return &subscription{h: h, u: u, cfg: cfg}, nil
+	sub, err := h.subscriptionOf(ctx, u, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return sub, nil
+}
+
+// subscriptionOf is u's subscription served by cfg as the clients of u's group are served
+// (Config.forGroup): the group's appearance over the panel's settings.
+func (h *Handler) subscriptionOf(ctx context.Context, u db.User, cfg Config) (*subscription, error) {
+	group, err := domain.UserGroup(ctx, h.st.Q, u)
+	if err != nil {
+		return nil, err
+	}
+	return &subscription{h: h, u: u, cfg: cfg.forGroup(group)}, nil
 }
 
 // subscription is one user's subscription as one request reads it (serve.Subscription).
@@ -133,6 +147,7 @@ func (s *subscription) Inbounds(ctx context.Context) ([]submodel.Inbound, error)
 	}
 	out := inbounds(r.inbounds, hosts)
 	for i, in := range r.inbounds {
+		out[i].Override = s.cfg.addressOf(r.group, in.ID)
 		for j := range out[i].Hosts {
 			host := &out[i].Hosts[j]
 			why := hidden[host.ID]

@@ -22,12 +22,15 @@ export function GroupForm({
   busy,
   errors,
   onCancel,
+  saveLabel,
 }: {
   initial: GroupDraft;
   submit: (b: GroupBody) => void;
   busy: boolean;
   errors: Record<string, string | undefined>;
   onCancel?: () => void;
+  /** The button's words: "Save" for a group there is; "Add a group" by default. */
+  saveLabel?: string;
 }) {
   const uid = useId();
   const inbounds = useInbounds();
@@ -71,7 +74,7 @@ export function GroupForm({
           </Button>
         ) : null}
         <Button variant="primary" type="submit" loading={busy} disabled={!ok}>
-          {onCancel ? t("common.save") : t("groups.add")}
+          {saveLabel ?? (onCancel ? t("common.save") : t("groups.add"))}
         </Button>
       </div>
     </form>

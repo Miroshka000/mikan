@@ -58,6 +58,22 @@ type Inbound struct {
 	// Hosts are the places clients reach the inbound at, the default one first; each is a
 	// proxy. The build reads the default one from the template's mikan.client, which it repeats.
 	Hosts []Host
+	// Override is where the user's group reaches the default host instead; the zero one: as
+	// everyone does.
+	Override AddressOverride
+}
+
+// AddressOverride is where a group's clients reach an inbound in place of its default
+// address: each field set goes over what the default host gives them, the rest stays.
+type AddressOverride struct {
+	Address string
+	Port    int
+	SNI     string
+	Host    string // HTTP Host of WebSocket and XHTTP
+	// Name is the proxy's name, the variables of the profile title in it as in Host.Name.
+	Name string
+	// CDN: a CDN in front shows its own certificate, so the node's is not pinned.
+	CDN bool
 }
 
 // Host is one place clients reach an inbound at; an empty field (port 0) keeps what they get

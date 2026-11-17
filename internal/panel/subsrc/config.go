@@ -147,6 +147,9 @@ func LoadConfig(ctx context.Context, d ConfigDeps) (Config, error) {
 		return Config{}, err
 	}
 	cfg.LogDays = LogDays(ctx, set)
+	if err := loadAppearance(ctx, d.Q, &cfg); err != nil {
+		return Config{}, err
+	}
 	tariffs, err := d.Q.ListTariffs(ctx)
 	if err != nil {
 		return Config{}, err

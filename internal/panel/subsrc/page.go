@@ -19,15 +19,16 @@ type headPage interface {
 }
 
 // servePage sends the subscription page with what the admin made of it (subpage): its data,
-// the link preview and the admin's CSS. When that cannot be read the page goes as built,
-// in its default look, rather than not at all.
+// the link preview and the admin's CSS, of the page of the subscriber's group when it has one
+// (cfg.Page, Config.forGroup). When that cannot be read the page goes as built, in its default
+// look, rather than not at all.
 func (h *Handler) servePage(w http.ResponseWriter, r *http.Request, cfg serve.Config) {
 	hp, ok := h.page.(headPage)
 	if !ok || h.pages == nil {
 		h.page.ServeHTTP(w, r)
 		return
 	}
-	pub, err := h.pages.Public(r.Context(), cfg.Brand, cfg.App.Accent)
+	pub, err := h.pages.Public(r.Context(), cfg.Page, cfg.Brand, cfg.App.Accent)
 	if err != nil {
 		h.warn("page", "subscription page: its settings were not read, the default look is shown", "err", err)
 		h.page.ServeHTTP(w, r)

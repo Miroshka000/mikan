@@ -12,6 +12,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"mikan/internal/panel/domain"
+	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 )
@@ -60,6 +61,8 @@ type GroupView struct {
 	Tariffs  int             `json:"tariffs" doc:"Сколько тарифов, кроме архивных, кладут своих клиентов в эту группу"`
 	Servers  GroupServers    `json:"servers"`
 	Hosts    []GroupHostView `json:"hosts" doc:"Адреса для клиентов, которые выдаются по группам и называют эту"`
+	// Appearance is how the group's subscriptions look: over the panel's settings.
+	Appearance GroupAppearanceView `json:"appearance"`
 }
 
 type groupsOutput struct{ Body []GroupView }
@@ -85,6 +88,8 @@ type patchGroupInput struct {
 		Color   *string           `json:"color,omitempty" enum:"gray,red,orange,yellow,green,teal,blue,purple,pink"`
 		Emoji   *string           `json:"emoji,omitempty" maxLength:"16" doc:"Пустая строка убирает значок"`
 		Servers *groupServersBody `json:"servers,omitempty" doc:"Не передан — без изменений. Действует сразу на всех клиентов группы"`
+		// Appearance is the session's to change, as the settings it stands for are.
+		Appearance *groupAppearanceBody `json:"appearance,omitempty" doc:"Оформление целиком, с адресами; не передано — без изменений. Только из сессии администратора, не ключом API"`
 	}
 }
 
@@ -110,10 +115,23 @@ type groupExtras struct {
 	tariffs map[int64]int64
 	servers map[int64]GroupServers
 	hosts   map[int64][]GroupHostView
+	looks   map[int64]domain.GroupAppearance
+	addrs   map[int64][]domain.GroupAddress
+	unbind  domain.UnbindRules // the panel's, of a group without its own
 }
 
 func (h *handlers) groupExtras(ctx context.Context, q *db.Queries) (groupExtras, error) {
 	e := groupExtras{users: map[int64]db.CountGroupUsersRow{}, tariffs: map[int64]int64{}, servers: map[int64]GroupServers{}, hosts: map[int64][]GroupHostView{}}
+	var err error
+	if e.looks, err = domain.LoadGroupAppearance(ctx, q); err != nil {
+		return e, err
+	}
+	if e.addrs, err = domain.LoadGroupAddresses(ctx, q); err != nil {
+		return e, err
+	}
+	if e.unbind, err = domain.LoadUnbindRules(ctx, h.d.Settings); err != nil {
+		return e, err
+	}
 	users, err := q.CountGroupUsers(ctx)
 	if err != nil {
 		return e, err
@@ -173,6 +191,11 @@ func (e groupExtras) view(g db.UserGroup) GroupView {
 	if v.Hosts == nil {
 		v.Hosts = []GroupHostView{}
 	}
+	look, ok := e.looks[g.ID]
+	if !ok {
+		look = domain.GroupAppearance{}
+	}
+	v.Appearance = groupAppearanceView(look, e.addrs[g.ID], e.unbind)
 	return v
 }
 
@@ -265,6 +288,17 @@ func (h *handlers) createGroup(ctx context.Context, in *createGroupInput) (*grou
 }
 
 func (h *handlers) updateGroup(ctx context.Context, in *patchGroupInput) (*groupOutput, error) {
+	var look domain.GroupAppearance
+	var addrs []domain.GroupAddress
+	if b := in.Body.Appearance; b != nil {
+		if err := requireSession(ctx, "appearance"); err != nil {
+			return nil, err
+		}
+		var err error
+		if look, addrs, err = h.groupAppearance(ctx, b); err != nil {
+			return nil, err
+		}
+	}
 	err := h.d.Store.Tx(ctx, func(q *db.Queries) error {
 		g, err := q.GetGroup(ctx, in.ID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -296,7 +330,16 @@ func (h *handlers) updateGroup(ctx context.Context, in *patchGroupInput) (*group
 		if _, err = q.UpdateGroup(ctx, db.UpdateGroupParams{Name: g.Name, Color: g.Color, Emoji: g.Emoji, ID: g.ID}); err != nil {
 			return err
 		}
-		return setGroupServers(ctx, q, g.ID, b.Servers)
+		if err := setGroupServers(ctx, q, g.ID, b.Servers); err != nil {
+			return err
+		}
+		if b.Appearance == nil {
+			return nil
+		}
+		if err := domain.SetGroupAppearance(ctx, q, g.ID, look); err != nil {
+			return appearanceError(err)
+		}
+		return appearanceError(domain.SetGroupAddresses(ctx, q, g.ID, addrs))
 	})
 	if store.IsUnique(err) {
 		err = groupNameTakenError()
@@ -307,7 +350,10 @@ func (h *handlers) updateGroup(ctx context.Context, in *patchGroupInput) (*group
 	if in.Body.Servers != nil {
 		h.d.Changes.PoliciesChanged() // the group's clients see other servers
 	}
-	h.audit(ctx, sessionOf(ctx).AdminID, "group.update", "group", strconv.FormatInt(in.ID, 10), map[string]any{"servers": in.Body.Servers != nil})
+	if in.Body.Appearance != nil {
+		settings.Touch() // the subscriptions' config holds every group's appearance
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, "group.update", "group", strconv.FormatInt(in.ID, 10), map[string]any{"servers": in.Body.Servers != nil, "appearance": in.Body.Appearance != nil})
 	return h.groupOut(ctx, in.ID)
 }
 
@@ -367,6 +413,7 @@ func (h *handlers) deleteGroup(ctx context.Context, in *groupIDInput) (*struct{}
 		return nil, err
 	}
 	h.d.Changes.PoliciesChanged() // its clients are back on their tariffs' servers
+	settings.Touch()              // and on the panel's appearance
 	h.audit(ctx, sessionOf(ctx).AdminID, "group.delete", "group", strconv.FormatInt(in.ID, 10), map[string]any{"users": freed, "hosts": hosts})
 	return nil, nil
 }

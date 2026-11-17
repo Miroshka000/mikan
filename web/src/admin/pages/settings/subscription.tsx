@@ -8,10 +8,9 @@ import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
-import { period } from "../../../lib/format";
-import { ReissueRules, TimesPerPeriod } from "./reissue-rules";
+import { ReissueRules } from "./reissue-rules";
+import { UnbindRulesEditor } from "./unbind-rules";
 import { useSaveSettings } from "./shared";
-import { LimitPicker } from "../user/limit-picker";
 import { TITLE_VARS, unknownVars } from "../../../lib/title-vars";
 
 // Ports the installer opens in the firewall (443 and the HTTPS pool): a subscription
@@ -303,58 +302,15 @@ export function DevicesCard({ s }: { s: Schemas["SettingsView"] }) {
   );
 }
 
-/** A pause in hours: "at once", "6 h", whole days as days, "never" (-1: until the admin lets it). */
-function pauseLabel(hours: number): string {
-  if (hours === 0) return t("settings.unbindAtOnce");
-  if (hours < 0) return t("settings.unbindNever");
-  if (hours % 24 === 0) return t("settings.unbindDays", { n: hours / 24 });
-  return t("settings.unbindHours", { n: hours });
-}
-
-/**
- * How subscribers unbind devices themselves: how many a period, and how long an unbound
- * device stays out, so that its app, still open, does not take the place back at once.
- */
+/** How subscribers unbind devices themselves, for every subscription without a group's own rules. */
 function UnbindRules({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   const r = s.device_unbind;
-  const set = (patch: Partial<Schemas["UnbindRules"]>, done: () => void) => save.mutate({ device_unbind: { ...r, ...patch } }, { onSuccess: done });
-  const off = !!r.off;
-  const summary = off
-    ? t("settings.unbindSummaryOff")
-    : r.limit === 0
-      ? t("settings.unbindSummaryFree")
-      : t("settings.unbindSummary", { n: r.limit, period: period(r.days) });
-  const pause =
-    r.return_hours < 0
-      ? t("settings.unbindSummaryNever")
-      : r.return_hours > 0
-        ? t("settings.unbindSummaryPause", { pause: pauseLabel(r.return_hours) })
-        : t("settings.unbindSummaryNoPause");
   return (
     <div className="mt-4 border-t border-[var(--line)] pt-4">
       <h3 className="text-[14px] font-medium">{t("settings.unbindTitle")}</h3>
       <p className="mt-1 mb-3 text-xs text-[var(--ink-500)]">{t("settings.unbindSub")}</p>
-      <div className="flex flex-col gap-3">
-        <TimesPerPeriod label={t("settings.unbindLimit")} value={r} busy={save.isPending} onChange={set} />
-        {off ? null : (
-          <LimitPicker
-            label={t("settings.unbindReturn")}
-            value={r.return_hours}
-            presets={[0, 6, 24, 72, -1]}
-            min={0}
-            max={720}
-            unlimited={false}
-            format={pauseLabel}
-            fieldUnit={t("settings.unbindHoursUnit")}
-            busy={save.isPending}
-            onChange={(n, done) => set({ return_hours: n ?? 0 }, done)}
-          />
-        )}
-      </div>
-      <p className="mt-3 text-xs text-[var(--ink-600)]" role="status">
-        {off ? summary : `${summary} ${pause}`}
-      </p>
+      <UnbindRulesEditor value={r} busy={save.isPending} onChange={(patch, done) => save.mutate({ device_unbind: { ...r, ...patch } }, { onSuccess: done })} />
     </div>
   );
 }

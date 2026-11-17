@@ -996,6 +996,25 @@ export interface paths {
         patch: operations["update-group"];
         trace?: never;
     };
+    "/api/v1/groups/{id}/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Страница подписки группы */
+        get: operations["get-group-page"];
+        /** Своя страница подписки группы */
+        put: operations["put-group-page"];
+        post?: never;
+        /** Группе — страница подписки для всех */
+        delete: operations["delete-group-page"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/import": {
         parameters: {
             query?: never;
@@ -5337,6 +5356,85 @@ export interface components {
             /** @enum {string} */
             op: "and" | "or";
         };
+        GroupAddressBody: {
+            /** @description Адрес или домен; не передан — адрес ноды */
+            address?: string;
+            cdn?: boolean;
+            host?: string;
+            /** Format: int64 */
+            inbound_id: number;
+            name?: string;
+            /**
+             * Format: int64
+             * @description Не передан — порт подключения
+             */
+            port?: number;
+            sni?: string;
+        };
+        GroupAddressView: {
+            /** @description Адрес или домен; пусто — адрес ноды */
+            address: string;
+            /** @description Впереди CDN со своим сертификатом: сертификат ноды не закрепляется */
+            cdn: boolean;
+            /** @description HTTP Host у WebSocket и XHTTP; пусто — как у сервера */
+            host: string;
+            /** Format: int64 */
+            inbound_id: number;
+            /** @description Имя в подписке, с переменными заголовка; пусто — имя подключения */
+            name: string;
+            /**
+             * Format: int64
+             * @description 0 — порт подключения
+             */
+            port: number;
+            /** @description Пусто — обычное имя TLS */
+            sni: string;
+        };
+        GroupAppearanceBody: {
+            addresses?: components["schemas"]["GroupAddressBody"][];
+            /** @description До 10 строк; пустая строка — без объявления */
+            announce?: string;
+            /** @description https://… или tg://… */
+            announce_url?: string;
+            /** @description Как дополнительные заголовки правила ответа: без заголовков кэша и длины */
+            headers?: components["schemas"]["Header"][];
+            require_hwid?: boolean;
+            /** @description https://… или tg://… */
+            support_url?: string;
+            templates?: components["schemas"]["GroupTemplatesBody"];
+            title?: string;
+            /** @description Свои правила отвязки; не передано — правила для всех */
+            unbind?: components["schemas"]["UnbindRules"];
+            /** Format: int64 */
+            update_hours?: number;
+        };
+        GroupAppearanceView: {
+            /** @description Где клиенты группы подключаются к протоколу вместо его адреса по умолчанию */
+            addresses: components["schemas"]["GroupAddressView"][];
+            /** @description Объявление; пустая строка — без объявления; null — как в настройках подписки */
+            announce: string | null;
+            /** @description Куда ведёт нажатие на объявление; null — как в настройках подписки */
+            announce_url: string | null;
+            /** @description Свои заголовки каждого ответа подписки; заголовки правила ответа сильнее */
+            headers: components["schemas"]["Header"][];
+            /** @description Своя страница подписки: GET, PUT и DELETE /api/v1/groups/{id}/page */
+            page: boolean;
+            /** @description Не выдавать подписку приложениям без ID устройства; null — как в настройках */
+            require_hwid: boolean | null;
+            /** @description Ссылка на поддержку; null — как в настройках подписки */
+            support_url: string | null;
+            templates: components["schemas"]["GroupTemplates"];
+            /** @description Название подписки в приложениях, с переменными как в sub_title; null — как в настройках подписки */
+            title: string | null;
+            unbind: components["schemas"]["UnbindRules"];
+            /** @description Свои правила отвязки устройств; false — правила для всех, они в unbind */
+            unbind_own: boolean;
+            /**
+             * Format: int64
+             * @description Как часто приложения обновляют подписку, в часах (Profile-Update-Interval); null — раз в час
+             */
+            update_hours: number | null;
+        };
         GroupHostView: {
             /** @description Пусто — адрес ноды */
             address: string;
@@ -5372,6 +5470,19 @@ export interface components {
             /** @description Все подключения группы: перечисленные переходят в неё из других групп, остальные её подключения возвращаются к основным серверам */
             inbound_ids: number[];
         };
+        GroupPageView: {
+            background?: components["schemas"]["PageAsset"];
+            /** @description Название бренда (settings.brand), общее для всех страниц */
+            brand: string;
+            /** @description Цвет бренда (settings.brand_accent), общий для всех страниц */
+            brand_accent: string;
+            config: components["schemas"]["Page"];
+            /** @description Страница по умолчанию — к ней ведёт «Сбросить» */
+            defaults: components["schemas"]["Page"];
+            logo?: components["schemas"]["PageAsset"];
+            /** @description У группы своя страница; false — в config страница для всех */
+            own: boolean;
+        };
         GroupServers: {
             /** @description Серверы как в тарифе клиента; false — только выбранные ноды и протоколы, вместо тарифных. Свой список протоколов в карточке клиента сильнее и того и другого */
             as_tariff: boolean;
@@ -5392,7 +5503,42 @@ export interface components {
             /** @description Тарифы, в которых группа меняется; остальные тарифы держат её как раньше. Закрытие и открытие группы действует сразу на клиентов тарифа */
             tariffs: components["schemas"]["GroupInTariff"][];
         };
+        GroupTemplates: {
+            /**
+             * Format: int64
+             * @description Шаблон Clash (mihomo); null — шаблон по умолчанию
+             */
+            mihomo: number | null;
+            /**
+             * Format: int64
+             * @description Шаблон sing-box; null — шаблон по умолчанию
+             */
+            singbox: number | null;
+            /**
+             * Format: int64
+             * @description Шаблон Xray; null — шаблон по умолчанию
+             */
+            xray: number | null;
+        };
+        GroupTemplatesBody: {
+            /**
+             * Format: int64
+             * @description Шаблон Clash (mihomo); не передан — шаблон по умолчанию
+             */
+            mihomo?: number;
+            /**
+             * Format: int64
+             * @description Шаблон sing-box; не передан — шаблон по умолчанию
+             */
+            singbox?: number;
+            /**
+             * Format: int64
+             * @description Шаблон Xray; не передан — шаблон по умолчанию
+             */
+            xray?: number;
+        };
         GroupView: {
+            appearance: components["schemas"]["GroupAppearanceView"];
             /** @enum {string} */
             color: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
             /** @description Значок перед названием; может быть пустым */
@@ -6820,6 +6966,8 @@ export interface components {
             name?: string;
         };
         PatchGroupInputBody: {
+            /** @description Оформление целиком, с адресами; не передано — без изменений. Только из сессии администратора, не ключом API */
+            appearance?: components["schemas"]["GroupAppearanceBody"];
             /** @enum {string} */
             color?: "gray" | "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "pink";
             /** @description Пустая строка убирает значок */
@@ -7514,6 +7662,9 @@ export interface components {
             promo_codes: number;
             /** Format: int64 */
             successful_activations: number;
+        };
+        PutGroupPageInputBody: {
+            config: components["schemas"]["Page"];
         };
         PutSitePageInputBody: {
             /** @description Документ конструктора (JSON) */
@@ -11940,6 +12091,101 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GroupView"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-group-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupPageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "put-group-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutGroupPageInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupPageView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-group-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

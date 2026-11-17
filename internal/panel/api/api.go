@@ -355,6 +355,7 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerFolders()
 	h.registerCustomFields()
 	h.registerGroups()
+	h.registerGroupPage()
 	h.registerSubPreview()
 	h.registerHapp()
 	h.registerCatalog()

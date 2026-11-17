@@ -30,8 +30,13 @@ func userInfoHeaders(hd http.Header, u User, cfg Config, vars map[string]string)
 	}
 	hd.Set("Subscription-Userinfo", "upload="+strconv.FormatInt(u.UsedUp, 10)+"; download="+strconv.FormatInt(u.UsedDown, 10)+
 		"; total="+strconv.FormatInt(total(u), 10)+"; expire="+strconv.FormatInt(expire, 10))
-	// Hourly: a port or target the panel changed on its own reaches clients soon.
-	hd.Set("Profile-Update-Interval", "1")
+	// Hourly unless set otherwise: a port or target the panel changed on its own reaches
+	// clients soon.
+	hours := 1
+	if cfg.UpdateHours > 0 {
+		hours = cfg.UpdateHours
+	}
+	hd.Set("Profile-Update-Interval", strconv.Itoa(hours))
 	hd.Set("Profile-Title", "base64:"+base64.StdEncoding.EncodeToString([]byte(profileTitle(cfg, vars))))
 	if cfg.SupportURL != "" {
 		hd.Set("Support-Url", cfg.SupportURL)

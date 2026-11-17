@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
-import { ChevronDown, ChevronUp, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { api, unwrap, type Schemas } from "../../../api/client";
 import { qk, useSubRules, useSubTemplates } from "../../../api/hooks";
@@ -15,6 +15,7 @@ import { t, tMaybe } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors, onFormError } from "../../../lib/fields";
 import { cleanRule } from "../../../lib/sub-rules";
+import { ResponseHeaders } from "./response-headers";
 import { RuleTester } from "./sub-rules-test";
 import { CORES, coreName } from "./sub-templates";
 import { HeaderNames, WhenEditor, blankCond } from "./sub-rules-when";
@@ -273,7 +274,6 @@ function ActionEditor({ id, at, a, onChange, errors, limits, formats }: { id: st
   const set = (patch: Partial<Action>) => onChange({ ...a, ...patch });
   const has = (...responds: Action["respond"][]) => responds.includes(a.respond);
   const headers = a.headers ?? [];
-  const setHeader = (j: number, patch: Partial<{ name: string; value: string }>) => set({ headers: headers.map((h, k) => (k === j ? { ...h, ...patch } : h)) });
   return (
     <div className="flex flex-col gap-3">
       <Field label={t("settings.subRules.respond")} htmlFor={`${id}-respond`} hint={t(`settings.subRules.respondHint.${a.respond}`)} error={errors[`${at}.respond`]}>
@@ -313,35 +313,13 @@ function ActionEditor({ id, at, a, onChange, errors, limits, formats }: { id: st
       {has("serve", "stub", "403", "404", "html") ? (
         <div>
           <div className="mb-2 text-[13px] font-medium text-[var(--ink-600)]">{t("settings.subRules.extraHeaders")}</div>
-          {headers.length > 0 ? (
-            <ul className="mb-2 flex flex-col gap-2">
-              {headers.map((h, j) => {
-                const error = errors[`${at}.headers[${j}].name`] ?? errors[`${at}.headers[${j}].value`];
-                return (
-                  <li key={j} className="flex flex-wrap items-center gap-2">
-                    <input className="input mono w-[184px]" value={h.name} maxLength={64} spellCheck={false} autoCapitalize="off" placeholder="X-Header" aria-label={t("settings.subRules.header")} aria-invalid={!!errors[`${at}.headers[${j}].name`]} onChange={(e) => setHeader(j, { name: e.target.value })} />
-                    <input className="input mono min-w-[160px] flex-1" value={h.value} maxLength={512} spellCheck={false} autoCapitalize="off" aria-label={t("settings.subRules.value")} aria-invalid={!!errors[`${at}.headers[${j}].value`]} onChange={(e) => setHeader(j, { value: e.target.value })} />
-                    <Button size="sm" variant="ghost" aria-label={t("settings.subRules.removeHeader")} title={t("settings.subRules.removeHeader")} onClick={() => set({ headers: headers.filter((_, k) => k !== j) })}>
-                      <X size={16} aria-hidden />
-                    </Button>
-                    {error ? (
-                      <p className="basis-full text-xs text-[var(--berry-600)]" role="alert">
-                        {error}
-                      </p>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-          {errors[`${at}.headers`] ? (
-            <p className="mb-2 text-xs text-[var(--berry-600)]" role="alert">
-              {errors[`${at}.headers`]}
-            </p>
-          ) : null}
-          <Button size="sm" disabled={headers.length >= limits.headers} onClick={() => set({ headers: [...headers, { name: "", value: "" }] })}>
-            <Plus size={16} aria-hidden /> {t("settings.subRules.addHeader")}
-          </Button>
+          <ResponseHeaders
+            headers={headers}
+            onChange={(hs) => set({ headers: hs })}
+            errorOf={(j, part) => errors[`${at}.headers[${j}].${part}`]}
+            listError={errors[`${at}.headers`]}
+            max={limits.headers}
+          />
         </div>
       ) : null}
     </div>

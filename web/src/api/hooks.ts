@@ -64,6 +64,8 @@ export const qk = {
   folders: ["folders"] as const,
   customFields: ["custom-fields"] as const,
   groups: ["groups"] as const,
+  // Under the groups: a group's page is read again with them.
+  groupPage: (id: number) => ["groups", "page", id] as const,
   lifecycle: ["lifecycle"] as const,
   // Under the users: a change of any of them may move who the removal reaches.
   inactive: (days: number) => ["users", "inactive", days] as const,
@@ -464,7 +466,20 @@ export const groupActions = {
   update: ({ id, body }: { id: number; body: Schemas["PatchGroupInputBody"] }) => unwrap(api.PATCH("/api/v1/groups/{id}", { params: { path: { id } }, body })),
   remove: (id: number) => unwrap(api.DELETE("/api/v1/groups/{id}", { params: { path: { id } } })),
   order: (ids: number[]) => unwrap(api.PUT("/api/v1/groups/order", { body: { ids } })),
+  /** The group's own subscription page: config saved as its own. */
+  putPage: ({ id, config }: { id: number; config: Schemas["Page"] }) => unwrap(api.PUT("/api/v1/groups/{id}/page", { params: { path: { id } }, body: { config } })),
+  /** The panel's page for the group again. */
+  removePage: (id: number) => unwrap(api.DELETE("/api/v1/groups/{id}/page", { params: { path: { id } } })),
 };
+
+/** The subscription page a group's clients see: its own, or the panel's (own false). */
+export function useGroupPage(id: number | undefined) {
+  return useQuery({
+    queryKey: qk.groupPage(id ?? 0),
+    queryFn: ({ signal }) => unwrap(api.GET("/api/v1/groups/{id}/page", { params: { path: { id: id! } }, signal })),
+    enabled: !!id,
+  });
+}
 
 /** One node's traffic by the hour (24 h, 7 days) or by the day (30 days). */
 export function useNodeTraffic(id: number | undefined, range: "24h" | "7d" | "30d") {

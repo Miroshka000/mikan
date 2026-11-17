@@ -63,9 +63,10 @@ export function SettingsPage() {
   const settings = useSettings();
   // A support operator has no account of their own here: the credentials, the sessions and the keys are closed to them.
   const operator = !!useSupportMode();
-  const { tab, part } = useSearch({ from: "/_app/settings" });
+  const { tab, part, group } = useSearch({ from: "/_app/settings" });
   const navigate = useNavigate({ from: "/settings" });
-  const go = (next: Tab, nextPart?: string) => void navigate({ search: { tab: next, part: nextPart }, replace: true });
+  // The page's editor keeps the group whose page it edits across its parts.
+  const go = (next: Tab, nextPart?: string) => void navigate({ search: { tab: next, part: nextPart, group: next === "page" ? group : undefined }, replace: true });
   const routingPart: RoutingPart = ROUTING_PARTS.includes(part as RoutingPart) ? (part as RoutingPart) : "mode";
   const pagePart: SubPagePart = (part as SubPagePart | undefined) ?? "look";
   // The subscription opens on its settings; the apps, how it answers requests and its
@@ -91,7 +92,7 @@ export function SettingsPage() {
       >
         {tab === "page" ? (
           // The editor loads its own data and keeps its own draft.
-          <SubPageSettings section={pagePart} onSection={(p) => go("page", p)} />
+          <SubPageSettings section={pagePart} onSection={(p) => go("page", p)} group={group} />
         ) : (
           <QueryBoundary query={settings} pending={<Skeleton style={{ height: 320, borderRadius: 20 }} />} wrap={(state) => <section className="card glass">{state}</section>}>
             {(s) =>

@@ -194,20 +194,11 @@ func (h *handlers) putSubPage(ctx context.Context, in *putSubPageInput) (*subPag
 	if in.Body.Brand != nil && (strings.ContainsAny(*in.Body.Brand, "\r\n") || subpage.HasControl(*in.Body.Brand)) {
 		details = append(details, fieldDetail("body.brand", "one_line", nil))
 	}
-	assets, err := h.subPages().Assets(ctx)
+	missing, err := h.pageImagesMissing(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := assets[subpage.AssetLogo]; !ok && (c.Brand.Logo == "image" || c.OG.Image) {
-		field := "body.config.brand.logo"
-		if c.Brand.Logo != "image" {
-			field = "body.config.og.image"
-		}
-		details = append(details, fieldDetail(field, "logo_missing", nil))
-	}
-	if _, ok := assets[subpage.AssetBackground]; !ok && c.Look.Background.Kind == "image" {
-		details = append(details, fieldDetail("body.config.look.background.kind", "background_missing", nil))
-	}
+	details = append(details, missing...)
 	if len(details) > 0 {
 		return nil, fieldErrs(details...)
 	}
@@ -231,6 +222,27 @@ func (h *handlers) putSubPage(ctx context.Context, in *putSubPageInput) (*subPag
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "sub_page.update", "", "", nil)
 	return h.getSubPage(ctx, nil)
+}
+
+// pageImagesMissing refuses a page that shows an image not uploaded: the logo, the link
+// preview's picture or the background, which every page of the panel's shares.
+func (h *handlers) pageImagesMissing(ctx context.Context, c subpage.Page) ([]error, error) {
+	assets, err := h.subPages().Assets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []error
+	if _, ok := assets[subpage.AssetLogo]; !ok && (c.Brand.Logo == "image" || c.OG.Image) {
+		field := "body.config.brand.logo"
+		if c.Brand.Logo != "image" {
+			field = "body.config.og.image"
+		}
+		out = append(out, fieldDetail(field, "logo_missing", nil))
+	}
+	if _, ok := assets[subpage.AssetBackground]; !ok && c.Look.Background.Kind == "image" {
+		out = append(out, fieldDetail("body.config.look.background.kind", "background_missing", nil))
+	}
+	return out, nil
 }
 
 func (h *handlers) getSubImage(ctx context.Context, in *subImageInput) (*subImageBytes, error) {

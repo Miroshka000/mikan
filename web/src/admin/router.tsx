@@ -141,7 +141,9 @@ export function createAppRouter(queryClient: QueryClient) {
       if (s.tab === "routing" && s.part === "torrent") return { tab: "routing", part: "torrent" };
       const tab = SETTINGS_TABS.includes(s.tab as SettingsSearch["tab"]) ? (s.tab as SettingsSearch["tab"]) : "general";
       const parts: readonly string[] | undefined = (SETTINGS_PARTS as Record<string, readonly string[]>)[tab];
-      return { tab, part: parts && typeof s.part === "string" && parts.includes(s.part) ? s.part : undefined };
+      // The page's editor edits a group's own page with the group's id; any other tab has none.
+      const group = tab === "page" ? noneOrId(s.group) : undefined;
+      return { tab, part: parts && typeof s.part === "string" && parts.includes(s.part) ? s.part : undefined, group: typeof group === "number" ? group : undefined };
     },
   });
   // The addons: what is installed (the bot, payment methods, pages, the built-in tools) and

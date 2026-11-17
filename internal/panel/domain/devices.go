@@ -221,7 +221,7 @@ func emitDevice(ctx context.Context, q *db.Queries, now time.Time, typ string, u
 // UnbindRules (ErrUnbindCooldown past them), and the device they unbound stays out for the
 // rules' pause; the admin unbinds outside them.
 func (d *Devices) Unbind(ctx context.Context, userID, deviceID int64, bySubscriber bool) error {
-	rules, err := LoadUnbindRules(ctx, d.set)
+	rules, err := UnbindRulesOf(ctx, d.st.Q, d.set, userID)
 	if err != nil {
 		return err
 	}

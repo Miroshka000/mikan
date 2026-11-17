@@ -45,7 +45,11 @@ func (h *Handler) PreviewUser(ctx context.Context, u db.User, in PreviewInput) (
 	if err != nil {
 		return UserPreview{}, err
 	}
-	sub := &subscription{h: h, u: u, cfg: cfg, dry: true}
+	sub, err := h.subscriptionOf(ctx, u, cfg)
+	if err != nil {
+		return UserPreview{}, err
+	}
+	sub.dry = true
 	target := "/" + u.SubToken
 	if in.Format != "" {
 		target += "?format=" + url.QueryEscape(in.Format)

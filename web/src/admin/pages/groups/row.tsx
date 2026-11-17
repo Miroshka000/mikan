@@ -1,14 +1,17 @@
 import { ArrowDown, ArrowUp, Pencil, Trash2 } from "lucide-react";
 import { t } from "../../../i18n";
 import { FolderMark } from "../user-folders";
+import { ownParts } from "./appearance/model";
 import type { Group } from "./model";
 
-/** What a group gives in one line: its clients, its tariffs and its servers. */
+/** What a group gives in one line: its clients, its tariffs, its servers and how much of its look is its own. */
 function summary(g: Group): string {
   const parts = [t("groups.users", { n: g.users })];
   if (g.tariffs > 0) parts.push(t("groups.tariffs", { n: g.tariffs }));
   parts.push(g.servers.as_tariff ? t("groups.serversTariffShort") : t("groups.serversOwnShort", { n: g.servers.nodes.length + g.servers.inbounds.length }));
   if (g.hosts.length > 0) parts.push(t("groups.hostsShort", { n: g.hosts.length }));
+  const own = ownParts(g.appearance);
+  if (own > 0) parts.push(t("groups.appearanceShort", { n: own }));
   return parts.join(" · ");
 }
 

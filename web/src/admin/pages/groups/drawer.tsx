@@ -1,6 +1,6 @@
-// The groups of clients (#290): what each group sees. A client is in its own group or else its
-// tariff's; a group's servers stand in for the tariff's, and the addresses for clients are
-// shown or kept by group at each address.
+// The groups of clients (#290): what each group sees and how its subscriptions look. A client is
+// in its own group or else its tariff's; a group's servers stand in for the tariff's, and its
+// appearance goes over the panel's settings. One group opens in its own editor (GroupEditor).
 import { useState } from "react";
 import { ApiError, errorText } from "../../../api/client";
 import { groupActions, useGroupMutation, useGroups } from "../../../api/hooks";
@@ -9,9 +9,8 @@ import { QueryBoundary } from "../../../components/query";
 import { useToast } from "../../../components/toast";
 import { Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
-import { chipOf } from "../user-folders";
+import { GroupEditor } from "./editor";
 import { GroupForm, type GroupDraft } from "./form";
-import { GroupHosts } from "./hosts";
 import { groupServersDraft, type Group } from "./model";
 import { GroupRow } from "./row";
 
@@ -29,7 +28,6 @@ export function GroupsDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
   const groups = useGroups();
   const toast = useToast();
   const create = useGroupMutation(groupActions.create);
-  const update = useGroupMutation(groupActions.update);
   const remove = useGroupMutation(groupActions.remove);
   const order = useGroupMutation(groupActions.order);
   const [editing, setEditing] = useState<number | null>(null);
@@ -43,8 +41,16 @@ export function GroupsDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
     order.mutate(ids, { onError: (e) => toast.error(errorText(e)) });
   };
   const only = removing ? removing.hosts.filter((h) => h.mode === "only").length : 0;
+  // The group open in its editor, as the list has it now: a save shows at once, a group
+  // deleted elsewhere closes the editor.
+  const current = editing === null ? undefined : groups.data?.find((g) => g.id === editing);
   return (
-    <Drawer wide open={open} onOpenChange={onOpenChange} title={t("groups.title")} meta={t("groups.meta")}>
+    <Drawer wide open={open} onOpenChange={onOpenChange} title={current ? current.name : t("groups.title")} meta={current ? t("groups.editorMeta") : t("groups.meta")}>
+      {current ? (
+        <div className="pt-5">
+          <GroupEditor group={current} onBack={() => setEditing(null)} />
+        </div>
+      ) : (
       <div className="pt-5">
         <p className="text-[13px] text-[var(--ink-500)]">{t("groups.intro")}</p>
         <section className="panel-soft mt-4 p-4" aria-label={t("groups.new")}>
@@ -85,51 +91,15 @@ export function GroupsDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
               <ul className="row-list mt-5" aria-label={t("groups.listLabel")}>
                 {list.map((g, idx) => (
                   <li key={g.id} className="py-3">
-                    {editing === g.id ? (
-                      <div className="flex flex-col gap-4">
-                        <GroupForm
-                          initial={{ ...chipOf(g), servers: groupServersDraft(g) }}
-                          busy={update.isPending}
-                          errors={fieldErrors(update.error)}
-                          onCancel={() => {
-                            update.reset();
-                            setEditing(null);
-                          }}
-                          submit={(body) =>
-                            update.mutate(
-                              { id: g.id, body },
-                              {
-                                onSuccess: () => {
-                                  setEditing(null);
-                                  toast.ok(t("groups.saved"));
-                                },
-                                onError: (e) => {
-                                  if (!byField(e)) toast.error(errorText(e));
-                                },
-                              },
-                            )
-                          }
-                        />
-                        <section aria-label={t("groups.hostsLabel")}>
-                          <h4 className="mb-1 text-[13px] font-semibold">{t("groups.hostsTitle")}</h4>
-                          <p className="mb-2 text-xs text-[var(--ink-500)]">{t("groups.hostsHint")}</p>
-                          <GroupHosts group={g} />
-                        </section>
-                      </div>
-                    ) : (
-                      <GroupRow
-                        group={g}
-                        first={idx === 0}
-                        last={idx === list.length - 1}
-                        ordering={order.isPending}
-                        onMove={list.length > 1 ? (by) => move(list, idx, by) : undefined}
-                        onEdit={() => {
-                          update.reset();
-                          setEditing(g.id);
-                        }}
-                        onDelete={() => setRemoving(g)}
-                      />
-                    )}
+                    <GroupRow
+                      group={g}
+                      first={idx === 0}
+                      last={idx === list.length - 1}
+                      ordering={order.isPending}
+                      onMove={list.length > 1 ? (by) => move(list, idx, by) : undefined}
+                      onEdit={() => setEditing(g.id)}
+                      onDelete={() => setRemoving(g)}
+                    />
                   </li>
                 ))}
               </ul>
@@ -137,6 +107,7 @@ export function GroupsDrawer({ open, onOpenChange }: { open: boolean; onOpenChan
           }
         </QueryBoundary>
       </div>
+      )}
       <Confirm
         open={!!removing}
         onOpenChange={(v) => !v && setRemoving(null)}

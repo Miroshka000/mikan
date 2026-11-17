@@ -4020,6 +4020,245 @@
         ],
         "type": "object"
       },
+      "GroupAddressBody": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "Адрес или домен; не передан — адрес ноды",
+            "maxLength": 253,
+            "type": "string"
+          },
+          "cdn": {
+            "type": "boolean"
+          },
+          "host": {
+            "maxLength": 253,
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 48,
+            "type": "string"
+          },
+          "port": {
+            "description": "Не передан — порт подключения",
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sni": {
+            "maxLength": 253,
+            "type": "string"
+          }
+        },
+        "required": [
+          "inbound_id"
+        ],
+        "type": "object"
+      },
+      "GroupAddressView": {
+        "additionalProperties": false,
+        "properties": {
+          "address": {
+            "description": "Адрес или домен; пусто — адрес ноды",
+            "maxLength": 253,
+            "type": "string"
+          },
+          "cdn": {
+            "description": "Впереди CDN со своим сертификатом: сертификат ноды не закрепляется",
+            "type": "boolean"
+          },
+          "host": {
+            "description": "HTTP Host у WebSocket и XHTTP; пусто — как у сервера",
+            "maxLength": 253,
+            "type": "string"
+          },
+          "inbound_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "name": {
+            "description": "Имя в подписке, с переменными заголовка; пусто — имя подключения",
+            "maxLength": 48,
+            "type": "string"
+          },
+          "port": {
+            "description": "0 — порт подключения",
+            "format": "int64",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sni": {
+            "description": "Пусто — обычное имя TLS",
+            "maxLength": 253,
+            "type": "string"
+          }
+        },
+        "required": [
+          "inbound_id",
+          "address",
+          "port",
+          "sni",
+          "host",
+          "name",
+          "cdn"
+        ],
+        "type": "object"
+      },
+      "GroupAppearanceBody": {
+        "additionalProperties": false,
+        "properties": {
+          "addresses": {
+            "items": {
+              "$ref": "#/components/schemas/GroupAddressBody"
+            },
+            "maxItems": 200,
+            "type": "array"
+          },
+          "announce": {
+            "description": "До 10 строк; пустая строка — без объявления",
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "announce_url": {
+            "description": "https://… или tg://…",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "headers": {
+            "description": "Как дополнительные заголовки правила ответа: без заголовков кэша и длины",
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "require_hwid": {
+            "type": "boolean"
+          },
+          "support_url": {
+            "description": "https://… или tg://…",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "templates": {
+            "$ref": "#/components/schemas/GroupTemplatesBody"
+          },
+          "title": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "unbind": {
+            "$ref": "#/components/schemas/UnbindRules",
+            "description": "Свои правила отвязки; не передано — правила для всех"
+          },
+          "update_hours": {
+            "format": "int64",
+            "maximum": 168,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "GroupAppearanceView": {
+        "additionalProperties": false,
+        "properties": {
+          "addresses": {
+            "description": "Где клиенты группы подключаются к протоколу вместо его адреса по умолчанию",
+            "items": {
+              "$ref": "#/components/schemas/GroupAddressView"
+            },
+            "type": "array"
+          },
+          "announce": {
+            "description": "Объявление; пустая строка — без объявления; null — как в настройках подписки",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "announce_url": {
+            "description": "Куда ведёт нажатие на объявление; null — как в настройках подписки",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headers": {
+            "description": "Свои заголовки каждого ответа подписки; заголовки правила ответа сильнее",
+            "items": {
+              "$ref": "#/components/schemas/Header"
+            },
+            "type": "array"
+          },
+          "page": {
+            "description": "Своя страница подписки: GET, PUT и DELETE /api/v1/groups/{id}/page",
+            "type": "boolean"
+          },
+          "require_hwid": {
+            "description": "Не выдавать подписку приложениям без ID устройства; null — как в настройках",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "support_url": {
+            "description": "Ссылка на поддержку; null — как в настройках подписки",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "templates": {
+            "$ref": "#/components/schemas/GroupTemplates"
+          },
+          "title": {
+            "description": "Название подписки в приложениях, с переменными как в sub_title; null — как в настройках подписки",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unbind": {
+            "$ref": "#/components/schemas/UnbindRules"
+          },
+          "unbind_own": {
+            "description": "Свои правила отвязки устройств; false — правила для всех, они в unbind",
+            "type": "boolean"
+          },
+          "update_hours": {
+            "description": "Как часто приложения обновляют подписку, в часах (Profile-Update-Interval); null — раз в час",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "templates",
+          "title",
+          "announce",
+          "announce_url",
+          "support_url",
+          "update_hours",
+          "headers",
+          "require_hwid",
+          "unbind_own",
+          "unbind",
+          "page",
+          "addresses"
+        ],
+        "type": "object"
+      },
       "GroupHostView": {
         "additionalProperties": false,
         "properties": {
@@ -4119,6 +4358,44 @@
         ],
         "type": "object"
       },
+      "GroupPageView": {
+        "additionalProperties": false,
+        "properties": {
+          "background": {
+            "$ref": "#/components/schemas/PageAsset"
+          },
+          "brand": {
+            "description": "Название бренда (settings.brand), общее для всех страниц",
+            "type": "string"
+          },
+          "brand_accent": {
+            "description": "Цвет бренда (settings.brand_accent), общий для всех страниц",
+            "type": "string"
+          },
+          "config": {
+            "$ref": "#/components/schemas/Page"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/Page",
+            "description": "Страница по умолчанию — к ней ведёт «Сбросить»"
+          },
+          "logo": {
+            "$ref": "#/components/schemas/PageAsset"
+          },
+          "own": {
+            "description": "У группы своя страница; false — в config страница для всех",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "own",
+          "config",
+          "defaults",
+          "brand",
+          "brand_accent"
+        ],
+        "type": "object"
+      },
       "GroupServers": {
         "additionalProperties": false,
         "properties": {
@@ -4198,9 +4475,68 @@
         ],
         "type": "object"
       },
+      "GroupTemplates": {
+        "additionalProperties": false,
+        "properties": {
+          "mihomo": {
+            "description": "Шаблон Clash (mihomo); null — шаблон по умолчанию",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "singbox": {
+            "description": "Шаблон sing-box; null — шаблон по умолчанию",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "xray": {
+            "description": "Шаблон Xray; null — шаблон по умолчанию",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "mihomo",
+          "singbox",
+          "xray"
+        ],
+        "type": "object"
+      },
+      "GroupTemplatesBody": {
+        "additionalProperties": false,
+        "properties": {
+          "mihomo": {
+            "description": "Шаблон Clash (mihomo); не передан — шаблон по умолчанию",
+            "format": "int64",
+            "type": "integer"
+          },
+          "singbox": {
+            "description": "Шаблон sing-box; не передан — шаблон по умолчанию",
+            "format": "int64",
+            "type": "integer"
+          },
+          "xray": {
+            "description": "Шаблон Xray; не передан — шаблон по умолчанию",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "GroupView": {
         "additionalProperties": false,
         "properties": {
+          "appearance": {
+            "$ref": "#/components/schemas/GroupAppearanceView"
+          },
           "color": {
             "enum": [
               "gray",
@@ -4261,7 +4597,8 @@
           "own_users",
           "tariffs",
           "servers",
-          "hosts"
+          "hosts",
+          "appearance"
         ],
         "type": "object"
       },
@@ -8132,6 +8469,10 @@
       "PatchGroupInputBody": {
         "additionalProperties": false,
         "properties": {
+          "appearance": {
+            "$ref": "#/components/schemas/GroupAppearanceBody",
+            "description": "Оформление целиком, с адресами; не передано — без изменений. Только из сессии администратора, не ключом API"
+          },
           "color": {
             "enum": [
               "gray",
@@ -9915,6 +10256,18 @@
           "bonus_bytes",
           "discount_orders",
           "discount_amount"
+        ],
+        "type": "object"
+      },
+      "PutGroupPageInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "config"
         ],
         "type": "object"
       },
@@ -18567,6 +18920,136 @@
         "tags": [
           "users"
         ]
+      }
+    },
+    "/api/v1/groups/{id}/page": {
+      "delete": {
+        "operationId": "delete-group-page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Группе — страница подписки для всех",
+        "tags": [
+          "users"
+        ],
+        "x-session-only": true
+      },
+      "get": {
+        "operationId": "get-group-page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupPageView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Страница подписки группы",
+        "tags": [
+          "users"
+        ]
+      },
+      "put": {
+        "operationId": "put-group-page",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutGroupPageInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupPageView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Своя страница подписки группы",
+        "tags": [
+          "users"
+        ],
+        "x-session-only": true
       }
     },
     "/api/v1/import": {

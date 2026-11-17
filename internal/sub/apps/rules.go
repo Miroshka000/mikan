@@ -292,16 +292,38 @@ func (a Action) check(path string, opts CheckOpts) error {
 	if !a.takes(RespondServe, RespondStub, Respond403, Respond404, RespondHTML) {
 		return nil
 	}
-	if len(a.Headers) > MaxHeaders {
-		return bad(path+".headers", "resp_headers_many", strconv.Itoa(MaxHeaders))
+	return checkHeaders(path+".headers", a.Headers)
+}
+
+// checkHeaders holds more headers of an answer, at path, to what a response rule may set: at
+// most MaxHeaders, named as a header is and none that delimits the body or the connection,
+// with values of visible ASCII up to 512 bytes.
+func checkHeaders(path string, hs []Header) error {
+	if len(hs) > MaxHeaders {
+		return bad(path, "resp_headers_many", strconv.Itoa(MaxHeaders))
 	}
-	for i, h := range a.Headers {
-		at := path + ".headers." + strconv.Itoa(i)
+	for i, h := range hs {
+		at := path + "." + strconv.Itoa(i)
 		if !headerName.MatchString(h.Name) || framing[canonical(h.Name)] {
 			return bad(at+".name", "resp_header_name", h.Name)
 		}
 		if len(h.Value) > 512 || !printable(h.Value) {
 			return bad(at+".value", "resp_header_value", "")
+		}
+	}
+	return nil
+}
+
+// CheckHeaders holds more headers every answer carries (a group's, apart from any rule) to a
+// response rule's rules, and to what CheckRules asks of a rule saved now: none of them tells a
+// cache how long to keep the answer (CacheHeaders). The error is a *CheckError at path.
+func CheckHeaders(path string, hs []Header) error {
+	if err := checkHeaders(path, hs); err != nil {
+		return err
+	}
+	for i, h := range hs {
+		if slices.Contains(CacheHeaders, canonical(h.Name)) {
+			return bad(path+"."+strconv.Itoa(i)+".name", "resp_header_cache", h.Name)
 		}
 	}
 	return nil

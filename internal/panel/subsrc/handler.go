@@ -49,6 +49,11 @@ type Config struct {
 	Tariffs map[int64]string
 	// LogDays is how long the request log is kept; 0: the requests are not logged.
 	LogDays int
+	// Appearance is how each group's subscriptions look, and Addresses where each group's
+	// clients reach inbounds in place of their default address, by group and inbound id:
+	// forGroup lays a group's over the rest.
+	Appearance map[int64]domain.GroupAppearance
+	Addresses  map[int64]map[int64]submodel.AddressOverride
 }
 
 // Binder hands devices their keys (domain.Devices). Admit tells what Bind would do, and
@@ -240,7 +245,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		internalError(w)
 		return
 	}
-	h.info(r.Context(), w, &subscription{h: h, u: u, cfg: cfg})
+	sub, err := h.subscriptionOf(r.Context(), u, cfg)
+	if err != nil {
+		internalError(w)
+		return
+	}
+	h.info(r.Context(), w, sub)
 }
 
 // internalError answers a request the panel failed on, without telling why: the cause is

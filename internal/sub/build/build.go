@@ -135,6 +135,26 @@ func hosts(in model.Inbound, seed string, sniOK bool) []host {
 		out = append(out, host{id: h.ID, order: h.Order, own: true, options: o, name: h.Name, client: proto.ClientOverrides{Server: addr, Port: h.Port,
 			SNI: sni, Host: h.Host, Fingerprint: h.Fingerprint}})
 	}
+	// The user's group reaches the default host elsewhere: what it sets goes over the rest,
+	// a choice of the more values too.
+	if o := in.Override; o != (model.AddressOverride{}) {
+		if o.Address != "" {
+			out[0].client.Server = o.Address
+		}
+		if o.Port != 0 {
+			out[0].client.Port = o.Port
+		}
+		if o.SNI != "" && sniOK {
+			out[0].client.SNI = o.SNI
+		}
+		if o.Host != "" {
+			out[0].client.Host = o.Host
+		}
+		if o.Name != "" {
+			out[0].name = o.Name
+		}
+		out[0].options.CDN = out[0].options.CDN || o.CDN
+	}
 	if out[0].hidden {
 		return out[1:]
 	}
@@ -165,6 +185,9 @@ func HostNames(ins []model.Inbound) []string {
 			if !h.Hidden && strings.Contains(h.Name, "{") {
 				out = append(out, h.Name)
 			}
+		}
+		if strings.Contains(in.Override.Name, "{") {
+			out = append(out, in.Override.Name)
 		}
 	}
 	return out
