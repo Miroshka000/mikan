@@ -11,7 +11,10 @@ import (
 // The relay lives under the subscription path: without the dedicated key it answers as
 // any other path there that the subscriptions do not know.
 func TestRelayAnswersLikeOtherSubscriptionPaths(t *testing.T) {
-	sub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404); w.Write([]byte("subscriptions: " + r.URL.Path)) })
+	sub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(404)
+		w.Write([]byte("subscriptions: " + r.URL.Path))
+	})
 	s := New(http.NotFoundHandler(), sub)
 	s.SetPaths(settings.Paths{Admin: "secret-admin", Sub: "secret-sub"})
 	s.SetSite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(418); w.Write([]byte("own site")) }))
