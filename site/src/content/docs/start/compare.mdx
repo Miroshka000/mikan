@@ -38,7 +38,9 @@ Marzban не выпускал стабильных релизов с 9 янва�
 - лимиты скорости, соединений и квоты действуют на самой ноде;
 - пользователи добавляются и удаляются без перезапуска ноды.
 
-Протоколы тоже отличаются. Кроме VLESS REALITY, Trojan и Shadowsocks есть Hysteria2, TUIC, AnyTLS, TrustTunnel, Mieru и другие из [пресетов](/mikan/protocols/presets/). Протоколы Citrus проверены автотестами против клиентов Xray, поэтому подписка работает и в приложениях на Xray (Happ, v2RayTun), и в Clash-приложениях.
+Это касается протоколов, где у каждого пользователя свой ключ. Sudoku, Snell и Shadowsocks-2022 с ChaCha20 работают с одним ключом на всех, и на них учёта и лимитов нет, см. [Список протоколов](/mikan/protocols/presets/#список).
+
+Протоколы тоже отличаются. Кроме VLESS REALITY, Trojan и Shadowsocks есть Hysteria2, TUIC, AnyTLS, TrustTunnel, Mieru и другие из [пресетов](/mikan/protocols/presets/). Протоколы Citrus проверены автотестами против клиентов Xray и mihomo. Какому приложению уходит какой протокол, зависит от протокола: VLESS, Trojan, Hysteria2 и другие получают и приложения на Xray (Happ, v2RayTun), и Clash-приложения, а TrustTunnel, Mieru и некоторые другие — только Clash-приложения. См. [Кто что получает](/mikan/protocols/presets/#кто-что-получает).
 
 ### Продажи из коробки
 
