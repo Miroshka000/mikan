@@ -37,11 +37,26 @@ type addressFollower struct {
 	now      func() time.Time
 
 	mu sync.Mutex
+	// menu is the move of the bot's Mini App button Telegram did not take: tried again, no
+	// sooner than menuRetry, until it goes through or there is nothing left to move. A later
+	// change of the address does not wait for it. Under mu.
+	menu      *menuMove
+	menuRetry time.Time
 }
+
+// menuMove points the Mini App button opening one subscription address at another.
+type menuMove struct{ from, to string }
 
 // addressEvery is how often the address is looked at: the CLI's changes are followed this
 // soon.
 const addressEvery = 5 * time.Second
+
+// A move of the Mini App button that failed is tried again this often, each try this long
+// at most: it holds the follower, which a save of the settings waits for.
+const (
+	menuRetryEvery   = time.Minute
+	menuRetryTimeout = 10 * time.Second
+)
 
 func (a *addressFollower) Run(ctx context.Context) {
 	pace.Tick(ctx, addressEvery, func(ctx context.Context) {
@@ -64,6 +79,7 @@ func (a *addressFollower) Check(ctx context.Context) error {
 		return err
 	}
 	if ok && applied.Same(cur) {
+		a.retryMenuButton(ctx)
 		return nil
 	}
 	if ok {
@@ -141,11 +157,36 @@ func (a *addressFollower) moveMenuButton(ctx context.Context, prev, next setting
 		}
 		return ep.URL() + "/" + paths.Sub
 	}
-	moved, err := a.gateway.MoveMenuButton(ctx, base(from), base(to))
-	switch {
-	case err != nil:
-		a.log.Warn("address: the bot's Mini App button not moved", "err", err)
-	case moved:
+	m := menuMove{from: base(from), to: base(to)}
+	// A move Telegram did not take left the button at the address before that one.
+	if a.menu != nil {
+		m.from = a.menu.from
+	}
+	a.tryMenuMove(ctx, m)
+}
+
+// retryMenuButton tries again the move of the Mini App button Telegram did not take.
+func (a *addressFollower) retryMenuButton(ctx context.Context) {
+	if a.gateway == nil || a.menu == nil || a.now().Before(a.menuRetry) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, menuRetryTimeout)
+	defer cancel()
+	a.tryMenuMove(ctx, *a.menu)
+}
+
+// tryMenuMove moves the Mini App button; a move that fails stays to be tried again.
+func (a *addressFollower) tryMenuMove(ctx context.Context, m menuMove) {
+	moved, err := a.gateway.MoveMenuButton(ctx, m.from, m.to)
+	if err != nil {
+		if a.menu == nil || *a.menu != m {
+			a.log.Warn("address: the bot's Mini App button not moved, it is tried again", "err", err)
+		}
+		a.menu, a.menuRetry = &m, a.now().Add(menuRetryEvery)
+		return
+	}
+	a.menu = nil
+	if moved {
 		a.log.Info("address: the bot's Mini App button opens the new address")
 	}
 }

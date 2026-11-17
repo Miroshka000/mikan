@@ -98,9 +98,10 @@ Custom rule headers pass through, except credentials, cookies, forwarding metada
   remain on the panel. Legacy imported subscription paths are not served by the edge;
   existing legacy links continue to use the panel.
 - Every profile request first goes to the panel. If the panel is unreachable, returns
-  502/503/504, or sends an incomplete response, the edge can return a previously successful
+  500/502/503/504, or sends an incomplete response, the edge can return a previously successful
   GET profile for the exact same subscription, query, forwarded headers, host and client
-  IP. Optional `-offline-roaming` allows a matching nonempty HWID to reuse its saved copy
+  IP. A 500 is one request failing (one subscription's profile, say), so it does not count
+  towards the circuit breaker below. Optional `-offline-roaming` allows a matching nonempty HWID to reuse its saved copy
   after an IP change. Enable it only if response rules and access policies do not depend
   on IP; the actual new IP is still forwarded to the panel. Requests without HWID keep
   strict IP matching. Browser pages, subscriber information and POST actions are not served offline.
@@ -131,8 +132,9 @@ Custom rule headers pass through, except credentials, cookies, forwarding metada
   expired entries are swept once per minute. Restarting clears it. Public assets use a separate five-minute cache
   (128 entries, 1 MiB each). No subscriber profiles are written to disk.
 - The panel’s existing address follower updates the Telegram menu, including port-only
-  and external-mode changes. It checks settings every five seconds; addon startup
-  retries unavailable panel settings without replacing the menu with an empty URL.
+  and external-mode changes. It checks settings every five seconds; a move Telegram
+  refuses is tried again once a minute until it goes through. Addon startup retries
+  unavailable panel settings without replacing the menu with an empty URL.
 - The dedicated token cannot list users or call the normal panel API. Subscriber
   tokens and Telegram authentication still govern subscriber actions.
 - Requests are limited to 1 MiB before forwarding; responses to 8 MiB. Slow request bodies use a separate 16-upload budget;
@@ -141,7 +143,7 @@ Custom rule headers pass through, except credentials, cookies, forwarding metada
 
 ## Fast offline mode and monitoring
 
-After three consecutive failed profile requests, the circuit breaker stops contacting
+After three consecutive failed profile requests (no answer, 502, 503 or 504), the circuit breaker stops contacting
 an unavailable panel for ten seconds and immediately serves matching saved profiles.
 After that delay, exactly one request probes recovery; other requests keep using the
 cache. A successful/authoritative response closes the circuit; another failure opens

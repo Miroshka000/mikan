@@ -208,7 +208,8 @@ func TestSubscriptionRelayUnauthorizedHasOrdinaryFallback(t *testing.T) {
 				return key.Key
 			}
 			subscription, full := create("subscription"), create("full")
-			baseline, body := h.do("GET", "/unknown-path", nil, nil)
+			// Under the subscription path, as any other path there the subscriptions do not know.
+			baseline, body := h.do("GET", "/"+subPath+"/unknown/abcdefghijklmnopqrstuvwx", nil, nil)
 			for _, token := range []string{"", "mk_" + strings.Repeat("z", 40), full} {
 				headers := map[string]string{"Authorization": "Bearer " + token, subrelay.RelayNonceHeader: "untrusted challenge"}
 				for _, suffix := range []string{"/abcdefghijklmnopqrstuvwx", subrelay.AuthPath} {

@@ -45,9 +45,9 @@ func (p *Proxy) profileCacheKey(req *http.Request, host string) string {
 	if !p.offlineRoaming || req.Header.Get("X-Hwid") == "" {
 		return profileKey(req, host)
 	}
-	copy := req.Clone(req.Context())
-	copy.Header.Del("X-Mikan-Client-IP")
-	return profileKey(copy, host)
+	clone := req.Clone(req.Context())
+	clone.Header.Del("X-Mikan-Client-IP")
+	return profileKey(clone, host)
 }
 
 func profilePath(path string) string {

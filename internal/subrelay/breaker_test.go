@@ -124,3 +124,30 @@ func TestOldFailureCannotReleaseRecoveryProbe(t *testing.T) {
 		t.Fatal("successful recovery did not reopen normal traffic")
 	}
 }
+
+// A 500 is the panel failing one request, not the panel down: the saved copy answers it,
+// and the breaker, opened here by a single counted failure, stays closed.
+func TestInternalErrorUsesSavedCopyWithoutOpeningCircuit(t *testing.T) {
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
+	p.SetCircuitBreaker(1, time.Minute)
+	status := 200
+	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return profileResponse(status), nil })}
+	if w := edgeFetch(p, "GET", tokenPath); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	status = 500
+	if w := edgeFetch(p, "GET", tokenPath); w.Code != 200 || w.Header().Get("X-Mikan-Offline") != "true" {
+		t.Fatalf("a 500 did not fall back to the saved copy: %d", w.Code)
+	}
+	if w := edgeFetch(p, "GET", otherToken); w.Code != 500 {
+		t.Fatalf("without a saved copy the panel's 500 is not passed on: %d", w.Code)
+	}
+	if !p.breaker.until.IsZero() {
+		t.Fatal("a 500 opened the circuit")
+	}
+	metrics := httptest.NewRecorder()
+	p.Metrics().ServeHTTP(metrics, httptest.NewRequest("GET", "http://localhost/metrics", nil))
+	if !strings.Contains(metrics.Body.String(), "mikan_sub_upstream_failures_total 2") {
+		t.Fatalf("500s not counted as upstream failures: %s", metrics.Body)
+	}
+}

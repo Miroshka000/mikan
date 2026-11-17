@@ -91,7 +91,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 		r2 := r.Clone(r.Context())
 		r2.URL.Path, r2.URL.RawPath = strings.TrimPrefix(rest, "relay"), ""
 		if !s.relay(w, r2) {
-			s.other(w, r)
+			// Without the key it is one more path under the subscriptions: their handler
+			// answers it as it answers any other one it does not know.
+			s.forward(w, r, s.sub, seg, rest, p)
 		}
 	case admin && seg != "" && paths.Admin != "" && secure.Equal(seg, paths.Admin):
 		s.forward(w, r, s.admin, seg, rest, p)

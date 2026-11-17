@@ -8,8 +8,11 @@ import (
 	"mikan/internal/panel/settings"
 )
 
-func TestRelayUsesSecretAndUnknownSiteFallback(t *testing.T) {
-	s := New(http.NotFoundHandler(), http.NotFoundHandler())
+// The relay lives under the subscription path: without the dedicated key it answers as
+// any other path there that the subscriptions do not know.
+func TestRelayAnswersLikeOtherSubscriptionPaths(t *testing.T) {
+	sub := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404); w.Write([]byte("subscriptions: " + r.URL.Path)) })
+	s := New(http.NotFoundHandler(), sub)
 	s.SetPaths(settings.Paths{Admin: "secret-admin", Sub: "secret-sub"})
 	s.SetSite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(418); w.Write([]byte("own site")) }))
 	enabled := false
@@ -40,14 +43,18 @@ func TestRelayUsesSecretAndUnknownSiteFallback(t *testing.T) {
 	if calls != 0 {
 		t.Fatal("public path probed relay")
 	}
+	// What the subscriptions' handler makes of a path under them it does not know.
+	unknown := func(w *httptest.ResponseRecorder) bool {
+		return w.Code == 404 && w.Body.String() == "subscriptions: /relay/abcdefghijklmnopqrstuvwx"
+	}
 	for _, auth := range []string{"", "Bearer dedicated"} {
-		if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", auth); w.Code != 418 || w.Body.String() != "own site" {
-			t.Fatal("disabled endpoint fingerprinted")
+		if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", auth); !unknown(w) {
+			t.Fatalf("disabled endpoint fingerprinted: %d %s", w.Code, w.Body)
 		}
 	}
 	enabled = true
-	if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", ""); w.Code != 418 {
-		t.Fatal("missing credential fingerprinted")
+	if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", ""); !unknown(w) {
+		t.Fatalf("missing credential fingerprinted: %d %s", w.Code, w.Body)
 	}
 	if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", "Bearer dedicated"); w.Code != 204 {
 		t.Fatal(w.Code)

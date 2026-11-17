@@ -200,8 +200,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	if resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504 {
-		failed = true
+	// 502, 503 and 504: the panel is down or out of reach, and the breaker counts them. A 500
+	// is the panel failing this one request (one subscription's profile, say): the saved copy
+	// answers it all the same, but the breaker leaves it out, or one broken profile would
+	// shut the panel off for everybody.
+	outage := resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504
+	counted := false
+	if outage || resp.StatusCode == http.StatusInternalServerError {
+		failed, counted = outage, true
 		p.stats.failures.Add(1)
 		if p.offline(w, r, key) {
 			return
@@ -221,7 +227,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Buffer before sending status so truncated/oversized upstream bodies become a 502.
 	body, err := io.ReadAll(io.LimitReader(resp.Body, (8<<20)+1))
 	if err != nil || len(body) > 8<<20 {
-		if !failed {
+		if !counted {
 			p.stats.failures.Add(1)
 		}
 		failed = true
