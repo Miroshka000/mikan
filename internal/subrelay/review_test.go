@@ -62,7 +62,9 @@ func TestUnrelated404DoesNotDropInflightProfile(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Go(func() { edgeFetch(p, "GET", tokenPath) })
 	<-started
-	edgeFetch(p, "GET", otherToken)
+	for range 1100 {
+		edgeFetch(p, "GET", otherToken)
+	}
 	close(release)
 	wg.Wait()
 	if len(p.profiles) != 1 {
@@ -169,7 +171,8 @@ func TestScopedInvalidationAndLRUEviction(t *testing.T) {
 	if _, ok := p.profiles["recent"]; ok {
 		t.Fatal("cache failed to evict least recently used variant")
 	}
-	generation := p.generation()
+	generation, release := p.beginFetch(tokenPath)
+	defer release()
 	p.forget(tokenPath, false)
 	p.remember("stale", tokenPath, e, generation)
 	if len(p.profiles) != 0 {

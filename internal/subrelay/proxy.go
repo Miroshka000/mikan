@@ -36,6 +36,7 @@ type Proxy struct {
 	epoch                   uint64
 	invalidated             map[string]uint64
 	invalidationFloor       uint64
+	activeProfiles          map[string]int
 	profileLimit, byteLimit int
 	cacheClock              uint64
 	trustedProxies          []netip.Prefix
@@ -54,7 +55,7 @@ func New(upstream, token, prefix string) (*Proxy, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxResponseHeaderBytes = 64 << 10
-	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, invalidated: map[string]uint64{}, profileLimit: maxProfiles, byteLimit: maxProfileBytes, inflight: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
+	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, invalidated: map[string]uint64{}, activeProfiles: map[string]int{}, profileLimit: maxProfiles, byteLimit: maxProfileBytes, inflight: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +139,12 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer func() { p.finishProbe(permit, failed, r.Context().Err() != nil) }()
 	}
 	p.stats.upstream.Add(1)
-	generation := p.generation()
+	var generation uint64
+	if tracked {
+		var release func()
+		generation, release = p.beginFetch(rel)
+		defer release()
+	}
 	resp, err := p.client.Do(req)
 	if err != nil {
 		failed = true

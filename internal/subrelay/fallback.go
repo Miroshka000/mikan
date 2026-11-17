@@ -60,6 +60,24 @@ func profileKey(req *http.Request, host string) string {
 
 func (p *Proxy) generation() uint64 { p.mu.Lock(); defer p.mu.Unlock(); return p.epoch }
 
+// Only active fetches need a per-subscription invalidation version. The request
+// concurrency limit bounds both maps, and unknown tokens cannot flush other fetches.
+func (p *Proxy) beginFetch(path string) (uint64, func()) {
+	p.mu.Lock()
+	p.activeProfiles[path]++
+	generation := p.epoch
+	p.mu.Unlock()
+	return generation, func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.activeProfiles[path]--
+		if p.activeProfiles[path] == 0 {
+			delete(p.activeProfiles, path)
+			delete(p.invalidated, path)
+		}
+	}
+}
+
 func (p *Proxy) remember(key, path string, e entry, generation uint64) {
 	contentType, _, _ := mime.ParseMediaType(e.header.Get("Content-Type"))
 	if p.offlineTTL <= 0 || len(e.body) == 0 || len(e.body) > 1<<20 || (contentType != "text/plain" && contentType != "text/yaml" && contentType != "application/json") {
@@ -126,14 +144,10 @@ func (p *Proxy) forget(path string, all bool) {
 	if all {
 		p.invalidationFloor = p.epoch
 		clear(p.invalidated)
-	} else {
-		// Bounded tombstones reject old in-flight responses without affecting other tokens.
-		if len(p.invalidated) >= 1024 {
-			p.invalidationFloor = p.epoch
-			clear(p.invalidated)
-		}
+	} else if p.activeProfiles[path] > 0 {
 		p.invalidated[path] = p.epoch
 	}
+
 	for k, v := range p.profiles {
 		if all || v.path == path {
 			p.profileBytes -= profileSize(v.entry)
