@@ -26,7 +26,7 @@ func TestMiniAppAndDeviceRefusalsKeepOtherProfiles(t *testing.T) {
 		status int
 	}{{"/tg/session", 401}, {otherToken + "/devices/1/unbind", 403}} {
 		t.Run(tc.path, func(t *testing.T) {
-			p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+			p, _ := New("https://panel.example/sub/relay", "key", "sub")
 			offline := false
 			p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if offline {
@@ -49,7 +49,7 @@ func TestMiniAppAndDeviceRefusalsKeepOtherProfiles(t *testing.T) {
 	}
 }
 func TestUnrelated404DoesNotDropInflightProfile(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	started, release := make(chan struct{}), make(chan struct{})
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if strings.HasSuffix(r.URL.Path, tokenPath) {
@@ -72,7 +72,7 @@ func TestUnrelated404DoesNotDropInflightProfile(t *testing.T) {
 	}
 }
 func TestOneBrokenProfileDoesNotOpenCircuitForEveryone(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if strings.HasSuffix(r.URL.Path, otherToken) {
 			return profileResponse(500), nil
@@ -89,7 +89,7 @@ func TestOneBrokenProfileDoesNotOpenCircuitForEveryone(t *testing.T) {
 	}
 }
 func TestRelayCredentialFailureInvalidatesAll(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) { return profileResponse(200), nil })}
 	edgeFetch(p, "GET", tokenPath)
 	edgeFetch(p, "GET", otherToken)
@@ -112,7 +112,7 @@ func TestRelayCredentialFailureInvalidatesAll(t *testing.T) {
 	}
 }
 func TestIntentionalDropDoesNotUseOfflineProfile(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) { return profileResponse(200), nil })}
 	edgeFetch(p, "GET", tokenPath)
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -139,7 +139,7 @@ func TestTrustedProxyIPsAndCustomRuleHeaders(t *testing.T) {
 		{"10.0.0.2:3", "CF-Connecting-IP", "203.0.113.7", "203.0.113.7"},
 		{"10.0.0.2:3", "X-Forwarded-For", "invalid", "10.0.0.2"},
 	} {
-		p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+		p, _ := New("https://panel.example/sub/relay", "key", "sub")
 		if err := p.SetTrustedProxies("10.0.0.0/8", tc.header); err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +167,7 @@ func TestTrustedProxyIPsAndCustomRuleHeaders(t *testing.T) {
 	}
 }
 func TestScopedInvalidationAndLRUEviction(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	if err := p.SetCacheLimits(2, 1024); err != nil {
 		t.Fatal(err)
 	}

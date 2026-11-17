@@ -3,9 +3,10 @@ package api
 import (
 	"database/sql"
 	"errors"
-	"mikan/internal/panel/store/storetest"
 	"sync"
 	"testing"
+
+	"mikan/internal/panel/store/storetest"
 )
 
 func TestRelayProofSecretIsStableConcurrentAndTokenBound(t *testing.T) {
@@ -14,7 +15,7 @@ func TestRelayProofSecretIsStableConcurrentAndTokenBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer st.Close()
-	first := &relayProofSigner{db: st.DB}
+	first := &relayProofSigner{q: st.Q}
 	proof, err := first.proof(t.Context(), "unknown", false)
 	if err != nil || proof != "" {
 		t.Fatal("unknown ticket initialized signer")
@@ -27,7 +28,7 @@ func TestRelayProofSecretIsStableConcurrentAndTokenBound(t *testing.T) {
 	failures := make(chan error, 2)
 	for range 2 {
 		wg.Go(func() {
-			signer := &relayProofSigner{db: st.DB}
+			signer := &relayProofSigner{q: st.Q}
 			value, err := signer.proof(t.Context(), "first-token", true)
 			if err != nil {
 				failures <- err
@@ -50,7 +51,7 @@ func TestRelayProofSecretIsStableConcurrentAndTokenBound(t *testing.T) {
 		stored = ticket
 	}
 	// Restarting the panel retains the secret; the same ticket cannot identify another token.
-	restarted := &relayProofSigner{db: st.DB}
+	restarted := &relayProofSigner{q: st.Q}
 	got, err := restarted.proof(t.Context(), "first-token", false)
 	if err != nil || got != stored {
 		t.Fatal("diagnostic ticket did not survive signer restart")

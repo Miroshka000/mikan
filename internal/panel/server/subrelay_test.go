@@ -1,10 +1,11 @@
 package server
 
 import (
-	"mikan/internal/panel/settings"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"mikan/internal/panel/settings"
 )
 
 func TestRelayUsesSecretAndUnknownSiteFallback(t *testing.T) {
@@ -40,18 +41,18 @@ func TestRelayUsesSecretAndUnknownSiteFallback(t *testing.T) {
 		t.Fatal("public path probed relay")
 	}
 	for _, auth := range []string{"", "Bearer dedicated"} {
-		if w := fetch(s, "/secret-admin/api/subscription/abcdefghijklmnopqrstuvwx", auth); w.Code != 418 || w.Body.String() != "own site" {
+		if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", auth); w.Code != 418 || w.Body.String() != "own site" {
 			t.Fatal("disabled endpoint fingerprinted")
 		}
 	}
 	enabled = true
-	if w := fetch(s, "/secret-admin/api/subscription/abcdefghijklmnopqrstuvwx", ""); w.Code != 418 {
+	if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", ""); w.Code != 418 {
 		t.Fatal("missing credential fingerprinted")
 	}
-	if w := fetch(s, "/secret-admin/api/subscription/abcdefghijklmnopqrstuvwx", "Bearer dedicated"); w.Code != 204 {
+	if w := fetch(s, "/secret-sub/relay/abcdefghijklmnopqrstuvwx", "Bearer dedicated"); w.Code != 204 {
 		t.Fatal(w.Code)
 	}
-	if w := fetch(s.SubOnly(), "/secret-admin/api/subscription/abcdefghijklmnopqrstuvwx", "Bearer dedicated"); w.Code != 418 {
+	if w := fetch(s.SubOnly(), "/secret-sub/relay/abcdefghijklmnopqrstuvwx", "Bearer dedicated"); w.Code != 404 {
 		t.Fatal("relay escaped onto subscription port")
 	}
 }

@@ -24,7 +24,7 @@ func (b *waitingBody) Read([]byte) (int, error) {
 }
 func (*waitingBody) Close() error { return nil }
 func TestSlowUploadsDoNotExhaustProfileFetchSlots(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return profileResponse(200), nil })}
 	started, release := make(chan struct{}, 16), make(chan struct{})
 	var wg sync.WaitGroup
@@ -67,7 +67,7 @@ func TestSlowUploadsDoNotExhaustProfileFetchSlots(t *testing.T) {
 	}
 }
 func TestAllConnectionLinesAreRemovedInBothDirections(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("X-Hop-One") != "" || r.Header.Get("X-Hop-Two") != "" {
 			t.Errorf("request leaked nominated fields: %v", r.Header)
@@ -116,7 +116,7 @@ func TestRepeatedClientIPHeaderLines(t *testing.T) {
 func TestClientRefusalCannotClearOtherProfilesThroughAuthProbe(t *testing.T) {
 	for _, probeStatus := range []int{204, 503, 429, 403, 200} {
 		t.Run(http.StatusText(probeStatus), func(t *testing.T) {
-			p, _ := New("https://panel.example/secret/api/subscription/", "key", "sub")
+			p, _ := New("https://panel.example/sub/relay/", "key", "sub")
 			p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return profileResponse(200), nil })}
 			edgeFetch(p, "GET", tokenPath)
 			edgeFetch(p, "GET", otherToken)
@@ -124,7 +124,7 @@ func TestClientRefusalCannotClearOtherProfilesThroughAuthProbe(t *testing.T) {
 			p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				if strings.HasSuffix(r.URL.Path, AuthPath) {
 					probes++
-					if r.Method != "HEAD" || r.URL.Path != "/secret/api/subscription"+AuthPath || r.URL.RawQuery != "" || r.Header.Get("X-Attack") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("User-Agent") != "mikan-sub" {
+					if r.Method != "HEAD" || r.URL.Path != "/sub/relay"+AuthPath || r.URL.RawQuery != "" || r.Header.Get("X-Attack") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("User-Agent") != "mikan-sub" {
 						t.Errorf("client input reached auth probe: %s %v", r.URL, r.Header)
 					}
 					if r.Header.Get("Authorization") != "Bearer key" || r.Header.Get(RelayNonceHeader) == "" || r.Header.Get(RelayNonceHeader) == "forged nonce" || r.Header.Get(RelayProofHeader) != "test-issued-proof" {
@@ -158,7 +158,7 @@ func TestClientRefusalCannotClearOtherProfilesThroughAuthProbe(t *testing.T) {
 	}
 }
 func TestUnmarkedOwnSiteCannotReplaceProfilesOrClearOtherSubscriptions(t *testing.T) {
-	p, _ := New("https://panel.example/secret/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return profileResponse(200), nil })}
 	edgeFetch(p, "GET", tokenPath)
 	edgeFetch(p, "GET", otherToken)

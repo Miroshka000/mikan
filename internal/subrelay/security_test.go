@@ -11,7 +11,7 @@ import (
 )
 
 func TestOversizedRequestNeverReachesPanel(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	calls := 0
 	p.client = &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -28,7 +28,7 @@ func TestOversizedRequestNeverReachesPanel(t *testing.T) {
 }
 
 func TestInfoRefusalInvalidatesProfile(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	p.remember("profile", tokenPath, entry{body: []byte("profile"), header: http.Header{"Content-Type": []string{"text/plain"}}}, p.generation())
 	p.forget(tokenPath+"/info", false)
@@ -42,10 +42,10 @@ func FuzzProxyCannotEscapeUpstream(f *testing.F) {
 		f.Add(path)
 	}
 	f.Fuzz(func(t *testing.T, path string) {
-		p, _ := New("https://panel.example/api/subscription", "edge-key", "sub")
+		p, _ := New("https://panel.example/sub/relay", "edge-key", "sub")
 		p.SetCircuitBreaker(0, 0)
 		p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-			if r.URL.Scheme != "https" || r.URL.Host != "panel.example" || !strings.HasPrefix(r.URL.Path, "/api/subscription/") {
+			if r.URL.Scheme != "https" || r.URL.Host != "panel.example" || !strings.HasPrefix(r.URL.Path, "/sub/relay/") {
 				t.Fatalf("proxy escaped upstream: %s", r.URL)
 			}
 			if r.Header.Get("Authorization") != "Bearer edge-key" || r.Header.Get("Cookie") != "" {
@@ -62,7 +62,7 @@ func FuzzProxyCannotEscapeUpstream(f *testing.F) {
 }
 
 func TestConcurrentRequestLimit(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	started := make(chan struct{}, 32)
 	release := make(chan struct{})
@@ -99,7 +99,7 @@ func TestConcurrentRequestLimit(t *testing.T) {
 }
 
 func TestReadOnlyMiniAppKeepsOfflineProfiles(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	p.remember("saved", tokenPath, entry{body: []byte("profile"), header: http.Header{"Content-Type": []string{"text/plain"}}}, p.generation())
 	p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -124,7 +124,7 @@ func TestReadOnlyMiniAppKeepsOfflineProfiles(t *testing.T) {
 }
 
 func TestCancelledRequestDoesNotReceiveOfflineProfile(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	p.remember("saved", tokenPath, entry{body: []byte("profile"), header: http.Header{"Content-Type": []string{"text/plain"}}}, p.generation())
 	ctx, cancel := context.WithCancel(context.Background())

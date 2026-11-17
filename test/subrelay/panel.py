@@ -12,7 +12,7 @@ class Panel(http.server.BaseHTTPRequestHandler):
         return self.headers.get("Authorization") == "Bearer ci-subscription-token" and not Path("/tmp/revoked").exists()
 
     def do_HEAD(self):
-        if self.path != "/api/subscription/_relay/auth":
+        if self.path != "/sub/relay/_relay/auth":
             self.send_error(404)
             return
         nonce = self.headers.get("X-Mikan-Relay-Nonce", "")
@@ -32,7 +32,7 @@ class Panel(http.server.BaseHTTPRequestHandler):
         if not self.authorized():
             self.send_error(404)
             return
-        if self.headers.get("Cookie") or not self.path.startswith("/api/subscription/"):
+        if self.headers.get("Cookie") or not self.path.startswith("/sub/relay/"):
             self.send_error(400)
             return
         self.send_response(200)

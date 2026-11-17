@@ -2,8 +2,8 @@
 
 A subscription edge for [#281](https://github.com/Miroshka000/mikan/issues/281).
 Run it on a separate server or behind a CDN. It needs no database, administrator
-password or panel TLS keys. The relay URL uses the panel’s secret admin path; the
-subscription key still cannot access the administrative API. Multiple instances can share one
+password, secret admin path or panel TLS keys. The relay uses the existing subscription
+path on the panel listener; the subscription key cannot access the administrative API. Multiple instances can share one
 subscription domain; each can have its own revocable subscription API key.
 
 ## Panel setup
@@ -31,7 +31,7 @@ Build with Go 1.27 (or use `/usr/local/bin/mikan-sub` from the project's Docker 
 ```sh
 go build -o mikan-sub ./cmd/mikan-sub
 # Load MIKAN_SUB_TOKEN from a protected environment file or secret manager.
-./mikan-sub -upstream 'https://panel.example.com:2053/<admin-path>/api/subscription' \
+./mikan-sub -upstream 'https://panel.example.com:2053' \
   -path YOUR_EXISTING_SUB_PATH -domain sub.example.com \
   -email admin@example.com -data /var/lib/mikan-sub/acme
 ```
@@ -44,8 +44,9 @@ Run under a supervisor with a dedicated account; grant binding to low ports or
 forward 80/443 to the service. SIGTERM gracefully shuts down both listeners.
 
 The edge keeps its restricted API token, opaque diagnostic ticket, public assets and saved profiles in memory, and its
-own ACME account/certificates on disk. The relay lives below the secret admin path on the panel listener only.
-Keep the full upstream URL private. Ordinary requests without a valid subscription key get the same 404/OwnSite
+own ACME account/certificates on disk. With a panel origin as `-upstream`, the edge derives
+`/<path>/relay` automatically. An explicit relay URL can also be supplied. Resetting the
+admin path does not affect edges. The relay is available on the panel listener only. Ordinary requests without a valid subscription key get the same 404/OwnSite
 response as unknown paths. Only an authenticated diagnostic ticket lets a previously
 authorized edge confirm that its key was revoked, without granting data access.
 Revoke an edge's key in the panel to disconnect it. Do not share ACME directories
@@ -62,7 +63,7 @@ docker build -f cmd/mikan-sub/Dockerfile -t mikan-sub .
 docker run -d --name mikan-sub --restart unless-stopped \
   --env-file /etc/mikan-sub.env -p 80:80 -p 443:443 \
   -v mikan-sub-acme:/data/acme mikan-sub \
-  -upstream 'https://panel.example.com:2053/<admin-path>/api/subscription' \
+  -upstream 'https://panel.example.com:2053' \
   -path YOUR_EXISTING_SUB_PATH -domain sub.example.com -email admin@example.com
 ```
 
@@ -74,7 +75,7 @@ its low ports. Use a separate ACME volume for each independent instance.
 
 ```sh
 ./mikan-sub -http -listen 127.0.0.1:8080 \
-  -upstream 'https://panel.example.com:2053/<admin-path>/api/subscription' \
+  -upstream 'https://panel.example.com:2053' \
   -path YOUR_EXISTING_SUB_PATH
 ```
 
@@ -99,7 +100,10 @@ Custom rule headers pass through, except credentials, cookies, forwarding metada
 - Every profile request first goes to the panel. If the panel is unreachable, returns
   502/503/504, or sends an incomplete response, the edge can return a previously successful
   GET profile for the exact same subscription, query, forwarded headers, host and client
-  IP. Browser pages, subscriber information and POST actions are not served offline.
+  IP. Optional `-offline-roaming` allows a matching nonempty HWID to reuse its saved copy
+  after an IP change. Enable it only if response rules and access policies do not depend
+  on IP; the actual new IP is still forwarded to the panel. Requests without HWID keep
+  strict IP matching. Browser pages, subscriber information and POST actions are not served offline.
 - Saved profiles expire one hour after the last successful fetch, or at the subscription's
   declared expiry, whichever comes first. Configure `-offline-ttl 15m`, for example;
   `-offline-ttl 0` disables this fallback. Offline responses include `X-Mikan-Offline: true`
@@ -123,10 +127,12 @@ Custom rule headers pass through, except credentials, cookies, forwarding metada
   uncached request variants and expired copies still receive 502 when the panel is down.
 - Profile storage is in memory only: at most 256 entries, 64 MiB total and 1 MiB per
   profile by default. Configure `-cache-entries 2000 -cache-bytes 268435456` for
-  a larger fleet. Variants are evicted in least-recently-used order. Restarting clears it. Public assets use a separate five-minute cache
+  a larger fleet. A linked-list LRU evicts variants without scanning the whole cache;
+  expired entries are swept once per minute. Restarting clears it. Public assets use a separate five-minute cache
   (128 entries, 1 MiB each). No subscriber profiles are written to disk.
-- The Telegram addon refreshes its menu address within 30 seconds, including port-only
-  and external-mode changes; panel outages preserve the last successful menu.
+- The panel’s existing address follower updates the Telegram menu, including port-only
+  and external-mode changes. It checks settings every five seconds; addon startup
+  retries unavailable panel settings without replacing the menu with an empty URL.
 - The dedicated token cannot list users or call the normal panel API. Subscriber
   tokens and Telegram authentication still govern subscriber actions.
 - Requests are limited to 1 MiB before forwarding; responses to 8 MiB. Slow request bodies use a separate 16-upload budget;
@@ -142,7 +148,10 @@ cache. A successful/authoritative response closes the circuit; another failure o
 it again. Explicit 4xx responses still invalidate profiles and are not masked by cache.
 Subscriber POST actions continue reaching the panel and never execute from cache.
 Configure `-failure-threshold 3 -retry-delay 10s`; threshold `0` disables the breaker.
-The initial failed requests can still take the normal upstream timeout.
+The initial failed requests can still take the normal upstream timeout. Upstream-unavailable
+warnings are limited to one per minute; failure counters still count every failed request.
+`-version` prints the build version without requiring configuration (source builds default
+to `dev`; Docker builds accept `--build-arg VERSION=...`).
 
 Metrics are opt-in, on a separate loopback-only listener:
 
@@ -179,7 +188,9 @@ must be trusted by the OS. Empty uses Let's Encrypt. The test never disables TLS
 verification and never sends an order to a public CA.
 
 The ACME test makes TLS-ALPN unreachable, so success requires HTTP-01. Its
-`--break-http-01` negative control also breaks HTTP-01 and requires issuance to fail.
+`--break-http-01` negative control also breaks HTTP-01. It requires a running, reachable
+edge listener and CA logs proving that an HTTP-01 challenge was attempted and failed.
+Connection refusal cannot make it pass, and any trusted successful TLS handshake fails it.
 
 Update panel and edge together: the private authentication confirmation is part of
 the relay protocol, and only confirmed responses may populate its caches.

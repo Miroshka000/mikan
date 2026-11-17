@@ -161,3 +161,20 @@ func TestMoveMenuButton(t *testing.T) {
 		t.Fatalf("the command list: moved %v, %v", moved, err)
 	}
 }
+
+func TestMoveMenuButtonRecognizesExplicitDefaultPort(t *testing.T) {
+	e := setup(t)
+	e.tg.mu.Lock()
+	e.tg.menu = map[string]any{"type": "web_app", "text": "Open", "web_app": map[string]any{"url": "https://sub.example:443/secret/tg?start=1"}}
+	e.tg.mu.Unlock()
+	if moved, err := e.gate.MoveMenuButton(e.ctx, "https://sub.example/secret", "https://sub.example:2054/secret"); err != nil || !moved {
+		t.Fatalf("port move: %v %v", moved, err)
+	}
+	e.tg.mu.Lock()
+	defer e.tg.mu.Unlock()
+	menu := e.tg.menu.(map[string]any)
+	app := menu["web_app"].(map[string]any)
+	if app["url"] != "https://sub.example:2054/secret/tg?start=1" {
+		t.Fatal(app)
+	}
+}

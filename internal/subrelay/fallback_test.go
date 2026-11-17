@@ -18,7 +18,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 
 func TestOfflineProfiles(t *testing.T) {
 	now := time.Unix(1800000000, 0)
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	p.now = func() time.Time { return now }
 	status := 200
@@ -90,7 +90,7 @@ func TestOfflineProfiles(t *testing.T) {
 }
 
 func TestProfileCacheLimitsAndInvalidation(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	e := entry{body: make([]byte, 1<<20), header: http.Header{"Content-Type": []string{"text/plain"}}}
 	for i := range 300 {
@@ -111,7 +111,7 @@ func TestProfileCacheLimitsAndInvalidation(t *testing.T) {
 }
 
 func TestProfileCacheConcurrent(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	var wg sync.WaitGroup
 	for i := range 20 {
@@ -128,7 +128,7 @@ func TestProfileCacheConcurrent(t *testing.T) {
 }
 
 func TestRefusalPreventsInflightCacheResurrection(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(0, 0)
 	generation := p.generation()
 	p.forget(tokenPath, true)
@@ -141,7 +141,7 @@ func TestRefusalPreventsInflightCacheResurrection(t *testing.T) {
 func TestOfflineRefusesExplicitAuthorizationErrors(t *testing.T) {
 	for _, status := range []int{401, 403, 404, 410, 429} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
-			p, _ := New("https://panel.example/api/subscription", "key", "sub")
+			p, _ := New("https://panel.example/sub/relay", "key", "sub")
 			p.SetCircuitBreaker(0, 0)
 			code := 200
 			p.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {

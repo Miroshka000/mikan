@@ -19,8 +19,8 @@ type Server struct {
 	admin  http.Handler
 	sub    http.Handler
 	relay  func(http.ResponseWriter, *http.Request) bool // dedicated subscription key only, on the panel listener
-	legacy http.Handler // the old panel's links (settings.Paths.Legacy); nil: none
-	site   http.Handler // every other path (OwnSite); nil: NotFound
+	legacy http.Handler                                  // the old panel's links (settings.Paths.Legacy); nil: none
+	site   http.Handler                                  // every other path (OwnSite); nil: NotFound
 	hsts   atomic.Pointer[func() bool]
 	// hello answers a node's hello and says so; whatever it does not answer is served
 	// like any unknown path (see nodehello). nil: none.
@@ -87,10 +87,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 	seg, rest, _ := strings.Cut(p[1:], "/")
 	paths := s.paths.Load()
 	switch {
-	case admin && s.relay != nil && paths.Admin != "" && secure.Equal(seg, paths.Admin) && strings.HasPrefix(rest, "api/subscription/"):
-  r2 := r.Clone(r.Context())
-  r2.URL.Path, r2.URL.RawPath = strings.TrimPrefix(rest, "api/subscription"), ""
-  if !s.relay(w, r2) { s.other(w, r) }
+	case admin && s.relay != nil && paths.Sub != "" && secure.Equal(seg, paths.Sub) && strings.HasPrefix(rest, "relay/"):
+		r2 := r.Clone(r.Context())
+		r2.URL.Path, r2.URL.RawPath = strings.TrimPrefix(rest, "relay"), ""
+		if !s.relay(w, r2) {
+			s.other(w, r)
+		}
 	case admin && seg != "" && paths.Admin != "" && secure.Equal(seg, paths.Admin):
 		s.forward(w, r, s.admin, seg, rest, p)
 	case seg != "" && paths.Sub != "" && secure.Equal(seg, paths.Sub):

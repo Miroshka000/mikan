@@ -4,7 +4,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY cmd/mikan-sub/ ./cmd/mikan-sub/
 COPY internal/subrelay/ ./internal/subrelay/
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /mikan-sub ./cmd/mikan-sub
+ARG VERSION=dev
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /mikan-sub ./cmd/mikan-sub
 
 FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk add --no-cache ca-certificates libcap && \

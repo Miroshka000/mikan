@@ -71,3 +71,9 @@ SELECT * FROM audit_log WHERE id < sqlc.arg(before_id) ORDER BY id DESC LIMIT CA
 
 -- name: PruneAudit :execrows
 DELETE FROM audit_log WHERE ts < $1;
+
+-- name: GetOrCreateSetting :one
+-- Keep the winner when several panel processes initialize the same internal secret.
+INSERT INTO settings (key, value) VALUES ($1, $2)
+ON CONFLICT (key) DO UPDATE SET key = excluded.key
+RETURNING value;

@@ -2,15 +2,16 @@ package tgbot
 
 import (
 	"encoding/json"
-	"mikan/internal/tgapi"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"mikan/internal/tgapi"
 )
 
-func TestRemoteMenuFollowsAddressAndPreservesItDuringOutage(t *testing.T) {
+func TestStartupUsesCurrentAddressAndPreservesMenuDuringPanelOutage(t *testing.T) {
 	url := "https://panel.example:2053/sub/tg"
 	down := false
 	panel := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,21 +46,18 @@ func TestRemoteMenuFollowsAddressAndPreservesItDuringOutage(t *testing.T) {
 	if err := b.Started(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.RefreshSetup(t.Context()); err != nil {
-		t.Fatal(err)
-	}
 	if len(menus) != 1 || menus[0] != url {
 		t.Fatalf("initial menu %v", menus)
 	}
 	url = "https://edge.example/sub/tg"
-	if err := b.RefreshSetup(t.Context()); err != nil {
+	if err := b.Started(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if len(menus) != 2 || menus[1] != url {
 		t.Fatalf("stale menu %v", menus)
 	}
 	down = true
-	if err := b.RefreshSetup(t.Context()); err == nil || len(menus) != 2 {
+	if err := b.Started(t.Context()); err == nil || len(menus) != 2 {
 		t.Fatal("panel failure replaced valid Telegram menu")
 	}
 }
@@ -116,13 +114,13 @@ func TestMenuPartialFailureIsRetriedWhenSettingsRevert(t *testing.T) {
 	checkMenu(url.Load().(string))
 	url.Store("https://second.example/sub/tg")
 	failCommands.Store(true)
-	if err := b.RefreshSetup(t.Context()); err == nil {
+	if err := b.Started(t.Context()); err == nil {
 		t.Fatal("partial failure was ignored")
 	}
 	checkMenu(url.Load().(string))
 	url.Store("https://first.example/sub/tg")
 	failCommands.Store(false)
-	if err := b.RefreshSetup(t.Context()); err != nil {
+	if err := b.Started(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	checkMenu(url.Load().(string))

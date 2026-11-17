@@ -18,10 +18,16 @@ import (
 // SubscriptionRelay exposes only the subscription surface to a revocable, dedicated
 // key. It accepts no admin session and no general API key.
 func SubscriptionRelay(d Deps, sub http.Handler) func(http.ResponseWriter, *http.Request) bool {
-	signer := &relayProofSigner{db: d.Store.DB}
+	signer := &relayProofSigner{q: d.Store.Q}
 	return func(w http.ResponseWriter, r *http.Request) (served bool) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !ok || len(token) != len(apiKeyPrefix)+apiKeyLen {
+			return false
+		}
+		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+		now := d.Now()
+		limit := "sub-key:" + auth.ClientKey(ip)
+		if ok, _ := d.IPLimit.Allowed(limit, now); !ok {
 			return false
 		}
 		diagnostic := r.Method == http.MethodHead && r.URL.Path == subrelay.AuthPath && r.URL.RawQuery == ""
@@ -45,22 +51,6 @@ func SubscriptionRelay(d Deps, sub http.Handler) func(http.ResponseWriter, *http
 			w.Header().Set(subrelay.RelayAuthHeader, "revoked:"+nonce)
 			w.WriteHeader(http.StatusNoContent)
 			return true
-		}
-		// Without configured keys, strangers still see only the ordinary fallback.
-		var enabled bool
-		err := d.Store.DB.QueryRowContext(r.Context(), "SELECT EXISTS (SELECT 1 FROM api_keys WHERE scope = 'subscription' AND (expires_at IS NULL OR expires_at > $1))", d.Now().Unix()).Scan(&enabled)
-		if err != nil {
-			http.Error(w, "subscription service unavailable", 503)
-			return true
-		}
-		if !enabled {
-			return refused()
-		}
-		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-		now := d.Now()
-		limit := "sub-key:" + auth.ClientKey(ip)
-		if ok, _ := d.IPLimit.Allowed(limit, now); !ok {
-			return false
 		}
 		key, err := d.Store.Q.GetAPIKeyByHash(r.Context(), hashAPIKey(token))
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {

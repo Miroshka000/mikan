@@ -1,6 +1,8 @@
 package subrelay
 
 import (
+	"container/list"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -19,7 +21,7 @@ type savedProfile struct {
 	entry
 	path    string
 	savedAt time.Time
-	used    uint64
+	lru     *list.Element
 }
 
 // SetOfflineTTL bounds how long a previously validated profile may survive a panel
@@ -34,6 +36,18 @@ func (p *Proxy) SetCacheLimits(entries, bytes int) error {
 	}
 	p.profileLimit, p.byteLimit = entries, bytes
 	return nil
+}
+
+// SetOfflineRoaming is opt-in: use only without IP-dependent access/response rules.
+// Nonempty HWIDs keep device variants separate while their network address changes.
+func (p *Proxy) SetOfflineRoaming(on bool) { p.offlineRoaming = on }
+func (p *Proxy) profileCacheKey(req *http.Request, host string) string {
+	if !p.offlineRoaming || req.Header.Get("X-Hwid") == "" {
+		return profileKey(req, host)
+	}
+	copy := req.Clone(req.Context())
+	copy.Header.Del("X-Mikan-Client-IP")
+	return profileKey(copy, host)
 }
 
 func profilePath(path string) string {
@@ -104,32 +118,19 @@ func (p *Proxy) remember(key, path string, e entry, generation uint64) {
 	if p.invalidationFloor > generation || p.invalidated[path] > generation {
 		return
 	}
-	if old, ok := p.profiles[key]; ok {
-		p.profileBytes -= profileSize(old.entry)
-		delete(p.profiles, key)
-	}
-	for k, v := range p.profiles {
-		if !p.now().Before(v.until) {
-			p.profileBytes -= profileSize(v.entry)
-			delete(p.profiles, k)
-		}
-	}
+	p.removeProfile(key)
 	if !p.now().Before(e.until) || profileSize(e) > p.byteLimit {
 		return
 	}
 	for len(p.profiles) >= p.profileLimit || p.profileBytes+profileSize(e) > p.byteLimit {
-		oldest := ""
-		var used uint64
-		for k, v := range p.profiles {
-			if oldest == "" || v.used < used {
-				oldest, used = k, v.used
-			}
-		}
-		p.profileBytes -= profileSize(p.profiles[oldest].entry)
-		delete(p.profiles, oldest)
+		p.removeProfile(p.profileLRU.Back().Value.(string))
 	}
-	p.cacheClock++
-	p.profiles[key] = savedProfile{entry: e, path: path, savedAt: p.now(), used: p.cacheClock}
+	node := p.profileLRU.PushFront(key)
+	p.profiles[key] = savedProfile{entry: e, path: path, savedAt: p.now(), lru: node}
+	if p.profilePaths[path] == nil {
+		p.profilePaths[path] = map[string]struct{}{}
+	}
+	p.profilePaths[path][key] = struct{}{}
 	p.profileBytes += profileSize(e)
 }
 
@@ -148,10 +149,14 @@ func (p *Proxy) forget(path string, all bool) {
 		p.invalidated[path] = p.epoch
 	}
 
-	for k, v := range p.profiles {
-		if all || v.path == path {
-			p.profileBytes -= profileSize(v.entry)
-			delete(p.profiles, k)
+	if all {
+		clear(p.profiles)
+		clear(p.profilePaths)
+		p.profileLRU.Init()
+		p.profileBytes = 0
+	} else {
+		for key := range p.profilePaths[path] {
+			p.removeProfile(key)
 		}
 	}
 }
@@ -163,14 +168,11 @@ func (p *Proxy) offline(w http.ResponseWriter, r *http.Request, key string) bool
 	p.mu.Lock()
 	e, ok := p.profiles[key]
 	if ok && !p.now().Before(e.until) {
-		p.profileBytes -= profileSize(e.entry)
-		delete(p.profiles, key)
+		p.removeProfile(key)
 		ok = false
 	}
 	if ok {
-		p.cacheClock++
-		e.used = p.cacheClock
-		p.profiles[key] = e
+		p.profileLRU.MoveToFront(e.lru)
 	}
 	p.mu.Unlock()
 	if !ok {
@@ -184,6 +186,45 @@ func (p *Proxy) offline(w http.ResponseWriter, r *http.Request, key string) bool
 	p.stats.offline.Add(1)
 	_, _ = w.Write(e.body)
 	return true
+}
+
+// removeProfile is called with mu held. Entry, path index and LRU stay in sync.
+func (p *Proxy) removeProfile(key string) {
+	e, ok := p.profiles[key]
+	if !ok {
+		return
+	}
+	delete(p.profiles, key)
+	p.profileBytes -= profileSize(e.entry)
+	p.profileLRU.Remove(e.lru)
+	delete(p.profilePaths[e.path], key)
+	if len(p.profilePaths[e.path]) == 0 {
+		delete(p.profilePaths, e.path)
+	}
+}
+
+// SweepExpired runs periodically, not for every successful fetch.
+func (p *Proxy) SweepExpired() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := p.now()
+	for key, e := range p.profiles {
+		if !now.Before(e.until) {
+			p.removeProfile(key)
+		}
+	}
+}
+func (p *Proxy) RunMaintenance(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			p.SweepExpired()
+		}
+	}
 }
 
 // Account for header payload as well as profile bodies in the memory budget.

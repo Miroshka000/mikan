@@ -10,7 +10,7 @@ import (
 )
 
 func TestCircuitFastFallbackAndRecovery(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "secret-token", "sub")
+	p, _ := New("https://panel.example/sub/relay", "secret-token", "sub")
 	now := time.Now()
 	p.now = func() time.Time { return now }
 	calls, status := 0, 200
@@ -70,7 +70,7 @@ func TestCircuitFastFallbackAndRecovery(t *testing.T) {
 }
 
 func TestCircuitDoesNotMaskRefusal(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	now := time.Now()
 	p.now = func() time.Time { return now }
 	status := 200
@@ -103,7 +103,7 @@ func TestCircuitDoesNotMaskRefusal(t *testing.T) {
 }
 
 func TestOldFailureCannotReleaseRecoveryProbe(t *testing.T) {
-	p, _ := New("https://panel.example/api/subscription", "key", "sub")
+	p, _ := New("https://panel.example/sub/relay", "key", "sub")
 	p.SetCircuitBreaker(1, time.Second)
 	now := time.Now()
 	p.now = func() time.Time { return now }

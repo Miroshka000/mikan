@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -405,16 +406,28 @@ type Endpoint struct {
 	Port int
 }
 
-// URL is https://host:port, the panel's base address; "" while it has no host or port.
+// URL is the HTTPS base address, omitting port 443; "" without a host or port.
 func (e Endpoint) URL() string {
 	if e.Host == "" || e.Port <= 0 {
 		return ""
 	}
-	return "https://" + net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
+	host := net.JoinHostPort(e.Host, strconv.Itoa(e.Port))
+	if e.Port == 443 {
+		host = strings.TrimSuffix(host, ":443")
+	}
+	return "https://" + host
 }
 
-// PanelSubEndpoint is the panel's subscription listener, where payment callbacks stay.
+// PanelSubEndpoint keeps local subscription domains, and uses the panel address
+// for callbacks only when subscriptions are served by an external edge.
 func (s *Settings) PanelSubEndpoint(ctx context.Context) (Endpoint, error) {
+	external, _, err := Get[bool](ctx, s, KeySubExternal)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	if !external {
+		return s.SubEndpoint(ctx)
+	}
 	ep, err := s.Endpoint(ctx)
 	if err != nil {
 		return ep, err

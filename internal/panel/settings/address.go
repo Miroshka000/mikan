@@ -28,6 +28,8 @@ type Address struct {
 	SubExternal bool   `json:"sub_external,omitempty"`
 	SubDomain   string `json:"sub_domain"`
 	PublicHost  string `json:"public_host"`
+	PanelPort   int    `json:"panel_port,omitempty"`
+	SubPort     int    `json:"sub_port,omitempty"`
 }
 
 // Address is the panel's address now.
@@ -45,6 +47,12 @@ func (s *Settings) Address(ctx context.Context) (Address, error) {
 		return Address{}, err
 	}
 	a.SubExternal = external
+	if a.PanelPort, _, err = Get[int](ctx, s, KeyPanelPort); err != nil {
+		return Address{}, err
+	}
+	if a.SubPort, _, err = Get[int](ctx, s, KeySubPort); err != nil {
+		return Address{}, err
+	}
 	return a, nil
 }
 
@@ -73,7 +81,7 @@ func (a Address) Names() []string {
 
 // Same says whether b is the same address.
 func (a Address) Same(b Address) bool {
-	return a.SubExternal == b.SubExternal && strings.EqualFold(a.Domain, b.Domain) && strings.EqualFold(a.SubDomain, b.SubDomain) && strings.EqualFold(a.PublicHost, b.PublicHost)
+	return a.PanelPort == b.PanelPort && a.SubPort == b.SubPort && a.SubExternal == b.SubExternal && strings.EqualFold(a.Domain, b.Domain) && strings.EqualFold(a.SubDomain, b.SubDomain) && strings.EqualFold(a.PublicHost, b.PublicHost)
 }
 
 // Former is a name the panel answered at before (KeyFormerDomains): its domain, or its
@@ -166,4 +174,17 @@ func (a Address) SubHost() string {
 func WithoutFormer(list []Former, name string) []Former {
 	name = FormerName(name)
 	return slices.DeleteFunc(slices.Clone(list), func(f Former) bool { return FormerName(f.Name) == name })
+}
+
+// SubEndpoint is the subscription address captured with this snapshot, including
+// its original port. Comparing snapshots must not read the current port for both.
+func (a Address) SubEndpoint() Endpoint {
+	port := a.PanelPort
+	if a.SubPort > 0 {
+		port = a.SubPort
+	}
+	if a.SubExternal && a.SubDomain != "" {
+		port = 443
+	}
+	return Endpoint{Host: a.SubHost(), Port: port}
 }

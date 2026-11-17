@@ -34,10 +34,7 @@ type Deps struct {
 // runs as the bot addon (cmd/mikan-telegram) on the updates and the events of the panel;
 // Panel is the panel's side.
 type Bot struct {
-	d                   Deps
-	setupMu             sync.Mutex
-	setupDone           bool
-	setupLang, setupURL string
+	d Deps
 
 	mu sync.Mutex
 	// Subscriptions somebody asked to take over: by subscription, and who was refused.
@@ -55,14 +52,6 @@ func (b *Bot) config(ctx context.Context) Config { return b.d.Backend.Config(ctx
 // the input field, in the bot's language. An error means some of it is not set: the caller
 // tries again.
 func (b *Bot) Started(ctx context.Context) error {
-	return b.refreshSetup(ctx, true)
-}
-
-// RefreshSetup follows address and language changes without repeating unchanged calls.
-func (b *Bot) RefreshSetup(ctx context.Context) error { return b.refreshSetup(ctx, false) }
-func (b *Bot) refreshSetup(ctx context.Context, force bool) error {
-	b.setupMu.Lock()
-	defer b.setupMu.Unlock()
 	var cfg Config
 	var url string
 	if remote, ok := b.d.Backend.(interface {
@@ -77,20 +66,14 @@ func (b *Bot) refreshSetup(ctx context.Context, force bool) error {
 		cfg = b.config(ctx)
 		url = b.miniAppURL(ctx, cfg)
 	}
-	if !force && b.setupDone && cfg.Lang == b.setupLang && url == b.setupURL {
-		return nil
-	}
 	w := wordsFor(cfg.Lang)
 	text := ""
 	if url != "" {
 		text = w.menuApp
 	}
-	// Either call may change Telegram before the other fails. Retry partial setups.
-	b.setupDone = false
 	if err := errors.Join(b.d.Client.SetCommands(ctx, w.commands), b.d.Client.SetMenuButton(ctx, text, url)); err != nil {
 		return err
 	}
-	b.setupDone, b.setupLang, b.setupURL = true, cfg.Lang, url
 	return nil
 }
 

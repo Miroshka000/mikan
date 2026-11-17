@@ -1,8 +1,6 @@
 package subsrc
 
 import (
-	"mikan/internal/subrelay"
-
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +14,7 @@ import (
 	"mikan/internal/panel/promo"
 	"mikan/internal/panel/server"
 	"mikan/internal/panel/store/db"
+	"mikan/internal/subrelay"
 )
 
 // The Telegram Mini App's JSON endpoints under "/tg/": the subscription page inside Telegram,

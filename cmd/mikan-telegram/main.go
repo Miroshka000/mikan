@@ -89,22 +89,10 @@ func (a *addon) setUp(ctx context.Context) {
 			return
 		}
 		if err == nil {
-			break
+			return
 		}
 		a.log.Warn("set up the chats", "err", err)
 		pace.Sleep(ctx, retryPause.Next(fails))
-	}
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := a.bot.RefreshSetup(ctx); err != nil && ctx.Err() == nil {
-				a.log.Warn("refresh chat setup", "err", err)
-			}
-		}
 	}
 }
 

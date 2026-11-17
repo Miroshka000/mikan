@@ -2,10 +2,11 @@ package api
 
 import (
 	"context"
-	"mikan/internal/panel/acme"
-	"mikan/internal/panel/settings"
 	"testing"
 	"time"
+
+	"mikan/internal/panel/acme"
+	"mikan/internal/panel/settings"
 )
 
 func TestExternalDomainCertificateIsStagedOnlyWhenReturningToPanel(t *testing.T) {

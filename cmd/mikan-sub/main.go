@@ -7,7 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"golang.org/x/crypto/acme"
 	"log/slog"
 	"net"
 	"net/http"
@@ -18,9 +17,13 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
+
 	"mikan/internal/subrelay"
 )
+
+var version = "dev"
 
 func main() {
 	if err := run(); err != nil {
@@ -30,7 +33,7 @@ func main() {
 }
 
 func run() error {
-	upstream := flag.String("upstream", "", "https://panel.example/<admin-path>/api/subscription")
+	upstream := flag.String("upstream", "", "panel HTTPS origin; /<path>/relay is appended (or supply an explicit relay URL)")
 	prefix := flag.String("path", "", "public subscription path (same as the panel)")
 	domain := flag.String("domain", "", "subscription DNS name; required for automatic HTTPS")
 	listen := flag.String("listen", ":443", "listen address; behind a CDN use -http -listen 127.0.0.1:8080")
@@ -46,7 +49,13 @@ func run() error {
 	cacheBytes := flag.Int("cache-bytes", 64<<20, "maximum combined saved profile/header bytes")
 	proxies := flag.String("trusted-proxies", "", "comma-separated trusted immediate proxy CIDRs; empty trusts none")
 	ipHeader := flag.String("client-ip-header", "X-Forwarded-For", "trusted proxy client header: X-Forwarded-For or CF-Connecting-IP")
+	showVersion := flag.Bool("version", false, "print version and exit")
+	roaming := flag.Bool("offline-roaming", false, "ignore IP for saved HWID variants; requires no IP-dependent policy")
 	flag.Parse()
+	if *showVersion {
+		fmt.Printf("mikan-sub %s\n", version)
+		return nil
+	}
 	if *failureThreshold < 0 || *retryDelay <= 0 {
 		return fmt.Errorf("invalid circuit breaker configuration")
 	}
@@ -81,10 +90,12 @@ func run() error {
 			slog.Warn("HTTP listener is public; restrict it to your TLS reverse proxy", "listen", *listen)
 		}
 	}
+	p.SetOfflineRoaming(*roaming)
 	p.SetOfflineTTL(*offlineTTL)
 	p.SetCircuitBreaker(*failureThreshold, *retryDelay)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go p.RunMaintenance(ctx)
 	slog.Info("mikan-sub starting", "listen", *listen, "http", *plain, "cache_entries", *cacheEntries, "offline_ttl", *offlineTTL)
 	srv := &http.Server{Addr: *listen, Handler: p, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 	var challenge *http.Server

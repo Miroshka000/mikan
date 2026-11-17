@@ -2,6 +2,7 @@ package subrelay
 
 import (
 	"bytes"
+	"container/list"
 	"errors"
 	"fmt"
 	"io"
@@ -39,7 +40,10 @@ type Proxy struct {
 	invalidationFloor       uint64
 	activeProfiles          map[string]int
 	profileLimit, byteLimit int
-	cacheClock              uint64
+	profileLRU              list.List
+	profilePaths            map[string]map[string]struct{}
+	offlineRoaming          bool
+	lastUpstreamWarning     time.Time
 	trustedProxies          []netip.Prefix
 	clientIPHeader          string
 	relayProof              string
@@ -57,9 +61,12 @@ func New(upstream, token, prefix string) (*Proxy, error) {
 	if token == "" || strings.ContainsAny(token, "\r\n") || prefix == "" || strings.ContainsAny(prefix, "/\\%?#") {
 		return nil, fmt.Errorf("token and a single public path segment are required")
 	}
+	if u.Path == "" || u.Path == "/" {
+		u.Path = "/" + prefix + "/relay"
+	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxResponseHeaderBytes = 64 << 10
-	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, invalidated: map[string]uint64{}, activeProfiles: map[string]int{}, profileLimit: maxProfiles, byteLimit: maxProfileBytes, inflight: make(chan struct{}, 16), uploads: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
+	return &Proxy{upstream: u, token: token, prefix: "/" + prefix, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, cache: map[string]entry{}, profiles: map[string]savedProfile{}, profilePaths: map[string]map[string]struct{}{}, invalidated: map[string]uint64{}, activeProfiles: map[string]int{}, profileLimit: maxProfiles, byteLimit: maxProfileBytes, inflight: make(chan struct{}, 16), uploads: make(chan struct{}, 16), offlineTTL: time.Hour, breaker: breaker{threshold: 3, cooldown: 10 * time.Second}, now: time.Now}, nil
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +139,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	key := ""
 	if profileRequest(r, rel) {
-		key = profileKey(req, r.Host)
+		key = p.profileCacheKey(req, r.Host)
 	}
 	tracked := key != ""
 	permit := probePermit{}
@@ -163,7 +170,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		failed = true
 		p.stats.failures.Add(1)
-		slog.Warn("subscription upstream unavailable", "status", 502)
+		p.warnUpstreamUnavailable()
 		if p.offline(w, r, key) {
 			return
 		}
@@ -272,4 +279,18 @@ func (p *Proxy) busy(w http.ResponseWriter) {
 	p.stats.rejected.Add(1)
 	w.Header().Set("Retry-After", "1")
 	http.Error(w, "subscription service busy", 503)
+}
+
+// Outage traffic must not turn stderr into an unbounded per-request work queue.
+func (p *Proxy) warnUpstreamUnavailable() {
+	now := p.now()
+	p.mu.Lock()
+	emit := p.lastUpstreamWarning.IsZero() || now.Sub(p.lastUpstreamWarning) >= time.Minute || now.Before(p.lastUpstreamWarning)
+	if emit {
+		p.lastUpstreamWarning = now
+	}
+	p.mu.Unlock()
+	if emit {
+		slog.Warn("subscription upstream unavailable", "status", 502)
+	}
 }

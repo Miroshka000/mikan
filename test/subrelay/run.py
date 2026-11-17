@@ -4,6 +4,7 @@ import argparse
 import http.client
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import ssl
@@ -23,16 +24,30 @@ def tls_handshake(number, context, name="sub.test", timeout=8):
             pass
 
 
-def require_issuance_failure(probe, seconds=12):
-    """Any trusted TLS handshake fails this control, independent of HTTP delivery."""
+def failed_http_challenge(log):
+    # This control uses a fresh CA and one requesting edge. TLS-ALPN fails first;
+    # require the HTTP attempt and its subsequent INVALID completion, not just any error.
+    attempt = re.search(r"Attempting to validate w/ HTTP: http://sub\.test:81/\.well-known/acme-challenge/\S+", log)
+    return bool(attempt and re.search(r"authz \S+ set INVALID by completed challenge", log[attempt.end():]))
+
+
+def require_issuance_failure(probe, *, listener_ready, challenge_failed, seconds=12):
+    """A dead listener or absent validation attempt must never pass this control."""
+    listener_ready()
     deadline = time.monotonic() + seconds
+    failures = 0
     while time.monotonic() < deadline:
         try:
             probe()
-        except OSError:
-            time.sleep(0.2)
+        except ssl.SSLError:
+            failures += 1
+        except OSError as error:
+            raise AssertionError("edge listener unavailable during ACME control") from error
         else:
             raise AssertionError("certificate issued despite broken HTTP-01 and TLS-ALPN")
+        listener_ready()
+        time.sleep(0.2)
+    assert failures and challenge_failed(), "no failed HTTP-01 challenge was observed"
 
 
 def main():
@@ -118,13 +133,13 @@ def main():
             docker("start", origin)
             copy_fixture(origin, cert, "/trust/test-ca.pem")
             edges = []
-            for index in range(2):
+            for index in range(1 if args.break_http_01 else 2):
                 name, volume = prefix + "-edge-" + str(index), prefix + "-acme-" + str(index)
                 volumes.append(volume)
                 options = ["--network", network]
                 if index == 0:
                     options += ["--network-alias", "sub.test"]
-                create(name, *options, "--read-only", "--cap-drop=ALL", "--cap-add=NET_BIND_SERVICE", "-p", "127.0.0.1::443", "-v", volume + ":/data/acme", "-e", "MIKAN_SUB_TOKEN=ci-subscription-token", "-v", trust_volume + ":/test-ca:ro", "-e", "SSL_CERT_FILE=/test-ca/test-ca.pem", args.image, "-upstream", "https://panel.test:8443/api/subscription", "-path", "sub", "-domain", "sub.test", "-acme-directory", "https://pebble:14000/dir", "-failure-threshold", "1", "-retry-delay", "30s", "-metrics-listen", "127.0.0.1:9091")
+                create(name, *options, "--read-only", "--cap-drop=ALL", "--cap-add=NET_BIND_SERVICE", "-p", "127.0.0.1::443", "-v", volume + ":/data/acme", "-e", "MIKAN_SUB_TOKEN=ci-subscription-token", "-v", trust_volume + ":/test-ca:ro", "-e", "SSL_CERT_FILE=/test-ca/test-ca.pem", args.image, "-upstream", "https://panel.test:8443", "-path", "sub", "-domain", "sub.test", "-acme-directory", "https://pebble:14000/dir", "-failure-threshold", "1", "-retry-delay", "30s", "-metrics-listen", "127.0.0.1:9091")
                 docker("start", name)
                 edges.append((name, port(name, 443)))
             def profile(number):
@@ -133,7 +148,16 @@ def main():
                 assert not any(name.startswith("X-Mikan-Relay-") for name in headers), "private authentication metadata leaked"
                 return headers
             if args.break_http_01:
-                require_issuance_failure(lambda: tls_handshake(edges[0][1], issued_trust))
+                def listener_ready():
+                    assert docker("inspect", "--format", "{{.State.Running}}", edges[0][0]) == "true", "edge exited"
+                    with socket.create_connection(("127.0.0.1", edges[0][1]), timeout=3):
+                        pass
+                until(listener_ready)
+                require_issuance_failure(
+                    lambda: tls_handshake(edges[0][1], issued_trust),
+                    listener_ready=listener_ready,
+                    challenge_failed=lambda: failed_http_challenge(docker("logs", ca, stderr=subprocess.STDOUT)),
+                )
                 print("PASS: broken HTTP-01 cannot issue a certificate (TLS-ALPN is also unreachable)", flush=True)
                 return
             # Pebble uses an unreachable TLS-ALPN port (4443), forcing HTTP-01.

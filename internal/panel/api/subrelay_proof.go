@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"mikan/internal/panel/store/db"
 )
 
 const relayProofSetting = "sub_relay_proof_key"
@@ -19,7 +21,7 @@ const relayProofSetting = "sub_relay_proof_key"
 // grants only that diagnostic, not subscription access, and survives key deletion.
 // Random/other-scope tokens cannot obtain it or fingerprint the endpoint with it.
 type relayProofSigner struct {
-	db  *sql.DB
+	q   *db.Queries
 	mu  sync.Mutex
 	key []byte
 }
@@ -28,13 +30,11 @@ func (s *relayProofSigner) proof(ctx context.Context, token string, create bool)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.key) == 0 {
-		var raw string
-		err := s.db.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = $1", relayProofSetting).Scan(&raw)
+		raw, err := s.q.GetSetting(ctx, relayProofSetting)
 		if errors.Is(err, sql.ErrNoRows) && create {
 			candidate, _ := json.Marshal(rand.Text() + rand.Text())
 			// Concurrent first requests keep the same winner; no secret can be overwritten.
-			err = s.db.QueryRowContext(ctx, `INSERT INTO settings (key,value) VALUES ($1,$2)
-    ON CONFLICT (key) DO UPDATE SET key=EXCLUDED.key RETURNING value`, relayProofSetting, string(candidate)).Scan(&raw)
+			raw, err = s.q.GetOrCreateSetting(ctx, db.GetOrCreateSettingParams{Key: relayProofSetting, Value: string(candidate)})
 		}
 		if errors.Is(err, sql.ErrNoRows) && !create {
 			return "", nil

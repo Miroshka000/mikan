@@ -573,7 +573,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 	}
 	// The address before the change: the names it leaves behind keep working (former names).
-	address := b.SubExternal != nil || b.SubDomain != nil || b.PublicHost != nil || b.Domain != nil
+	address := b.SubPort != nil || b.SubExternal != nil || b.SubDomain != nil || b.PublicHost != nil || b.Domain != nil
 	prev, err := h.d.Settings.Address(ctx)
 	if err != nil {
 		return nil, err
@@ -649,10 +649,6 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 				h.d.SubDomain(dom)
 			}
 		}
-	}
-	// The bot's Mini App button points at the subscription page.
-	if (b.SubPort != nil || b.SubDomain != nil || b.SubExternal != nil) && h.d.Gateway != nil {
-		h.d.Gateway.Reload()
 	}
 	// The panel's own node keeps the subscription port open to its users (nodesync.ownPorts).
 	if b.SubPort != nil {

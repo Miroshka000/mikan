@@ -120,25 +120,28 @@ func (a *addressFollower) follow(ctx context.Context, prev, next settings.Addres
 
 // moveMenuButton points the bot's Mini App button at the subscriptions' new address.
 func (a *addressFollower) moveMenuButton(ctx context.Context, prev, next settings.Address) {
-	if a.gateway == nil || strings.EqualFold(prev.SubHost(), next.SubHost()) {
+	if a.gateway == nil {
 		return
 	}
-	ep, err := a.set.SubEndpoint(ctx)
-	if err != nil {
+	// Old saved snapshots did not contain ports; adopt current ports once on upgrade.
+	if prev.PanelPort == 0 {
+		prev.PanelPort, prev.SubPort = next.PanelPort, next.SubPort
+	}
+	from, to := prev.SubEndpoint(), next.SubEndpoint()
+	if strings.EqualFold(from.Host, to.Host) && from.Port == to.Port {
 		return
 	}
 	paths, err := a.set.Paths(ctx)
 	if err != nil || paths.Sub == "" {
 		return
 	}
-	base := func(host string) string {
-		u := settings.Endpoint{Host: host, Port: ep.Port}.URL()
-		if u == "" {
+	base := func(ep settings.Endpoint) string {
+		if ep.URL() == "" {
 			return ""
 		}
-		return u + "/" + paths.Sub
+		return ep.URL() + "/" + paths.Sub
 	}
-	moved, err := a.gateway.MoveMenuButton(ctx, base(prev.SubHost()), base(next.SubHost()))
+	moved, err := a.gateway.MoveMenuButton(ctx, base(from), base(to))
 	switch {
 	case err != nil:
 		a.log.Warn("address: the bot's Mini App button not moved", "err", err)

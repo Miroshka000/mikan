@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -169,15 +170,25 @@ func (g *Gateway) Go(f func()) { g.running.Go(f) }
 // the subscriptions' address changed, and the bot sets the button only when it starts.
 // moved is false when there was nothing to move, the bot being off included.
 func (g *Gateway) MoveMenuButton(ctx context.Context, from, to string) (moved bool, err error) {
+	normalize := func(raw string) string {
+		u, err := url.Parse(raw)
+		if err == nil && u.Scheme == "https" && u.Port() == "443" {
+			u.Host = strings.TrimSuffix(u.Host, ":443")
+			return u.String()
+		}
+		return raw
+	}
+	from, to = normalize(from), normalize(to)
 	c := g.Client()
 	if c == nil || from == "" || to == "" || from == to {
 		return false, nil
 	}
-	text, url, err := c.MenuButton(ctx)
-	if err != nil || url == "" || !strings.HasPrefix(url, from) {
+	text, current, err := c.MenuButton(ctx)
+	current = normalize(current)
+	if err != nil || current == "" || !strings.HasPrefix(current, from) {
 		return false, err
 	}
-	rest := strings.TrimPrefix(url, from)
+	rest := strings.TrimPrefix(current, from)
 	if rest != "" && !strings.HasPrefix(rest, "/") && !strings.HasPrefix(rest, "?") && !strings.HasPrefix(rest, "#") {
 		return false, nil // another path that only begins like the old one
 	}
