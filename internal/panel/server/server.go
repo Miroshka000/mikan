@@ -18,6 +18,7 @@ type Server struct {
 	paths  atomic.Pointer[settings.Paths]
 	admin  http.Handler
 	sub    http.Handler
+	relay  http.Handler // dedicated subscription key only, on the panel listener
 	legacy http.Handler // the old panel's links (settings.Paths.Legacy); nil: none
 	site   http.Handler // every other path (OwnSite); nil: NotFound
 	hsts   atomic.Pointer[func() bool]
@@ -25,6 +26,9 @@ type Server struct {
 	// like any unknown path (see nodehello). nil: none.
 	hello func(w http.ResponseWriter, r *http.Request) bool
 }
+
+// SetSubscriptionRelay installs the authenticated mikan-sub endpoint.
+func (s *Server) SetSubscriptionRelay(h http.Handler) { s.relay = h }
 
 // SetHello takes the handler of the nodes' hellos.
 func (s *Server) SetHello(h func(w http.ResponseWriter, r *http.Request) bool) { s.hello = h }
@@ -78,6 +82,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, admin bool) {
 	seg, rest, _ := strings.Cut(p[1:], "/")
 	paths := s.paths.Load()
 	switch {
+	case admin && s.relay != nil && strings.HasPrefix(p, "/api/subscription/"):
+		http.StripPrefix("/api/subscription", s.relay).ServeHTTP(w, r)
 	case admin && seg != "" && paths.Admin != "" && secure.Equal(seg, paths.Admin):
 		s.forward(w, r, s.admin, seg, rest, p)
 	case seg != "" && paths.Sub != "" && secure.Equal(seg, paths.Sub):

@@ -543,6 +543,7 @@ func NewPanel(st *store.Store, o Options) (*Panel, error) {
 	}))
 	adminMux.Handle("/", p.spa)
 	p.server = server.New(adminMux, subHandler)
+	p.server.SetSubscriptionRelay(api.SubscriptionRelay(deps, subHandler))
 	p.server.SetLegacy(subHandler.Legacy())
 	if o.DataDir != "" {
 		set := settings.New(st.Q)

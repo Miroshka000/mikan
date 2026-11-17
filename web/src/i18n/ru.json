@@ -2202,7 +2202,9 @@
       "certPending": "Нет сертификата",
       "drawerTitle": "Свой сертификат для подписки",
       "drawerLead": "Сертификат и ключ для {domain}: например, от certbot (fullchain.pem и privkey.pem). Панель отдаёт его только тем, кто приходит на домен подписки.",
-      "clearText": "Домен подписки снова получит сертификат автоматически. Пока он выпускается, клиенты получают ваш сертификат."
+      "clearText": "Домен подписки снова получит сертификат автоматически. Пока он выпускается, клиенты получают ваш сертификат.",
+      "external": "Внешний mikan-sub",
+      "externalHint": "Домен ведёт на отдельный сервер или CDN. Сертификат выпускает mikan-sub; ссылки используют HTTPS на порту 443."
     },
     "inactive": {
       "title": "Если подписка не работает",
@@ -2892,7 +2894,9 @@
     "download": "Скачать OpenAPI",
     "downloadHint": "Файл openapi.json для Postman, Insomnia, Swagger UI и генераторов клиентов. В нём уже стоит адрес этой панели, он секретный, не публикуйте файл.",
     "prometheus": "Prometheus и Grafana",
-    "prometheusHint": "GET /metrics отдаёт клиентов, трафик, ноды и протоколы в формате Prometheus. Собирайте его ключом на чтение; задача для prometheus.yml:"
+    "prometheusHint": "GET /metrics отдаёт клиентов, трафик, ноды и протоколы в формате Prometheus. Собирайте его ключом на чтение; задача для prometheus.yml:",
+    "scopeSubscription": "Подписки",
+    "scopeSubscriptionHint": "Только для mikan-sub: отдача подписок, без доступа к API панели."
   },
   "payments": {
     "title": "Платежи",

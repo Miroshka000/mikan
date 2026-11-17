@@ -337,6 +337,10 @@ func (m *Manager) ClearCustom() error {
 
 func (m *Manager) identifier(ctx context.Context) (string, error) {
 	if m.sub {
+		external, _, err := settings.Get[bool](ctx, m.set, settings.KeySubExternal)
+		if err != nil || external {
+			return "", err
+		}
 		return m.set.String(ctx, settings.KeySubDomain)
 	}
 	d, err := m.set.String(ctx, settings.KeyDomain)

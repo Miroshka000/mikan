@@ -49,7 +49,7 @@ type APIKeyView struct {
 	ID         int64      `json:"id"`
 	Name       string     `json:"name"`
 	Prefix     string     `json:"prefix" doc:"Первые символы ключа, чтобы отличать ключи"`
-	Scope      string     `json:"scope" enum:"read,full"`
+	Scope      string     `json:"scope" enum:"read,full,subscription"`
 	CreatedAt  time.Time  `json:"created_at"`
 	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
@@ -61,7 +61,7 @@ type apiKeysOutput struct{ Body []APIKeyView }
 type createAPIKeyInput struct {
 	Body struct {
 		Name       string `json:"name" minLength:"1" maxLength:"60"`
-		Scope      string `json:"scope" enum:"read,full" doc:"read — только GET-запросы, без ссылок подписок и секретных адресов; full — изменения, кроме входа, сессий, ключей и операций, где уходят деньги, ключи и адреса клиентов (в справочнике помечены «только сессия»)"`
+		Scope      string `json:"scope" enum:"read,full,subscription" doc:"subscription — только mikan-sub; read — только GET-запросы, без ссылок подписок и секретных адресов; full — изменения, кроме входа, сессий, ключей и операций, где уходят деньги, ключи и адреса клиентов (в справочнике помечены «только сессия»)"`
 		ExpireDays int    `json:"expire_days,omitempty" minimum:"0" maximum:"3650" doc:"Срок в днях; 0 — пока не отзовут"`
 		Password   string `json:"password" minLength:"1" maxLength:"256" doc:"Пароль админа: ключ не выпускается из одной лишь украденной сессии"`
 		TOTP       string `json:"totp,omitempty" maxLength:"16" doc:"Код из приложения, если включена 2FA"`
@@ -195,6 +195,10 @@ func (h *handlers) bearer(ctx huma.Context, next func(huma.Context), mutating bo
 	if err != nil || (key.ExpiresAt.Valid && key.ExpiresAt.Int64 <= now.Unix()) {
 		h.d.IPLimit.Fail(ipKey, now)
 		_ = huma.WriteErr(h.api, ctx, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if key.Scope == "subscription" {
+		_ = huma.WriteErr(h.api, ctx, http.StatusForbidden, "subscription_only_key")
 		return
 	}
 	op := ctx.Operation()

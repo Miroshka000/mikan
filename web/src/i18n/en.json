@@ -2194,7 +2194,7 @@
       "title": "A domain of its own for subscriptions",
       "sub": "Subscription links on a domain or subdomain of their own, not on the panel's address",
       "field": "Domain for links",
-      "hint": "Point its A record at this server. It must differ from the panel's domain ({domain}).",
+      "hint": "Point its A record at the panel, or at mikan-sub with external mode enabled. It must differ from the panel's domain ({domain}).",
       "note": "Links handed out before keep working. This domain opens subscriptions only; the admin panel stays on the panel's address. When the panel moves, move the domain: clients keep their links.",
       "off": "Remove the domain",
       "cert": "Certificate for subscriptions",
@@ -2202,7 +2202,9 @@
       "certPending": "No certificate",
       "drawerTitle": "Own certificate for subscriptions",
       "drawerLead": "A certificate and key for {domain}, from certbot for example (fullchain.pem and privkey.pem). The panel serves it only to those who come to the subscription domain.",
-      "clearText": "The subscription domain gets its certificate automatically again. Until it is issued, clients get yours."
+      "clearText": "The subscription domain gets its certificate automatically again. Until it is issued, clients get yours.",
+      "external": "External mikan-sub",
+      "externalHint": "The domain points to another server or CDN. mikan-sub manages its certificate and serves links on HTTPS port 443."
     },
     "inactive": {
       "title": "When a subscription does not work",
@@ -2892,7 +2894,9 @@
     "download": "Download OpenAPI",
     "downloadHint": "openapi.json for Postman, Insomnia, Swagger UI and client generators. It carries this panel's address, which is secret, so do not publish the file.",
     "prometheus": "Prometheus and Grafana",
-    "prometheusHint": "GET /metrics gives clients, traffic, nodes and protocols in the Prometheus format. Scrape it with a read key; this is the job for prometheus.yml:"
+    "prometheusHint": "GET /metrics gives clients, traffic, nodes and protocols in the Prometheus format. Scrape it with a read key; this is the job for prometheus.yml:",
+    "scopeSubscription": "Subscriptions",
+    "scopeSubscriptionHint": "For mikan-sub only: serve subscriptions, with no access to the panel API."
   },
   "payments": {
     "title": "Payments",

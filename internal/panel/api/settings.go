@@ -40,6 +40,7 @@ type SettingsView struct {
 	BrandLogoURL   string `json:"brand_logo_url" doc:"Логотип: https, PNG, WebP или JPEG до 512 КБ; пусто — значок приложения"`
 	PublicHost     string `json:"public_host"`
 	Domain         string `json:"domain"`
+	SubExternal    bool   `json:"sub_external" doc:"Домен подписки обслуживает внешний mikan-sub"`
 	SubDomain      string `json:"sub_domain" doc:"Свой домен для ссылок подписки; пусто — адрес панели"`
 	// SubCertificate is the subscription domain's own certificate; absent in development.
 	SubCertificate *acme.Status `json:"sub_certificate,omitempty" doc:"Сертификат домена подписки: kind off — домен не задан"`
@@ -113,6 +114,7 @@ type patchSettingsBody = struct {
 	HappCrypt      *string              `json:"happ_crypt,omitempty" enum:"off,api,local"`
 	PublicHost     *string              `json:"public_host,omitempty" maxLength:"253"`
 	Domain         *string              `json:"domain,omitempty" maxLength:"253"`
+	SubExternal    *bool                `json:"sub_external,omitempty"`
 	SubDomain      *string              `json:"sub_domain,omitempty" maxLength:"253" doc:"Домен для ссылок подписки, отдельный от домена панели; пусто — убрать. Старые ссылки продолжают работать"`
 	QuietHourUTC   *int                 `json:"quiet_hour_utc,omitempty" minimum:"0" maximum:"23"`
 	SubGroupMain   *string              `json:"sub_group_main,omitempty" maxLength:"200"`
@@ -186,6 +188,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	get(settings.KeyPublicHost, &v.PublicHost)
 	get(settings.KeyDomain, &v.Domain)
 	get(settings.KeySubDomain, &v.SubDomain)
+	if err == nil {
+		v.SubExternal, _, err = settings.Get[bool](ctx, h.d.Settings, settings.KeySubExternal)
+	}
 	get(settings.KeyGroupMain, &v.SubGroupMain)
 	get(settings.KeyGroupAuto, &v.SubGroupAuto)
 	get(settings.KeyRouting, &v.SubRouting)
@@ -296,7 +301,7 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if h.d.Cert != nil {
 		v.Certificate = h.d.Cert()
 	}
-	if h.d.SubCerts != nil {
+	if h.d.SubCerts != nil && !v.SubExternal {
 		st := h.d.SubCerts.Status()
 		v.SubCertificate = &st
 	}
@@ -493,7 +498,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 			}
 		}
 	}
-	if (b.SubDomain != nil || b.PublicHost != nil || b.Domain != nil) && len(details) == 0 {
+	if (b.SubDomain != nil || b.SubExternal != nil || b.PublicHost != nil || b.Domain != nil) && len(details) == 0 {
 		ds, err := h.checkSubDomain(ctx, b)
 		if err != nil {
 			return nil, err
@@ -543,8 +548,9 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		return nil, err
 	}
 	// The domain is served at once: its requests, its certificate, ordered now.
-	if b.SubDomain != nil && h.d.SubDomain != nil {
-		h.d.SubDomain(strings.TrimSpace(*b.SubDomain))
+	if (b.SubDomain != nil || b.SubExternal != nil) && h.d.SubDomain != nil {
+		dom, _ := h.d.Settings.String(ctx, settings.KeySubDomain)
+		h.d.SubDomain(dom)
 	}
 	// The bot's Mini App button points at the subscription page.
 	if (b.SubPort != nil || b.SubDomain != nil) && h.d.Gateway != nil {

@@ -28,8 +28,9 @@ const (
 	// KeySubDomain is a domain of its own for subscription links, apart from the panel's:
 	// its own certificate (acme.NewSub), the panel's address keeps serving the links handed
 	// out before. Empty: the links are on the panel's address.
-	KeySubDomain = "sub_domain"
-	KeyACMEEmail = "acme_email"
+	KeySubDomain   = "sub_domain"
+	KeySubExternal = "sub_external" // domain is served by mikan-sub, with its own ACME
+	KeyACMEEmail   = "acme_email"
 	// KeyACMECA is the certificate authority of the panel and its nodes (acme.ValidCA);
 	// unset: Let's Encrypt. KeyACMEEABKID and KeyACMEEABHMAC are Google Trust Services'
 	// external account key; the HMAC is a secret and never shown back.
@@ -367,10 +368,18 @@ func (s *Settings) SubEndpoint(ctx context.Context) (Endpoint, error) {
 	if err != nil {
 		return ep, err
 	}
+	hasSubDomain := false
 	if d, err := s.String(ctx, KeySubDomain); err != nil {
 		return ep, err
 	} else if d != "" {
 		ep.Host = d
+		hasSubDomain = true
+	}
+	if external, _, err := Get[bool](ctx, s, KeySubExternal); err != nil {
+		return ep, err
+	} else if external && hasSubDomain {
+		ep.Port = 443
+		return ep, nil
 	}
 	if p, _, err := Get[int](ctx, s, KeySubPort); err != nil {
 		return ep, err

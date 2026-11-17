@@ -2811,7 +2811,7 @@ export interface components {
             /** @description Первые символы ключа, чтобы отличать ключи */
             prefix: string;
             /** @enum {string} */
-            scope: "read" | "full";
+            scope: "read" | "full" | "subscription";
         };
         AddSourceInputBody: {
             /** @description Публичный ключ автора, ed25519 в base64, если админ знает его заранее: источник принимается, только если подписан им */
@@ -3517,10 +3517,10 @@ export interface components {
             /** @description Пароль админа: ключ не выпускается из одной лишь украденной сессии */
             password: string;
             /**
-             * @description read — только GET-запросы, без ссылок подписок и секретных адресов; full — изменения, кроме входа, сессий, ключей и операций, где уходят деньги, ключи и адреса клиентов (в справочнике помечены «только сессия»)
+             * @description subscription — только mikan-sub; read — только GET-запросы, без ссылок подписок и секретных адресов; full — изменения, кроме входа, сессий, ключей и операций, где уходят деньги, ключи и адреса клиентов (в справочнике помечены «только сессия»)
              * @enum {string}
              */
-            scope: "read" | "full";
+            scope: "read" | "full" | "subscription";
             /** @description Код из приложения, если включена 2FA */
             totp?: string;
         };
@@ -3540,7 +3540,7 @@ export interface components {
             /** @description Первые символы ключа, чтобы отличать ключи */
             prefix: string;
             /** @enum {string} */
-            scope: "read" | "full";
+            scope: "read" | "full" | "subscription";
         };
         CreateCampaignInputBody: {
             /** @description Метка в ссылке: латиница, цифры, _ и -; пусто — случайная */
@@ -5068,6 +5068,7 @@ export interface components {
             sub_announce_url?: string;
             /** @description Домен для ссылок подписки, отдельный от домена панели; пусто — убрать. Старые ссылки продолжают работать */
             sub_domain?: string;
+            sub_external?: boolean;
             sub_group_auto?: string;
             sub_group_main?: string;
             sub_inactive_server?: boolean;
@@ -5894,6 +5895,8 @@ export interface components {
             sub_certificate?: components["schemas"]["Status"];
             /** @description Свой домен для ссылок подписки; пусто — адрес панели */
             sub_domain: string;
+            /** @description Домен подписки обслуживает внешний mikan-sub */
+            sub_external: boolean;
             /** @description Группа автовыбора самого быстрого подключения */
             sub_group_auto: string;
             /** @description Главная группа в Clash-приложениях */
