@@ -80,6 +80,8 @@ export default defineConfig({
 					translations: { en: 'Getting started' },
 					items: [
 						{ slug: 'start/overview' },
+						{ slug: 'start/citrus' },
+						{ slug: 'start/compare' },
 						{ slug: 'start/install' },
 						{ slug: 'start/first-steps' },
 						{ slug: 'start/domain' },
