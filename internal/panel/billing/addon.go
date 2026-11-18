@@ -310,24 +310,36 @@ func (s *Service) AddonWebhookURL(ctx context.Context, id, subBase string) strin
 	return subBase + "/pay/addon/" + id + "/" + tok
 }
 
-func (s *Service) openAddonInvoice(ctx context.Context, p db.Payment, description string) (sql.NullString, string, error) {
+func (s *Service) openAddonInvoice(ctx context.Context, p db.Payment, description, returnURL, email string) (sql.NullString, string, error) {
 	id := model.AddonID(p.Provider)
 	cl, cfg, err := s.addonClient(ctx, id)
 	if err != nil {
 		return sql.NullString{}, "", err
 	}
-	// Where the buyer goes back after paying: the bot, or Telegram itself while it is off.
-	ret, sub := "https://t.me", ""
-	if tg := s.telegram(); tg != nil {
-		if u := tg.BotURL(ctx); u != "" {
-			ret = u
+	returnTo := returnURL
+	if returnTo == "" {
+		// Telegram invoices return to the bot if it is running.
+		returnTo = "https://t.me"
+		if tg := s.telegram(); tg != nil {
+			if u := tg.BotURL(ctx); u != "" {
+				returnTo = u
+			}
 		}
 	}
+	sub := ""
 	if s.d.SubBase != nil {
 		sub = s.d.SubBase(ctx)
 	}
+	browserCheckout := false
+	if returnURL != "" {
+		info, _ := s.d.Addons.Info(ctx, id)
+		browserCheckout = info.Can("browser_checkout")
+		if !info.Can("receipt_email") {
+			email = ""
+		}
+	}
 	inv, err := cl.CreateInvoice(ctx, addons.InvoiceRequest{Settings: cfg.Values, PaymentID: p.ID, IdempotencyKey: "mikan-" + strconv.FormatInt(p.ID, 10),
-		Amount: p.Amount, Currency: p.Currency, Description: description, ReturnURL: ret, WebhookURL: s.AddonWebhookURL(ctx, id, sub)})
+		Amount: p.Amount, Currency: p.Currency, Description: description, ReturnURL: returnTo, ReceiptEmail: email, BrowserCheckout: browserCheckout, WebhookURL: s.AddonWebhookURL(ctx, id, sub)})
 	if err != nil {
 		return sql.NullString{}, "", err
 	}

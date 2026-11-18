@@ -178,14 +178,16 @@ func (c *Client) Check(ctx context.Context, s Settings) error {
 }
 
 type InvoiceRequest struct {
-	Settings       Settings `json:"settings"`
-	PaymentID      int64    `json:"payment_id"`
-	IdempotencyKey string   `json:"idempotency_key"`
-	Amount         int64    `json:"amount"`
-	Currency       string   `json:"currency"`
-	Description    string   `json:"description"`
-	ReturnURL      string   `json:"return_url"`
-	WebhookURL     string   `json:"webhook_url"`
+	Settings        Settings `json:"settings"`
+	PaymentID       int64    `json:"payment_id"`
+	IdempotencyKey  string   `json:"idempotency_key"`
+	Amount          int64    `json:"amount"`
+	Currency        string   `json:"currency"`
+	Description     string   `json:"description"`
+	ReturnURL       string   `json:"return_url"`
+	ReceiptEmail    string   `json:"receipt_email,omitempty"`
+	BrowserCheckout bool     `json:"browser_checkout,omitempty"`
+	WebhookURL      string   `json:"webhook_url"`
 }
 
 type Invoice struct {

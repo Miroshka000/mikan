@@ -16,8 +16,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"mikan/internal/panel/auth"
 	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/panelimport"
@@ -81,15 +83,19 @@ type Handler struct {
 	devices  Binder
 	reissuer Reissuer // nil: the Mini App has no new-link button
 	// trustProxy takes the client's IP from X-Forwarded-For (a reverse proxy in front).
-	trustProxy bool
-	tg         Telegram         // nil: no bot
-	shop       *billing.Service // nil: nothing on sale
-	promos     *promo.Service
-	pages      *subpage.Service // nil: the page as built, nothing of the admin's
-	balance    balancer         // nil: every node shows
-	happ       *HappLinks       // Happ crypt links, kept per subscription
-	log        *slog.Logger
-	promoLimit promoLimiter
+	trustProxy      bool
+	tg              Telegram         // nil: no bot
+	shop            *billing.Service // nil: nothing on sale
+	promos          *promo.Service
+	pages           *subpage.Service // nil: the page as built, nothing of the admin's
+	balance         balancer         // nil: every node shows
+	happ            *HappLinks       // Happ crypt links, kept per subscription
+	log             *slog.Logger
+	promoLimit      promoLimiter
+	shopPayLimit    *auth.Limiter
+	shopOffersLimit *auth.Limiter
+	shopStatusLimit *auth.Limiter
+	shopLimitSweep  atomic.Int64
 	// profiles answers the fetches of the subscriptions this handler is the Source of.
 	profiles *serve.Handler
 }
@@ -140,7 +146,10 @@ func (h *Handler) SetBalancer(b *domain.Balancer) {
 func (h *Handler) SetPages(s *subpage.Service) { h.pages = s }
 
 func NewHandler(st *store.Store, cfg func(ctx context.Context) (Config, error), page http.Handler, now func() time.Time, devices Binder, trustProxy bool) *Handler {
-	h := &Handler{st: st, cfg: cfg, page: page, now: now, devices: devices, trustProxy: trustProxy, log: slog.New(slog.DiscardHandler), happ: NewHappLinks()}
+	h := &Handler{st: st, cfg: cfg, page: page, now: now, devices: devices, trustProxy: trustProxy, log: slog.New(slog.DiscardHandler), happ: NewHappLinks(),
+		shopPayLimit:    auth.NewLimiter(20, time.Minute, time.Minute, time.Minute),
+		shopOffersLimit: auth.NewLimiter(60, time.Minute, time.Minute, time.Minute),
+		shopStatusLimit: auth.NewLimiter(120, time.Minute, time.Minute, time.Minute)}
 	h.profiles = serve.New(h, now, h.clientIP)
 	if page != nil {
 		h.profiles.SetPage(h.servePage)
@@ -186,6 +195,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	token, rest, _ := strings.Cut(p, "/")
 	if token == "tg" && h.tg != nil {
 		h.miniApp(w, r, rest)
+		return
+	}
+	if token == "shop" && h.shop != nil {
+		h.webShop(w, r, rest)
 		return
 	}
 	if token == "pay" && h.shop != nil {

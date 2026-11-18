@@ -98,3 +98,45 @@ func TestConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestShopProxy(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(RelayAuthHeader, "1")
+		w.Header().Set(RelayProofHeader, "proof")
+		if r.Header.Get("Authorization") != "Bearer edge-key" || r.Header.Get("Origin") != "https://sub.example" {
+			t.Error("relay key or browser origin missing")
+		}
+		body, err := io.ReadAll(r.Body)
+		if err != nil || (r.Method == http.MethodPost && string(body) != "{}") {
+			t.Errorf("request body: %q, %v", body, err)
+		}
+		_, _ = io.WriteString(w, r.Method+" "+r.URL.Path)
+	}))
+	t.Cleanup(upstream.Close)
+	p, err := New(upstream.URL, "edge-key", "sub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.client = upstream.Client()
+	for _, tc := range []struct{ method, path, body string }{
+		{http.MethodGet, "/shop", ""},
+		{http.MethodPost, "/shop/offers", "{}"},
+		{http.MethodPost, "/shop/pay", "{}"},
+		{http.MethodPost, "/shop/status", "{}"},
+	} {
+		r := httptest.NewRequest(tc.method, "https://sub.example/sub"+tc.path, strings.NewReader(tc.body))
+		r.Header.Set("Origin", "https://sub.example")
+		w := httptest.NewRecorder()
+		p.ServeHTTP(w, r)
+		if w.Code != http.StatusOK || w.Body.String() != tc.method+" /sub/relay"+tc.path || w.Header().Get("Cache-Control") != "private, no-store" {
+			t.Fatalf("%s %s: %d %q %v", tc.method, tc.path, w.Code, w.Body.String(), w.Header())
+		}
+	}
+	for _, path := range []string{"/shop/unlisted", "/pay/webhook"} {
+		w := httptest.NewRecorder()
+		p.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "https://sub.example/sub"+path, nil))
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("unexpected relay path %s: %d", path, w.Code)
+		}
+	}
+}

@@ -9,9 +9,10 @@ import { Button, Skeleton } from "../components/ui";
 import { initI18n, t, useLocale } from "../i18n";
 import { subDicts } from "../i18n/sub";
 import { APPS } from "./apps";
-import { hashParams, initData, json, okData, openOutside, pageURL, postJSON, request, subRoot, tgEvent, tgMode, tokenOf } from "./net";
+import { hashParams, initData, json, okData, openOutside, pageURL, postJSON, request, subRoot, tgEvent, tgMode, tokenOf, webShopMode } from "./net";
 import { applyLook, readPage, titleOf, type DocView } from "./page";
 import { FreePlan, loadShop, Shop, type ShopData } from "./shop";
+import { BrowserShop } from "./browser-shop";
 import { PromoSection } from "./promo";
 import { ReissueSection } from "./reissue";
 import type { Info, TgSub } from "./types";
@@ -450,7 +451,9 @@ function SubPage() {
               {deviceShop}
               {freePlan}
             </>
-          ) : null
+          ) : (
+            <BrowserShop subToken={token} title={titleOf(config, "shop") || t("sub.shop")} onRenewed={() => loadInfo(subURL).catch(() => undefined)} />
+          )
         }
         reissue={
           tgMode ? (
@@ -475,6 +478,11 @@ function SubPage() {
   );
 }
 
+function WebShopPage() {
+  useLocale();
+  return <Shell><BrowserShop title={t("sub.shopNew")} /></Shell>;
+}
+
 function Shell({ brand, children }: { brand?: string; children: React.ReactNode }) {
   return (
     <PageShell config={config} brand={brand ?? page.brand} logo={asset(page.logo)} right={<LangSwitch className="ml-auto" />}>
@@ -491,7 +499,7 @@ void initI18n(subDicts).then(() => {
     <StrictMode>
       <ErrorBoundary>
         <PageBackdrop look={config.look} image={asset(page.background)} />
-        <SubPage />
+        {webShopMode ? <WebShopPage /> : <SubPage />}
       </ErrorBoundary>
     </StrictMode>,
   );
