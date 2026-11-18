@@ -68,7 +68,9 @@ SELECT * FROM payments WHERE status = 'paid' ORDER BY id;
 SELECT count(*) FROM payments WHERE tg_id = $1 AND status IN ('pending', 'paid') AND created_at > $2;
 
 -- name: ExpirePayments :execrows
-UPDATE payments SET status = 'expired' WHERE status = 'pending' AND created_at < $1;
+-- Incomplete web invoices are expired under their checkout lock (web_checkout.sql).
+UPDATE payments SET status = 'expired' WHERE status = 'pending' AND created_at < $1
+AND (external_id IS NOT NULL OR pay_url <> '' OR NOT starts_with(payload, 'web_'));
 
 -- name: ListPayments :many
 SELECT sqlc.embed(payments), CAST(COALESCE(users.name, '') AS TEXT) AS user_name, CAST(COALESCE(tg_chats.username, '') AS TEXT) AS tg_username

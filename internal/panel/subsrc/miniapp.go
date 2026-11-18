@@ -193,7 +193,7 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 	}
 	ctx := r.Context()
 	if rest == "shop" {
-		h.miniAppOffers(ctx, w, tgID, userID, fail)
+		h.shopOffers(ctx, w, tgID, userID, nil, fail)
 		return
 	}
 	if strings.TrimSpace(in.PromoCode) != "" && !h.promoLimit.allow(tgID, h.now(), in.PromoCode) {
@@ -226,20 +226,30 @@ func (h *Handler) miniAppShop(w http.ResponseWriter, r *http.Request, rest strin
 	_ = json.NewEncoder(w).Encode(map[string]string{"url": p.PayUrl, "provider": p.Provider})
 }
 
-// miniAppOffers answers "shop": the tariffs on sale, the payment providers, the traffic
+// shopOffers answers the shop catalog: the tariffs on sale, the payment providers, the traffic
 // packages of the subscription userID (0: none), and the priced trial when the Telegram
 // account tgID may buy it.
-func (h *Handler) miniAppOffers(ctx context.Context, w http.ResponseWriter, tgID, userID int64, fail func(int, string)) {
-	offers, av, err := h.shop.Offers(ctx)
+func (h *Handler) shopOffers(ctx context.Context, w http.ResponseWriter, tgID, userID int64, web *db.User, fail func(int, string)) {
+	var offers []billing.Offer
+	var av billing.Available
+	var err error
+	if web != nil {
+		offers, av, err = h.shop.WebOffers(ctx, *web)
+	} else {
+		offers, av, err = h.shop.Offers(ctx)
+	}
 	if err != nil {
 		fail(http.StatusInternalServerError, "internal")
 		return
 	}
 	cfg, _ := h.cfg(ctx)
-	packages, err := h.shopPackages(ctx, userID, cfg.Lang)
-	if err != nil {
-		fail(http.StatusInternalServerError, "internal")
-		return
+	packages := []shopPackage{}
+	if web == nil {
+		packages, err = h.shopPackages(ctx, userID, cfg.Lang)
+		if err != nil {
+			fail(http.StatusInternalServerError, "internal")
+			return
+		}
 	}
 	// A tariff's terms, the first one also in the offer itself (as before terms).
 	type term struct {
@@ -283,15 +293,17 @@ func (h *Handler) miniAppOffers(ctx context.Context, w http.ResponseWriter, tgID
 		Device *offer `json:"device,omitempty"`
 	}{AllowNew: h.shop.Config(ctx).AllowNew, Offers: []offer{}, Packages: packages, Addons: []addon{},
 		Providers: map[string]bool{billing.Stars: av.Stars}}
-	if fo, ok := h.shop.FreeOffer(ctx, tgID); ok {
-		out.Free = &freeOffer{Name: fo.Tariff.Name, Description: model.Describe(model.Tariff(fo.Tariff), fo.Tariff.DurationDays, cfg.Lang), Channel: fo.Channel}
-	}
-	if to, _, ok := h.shop.TrialOffer(ctx, tgID); ok {
-		out.Trial = &offer{ID: to.Tariff.ID, Name: to.Tariff.Name, Description: model.Describe(model.Tariff(to.Tariff), to.Tariff.DurationDays, cfg.Lang), Note: to.Tariff.Description, Stars: to.Stars, Rub: to.Rub, Terms: []term{}}
-	}
-	if userID != 0 {
-		if do, _, ok, _ := h.shop.DeviceOfferFor(ctx, userID); ok {
-			out.Device = &offer{ID: userID, Name: model.DescribeDevice(cfg.Lang), Description: model.DescribeDeviceOffer(do.Model(), cfg.Lang), Stars: do.Stars, Rub: do.Rub, Terms: []term{}}
+	if web == nil {
+		if fo, ok := h.shop.FreeOffer(ctx, tgID); ok {
+			out.Free = &freeOffer{Name: fo.Tariff.Name, Description: model.Describe(model.Tariff(fo.Tariff), fo.Tariff.DurationDays, cfg.Lang), Channel: fo.Channel}
+		}
+		if to, _, ok := h.shop.TrialOffer(ctx, tgID); ok {
+			out.Trial = &offer{ID: to.Tariff.ID, Name: to.Tariff.Name, Description: model.Describe(model.Tariff(to.Tariff), to.Tariff.DurationDays, cfg.Lang), Note: to.Tariff.Description, Stars: to.Stars, Rub: to.Rub, Terms: []term{}}
+		}
+		if userID != 0 {
+			if do, _, ok, _ := h.shop.DeviceOfferFor(ctx, userID); ok {
+				out.Device = &offer{ID: userID, Name: model.DescribeDevice(cfg.Lang), Description: model.DescribeDeviceOffer(do.Model(), cfg.Lang), Stars: do.Stars, Rub: do.Rub, Terms: []term{}}
+			}
 		}
 	}
 	for _, id := range av.Addons {

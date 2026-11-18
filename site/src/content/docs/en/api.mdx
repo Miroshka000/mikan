@@ -110,3 +110,33 @@ curl -H "Authorization: Bearer $KEY" "$BASE/balances/123456789"
 The amounts of a balance and its operations come in hundredths of the currency (the `currency` of the answer): positive is money in, negative is money out. An operation's `kind` is `topup`, `spend`, `refund` or `adjust`.
 
 Changing a balance moves a client's money, so an API key cannot call it: the answer is 403 `session_only`. It is available only from the administrator's session, with a body like `{"delta": -5000, "note": "refund for the downtime"}`. `delta` is in hundredths of the currency, a negative one debits, and the balance never goes below zero (the answer is `balance_low`). `note` is required and shown to the client in the balance history. Every change goes to the audit log.
+
+## Purchase and renewal API
+
+Send POST requests to the configured subscription base URL with `Content-Type: application/json`.
+The built-in storefront is at `<subscription base URL>/shop`. A third-party server or bot can
+call the same endpoints directly. With an external subscription domain, `mikan-sub` forwards
+the storefront and these requests to the panel. Payment providers send webhooks to the panel
+address shown in the adapter settings.
+
+| Path | Request body | Result |
+| --- | --- | --- |
+| `/shop/offers` | `{}` for a new purchase or `{"token":"<subscription token>"}` for a renewal | `offers` with plans and terms, and `addons` with payment methods. Prices are in kopecks. |
+| `/shop/pay` | `checkout_key`, `tariff_id`, optional `term_days`, `provider` from `addons`, and `email`. Add `token` for a renewal. | `status` and `url` after invoice creation. An email is required for a new purchase. |
+| `/shop/status` | `{"checkout_key":"<checkout key>"}` | `status`, `url` for an open invoice, `retryable: true` when invoice creation can be retried, and `token` for a new purchase while its issued link is current. |
+
+Generate `checkout_key` from 32 cryptographically random bytes encoded as 64 lowercase
+hexadecimal characters. Keep it private and use it for retries of the same order. If `term_days`
+is omitted, `/shop/pay` uses the tariff's first configured term. Send `term_days` from
+`/shop/offers` when paying for a different term.
+
+Check `/shop/status` with the same key after a redirect or a failed invoice request. When it
+returns `retryable: true`, repeat `/shop/pay` for the same order. The retry may omit `email` to
+reuse the stored address. If `/shop/pay` returns `409 invoice_in_progress`, check status again
+after a short delay.
+
+`pending` means an invoice is being prepared or awaiting payment. `paid` means payment was
+received and `applied` means the subscription is ready. `failed` can be retried only when the
+response includes `retryable: true`. `expired` and `refunded` end the order. For an applied new
+purchase, open `<subscription base URL>/<token>` if provided. If the link has changed, contact
+support with the purchase email. For an applied renewal, use the original subscription link.

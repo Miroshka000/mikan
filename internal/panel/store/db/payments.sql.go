@@ -201,8 +201,10 @@ func (q *Queries) ExpireExtraDevices(ctx context.Context, now int64) ([]ExpireEx
 
 const expirePayments = `-- name: ExpirePayments :execrows
 UPDATE payments SET status = 'expired' WHERE status = 'pending' AND created_at < $1
+AND (external_id IS NOT NULL OR pay_url <> '' OR NOT starts_with(payload, 'web_'))
 `
 
+// Incomplete web invoices are expired under their checkout lock (web_checkout.sql).
 func (q *Queries) ExpirePayments(ctx context.Context, createdAt int64) (int64, error) {
 	result, err := q.db.ExecContext(ctx, expirePayments, createdAt)
 	if err != nil {

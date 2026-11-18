@@ -26,7 +26,7 @@ type PagePublic = {
 };
 
 /** Blocks shown only in the Telegram Mini App: buying needs Telegram's sign-in. */
-export const MINI_APP_ONLY: readonly BlockType[] = ["promo", "shop", "reissue"];
+export const MINI_APP_ONLY: readonly BlockType[] = ["promo", "reissue"];
 export const CUSTOM_TYPES: readonly BlockType[] = ["text", "links"];
 export const PLATFORMS: readonly Platform[] = ["ios", "android", "windows", "macos", "linux"];
 

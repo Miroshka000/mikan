@@ -6,6 +6,7 @@ import { Button, Field, Pill } from "../../../components/ui";
 import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
+import { safeHref } from "../../../lib/url";
 import { fieldErrors } from "../../../lib/fields";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
 import { ReissueRules } from "./reissue-rules";
@@ -37,6 +38,7 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
     if (valid) save.mutate({ sub_port: next });
   };
   const current = s.sub_port || s.panel_port;
+  const shopURL = s.sub_base_url && safeHref(s.sub_base_url + "shop");
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
       <form onSubmit={submit} noValidate>
@@ -50,6 +52,7 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
           <div className="panel-soft mb-4 p-3">
             <div className="text-xs text-[var(--ink-500)]">{t("settings.subPortLinks")}</div>
             <div className="mono truncate text-[13px]">{s.sub_base_url.replace(/[^/]+\/$/, "…")}</div>
+            {shopURL ? <a href={shopURL} className="mt-2 inline-block text-sm underline" target="_blank" rel="noopener noreferrer">{t("settings.webShop")}</a> : null}
           </div>
         ) : null}
         <Field label={t("settings.subPortField")} htmlFor="s-sub-port" hint={t("settings.subPortHint", { panel: s.panel_port })} error={error ?? (valid ? undefined : t("settings.subPortInvalid"))}>
