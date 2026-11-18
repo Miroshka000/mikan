@@ -257,8 +257,27 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 			t.Fatalf("expected an invoice failure: %d %s", resp.StatusCode, body)
 		}
 	}
+	type checkoutStatus struct {
+		Status    string `json:"status"`
+		URL       string `json:"url"`
+		Token     string `json:"token"`
+		Retryable bool   `json:"retryable"`
+	}
+	status := func(key string) checkoutStatus {
+		t.Helper()
+		resp, body := h.do(http.MethodPost, shop+"/status", map[string]string{"checkout_key": key}, nil)
+		var got checkoutStatus
+		if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &got) != nil {
+			t.Fatalf("status: %d %s", resp.StatusCode, body)
+		}
+		return got
+	}
 	failWebInvoice.Store(true)
 	expectInvoiceError()
+	if got := status(key); got.Status != "failed" || !got.Retryable || got.URL != "" {
+		t.Fatalf("before reopening the invoice: %+v", got)
+	}
+	delete(order, "email") // The browser can resume after a reload using the saved order fields.
 
 	// The provider succeeds on the next attempt, but PostgreSQL refuses the URL.
 	setConstraint := func(query string) {
@@ -275,6 +294,11 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 	if again := pay(); again["url"] != first["url"] {
 		t.Fatalf("retry created a different invoice: %v, %v", first, again)
 	}
+	order["email"] = "other@example.com"
+	if resp, body := h.do(http.MethodPost, shop+"/pay", order, nil); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "checkout_conflict") {
+		t.Fatalf("changed email on replay: %d %s", resp.StatusCode, body)
+	}
+	order["email"] = "buyer@example.com"
 	if len(webInvoiceKeys) != 3 {
 		t.Fatalf("provider got %d invoice requests, want 3", len(webInvoiceKeys))
 	}
@@ -282,16 +306,7 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 	if wantIdempotency == "" || <-webInvoiceKeys != wantIdempotency || <-webInvoiceKeys != wantIdempotency {
 		t.Fatal("failed invoice retries did not reuse the original payment idempotency key")
 	}
-	status := func(key string) map[string]string {
-		t.Helper()
-		resp, body := h.do(http.MethodPost, shop+"/status", map[string]string{"checkout_key": key}, nil)
-		var got map[string]string
-		if resp.StatusCode != http.StatusOK || json.Unmarshal(body, &got) != nil {
-			t.Fatalf("status: %d %s", resp.StatusCode, body)
-		}
-		return got
-	}
-	if got := status(key); got["status"] != "pending" || got["token"] != "" {
+	if got := status(key); got.Status != "pending" || got.Token != "" || got.Retryable {
 		t.Fatalf("before payment: %v", got)
 	}
 	if resp, _ := h.do(http.MethodPost, shop+"/status", map[string]string{"checkout_key": strings.Repeat("b", 64)}, nil); resp.StatusCode != http.StatusNotFound {
@@ -299,10 +314,10 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 	}
 	h.p.Billing.Reconcile(ctx)
 	got := status(key)
-	if got["status"] != "applied" || got["token"] == "" {
+	if got.Status != "applied" || got.Token == "" {
 		t.Fatalf("after payment: %v", got)
 	}
-	u, err := h.st.Q.GetUserBySubToken(ctx, got["token"])
+	u, err := h.st.Q.GetUserBySubToken(ctx, got.Token)
 	if err != nil || u.Source != domain.UserFromWeb || u.Contact != "buyer@example.com" {
 		t.Fatalf("web subscriber: source %s, contact %q, error %v", u.Source, u.Contact, err)
 	}
@@ -322,13 +337,13 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 	if err != nil || renewed.SubToken != u.SubToken || renewed.ExpiresAt.Int64 <= u.ExpiresAt.Int64 {
 		t.Fatalf("renewal: expiry %v, error %v", renewed.ExpiresAt, err)
 	}
-	if got := status(order["checkout_key"].(string)); got["status"] != "applied" || got["token"] != "" {
+	if got := status(order["checkout_key"].(string)); got.Status != "applied" || got.Token != "" {
 		t.Fatalf("renewal status: %v", got)
 	}
 	if resp, body := h.do(http.MethodPost, fmt.Sprintf("/%s/api/v1/users/%d/reissue", adminPath, u.ID), nil, map[string]string{"X-CSRF-Token": h.csrf}); resp.StatusCode != http.StatusOK {
 		t.Fatalf("reissue: %d %s", resp.StatusCode, body)
 	}
-	if got := status(key); got["status"] != "applied" || got["token"] != "" {
+	if got := status(key); got.Status != "applied" || got.Token != "" {
 		t.Fatalf("rotated token is accessible from the old checkout: %v", got)
 	}
 
@@ -342,15 +357,27 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := status(expiredKey); got["status"] != "pending" {
-		t.Fatalf("before expiry check: %v", got)
+	if _, err := h.st.DB.ExecContext(ctx, `INSERT INTO web_invoice_leases (payment_id, lease_until)
+		SELECT id, $1 FROM payments WHERE payload = $2`, h.now.Add(time.Minute).Unix(), payload); err != nil {
+		t.Fatal(err)
+	}
+	h.p.Billing.Reconcile(ctx)
+	if got := status(expiredKey); got.Status != "pending" || !got.Retryable {
+		t.Fatalf("reconcile expired an invoice still being opened: %+v", got)
+	}
+	if resp, body := h.do(http.MethodPost, shop+"/pay", order, nil); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "invoice_in_progress") {
+		t.Fatalf("retry while invoice is being opened: %d %s", resp.StatusCode, body)
+	}
+	if _, err := h.st.DB.ExecContext(ctx, `UPDATE web_invoice_leases SET lease_until = $1
+		WHERE payment_id = (SELECT id FROM payments WHERE payload = $2)`, h.now.Add(-time.Minute).Unix(), payload); err != nil {
+		t.Fatal(err)
 	}
 	calls := len(webInvoiceKeys)
 	resp, body := h.do(http.MethodPost, shop+"/pay", order, nil)
 	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"status":"expired"`) {
 		t.Fatalf("expired checkout: %d %s", resp.StatusCode, body)
 	}
-	if got := status(expiredKey); got["status"] != "expired" || got["url"] != "" || len(webInvoiceKeys) != calls {
+	if got := status(expiredKey); got.Status != "expired" || got.URL != "" || got.Retryable || len(webInvoiceKeys) != calls {
 		t.Fatalf("expired invoice was reopened or its status was not saved: %v", got)
 	}
 }

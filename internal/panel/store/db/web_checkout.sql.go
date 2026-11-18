@@ -60,12 +60,19 @@ func (q *Queries) CreateWebCheckout(ctx context.Context, arg CreateWebCheckoutPa
 }
 
 const expireIncompleteWebInvoice = `-- name: ExpireIncompleteWebInvoice :exec
-UPDATE payments SET status = 'expired'
-WHERE id = $1 AND status IN ('pending', 'failed') AND pay_url = '' AND external_id IS NULL
+UPDATE payments AS p SET status = 'expired'
+WHERE p.id = $1 AND p.status IN ('pending', 'failed')
+  AND p.pay_url = '' AND p.external_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM web_invoice_leases l WHERE l.payment_id = p.id AND l.lease_until > $2)
 `
 
-func (q *Queries) ExpireIncompleteWebInvoice(ctx context.Context, id int64) error {
-	_, err := q.db.ExecContext(ctx, expireIncompleteWebInvoice, id)
+type ExpireIncompleteWebInvoiceParams struct {
+	PaymentID int64
+	Now       int64
+}
+
+func (q *Queries) ExpireIncompleteWebInvoice(ctx context.Context, arg ExpireIncompleteWebInvoiceParams) error {
+	_, err := q.db.ExecContext(ctx, expireIncompleteWebInvoice, arg.PaymentID, arg.Now)
 	return err
 }
 
@@ -132,6 +139,47 @@ func (q *Queries) GetWebCheckout(ctx context.Context, paymentID int64) (WebCheck
 	var i WebCheckout
 	err := row.Scan(&i.PaymentID, &i.ReceiptEmail, &i.TokenHash)
 	return i, err
+}
+
+const listExpiredWebInvoices = `-- name: ListExpiredWebInvoices :many
+SELECT p.id, p.payload FROM payments AS p
+WHERE p.created_at <= $1 AND p.status IN ('pending', 'failed')
+  AND starts_with(p.payload, 'web_') AND p.pay_url = '' AND p.external_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM web_invoice_leases l WHERE l.payment_id = p.id AND l.lease_until > $2)
+ORDER BY p.id LIMIT 100
+`
+
+type ListExpiredWebInvoicesParams struct {
+	Cutoff int64
+	Now    int64
+}
+
+type ListExpiredWebInvoicesRow struct {
+	ID      int64
+	Payload string
+}
+
+func (q *Queries) ListExpiredWebInvoices(ctx context.Context, arg ListExpiredWebInvoicesParams) ([]ListExpiredWebInvoicesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listExpiredWebInvoices, arg.Cutoff, arg.Now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListExpiredWebInvoicesRow{}
+	for rows.Next() {
+		var i ListExpiredWebInvoicesRow
+		if err := rows.Scan(&i.ID, &i.Payload); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockWebCheckout = `-- name: LockWebCheckout :exec

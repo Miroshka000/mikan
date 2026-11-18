@@ -126,7 +126,10 @@ func (h *Handler) webShopLimit(action string) *auth.Limiter {
 }
 
 func writeCheckoutStatus(w http.ResponseWriter, p db.Payment, token string) {
-	out := map[string]string{"status": p.Status}
+	out := map[string]any{"status": p.Status}
+	if billing.UnopenedWebInvoice(p) {
+		out["retryable"] = true
+	}
 	if p.Status == billing.PaymentPending && p.PayUrl != "" {
 		out["url"] = p.PayUrl
 	}

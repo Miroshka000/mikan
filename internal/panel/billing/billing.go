@@ -505,10 +505,15 @@ func (s *Service) tariffOrder(ctx context.Context, userID, tariffID int64, days 
 	stars, rub := term.PriceStars, term.PriceRub
 	// Devices bought that stay with renewals are paid for with each of them.
 	if userID != 0 {
-		if u, err := q.GetUser(ctx, userID); err == nil {
-			moreStars, moreRub := model.RenewalExtras(s.Config(ctx).Model(), model.User(u), model.Tariff(t))
-			stars, rub = plus(stars, moreStars), plus(rub, moreRub)
+		u, err := q.GetUser(ctx, userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.Tariff{}, domain.Term{}, 0, "", ErrNotYours
 		}
+		if err != nil {
+			return db.Tariff{}, domain.Term{}, 0, "", err
+		}
+		moreStars, moreRub := model.RenewalExtras(s.Config(ctx).Model(), model.User(u), model.Tariff(t))
+		stars, rub = plus(stars, moreStars), plus(rub, moreRub)
 	}
 	amount, currency, ok := av.price(provider, stars, rub)
 	if !ok {
@@ -1242,6 +1247,7 @@ func (s *Service) Reconcile(ctx context.Context) {
 	if _, err := q.ExpirePayments(ctx, now.Add(-pendingTTL).Unix()); err != nil {
 		s.d.Log.Error("billing: expire", "err", err)
 	}
+	s.expireWebInvoices(ctx, now)
 	if s.d.Promo != nil {
 		_ = s.d.Promo.ReleaseExpired(ctx, now.Unix())
 	}

@@ -1,12 +1,12 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { Button, Skeleton } from "../components/ui";
 import { t, useLocale } from "../i18n";
 import { safeHref } from "../lib/url";
 import { checkoutRoot, postJSON } from "./net";
-import { Shop, type ShopData } from "./shop";
+import { Shop, type BrowserOrder, type ShopData } from "./shop";
 
-type Checkout = { key: string; subToken: string };
-type Result = { status: string; token?: string; url?: string; code?: string };
+type Checkout = { key: string; subToken: string; order?: BrowserOrder };
+type Result = { status: string; token?: string; url?: string; code?: string; retryable?: boolean };
 const storageKey = "mikan-checkout:" + checkoutRoot;
 
 function remember(checkout: Checkout | null) {
@@ -27,16 +27,23 @@ function newKey() {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function openInvoice(checkout: Checkout, email?: string) {
+  return postJSON<Result>(checkoutRoot + "/pay", {
+    ...checkout.order, email, token: checkout.subToken, checkout_key: checkout.key,
+  });
+}
+
 export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: string; title: string; onRenewed?: () => void }) {
   useLocale();
   const [checkout, setCheckout] = useState(() => {
     const saved = savedCheckout();
     return !subToken || saved?.subToken === subToken ? saved : null;
   });
-  const draftOrder = useRef<{ key: string; order: string } | null>(null);
   const [result, setResult] = useState<Partial<Result>>({});
   const [data, setData] = useState<ShopData | null>();
   const [pollFailed, setPollFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryFailed, setRetryFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -50,7 +57,7 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
   }, [subToken, attempt]);
 
   useEffect(() => {
-    if (!checkout) return;
+    if (!checkout || retrying) return;
     const ctl = new AbortController();
     let timer: number | undefined;
     let missing = 0;
@@ -75,7 +82,7 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
     };
     void poll();
     return () => { ctl.abort(); window.clearTimeout(timer); };
-  }, [checkout, attempt]);
+  }, [checkout, attempt, retrying]);
 
   const finished = result.status === "applied";
   const refresh = useEffectEvent(() => onRenewed?.());
@@ -84,11 +91,11 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
   }, [finished, checkout, subToken]);
 
   const clear = () => {
-    draftOrder.current = null;
     remember(null);
     setCheckout(null);
     setResult({});
     setPollFailed(false);
+    setRetryFailed(false);
   };
 
   if (checkout) {
@@ -97,17 +104,33 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
     const sub = token ? checkoutRoot.slice(0, -"/shop".length) + "/" + encodeURIComponent(token) : "";
     const failed = ["expired", "failed", "refunded", "missing"].includes(result.status ?? "");
     const pending = !finished && !failed;
+    const canRetry = result.retryable && checkout.order;
+    const retry = async () => {
+      setRetrying(true);
+      setRetryFailed(false);
+      try {
+        const r = await openInvoice(checkout);
+        if (r.ok) setResult(r.data);
+        else setRetryFailed(true);
+      } catch {
+        setRetryFailed(true);
+      } finally {
+        setRetrying(false);
+      }
+    };
     return (
       <section className="glass sub-card flex flex-col gap-3 p-4" aria-label={title}>
         <h2 className="text-[15px] font-semibold">{title}</h2>
         <p className="text-sm text-[var(--ink-600)]" role="status">
-          {t(finished ? "sub.webApplied" : failed ? "sub.webEnded" : pollFailed ? "sub.webCheckFailed" : "sub.webPending")}
+          {t(finished ? "sub.webApplied" : canRetry ? "sub.webInvoiceMissing" : failed ? "sub.webEnded" : pollFailed ? "sub.webCheckFailed" : "sub.webPending")}
         </p>
         {pending && href ? <a className="btn btn-primary" href={href}>{t("sub.shopGo")}</a> : null}
         {finished && sub ? <a className="btn btn-primary" href={sub}>{t("sub.webOpenLink")}</a> : null}
         {finished && !sub ? <p className="text-sm">{t("sub.webLinkUnavailable")}</p> : null}
-        {pending ? <Button variant="ghost" onClick={() => setAttempt((n) => n + 1)}>{t("sub.shopRefresh")}</Button> : null}
-        {!pending ? <Button variant="ghost" onClick={clear}>{t(finished ? "sub.webBack" : "common.retry")}</Button> : null}
+        {canRetry ? <Button disabled={retrying} onClick={() => void retry()}>{t("sub.webRetryInvoice")}</Button> : null}
+        {canRetry && retryFailed ? <p role="alert" className="text-sm">{t("sub.shopFail")}</p> : null}
+        {pending && !canRetry ? <Button variant="ghost" onClick={() => setAttempt((n) => n + 1)}>{t("sub.shopRefresh")}</Button> : null}
+        {!pending || canRetry ? <Button variant="ghost" disabled={retrying} onClick={clear}>{t(finished || canRetry ? "sub.webBack" : "common.retry")}</Button> : null}
       </section>
     );
   }
@@ -126,22 +149,21 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
   return (
     <Shop data={data} offers={data.offers} subRoot="" initData="" token={subToken} title={title}
       openInvoice={() => undefined} openLink={() => undefined} onRefresh={() => undefined}
-      browserPay={async (order) => {
-        const signature = JSON.stringify({ ...order, subToken });
-        const key = draftOrder.current?.order === signature ? draftOrder.current.key : newKey();
-        draftOrder.current = { key, order: signature };
-        const current = { key, subToken };
+      browserPay={async ({ email, ...order }) => {
+        const current = { key: newKey(), subToken, order };
         // Save before opening the invoice so a reload or a provider redirect can resume.
         remember(current);
         try {
-          const r = await postJSON<Result>(checkoutRoot + "/pay", { ...order, token: subToken, checkout_key: current.key });
+          const r = await openInvoice(current, email);
           if (!r.ok) {
-            remember(null);
+            if (r.status >= 500 || r.status === 429 || r.data.code === "invoice_in_progress") setCheckout(current);
+            else remember(null);
             return r.data.code ?? "invoice_failed";
           }
           setCheckout(current);
           setResult(r.data);
         } catch {
+          setCheckout(current);
           return "invoice_failed";
         }
         return undefined;

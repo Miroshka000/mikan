@@ -29,6 +29,7 @@ export type ShopData = {
   free?: { name: string; description: string; channel?: string };
 };
 type Provider = "stars" | `addon:${string}`;
+export type BrowserOrder = { tariff_id: number; term_days?: number; provider: Provider };
 
 // YooKassa and CryptoBot keep the words buyers knew them by, and come first.
 const KNOWN: Record<string, Key> = { "addon:yookassa": "sub.shopCard", "addon:cryptobot": "sub.shopCrypto" };
@@ -81,7 +82,7 @@ export function Shop({
   openLink: (url: string) => void;
   onRefresh: () => void;
   promoCode?: string;
-  browserPay?: (order: { tariff_id: number; term_days?: number; provider: Provider; email: string }) => Promise<string | undefined>;
+  browserPay?: (order: BrowserOrder & { email: string }) => Promise<string | undefined>;
 }) {
   const [email, setEmail] = useState("");
   const [picked, setPicked] = useState<number | null>(offers.length === 1 ? offers[0]!.id : null);

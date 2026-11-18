@@ -3634,6 +3634,8 @@
     "webEnded": "This checkout has ended. You can start a new one.",
     "webCheckFailed": "Could not check the payment. Try refreshing.",
     "webPending": "Waiting for payment confirmation.",
+    "webInvoiceMissing": "The invoice is still being prepared or could not be opened.",
+    "webRetryInvoice": "Retry opening the invoice",
     "webOpenLink": "Open subscription",
     "webLinkUnavailable": "This subscription link has changed. Use your current link or contact support.",
     "webBack": "Back to the shop",

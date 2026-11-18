@@ -85,7 +85,7 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 		return db.Payment{}, err
 	}
 	email := strings.TrimSpace(order.Email)
-	if email != "" || order.SubToken == "" {
+	if email != "" {
 		addr, err := mail.ParseAddress(email)
 		if len(email) > 254 || err != nil || addr.Address != email {
 			return db.Payment{}, ErrCheckoutEmail
@@ -117,6 +117,7 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 		orderErr = ErrNewOff
 	}
 	var leaseUntil int64
+	var receiptEmail string
 	claimed := false
 	err = s.d.Store.TxRC(ctx, func(q *db.Queries) error {
 		claimed = false
@@ -132,27 +133,44 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 				return ErrCheckoutConflict
 			}
 			p = prev
-			if p.PayUrl != "" || p.ExternalID.Valid || p.Status != PaymentPending && p.Status != PaymentFailed {
+			incomplete := UnopenedWebInvoice(p)
+			if p.Status != PaymentPending && !incomplete {
 				return nil
-			}
-			if p.CreatedAt <= now.Add(-pendingTTL).Unix() {
-				if err := q.ExpireIncompleteWebInvoice(ctx, p.ID); err != nil {
-					return err
-				}
-				p, err = q.GetPayment(ctx, p.ID)
-				return err
-			}
-			if orderErr != nil {
-				return orderErr
 			}
 			checkout, err := q.GetWebCheckout(ctx, p.ID)
 			if err != nil {
 				return err
 			}
-			if checkout.ReceiptEmail != email {
-				return ErrCheckoutConflict
+			if email != "" && checkout.ReceiptEmail != email {
+				// Applying a payment may clear its receipt email after the read above.
+				p, err = q.GetPayment(ctx, p.ID)
+				if err == nil && (p.Status == PaymentPending || UnopenedWebInvoice(p)) {
+					return ErrCheckoutConflict
+				}
+				return err
 			}
+			if !incomplete {
+				return nil
+			}
+			if p.CreatedAt <= now.Add(-pendingTTL).Unix() {
+				if err := q.ExpireIncompleteWebInvoice(ctx, db.ExpireIncompleteWebInvoiceParams{PaymentID: p.ID, Now: now.Unix()}); err != nil {
+					return err
+				}
+				p, err = q.GetPayment(ctx, p.ID)
+				if err == nil && UnopenedWebInvoice(p) {
+					return ErrCheckoutBusy
+				}
+				return err
+			}
+			if orderErr != nil {
+				return orderErr
+			}
+			receiptEmail = checkout.ReceiptEmail
 		case errors.Is(err, sql.ErrNoRows):
+			if kind == "new" && email == "" {
+				return ErrCheckoutEmail
+			}
+			receiptEmail = email
 			if orderErr != nil {
 				return orderErr
 			}
@@ -196,7 +214,7 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 
 	lang, _ := s.d.Settings.Lang(ctx)
 	desc := model.Describe(model.Tariff(t), p.TermDays.Int64, lang)
-	ext, url, invoiceErr := s.openAddonInvoice(ctx, p, p.TariffName+" — "+desc, strings.TrimSuffix(subBase, "/")+"/shop", email)
+	ext, url, invoiceErr := s.openAddonInvoice(ctx, p, p.TariffName+" — "+desc, strings.TrimSuffix(subBase, "/")+"/shop", receiptEmail)
 	finish := db.FinishWebInvoiceParams{PaymentID: p.ID, LeaseUntil: leaseUntil, ExternalID: ext, PayUrl: url, Status: PaymentPending}
 	if invoiceErr != nil {
 		finish.Status, finish.Error = PaymentFailed, errCode(invoiceErr)
@@ -213,6 +231,32 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 		return db.Payment{}, fmt.Errorf("%w: %s", ErrProviderOff, finish.Error)
 	}
 	return saved, nil
+}
+
+// UnopenedWebInvoice reports whether the same checkout can retry opening an invoice.
+func UnopenedWebInvoice(p db.Payment) bool {
+	return p.PayUrl == "" && !p.ExternalID.Valid && (p.Status == PaymentPending || p.Status == PaymentFailed)
+}
+
+// The general sweep does not touch incomplete web invoices. An invoice claim and
+// an expiration decision must share the lock and read the lease on its transaction.
+func (s *Service) expireWebInvoices(ctx context.Context, now time.Time) {
+	rows, err := s.d.Store.Q.ListExpiredWebInvoices(ctx, db.ListExpiredWebInvoicesParams{Cutoff: now.Add(-pendingTTL).Unix(), Now: now.Unix()})
+	if err != nil {
+		s.d.Log.Error("billing: list expired web invoices", "err", err)
+		return
+	}
+	for _, row := range rows {
+		err := s.d.Store.TxRC(ctx, func(q *db.Queries) error {
+			if err := q.LockWebCheckout(ctx, row.Payload); err != nil {
+				return err
+			}
+			return q.ExpireIncompleteWebInvoice(ctx, db.ExpireIncompleteWebInvoiceParams{PaymentID: row.ID, Now: s.d.Now().Unix()})
+		})
+		if err != nil {
+			s.d.Log.Error("billing: expire web invoice", "payment", row.ID, "err", err)
+		}
+	}
 }
 
 // WebStatus only releases a link issued by this checkout, while it is still current.

@@ -123,11 +123,20 @@ address shown in the adapter settings.
 | --- | --- | --- |
 | `/shop/offers` | `{}` for a new purchase or `{"token":"<subscription token>"}` for a renewal | `offers` with plans and terms, and `addons` with payment methods. Prices are in kopecks. |
 | `/shop/pay` | `checkout_key`, `tariff_id`, optional `term_days`, `provider` from `addons`, and `email`. Add `token` for a renewal. | `status` and `url` after invoice creation. An email is required for a new purchase. |
-| `/shop/status` | `{"checkout_key":"<checkout key>"}` | `status`, and after applying a new purchase, `token` for `<subscription base URL>/<token>`. |
+| `/shop/status` | `{"checkout_key":"<checkout key>"}` | `status`, `url` for an open invoice, `retryable: true` when invoice creation can be retried, and `token` for a new purchase while its issued link is current. |
 
 Generate `checkout_key` from 32 cryptographically random bytes encoded as 64 lowercase
-hexadecimal characters. Keep it private and use it for retries of the same order. After the
-redirect, check status with the same key. `pending` means awaiting payment, `paid` means
-payment received, and `applied` means the subscription is ready. Other terminal statuses
-include `failed`, `expired`, and `refunded`. After a renewal reaches `applied`, use the original
-subscription link.
+hexadecimal characters. Keep it private and use it for retries of the same order. If `term_days`
+is omitted, `/shop/pay` uses the tariff's first configured term. Send `term_days` from
+`/shop/offers` when paying for a different term.
+
+Check `/shop/status` with the same key after a redirect or a failed invoice request. When it
+returns `retryable: true`, repeat `/shop/pay` for the same order. The retry may omit `email` to
+reuse the stored address. If `/shop/pay` returns `409 invoice_in_progress`, check status again
+after a short delay.
+
+`pending` means an invoice is being prepared or awaiting payment. `paid` means payment was
+received and `applied` means the subscription is ready. `failed` can be retried only when the
+response includes `retryable: true`. `expired` and `refunded` end the order. For an applied new
+purchase, open `<subscription base URL>/<token>` if provided. If the link has changed, contact
+support with the purchase email. For an applied renewal, use the original subscription link.

@@ -28,5 +28,14 @@ WHERE p.id = sqlc.arg(payment_id)
 RETURNING p.*;
 
 -- name: ExpireIncompleteWebInvoice :exec
-UPDATE payments SET status = 'expired'
-WHERE id = $1 AND status IN ('pending', 'failed') AND pay_url = '' AND external_id IS NULL;
+UPDATE payments AS p SET status = 'expired'
+WHERE p.id = sqlc.arg(payment_id) AND p.status IN ('pending', 'failed')
+  AND p.pay_url = '' AND p.external_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM web_invoice_leases l WHERE l.payment_id = p.id AND l.lease_until > sqlc.arg(now));
+
+-- name: ListExpiredWebInvoices :many
+SELECT p.id, p.payload FROM payments AS p
+WHERE p.created_at <= sqlc.arg(cutoff) AND p.status IN ('pending', 'failed')
+  AND starts_with(p.payload, 'web_') AND p.pay_url = '' AND p.external_id IS NULL
+  AND NOT EXISTS (SELECT 1 FROM web_invoice_leases l WHERE l.payment_id = p.id AND l.lease_until > sqlc.arg(now))
+ORDER BY p.id LIMIT 100;
