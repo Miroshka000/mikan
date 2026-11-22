@@ -77,9 +77,9 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
   }, [finished, checkout, subToken]);
 
   const clear = () => {
-    if (checkout) remember(checkoutRoot, checkout, "clear");
+    const cleared = !checkout || remember(checkoutRoot, checkout, "clear");
     if (!subToken && new URLSearchParams(location.search).has("checkout")) history.replaceState(null, "", checkoutRoot);
-    setCheckout(null);
+    setCheckout(cleared ? savedCheckout(checkoutRoot, subToken) : null);
     setResult({});
     setPollFailed(false);
     setRetryFailed(false);
