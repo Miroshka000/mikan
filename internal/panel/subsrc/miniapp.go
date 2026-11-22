@@ -276,8 +276,9 @@ func (h *Handler) shopOffers(ctx context.Context, w http.ResponseWriter, tgID, u
 	}
 	// Marketplace adapters take rubles; the buyer sees each by its own name.
 	type addon struct {
-		Provider string `json:"provider"`
-		Name     string `json:"name"`
+		Provider     string `json:"provider"`
+		Name         string `json:"name"`
+		ReceiptEmail bool   `json:"receipt_email,omitempty"`
 	}
 	out := struct {
 		AllowNew  bool            `json:"allow_new"`
@@ -307,7 +308,8 @@ func (h *Handler) shopOffers(ctx context.Context, w http.ResponseWriter, tgID, u
 		}
 	}
 	for _, id := range av.Addons {
-		out.Addons = append(out.Addons, addon{Provider: billing.AddonPrefix + id, Name: h.shop.AddonName(ctx, id, cfg.Lang)})
+		name, receiptEmail := h.shop.AddonCheckoutInfo(ctx, id, cfg.Lang)
+		out.Addons = append(out.Addons, addon{Provider: billing.AddonPrefix + id, Name: name, ReceiptEmail: web != nil && receiptEmail})
 	}
 	for _, o := range offers {
 		mo := o.Model()

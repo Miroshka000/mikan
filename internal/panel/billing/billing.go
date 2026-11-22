@@ -58,6 +58,8 @@ type Config struct {
 	Stars   bool `json:"stars"`
 	// AllowNew lets people without a subscription buy one; off: only renewals.
 	AllowNew bool `json:"allow_new"`
+	// Website enables browser sales, separately from the Telegram shop.
+	Website bool `json:"website"`
 	// RenewResetsTraffic: a paid renewal also starts a new traffic period; off, the
 	// counter keeps running and only the term is extended.
 	RenewResetsTraffic bool `json:"renew_resets_traffic"`
@@ -928,6 +930,7 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		return err
 	}
 	reset := cfg.RenewResetsTraffic
+	lang, _ := s.d.Settings.Lang(ctx)
 	run := func(q *db.Queries) error {
 		// A conflict runs this again: nothing from an attempt that rolled back may stay.
 		pay, u, created, done = db.Payment{}, db.User{}, false, false
@@ -989,6 +992,9 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 			}
 			in.Contact = checkout.ReceiptEmail
 			in.Name, in.Note, in.Source = fmt.Sprintf("Web order %d", pay.ID), "Web checkout", domain.UserFromWeb
+			if lang == "ru" {
+				in.Name, in.Note = fmt.Sprintf("Заказ с сайта %d", pay.ID), "Покупка на сайте"
+			}
 		} else {
 			in.Name = buyerName(ctx, q, pay.TgID)
 		}

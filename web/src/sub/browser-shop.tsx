@@ -3,25 +3,10 @@ import { Button, Skeleton } from "../components/ui";
 import { t, useLocale } from "../i18n";
 import { safeHref } from "../lib/url";
 import { checkoutRoot, postJSON } from "./net";
-import { Shop, type BrowserOrder, type ShopData } from "./shop";
+import { Shop, type ShopData } from "./shop";
+import { remember, savedCheckout, type Checkout } from "./browser-checkout";
 
-type Checkout = { key: string; subToken: string; order?: BrowserOrder };
-type Result = { status: string; token?: string; url?: string; code?: string; retryable?: boolean };
-const storageKey = "mikan-checkout:" + checkoutRoot;
-
-function remember(checkout: Checkout | null) {
-  if (checkout) localStorage.setItem(storageKey, JSON.stringify(checkout));
-  else localStorage.removeItem(storageKey);
-}
-
-function savedCheckout(): Checkout | null {
-  try {
-    const value: Checkout | null = JSON.parse(localStorage.getItem(storageKey) ?? "null");
-    return value && /^[a-f0-9]{64}$/.test(value.key) && typeof value.subToken === "string" ? value : null;
-  } catch {
-    return null;
-  }
-}
+type Result = { status: string; token?: string; url?: string; code?: string; retryable?: boolean; reference?: string };
 
 function newKey() {
   return Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
@@ -35,15 +20,13 @@ function openInvoice(checkout: Checkout, email?: string) {
 
 export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: string; title: string; onRenewed?: () => void }) {
   useLocale();
-  const [checkout, setCheckout] = useState(() => {
-    const saved = savedCheckout();
-    return !subToken || saved?.subToken === subToken ? saved : null;
-  });
+  const [checkout, setCheckout] = useState(() => savedCheckout(checkoutRoot, subToken, subToken ? null : new URLSearchParams(location.search).get("checkout")));
   const [result, setResult] = useState<Partial<Result>>({});
   const [data, setData] = useState<ShopData | null>();
   const [pollFailed, setPollFailed] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [retryFailed, setRetryFailed] = useState(false);
+  const [storageFailed, setStorageFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -70,6 +53,9 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
           return;
         }
         if (r.ok) {
+          if (r.data.reference && checkout.reference !== r.data.reference) {
+            if (!remember(checkoutRoot, { ...checkout, reference: r.data.reference }, "update")) setStorageFailed(true);
+          }
           setPollFailed(false);
           setResult(r.data);
           if (r.data.status !== "pending" && r.data.status !== "paid") return;
@@ -91,11 +77,13 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
   }, [finished, checkout, subToken]);
 
   const clear = () => {
-    remember(null);
+    if (checkout) remember(checkoutRoot, checkout, "clear");
+    if (!subToken && new URLSearchParams(location.search).has("checkout")) history.replaceState(null, "", checkoutRoot);
     setCheckout(null);
     setResult({});
     setPollFailed(false);
     setRetryFailed(false);
+    setStorageFailed(false);
   };
 
   if (checkout) {
@@ -110,7 +98,10 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
       setRetryFailed(false);
       try {
         const r = await openInvoice(checkout);
-        if (r.ok) setResult(r.data);
+        if (r.ok) {
+          if (!remember(checkoutRoot, { ...checkout, reference: r.data.reference }, "update")) setStorageFailed(true);
+          setResult(r.data);
+        }
         else setRetryFailed(true);
       } catch {
         setRetryFailed(true);
@@ -124,7 +115,8 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
         <p className="text-sm text-[var(--ink-600)]" role="status">
           {t(finished ? "sub.webApplied" : canRetry ? "sub.webInvoiceMissing" : failed ? "sub.webEnded" : pollFailed ? "sub.webCheckFailed" : "sub.webPending")}
         </p>
-        {pending && href ? <a className="btn btn-primary" href={href}>{t("sub.shopGo")}</a> : null}
+        {pending && storageFailed ? <p className="text-sm">{t("sub.webStorageUnavailable")}</p> : null}
+        {pending && href ? <a className="btn btn-primary" href={href} target={storageFailed ? "_blank" : undefined} rel={storageFailed ? "noopener noreferrer" : undefined}>{t("sub.shopGo")}</a> : null}
         {finished && sub ? <a className="btn btn-primary" href={sub}>{t("sub.webOpenLink")}</a> : null}
         {finished && !sub ? <p className="text-sm">{t("sub.webLinkUnavailable")}</p> : null}
         {canRetry ? <Button disabled={retrying} onClick={() => void retry()}>{t("sub.webRetryInvoice")}</Button> : null}
@@ -152,15 +144,17 @@ export function BrowserShop({ subToken = "", title, onRenewed }: { subToken?: st
       browserPay={async ({ email, ...order }) => {
         const current = { key: newKey(), subToken, order };
         // Save before opening the invoice so a reload or a provider redirect can resume.
-        remember(current);
+        setStorageFailed(!remember(checkoutRoot, current));
         try {
           const r = await openInvoice(current, email);
           if (!r.ok) {
             if (r.status >= 500 || r.status === 429 || r.data.code === "invoice_in_progress") setCheckout(current);
-            else remember(null);
+            else remember(checkoutRoot, current, "clear");
             return r.data.code ?? "invoice_failed";
           }
-          setCheckout(current);
+          const saved = { ...current, reference: r.data.reference };
+          if (!remember(checkoutRoot, saved, "update")) setStorageFailed(true);
+          setCheckout(saved);
           setResult(r.data);
         } catch {
           setCheckout(current);

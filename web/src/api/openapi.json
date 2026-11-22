@@ -8795,6 +8795,9 @@
             "format": "int64",
             "minimum": 0,
             "type": "integer"
+          },
+          "website": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -9344,12 +9347,17 @@
             "description": "Сколько пробных подписок выдано",
             "format": "int64",
             "type": "integer"
+          },
+          "website": {
+            "description": "Продажи и продление подписок в браузере; выключено по умолчанию",
+            "type": "boolean"
           }
         },
         "required": [
           "enabled",
           "stars",
           "allow_new",
+          "website",
           "renew_resets_traffic",
           "trial_tariff_id",
           "trial_stars",

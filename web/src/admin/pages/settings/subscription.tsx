@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { Schemas } from "../../../api/client";
-import { useInbounds, useNodes } from "../../../api/hooks";
+import { useInbounds, useNodes, usePaymentSettings } from "../../../api/hooks";
 import { CardHead, Disclosure, FormActions } from "../../../components/layout";
 import { Button, Field, Pill } from "../../../components/ui";
 import { SwitchRow } from "../../../components/switch";
@@ -24,6 +24,7 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   const inbounds = useInbounds();
   const nodes = useNodes();
+  const payments = usePaymentSettings().data;
   const { draft: port, setDraft: setPort } = useDraft(s.sub_port ? String(s.sub_port) : "");
   const error = fieldErrors(save.error).sub_port;
   const own = nodes.data?.find((n) => n.local)?.id;
@@ -38,7 +39,7 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
     if (valid) save.mutate({ sub_port: next });
   };
   const current = s.sub_port || s.panel_port;
-  const shopURL = s.sub_base_url && safeHref(s.sub_base_url + "shop");
+  const shopURL = payments?.enabled && payments.website && payments.allow_new && s.sub_base_url && safeHref(s.sub_base_url + "shop");
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
       <form onSubmit={submit} noValidate>

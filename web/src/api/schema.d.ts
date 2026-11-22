@@ -7107,6 +7107,7 @@ export interface components {
              * @description Тариф пробного периода; 0 — выключить
              */
             trial_tariff_id?: number;
+            website?: boolean;
         };
         PatchSettingsInputBody: {
             /**
@@ -7338,6 +7339,8 @@ export interface components {
              * @description Сколько пробных подписок выдано
              */
             trials: number;
+            /** @description Продажи и продление подписок в браузере; выключено по умолчанию */
+            website: boolean;
         };
         PaymentSettingsViewAvailableStruct: {
             /** @description Адаптеры маркетплейса, которые принимают оплату прямо сейчас */

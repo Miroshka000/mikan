@@ -2,7 +2,8 @@
 ALTER TABLE users DROP CONSTRAINT users_source_check;
 ALTER TABLE users ADD CONSTRAINT users_source_check CHECK (source IN ('admin', 'bot', 'trial', 'import', 'free', 'web'));
 
--- Keep the receipt email until payment applies and the link hash until it rotates.
+-- Keep the email here until payment applies. A new subscriber keeps it as their contact.
+-- The link hash proves which subscription link the checkout issued.
 CREATE TABLE web_checkouts (
   payment_id BIGINT PRIMARY KEY REFERENCES payments(id) ON DELETE CASCADE,
   receipt_email TEXT NOT NULL,

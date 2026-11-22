@@ -65,14 +65,14 @@ func TestAddonsMarketplace(t *testing.T) {
 				"settings":[{"key":"shop_id","type":"string","required":true},{"key":"secret_key","type":"string","secret":true,"required":true}]}`)
 		case r.URL.Path == "/v1/check" && in.Settings["secret_key"] == secret:
 			_, _ = io.WriteString(w, `{}`)
-		case r.URL.Path == "/v1/invoices" && in.Settings["secret_key"] == secret && strings.HasSuffix(in.ReturnURL, "/shop"):
+		case r.URL.Path == "/v1/invoices" && in.Settings["secret_key"] == secret && strings.Contains(in.ReturnURL, "/shop?checkout="):
 			switch in.ReceiptEmail {
 			case "edge-buyer@example.com":
-				if in.ReturnURL != "https://edge.example.com/"+subPath+"/shop" ||
+				if !strings.HasPrefix(in.ReturnURL, "https://edge.example.com/"+subPath+"/shop?checkout=") ||
 					!strings.HasPrefix(in.WebhookURL, "https://203.0.113.10:21355/"+subPath+"/pay/addon/fake/") {
 					t.Error("browser return and payment callback must use the edge and panel respectively")
 				}
-			case "buyer@example.com":
+			case "buyer@example.com", "": // A website renewal can omit its receipt address.
 			default:
 				t.Error("checkout email was not passed to the adapter")
 			}
@@ -212,6 +212,21 @@ func TestAddonsMarketplace(t *testing.T) {
 	if resp, body := h.do(http.MethodPost, "/"+subPath+"/tg/pay", map[string]any{"init_data": initData(tgToken, 555, h.now), "tariff_id": sale.ID, "provider": "addon:ghost"}, same); resp.StatusCode != http.StatusConflict {
 		t.Fatalf("an adapter that is not installed: %d %s", resp.StatusCode, body)
 	}
+	shop := "/" + subPath + "/shop"
+	if resp, _ := h.do(http.MethodGet, shop, nil, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("website shop enabled by default: %d", resp.StatusCode)
+	}
+	if resp, body := h.do(http.MethodPost, shop+"/offers", map[string]any{}, nil); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"offers":[]`) {
+		t.Fatalf("website exposed offers by default: %d %s", resp.StatusCode, body)
+	}
+	disabledOrder := map[string]any{"checkout_key": strings.Repeat("f", 64), "tariff_id": sale.ID, "provider": "addon:fake", "email": "buyer@example.com"}
+	if resp, body := h.do(http.MethodPost, shop+"/pay", disabledOrder, nil); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "provider_off") {
+		t.Fatalf("website opened invoice by default: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := h.do(http.MethodPatch, "/"+adminPath+"/api/v1/payments/settings", map[string]any{"website": true}, csrf); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"website":true`) {
+		t.Fatalf("enable website sales: %d %s", resp.StatusCode, body)
+	}
+	must(settings.Set(ctx, settings.New(h.st.Q), settings.KeyDefaultLang, "ru"))
 
 	t.Run("web checkout", func(t *testing.T) { testWebCheckout(t, h, sale.ID, &failWebInvoice, webInvoiceKeys) })
 	t.Run("relayed web checkout", func(t *testing.T) { testRelayedWebCheckout(t, h, sale.ID) })
@@ -229,7 +244,7 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 		t.Fatalf("shop page: %d %s", resp.StatusCode, body)
 	}
 	if resp, body := h.do(http.MethodPost, shop+"/offers", map[string]any{}, nil); resp.StatusCode != http.StatusOK ||
-		!strings.Contains(string(body), `"providers":{"stars":false}`) || !strings.Contains(string(body), `"provider":"addon:fake"`) {
+		!strings.Contains(string(body), `"providers":{"stars":false}`) || !strings.Contains(string(body), `"provider":"addon:fake"`) || !strings.Contains(string(body), `"receipt_email":true`) {
 		t.Fatalf("public offers: %d %s", resp.StatusCode, body)
 	}
 	key := strings.Repeat("a", 64)
@@ -291,6 +306,10 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 	setConstraint("ALTER TABLE payments DROP CONSTRAINT test_no_web_payment_url")
 
 	first := pay()
+	reference := fmt.Sprintf("%x", sha256.Sum256([]byte(key)))
+	if first["reference"] != reference {
+		t.Fatalf("checkout return reference: %v", first)
+	}
 	if again := pay(); again["url"] != first["url"] {
 		t.Fatalf("retry created a different invoice: %v, %v", first, again)
 	}
@@ -309,6 +328,20 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 	if got := status(key); got.Status != "pending" || got.Token != "" || got.Retryable {
 		t.Fatalf("before payment: %v", got)
 	}
+	setWebsite := func(enabled bool) {
+		t.Helper()
+		api := "/" + adminPath + "/api/v1/payments/settings"
+		if resp, body := h.do(http.MethodPatch, api, map[string]bool{"website": enabled}, map[string]string{"X-CSRF-Token": h.csrf}); resp.StatusCode != http.StatusOK {
+			t.Fatalf("set website sales to %t: %d %s", enabled, resp.StatusCode, body)
+		}
+	}
+	setWebsite(false)
+	if resp, _ := h.do(http.MethodGet, shop, nil, nil); resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("disabled storefront page: %d", resp.StatusCode)
+	}
+	if resp, _ := h.do(http.MethodGet, shop+"?checkout="+reference, nil, nil); resp.StatusCode != http.StatusOK {
+		t.Fatalf("return to an existing order after disabling website sales: %d", resp.StatusCode)
+	}
 	if resp, _ := h.do(http.MethodPost, shop+"/status", map[string]string{"checkout_key": strings.Repeat("b", 64)}, nil); resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("wrong key: %d", resp.StatusCode)
 	}
@@ -318,18 +351,22 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 		t.Fatalf("after payment: %v", got)
 	}
 	u, err := h.st.Q.GetUserBySubToken(ctx, got.Token)
-	if err != nil || u.Source != domain.UserFromWeb || u.Contact != "buyer@example.com" {
+	if err != nil || u.Source != domain.UserFromWeb || u.Contact != "buyer@example.com" || u.Note != "Покупка на сайте" || !strings.HasPrefix(u.Name, "Заказ с сайта ") {
 		t.Fatalf("web subscriber: source %s, contact %q, error %v", u.Source, u.Contact, err)
 	}
 	if _, err := h.st.Q.GetTgLink(ctx, u.ID); err != sql.ErrNoRows {
 		t.Fatalf("subscriber has a Telegram link before linking: %v", err)
 	}
+	setWebsite(true)
 
 	order["checkout_key"] = strings.Repeat("c", 64)
 	order["token"] = strings.Repeat("z", 24)
-	if resp, body := h.do(http.MethodPost, shop+"/pay", order, nil); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "not_yours") {
-		t.Fatalf("wrong renewal token: %d %s", resp.StatusCode, body)
+	for _, action := range []string{"offers", "pay"} {
+		if resp, body := h.do(http.MethodPost, shop+"/"+action, order, nil); resp.StatusCode != http.StatusNotFound || !strings.Contains(string(body), "not_yours") {
+			t.Fatalf("wrong renewal token at %s: %d %s", action, resp.StatusCode, body)
+		}
 	}
+	delete(order, "email")
 	order["token"] = u.SubToken
 	pay()
 	h.p.Billing.Reconcile(ctx)
@@ -349,6 +386,7 @@ func testWebCheckout(t *testing.T, h *harness, tariffID int64, failWebInvoice *a
 
 	expiredKey := strings.Repeat("d", 64)
 	order["checkout_key"] = expiredKey
+	order["email"] = "buyer@example.com"
 	delete(order, "token")
 	failWebInvoice.Store(true)
 	expectInvoiceError()

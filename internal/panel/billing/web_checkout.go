@@ -52,23 +52,23 @@ func webPayload(key string) (string, error) {
 	return webPayloadPrefix + tokenHash(key), nil
 }
 
-func (s *Service) webAvailable(ctx context.Context) Available {
-	if !s.Config(ctx).Enabled {
+func (s *Service) webAvailable(ctx context.Context, cfg Config) Available {
+	if !cfg.Enabled || !cfg.Website {
 		return Available{}
 	}
 	return Available{Addons: s.availableAddons(ctx)}
 }
 
 func (s *Service) WebOffers(ctx context.Context, u db.User) ([]Offer, Available, error) {
-	if u.ID == 0 && !s.Config(ctx).AllowNew {
+	cfg := s.Config(ctx)
+	if u.ID == 0 && !cfg.AllowNew {
 		return nil, Available{}, nil
 	}
-	av := s.webAvailable(ctx)
+	av := s.webAvailable(ctx, cfg)
 	offers, err := s.offers(ctx, av)
-	cfg := s.Config(ctx).Model()
 	for i := range offers {
 		o := &offers[i]
-		_, extra := model.RenewalExtras(cfg, model.User(u), model.Tariff(o.Tariff))
+		_, extra := model.RenewalExtras(cfg.Model(), model.User(u), model.Tariff(o.Tariff))
 		for j := range o.Terms {
 			o.Terms[j].Rub += extra
 		}
@@ -112,8 +112,9 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 		kind, userID = "renew", sql.NullInt64{Int64: u.ID, Valid: true}
 	}
 	var p db.Payment
-	t, term, amount, currency, orderErr := s.tariffOrder(ctx, userID.Int64, order.TariffID, order.TermDays, order.Provider, s.webAvailable(ctx))
-	if kind == "new" && !s.Config(ctx).AllowNew {
+	cfg := s.Config(ctx)
+	t, term, amount, currency, orderErr := s.tariffOrder(ctx, userID.Int64, order.TariffID, order.TermDays, order.Provider, s.webAvailable(ctx, cfg))
+	if kind == "new" && !cfg.AllowNew {
 		orderErr = ErrNewOff
 	}
 	var leaseUntil int64
@@ -214,7 +215,10 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 
 	lang, _ := s.d.Settings.Lang(ctx)
 	desc := model.Describe(model.Tariff(t), p.TermDays.Int64, lang)
-	ext, url, invoiceErr := s.openAddonInvoice(ctx, p, p.TariffName+" — "+desc, strings.TrimSuffix(subBase, "/")+"/shop", receiptEmail)
+	// Share a digest with the provider for selecting the browser's saved order.
+	// The original key remains in the browser and is required for status and retries.
+	returnURL := strings.TrimSuffix(subBase, "/") + "/shop?checkout=" + strings.TrimPrefix(p.Payload, webPayloadPrefix)
+	ext, url, invoiceErr := s.openAddonInvoice(ctx, p, p.TariffName+" — "+desc, returnURL, receiptEmail)
 	finish := db.FinishWebInvoiceParams{PaymentID: p.ID, LeaseUntil: leaseUntil, ExternalID: ext, PayUrl: url, Status: PaymentPending}
 	if invoiceErr != nil {
 		finish.Status, finish.Error = PaymentFailed, errCode(invoiceErr)
@@ -231,6 +235,18 @@ func (s *Service) WebInvoice(ctx context.Context, order WebOrder) (db.Payment, e
 		return db.Payment{}, fmt.Errorf("%w: %s", ErrProviderOff, finish.Error)
 	}
 	return saved, nil
+}
+
+// WebReturnExists identifies a checkout return without releasing its status or link.
+func (s *Service) WebReturnExists(ctx context.Context, digest string) bool {
+	if len(digest) != 64 {
+		return false
+	}
+	if _, err := hex.DecodeString(digest); err != nil {
+		return false
+	}
+	_, err := s.d.Store.Q.GetPaymentByPayload(ctx, webPayloadPrefix+digest)
+	return err == nil
 }
 
 // UnopenedWebInvoice reports whether the same checkout can retry opening an invoice.

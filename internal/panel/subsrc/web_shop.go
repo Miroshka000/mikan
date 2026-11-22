@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"mikan/internal/panel/auth"
@@ -26,8 +27,14 @@ type checkoutRequest struct {
 
 func (h *Handler) webShop(w http.ResponseWriter, r *http.Request, action string) {
 	w.Header().Set("Cache-Control", "no-store")
+	ctx := r.Context()
 	if action == "" && (r.Method == http.MethodGet || r.Method == http.MethodHead) && h.page != nil {
-		cfg, _ := h.cfg(r.Context())
+		selling := h.shop.Config(ctx)
+		if !(selling.Enabled && selling.Website && selling.AllowNew) && !h.shop.WebReturnExists(ctx, r.URL.Query().Get("checkout")) {
+			server.NotFound(w)
+			return
+		}
+		cfg, _ := h.cfg(ctx)
 		h.servePage(w, r, cfg.Config)
 		return
 	}
@@ -62,7 +69,6 @@ func (h *Handler) webShop(w http.ResponseWriter, r *http.Request, action string)
 		fail(http.StatusBadRequest, "bad_request")
 		return
 	}
-	ctx := r.Context()
 	switch action {
 	case "offers":
 		var u db.User
@@ -87,6 +93,8 @@ func (h *Handler) webShop(w http.ResponseWriter, r *http.Request, action string)
 			fail(http.StatusBadRequest, err.Error())
 		case errors.Is(err, billing.ErrCheckoutConflict), errors.Is(err, billing.ErrCheckoutBusy):
 			fail(http.StatusConflict, err.Error())
+		case errors.Is(err, billing.ErrNotYours):
+			fail(http.StatusNotFound, err.Error())
 		case err != nil:
 			status, code, unexplained := invoiceFailure(err)
 			if unexplained {
@@ -126,7 +134,7 @@ func (h *Handler) webShopLimit(action string) *auth.Limiter {
 }
 
 func writeCheckoutStatus(w http.ResponseWriter, p db.Payment, token string) {
-	out := map[string]any{"status": p.Status}
+	out := map[string]any{"status": p.Status, "reference": strings.TrimPrefix(p.Payload, "web_")}
 	if billing.UnopenedWebInvoice(p) {
 		out["retryable"] = true
 	}
