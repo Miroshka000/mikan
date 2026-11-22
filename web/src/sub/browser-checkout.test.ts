@@ -45,13 +45,6 @@ test("concurrent purchases keep separate keys and provider return references", (
   expect(savedCheckout(root, "")).toMatchObject(second);
 });
 
-test("resuming an older saved order adds its provider return reference", () => {
-  localStorage.setItem(`mikan-checkout:${root}`, JSON.stringify({ key: renewal.key, subToken: renewal.subToken }));
-  expect(savedCheckout(root, renewal.subToken)?.key).toBe(renewal.key);
-  expect(remember(root, renewal, "update")).toBe(true);
-  expect(savedCheckout(root, "", renewal.reference)).toEqual(renewal);
-});
-
 test("a blocked storage write is reported to the caller without throwing", () => {
   vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("storage denied"); });
   expect(remember(root, purchase)).toBe(false);

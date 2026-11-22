@@ -29,8 +29,7 @@ func (h *Handler) webShop(w http.ResponseWriter, r *http.Request, action string)
 	w.Header().Set("Cache-Control", "no-store")
 	ctx := r.Context()
 	if action == "" && (r.Method == http.MethodGet || r.Method == http.MethodHead) && h.page != nil {
-		selling := h.shop.Config(ctx)
-		if !(selling.Enabled && selling.Website && selling.AllowNew) && !h.shop.WebReturnExists(ctx, r.URL.Query().Get("checkout")) {
+		if !h.shopPageOpen(r) {
 			server.NotFound(w)
 			return
 		}
@@ -119,6 +118,24 @@ func (h *Handler) webShop(w http.ResponseWriter, r *http.Request, action string)
 	default:
 		server.NotFound(w)
 	}
+}
+
+// shopPageOpen tells whether the storefront page is served: while new website sales are on,
+// or for a buyer returning to an order of theirs. The return looks the order up in the
+// database, so it shares the status budget per IP.
+func (h *Handler) shopPageOpen(r *http.Request) bool {
+	selling := h.shop.Config(r.Context())
+	if selling.Enabled && selling.Website && selling.AllowNew {
+		return true
+	}
+	digest := r.URL.Query().Get("checkout")
+	if digest == "" {
+		return false
+	}
+	if ok, _, _ := h.shopStatusLimit.Reserve(auth.ClientKey(h.clientIP(r)), h.now()); !ok {
+		return false
+	}
+	return h.shop.WebReturnExists(r.Context(), digest)
 }
 
 func (h *Handler) webShopLimit(action string) *auth.Limiter {
