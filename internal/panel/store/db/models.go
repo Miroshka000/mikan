@@ -957,6 +957,17 @@ type UserStart struct {
 	FrozenAt int64
 }
 
+type WebCheckout struct {
+	PaymentID    int64
+	ReceiptEmail string
+	TokenHash    string
+}
+
+type WebInvoiceLease struct {
+	PaymentID  int64
+	LeaseUntil int64
+}
+
 type WebhookDelivery struct {
 	ID           int64
 	EndpointID   int64

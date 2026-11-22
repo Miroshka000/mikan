@@ -347,6 +347,7 @@ function AddonMethodsCard() {
  * typed is 199.5 there, and the form would stay unsaved after the save. */
 const rulesForm = (s: Settings) => ({
   allowNew: s.allow_new,
+  website: s.website,
   resetTraffic: s.renew_resets_traffic,
   keepDevices: s.extra_devices_keep,
   trial: s.trial_tariff_id ?? 0,
@@ -377,6 +378,7 @@ function RulesCard({ s }: { s: Settings }) {
     save.mutate(
       {
         allow_new: form.allowNew,
+        website: form.website,
         renew_resets_traffic: form.resetTraffic,
         extra_devices_keep: form.keepDevices,
         trial_tariff_id: form.trial,
@@ -397,6 +399,7 @@ function RulesCard({ s }: { s: Settings }) {
         {save.error ? <div className="banner err mb-4" role="alert">{errorText(save.error)}</div> : null}
         <div className="row-list">
           <SwitchRow label={t("payments.allowNew")} sub={t("payments.allowNewSub")} checked={form.allowNew} onChange={(v) => setForm((f) => ({ ...f, allowNew: v }))} />
+          <SwitchRow label={t("payments.website")} sub={t("payments.websiteSub")} checked={form.website} onChange={(website) => setForm((f) => ({ ...f, website }))} />
           <SwitchRow
             label={t("payments.resetTraffic")}
             sub={form.resetTraffic ? t("payments.resetTrafficOn") : t("payments.resetTrafficOff")}

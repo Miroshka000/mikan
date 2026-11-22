@@ -4458,7 +4458,7 @@ export interface components {
              * @default all
              * @enum {string}
              */
-            source: "all" | "admin" | "bot" | "trial" | "free" | "import";
+            source: "all" | "admin" | "bot" | "web" | "trial" | "free" | "import";
             /**
              * @default all
              * @enum {string}
@@ -6010,7 +6010,7 @@ export interface components {
              */
             hidden_total: number;
             items: components["schemas"]["UserView"][];
-            /** @description Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку, группу и скрытых */
+            /** @description Пользователи по источникам (admin, bot, web, trial, free, import) среди подходящих под папку, группу и скрытых */
             source_counts: {
                 [key: string]: number;
             };
@@ -7107,6 +7107,7 @@ export interface components {
              * @description Тариф пробного периода; 0 — выключить
              */
             trial_tariff_id?: number;
+            website?: boolean;
         };
         PatchSettingsInputBody: {
             /**
@@ -7338,6 +7339,8 @@ export interface components {
              * @description Сколько пробных подписок выдано
              */
             trials: number;
+            /** @description Продажи и продление подписок в браузере; выключено по умолчанию */
+            website: boolean;
         };
         PaymentSettingsViewAvailableStruct: {
             /** @description Адаптеры маркетплейса, которые принимают оплату прямо сейчас */
@@ -9509,10 +9512,10 @@ export interface components {
             /** Format: date-time */
             resets_at: string | null;
             /**
-             * @description Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется
+             * @description Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, web — куплен на сайте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется
              * @enum {string}
              */
-            source: "admin" | "bot" | "trial" | "free" | "import";
+            source: "admin" | "bot" | "web" | "trial" | "free" | "import";
             /**
              * Format: int64
              * @description Мбит/с в каждую сторону; null — без ограничения
@@ -17564,7 +17567,7 @@ export interface operations {
                 /** @description all — любая; none — ни в какой группе; число — id группы. Группа клиента — своя или его тарифа (effective_group_id) */
                 group?: string;
                 /** @description Откуда пользователь, см. source у пользователя */
-                source?: "all" | "admin" | "bot" | "trial" | "free" | "import";
+                source?: "all" | "admin" | "bot" | "web" | "trial" | "free" | "import";
                 /** @description show — вместе со скрытыми (по умолчанию: скрытие касается только списка в панели); hide — без скрытых; only — только скрытые */
                 hidden?: "hide" | "show" | "only";
                 limit?: number;

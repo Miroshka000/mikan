@@ -1529,6 +1529,7 @@
               "all",
               "admin",
               "bot",
+              "web",
               "trial",
               "free",
               "import"
@@ -5874,7 +5875,7 @@
               "format": "int64",
               "type": "integer"
             },
-            "description": "Пользователи по источникам (admin, bot, trial, import) среди подходящих под папку, группу и скрытых",
+            "description": "Пользователи по источникам (admin, bot, web, trial, free, import) среди подходящих под папку, группу и скрытых",
             "type": "object"
           },
           "total": {
@@ -8794,6 +8795,9 @@
             "format": "int64",
             "minimum": 0,
             "type": "integer"
+          },
+          "website": {
+            "type": "boolean"
           }
         },
         "type": "object"
@@ -9343,12 +9347,17 @@
             "description": "Сколько пробных подписок выдано",
             "format": "int64",
             "type": "integer"
+          },
+          "website": {
+            "description": "Продажи и продление подписок в браузере; выключено по умолчанию",
+            "type": "boolean"
           }
         },
         "required": [
           "enabled",
           "stars",
           "allow_new",
+          "website",
           "renew_resets_traffic",
           "trial_tariff_id",
           "trial_stars",
@@ -15198,10 +15207,11 @@
             ]
           },
           "source": {
-            "description": "Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется",
+            "description": "Откуда пользователь: admin — создан в панели или по ключу API, bot — куплен в боте, web — куплен на сайте, trial — пробный период бота, free — бесплатный тариф из бота или Mini App, import — перенесён из другой панели. Заполняется при создании, не меняется",
             "enum": [
               "admin",
               "bot",
+              "web",
               "trial",
               "free",
               "import"
@@ -26245,6 +26255,7 @@
                 "all",
                 "admin",
                 "bot",
+                "web",
                 "trial",
                 "free",
                 "import"

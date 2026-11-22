@@ -24,7 +24,7 @@ func Allowed(method, p string) bool {
 		return false
 	}
 	if method == http.MethodGet || method == http.MethodHead {
-		return p == "/tg" || Static(p) || subscriber.MatchString(p) && !strings.Contains(p, "/devices/") || strings.HasPrefix(p, "/brand/")
+		return p == "/tg" || p == "/shop" || Static(p) || subscriber.MatchString(p) && !strings.Contains(p, "/devices/") || strings.HasPrefix(p, "/brand/")
 	}
-	return method == http.MethodPost && (subscriber.MatchString(p) && strings.Contains(p, "/devices/") || p == "/tg/session" || p == "/tg/reissue" || p == "/tg/shop" || p == "/tg/pay" || p == "/tg/free" || p == "/tg/promo" || p == "/tg/promo-history")
+	return method == http.MethodPost && (subscriber.MatchString(p) && strings.Contains(p, "/devices/") || p == "/tg/session" || p == "/tg/reissue" || p == "/tg/shop" || p == "/tg/pay" || p == "/tg/free" || p == "/tg/promo" || p == "/tg/promo-history" || p == "/shop/offers" || p == "/shop/pay" || p == "/shop/status")
 }

@@ -58,6 +58,8 @@ type Config struct {
 	Stars   bool `json:"stars"`
 	// AllowNew lets people without a subscription buy one; off: only renewals.
 	AllowNew bool `json:"allow_new"`
+	// Website enables browser sales, separately from the Telegram shop.
+	Website bool `json:"website"`
 	// RenewResetsTraffic: a paid renewal also starts a new traffic period; off, the
 	// counter keeps running and only the term is extended.
 	RenewResetsTraffic bool `json:"renew_resets_traffic"`
@@ -124,7 +126,9 @@ type Deps struct {
 	Addons *addons.Manager
 	// SubBase is https://host:port/<sub path>, where the webhooks are; "" without an address.
 	SubBase func(ctx context.Context) string
-	Promo   *promo.Service
+	// CheckoutBase is the public subscription address that buyers return to.
+	CheckoutBase func(ctx context.Context) string
+	Promo        *promo.Service
 	// Events wakes the addons reading the feed after a payment, a trial or a refund; nil: no
 	// one waits (the events are written all the same).
 	Events *events.Hub
@@ -294,20 +298,25 @@ type OfferTerm struct {
 // an available provider takes.
 func (s *Service) Offers(ctx context.Context) ([]Offer, Available, error) {
 	av := s.Available(ctx)
+	out, err := s.offers(ctx, av)
+	return out, av, err
+}
+
+func (s *Service) offers(ctx context.Context, av Available) ([]Offer, error) {
 	if !av.Any() {
-		return nil, av, nil
+		return nil, nil
 	}
 	ts, err := s.d.Store.Q.ListTariffsOnSale(ctx)
 	if err != nil {
-		return nil, av, err
+		return nil, err
 	}
 	rows, err := s.d.Store.Q.ListAllTariffTerms(ctx)
 	if err != nil {
-		return nil, av, err
+		return nil, err
 	}
 	groups, gifts, err := s.contents(ctx, ts)
 	if err != nil {
-		return nil, av, err
+		return nil, err
 	}
 	var out []Offer
 	for _, t := range ts {
@@ -326,7 +335,7 @@ func (s *Service) Offers(ctx context.Context) ([]Offer, Available, error) {
 			out = append(out, o)
 		}
 	}
-	return out, av, nil
+	return out, nil
 }
 
 // contents reads what the tariffs ts are made of, by tariff id: their groups (only a group
@@ -416,36 +425,9 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 		return db.Payment{}, err
 	}
 	q := s.d.Store.Q
-	t, err := q.GetTariff(ctx, req.TariffID)
-	if errors.Is(err, sql.ErrNoRows) || err == nil && (t.Archived != 0 || t.OnSale == 0) {
-		return db.Payment{}, ErrNotForSale
-	}
+	t, term, amount, currency, err := s.tariffOrder(ctx, req.UserID, req.TariffID, req.TermDays, req.Provider, s.Available(ctx))
 	if err != nil {
 		return db.Payment{}, err
-	}
-	terms, err := domain.TermsOf(ctx, q, t)
-	if err != nil {
-		return db.Payment{}, err
-	}
-	term := terms[0]
-	if req.TermDays != nil {
-		var found bool
-		if term, found = domain.FindTerm(terms, *req.TermDays); !found {
-			return db.Payment{}, ErrNotForSale
-		}
-	}
-	av := s.Available(ctx)
-	stars, rub := term.PriceStars, term.PriceRub
-	// Devices bought that stay with renewals are paid for with each of them.
-	if req.UserID != 0 {
-		if u, err := q.GetUser(ctx, req.UserID); err == nil {
-			moreStars, moreRub := model.RenewalExtras(s.Config(ctx).Model(), model.User(u), model.Tariff(t))
-			stars, rub = plus(stars, moreStars), plus(rub, moreRub)
-		}
-	}
-	amount, currency, ok := av.price(req.Provider, stars, rub)
-	if !ok {
-		return db.Payment{}, ErrProviderOff
 	}
 	termDays := sql.NullInt64{Int64: term.Days, Valid: true}
 	kind := "renew"
@@ -500,6 +482,46 @@ func (s *Service) Invoice(ctx context.Context, req InvoiceRequest) (db.Payment, 
 	}
 	lang, _ := s.d.Settings.Lang(ctx)
 	return s.openPayment(ctx, p, t.Name, model.Describe(model.Tariff(t), term.Days, lang))
+}
+
+func (s *Service) tariffOrder(ctx context.Context, userID, tariffID int64, days *int64, provider string, av Available) (db.Tariff, domain.Term, int64, string, error) {
+	q := s.d.Store.Q
+	t, err := q.GetTariff(ctx, tariffID)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && (t.Archived != 0 || t.OnSale == 0) {
+		return db.Tariff{}, domain.Term{}, 0, "", ErrNotForSale
+	}
+	if err != nil {
+		return db.Tariff{}, domain.Term{}, 0, "", err
+	}
+	terms, err := domain.TermsOf(ctx, q, t)
+	if err != nil {
+		return db.Tariff{}, domain.Term{}, 0, "", err
+	}
+	term := terms[0]
+	if days != nil {
+		var found bool
+		if term, found = domain.FindTerm(terms, *days); !found {
+			return db.Tariff{}, domain.Term{}, 0, "", ErrNotForSale
+		}
+	}
+	stars, rub := term.PriceStars, term.PriceRub
+	// Devices bought that stay with renewals are paid for with each of them.
+	if userID != 0 {
+		u, err := q.GetUser(ctx, userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return db.Tariff{}, domain.Term{}, 0, "", ErrNotYours
+		}
+		if err != nil {
+			return db.Tariff{}, domain.Term{}, 0, "", err
+		}
+		moreStars, moreRub := model.RenewalExtras(s.Config(ctx).Model(), model.User(u), model.Tariff(t))
+		stars, rub = plus(stars, moreStars), plus(rub, moreRub)
+	}
+	amount, currency, ok := av.price(provider, stars, rub)
+	if !ok {
+		return db.Tariff{}, domain.Term{}, 0, "", ErrProviderOff
+	}
+	return t, term, amount, currency, nil
 }
 
 // promoGuard refuses a promo code before anything is opened: codes are off, or the
@@ -713,6 +735,11 @@ func (s *Service) openPayment(ctx context.Context, p db.Payment, title, desc str
 		return q.GetPayment(ctx, p.ID)
 	}
 	ext, url, err := s.openInvoice(ctx, p, title, desc)
+	return s.recordInvoice(ctx, p, ext, url, err)
+}
+
+func (s *Service) recordInvoice(ctx context.Context, p db.Payment, ext sql.NullString, url string, err error) (db.Payment, error) {
+	q := s.d.Store.Q
 	if err != nil {
 		_, _ = q.SetPaymentStatus(ctx, db.SetPaymentStatusParams{NewStatus: PaymentFailed, ID: p.ID, OldStatus: PaymentPending})
 		if s.d.Promo != nil {
@@ -742,7 +769,7 @@ func (s *Service) openInvoice(ctx context.Context, p db.Payment, title, desc str
 		return sql.NullString{}, url, err
 	}
 	if model.AddonID(p.Provider) != "" {
-		return s.openAddonInvoice(ctx, p, title+" — "+desc)
+		return s.openAddonInvoice(ctx, p, title+" — "+desc, "", "")
 	}
 	return sql.NullString{}, "", ErrProviderOff
 }
@@ -903,6 +930,7 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		return err
 	}
 	reset := cfg.RenewResetsTraffic
+	lang, _ := s.d.Settings.Lang(ctx)
 	run := func(q *db.Queries) error {
 		// A conflict runs this again: nothing from an attempt that rolled back may stay.
 		pay, u, created, done = db.Payment{}, db.User{}, false, false
@@ -954,9 +982,23 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 				return err
 			}
 		}
-		if u, created, err = s.d.Users.Purchase(ctx, q, domain.PurchaseInput{UserID: userID, TariffID: pay.TariffID.Int64,
-			Term: pay.TermDays, Name: buyerName(ctx, q, pay.TgID), TgID: pay.TgID, ResetTraffic: reset, KeepExtraDevices: cfg.ExtraDevicesKeep,
-			PaymentID: pay.ID}); err != nil {
+		web := strings.HasPrefix(pay.Payload, webPayloadPrefix)
+		in := domain.PurchaseInput{UserID: userID, TariffID: pay.TariffID.Int64, Term: pay.TermDays,
+			TgID: pay.TgID, ResetTraffic: reset, KeepExtraDevices: cfg.ExtraDevicesKeep, PaymentID: pay.ID}
+		if web {
+			checkout, err := q.GetWebCheckout(ctx, id)
+			if err != nil {
+				return err
+			}
+			in.Contact = checkout.ReceiptEmail
+			in.Name, in.Note, in.Source = fmt.Sprintf("Web order %d", pay.ID), "Web checkout", domain.UserFromWeb
+			if lang == "ru" {
+				in.Name, in.Note = fmt.Sprintf("Заказ с сайта %d", pay.ID), "Покупка на сайте"
+			}
+		} else {
+			in.Name = buyerName(ctx, q, pay.TgID)
+		}
+		if u, created, err = s.d.Users.Purchase(ctx, q, in); err != nil {
 			return err
 		}
 		// The tariff's gifts come with every payment for it, on its transaction: a refund
@@ -964,7 +1006,16 @@ func (s *Service) Apply(ctx context.Context, id int64) error {
 		if _, err := domain.GrantGifts(ctx, q, u, pay.TariffID.Int64, pay.ID, s.d.Now()); err != nil {
 			return err
 		}
-		if created {
+		if web {
+			complete := db.CompleteWebCheckoutParams{PaymentID: id}
+			if created {
+				complete.TokenHash = tokenHash(u.SubToken)
+			}
+			if err := q.CompleteWebCheckout(ctx, complete); err != nil {
+				return err
+			}
+		}
+		if created && !web {
 			if err := q.LinkTg(ctx, db.LinkTgParams{UserID: u.ID, TgID: pay.TgID, CreatedAt: s.d.Now().Unix()}); err != nil {
 				return err
 			}
@@ -1202,6 +1253,7 @@ func (s *Service) Reconcile(ctx context.Context) {
 	if _, err := q.ExpirePayments(ctx, now.Add(-pendingTTL).Unix()); err != nil {
 		s.d.Log.Error("billing: expire", "err", err)
 	}
+	s.expireWebInvoices(ctx, now)
 	if s.d.Promo != nil {
 		_ = s.d.Promo.ReleaseExpired(ctx, now.Unix())
 	}

@@ -18,7 +18,7 @@ export type ShopData = {
   allow_new: boolean;
   providers: { stars: boolean };
   /** Marketplace adapters that take rubles, by the name the buyer sees. */
-  addons?: { provider: `addon:${string}`; name: string }[];
+  addons?: { provider: `addon:${string}`; name: string; receipt_email?: boolean }[];
   offers: Offer[];
   packages?: Offer[];
   /** One more device for the subscription on screen. */
@@ -29,6 +29,7 @@ export type ShopData = {
   free?: { name: string; description: string; channel?: string };
 };
 type Provider = "stars" | `addon:${string}`;
+export type BrowserOrder = { tariff_id: number; term_days?: number; provider: Provider };
 
 // YooKassa and CryptoBot keep the words buyers knew them by, and come first.
 const KNOWN: Record<string, Key> = { "addon:yookassa": "sub.shopCard", "addon:cryptobot": "sub.shopCrypto" };
@@ -67,6 +68,7 @@ export function Shop({
   openLink,
   onRefresh,
   promoCode = "",
+  browserPay,
 }: {
   data: ShopData;
   offers: Offer[];
@@ -80,7 +82,9 @@ export function Shop({
   openLink: (url: string) => void;
   onRefresh: () => void;
   promoCode?: string;
+  browserPay?: (order: BrowserOrder & { email: string }) => Promise<string | undefined>;
 }) {
+  const [email, setEmail] = useState("");
   const [picked, setPicked] = useState<number | null>(offers.length === 1 ? offers[0]!.id : null);
   // The chosen term of a plan sold for several; the first until another is chosen.
   const [termDays, setTermDays] = useState<number | null>(null);
@@ -105,12 +109,17 @@ export function Shop({
   const failText = (code: string) =>
     field === "package_id" && code === "not_for_sale" ? t("sub.packageNotForSale") : field === "device" && code === "not_for_sale" ? t("sub.deviceNotForSale") : t(FAIL[code] ?? "sub.shopFail");
 
-  const pay = async (provider: Provider) => {
+  const pay = async (provider: Provider, receiptEmail?: boolean) => {
     if (!offer) return;
     setBusy(provider);
     setError("");
     setReady(null);
     try {
+      if (browserPay) {
+        const code = await browserPay({ tariff_id: offer.id, term_days: sold?.days, provider, email: !token || receiptEmail ? email.trim() : "" });
+        if (code) setError(code === "invalid_email" ? t("sub.webEmailError") : failText(code));
+        return;
+      }
       if (promoCode) {
         const preview = await postJSON<{ code: string; discount: number; final_amount: number; currency: string }>(subRoot + "/tg/promo", {
           init_data: initData,
@@ -148,13 +157,14 @@ export function Shop({
     }
   };
 
-  const methods: { id: Provider; label: string; price?: string }[] = [];
+  const methods: { id: Provider; label: string; price?: string; receiptEmail?: boolean }[] = [];
   if (price?.stars && data.providers.stars) methods.push({ id: "stars", label: t("sub.shopStars"), price: `⭐ ${price.stars}` });
   if (price?.rub) {
     const adapters = [...(data.addons ?? [])].sort((a, b) => rank(a.provider) - rank(b.provider) || a.provider.localeCompare(b.provider));
-    for (const a of adapters) methods.push({ id: a.provider, label: KNOWN[a.provider] ? t(KNOWN[a.provider]!) : a.name, price: rubles(price.rub) });
+    for (const a of adapters) methods.push({ id: a.provider, label: KNOWN[a.provider] ? t(KNOWN[a.provider]!) : a.name, price: rubles(price.rub), receiptEmail: a.receipt_email });
   }
 
+  const emailValid = /^[^\s@]+@[^\s@]+$/.test(email.trim());
   const goName = ready ? data.addons?.find((a) => a.provider === ready.provider)?.name : undefined;
 
   return (
@@ -200,10 +210,16 @@ export function Shop({
           ))}
         </div>
       ) : null}
+      {offer && browserPay && (!token || methods.some((m) => m.receiptEmail)) ? (
+        <label className="mt-3 flex flex-col gap-1 text-xs font-medium">
+          {t(token ? "sub.webEmail" : "sub.webPurchaseEmail")}
+          <input className="input" type="email" autoComplete="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} required={!token} />
+        </label>
+      ) : null}
       {offer ? (
         <div className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, methods.length))}, minmax(0, 1fr))` }}>
           {methods.map((m, i) => (
-            <Button key={m.id} variant={i === 0 ? "primary" : "glass"} className="flex-col gap-0 py-2" style={{ height: "auto" }} loading={busy === m.id} disabled={!!busy} onClick={() => void pay(m.id)}>
+            <Button key={m.id} variant={i === 0 ? "primary" : "glass"} className="flex-col gap-0 py-2" style={{ height: "auto" }} loading={busy === m.id} disabled={!!busy || (!!browserPay && !emailValid && (!token || (!!m.receiptEmail && !!email.trim())))} onClick={() => void pay(m.id, m.receiptEmail)}>
               <span className="text-[13px] font-semibold">{m.price}</span>
               <span className="text-[11px] opacity-80">{m.label}</span>
             </Button>

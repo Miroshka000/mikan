@@ -85,6 +85,7 @@ func NewUsers(st *store.Store, pool *Pool, changes Changes, now func() time.Time
 // permission: nothing reads it to decide what a user may do.
 const (
 	UserFromAdmin  = "admin"  // made in the panel or by an API key
+	UserFromWeb    = "web"    // bought on the subscription site
 	UserFromBot    = "bot"    // bought in the Telegram bot
 	UserFromTrial  = "trial"  // the bot's free trial
 	UserFromImport = "import" // brought over from another panel
@@ -92,7 +93,7 @@ const (
 )
 
 // UserOrigins lists them in the order the list shows them.
-var UserOrigins = []string{UserFromAdmin, UserFromBot, UserFromTrial, UserFromFree, UserFromImport}
+var UserOrigins = []string{UserFromAdmin, UserFromBot, UserFromWeb, UserFromTrial, UserFromFree, UserFromImport}
 
 // ValidOrigin tells a source the database accepts.
 func ValidOrigin(s string) bool { return slices.Contains(UserOrigins, s) }
@@ -222,10 +223,11 @@ type PurchaseInput struct {
 	// Term is the term bought, as it was when bought; invalid: the tariff's own.
 	Term sql.NullInt64
 	Name string
-	// Note and Source go on a new subscription; empty: bought in the bot. A payment of a
+	// Contact, Note and Source go on a new subscription; empty: bought in the bot. A payment of a
 	// kind of its own names itself (the trial, bought for a price).
-	Note   string
-	Source string
+	Contact string
+	Note    string
+	Source  string
 	// TgID is the Telegram account that pays (for events.UserCreated).
 	TgID int64
 	// ResetTraffic: a renewal also starts a new traffic period (the payment buys a full
@@ -253,7 +255,7 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (
 		u, err = q.GetUser(ctx, in.UserID)
 	}
 	if in.UserID == 0 || errors.Is(err, sql.ErrNoRows) {
-		u, err = s.createTx(ctx, q, CreateInput{Name: in.Name, Note: cmp.Or(in.Note, "Telegram"), TariffID: in.TariffID,
+		u, err = s.createTx(ctx, q, CreateInput{Name: in.Name, Contact: in.Contact, Note: cmp.Or(in.Note, "Telegram"), TariffID: in.TariffID,
 			TermDays: in.Term, Source: cmp.Or(in.Source, UserFromBot), TgID: in.TgID}, true)
 		return u, err == nil, err
 	}

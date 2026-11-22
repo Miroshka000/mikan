@@ -21,6 +21,7 @@ type PaymentSettingsView struct {
 	Enabled            bool            `json:"enabled" doc:"Продажа подписок: выключено — бот и Mini App ничего не продают, новые счета не создаются, уже открытые засчитываются"`
 	Stars              bool            `json:"stars" doc:"Telegram Stars: нужен только запущенный бот"`
 	AllowNew           bool            `json:"allow_new" doc:"Новые люди могут купить подписку в боте; иначе — только продление"`
+	Website            bool            `json:"website" doc:"Продажи и продление подписок в браузере; выключено по умолчанию"`
 	RenewResetsTraffic bool            `json:"renew_resets_traffic" doc:"Оплаченное продление обнуляет трафик и начинает новый период; иначе только добавляет срок"`
 	TrialTariffID      *int64          `json:"trial_tariff_id" doc:"Тариф пробного периода: один раз на Telegram-аккаунт без подписки и оплат, кнопка в приветствии бота; null — пробного периода нет. Работает и при выключенной продаже"`
 	TrialStars         int64           `json:"trial_stars" doc:"Цена пробного периода в Stars; 0 вместе с trial_rub — бесплатно"`
@@ -66,6 +67,7 @@ type patchPaymentSettingsInput struct {
 		Enabled            *bool  `json:"enabled,omitempty"`
 		Stars              *bool  `json:"stars,omitempty"`
 		AllowNew           *bool  `json:"allow_new,omitempty"`
+		Website            *bool  `json:"website,omitempty"`
 		RenewResetsTraffic *bool  `json:"renew_resets_traffic,omitempty"`
 		TrialTariffID      *int64 `json:"trial_tariff_id,omitempty" minimum:"0" doc:"Тариф пробного периода; 0 — выключить"`
 		// The bounds are domain.MaxPriceStars and domain.MaxPriceRub, which a tag cannot
@@ -142,7 +144,7 @@ func (h *handlers) paymentSettings(ctx context.Context) (PaymentSettingsView, er
 	if err != nil {
 		return PaymentSettingsView{}, err
 	}
-	v := PaymentSettingsView{Enabled: c.Enabled, Stars: c.Stars, AllowNew: c.AllowNew, RenewResetsTraffic: c.RenewResetsTraffic, TrialStars: c.TrialStars, TrialRub: c.TrialRub}
+	v := PaymentSettingsView{Enabled: c.Enabled, Stars: c.Stars, AllowNew: c.AllowNew, Website: c.Website, RenewResetsTraffic: c.RenewResetsTraffic, TrialStars: c.TrialStars, TrialRub: c.TrialRub}
 	if t, ok := h.d.Billing.TrialTariff(ctx); ok {
 		v.TrialTariffID = &t.ID
 	}
@@ -239,7 +241,7 @@ func (h *handlers) updatePaymentSettings(ctx context.Context, in *patchPaymentSe
 		if c, err = billing.LoadConfig(ctx, set); err != nil {
 			return err
 		}
-		for dst, v := range map[*bool]*bool{&c.Enabled: b.Enabled, &c.Stars: b.Stars, &c.AllowNew: b.AllowNew, &c.RenewResetsTraffic: b.RenewResetsTraffic,
+		for dst, v := range map[*bool]*bool{&c.Enabled: b.Enabled, &c.Stars: b.Stars, &c.AllowNew: b.AllowNew, &c.Website: b.Website, &c.RenewResetsTraffic: b.RenewResetsTraffic,
 			&c.ExtraDevicesKeep: b.ExtraDevicesKeep} {
 			if v != nil {
 				*dst = *v
@@ -319,7 +321,7 @@ func (h *handlers) updatePaymentSettings(ctx context.Context, in *patchPaymentSe
 		return nil, err
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, "payments.settings", "", "", map[string]any{"enabled": c.Enabled, "stars": c.Stars,
-		"allow_new": c.AllowNew, "renew_resets_traffic": c.RenewResetsTraffic, "trial_tariff_id": c.TrialTariffID,
+		"allow_new": c.AllowNew, "website": c.Website, "renew_resets_traffic": c.RenewResetsTraffic, "trial_tariff_id": c.TrialTariffID,
 		"trial_stars": c.TrialStars, "trial_rub": c.TrialRub, "free_tariff_id": c.FreeTariffID, "free_condition": freeConditionView(c.FreeCondition),
 		"extra_devices_keep": c.ExtraDevicesKeep, "balance": map[string]any{"enabled": c.Balance.Enabled, "currency": c.Balance.Currency, "rate": c.Balance.Rate,
 			"min": c.Balance.Min, "max": c.Balance.Max}})
