@@ -82,6 +82,7 @@ export default defineConfig({
 						{ slug: 'start/overview' },
 						{ slug: 'start/citrus' },
 						{ slug: 'start/compare' },
+						{ slug: 'start/reality-mihomo' },
 						{ slug: 'start/install' },
 						{ slug: 'start/first-steps' },
 						{ slug: 'start/domain' },

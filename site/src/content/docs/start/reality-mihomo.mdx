@@ -1,0 +1,67 @@
+---
+title: REALITY и mihomo-клиенты
+description: 'Кейс: как mikan отдаёт VLESS и Trojan REALITY Clash-приложениям на ядре mihomo: что попадает в профиль, какие версии нужны и что панель делает сама.'
+---
+
+VLESS REALITY — основной протокол для России, а Clash-приложения на ядре mihomo — Clash Verge, FlClash, Koala Clash, Clash Meta for Android, ClashX Meta и другие — одни из самых популярных клиентов. В панелях вокруг Xray профиль Clash собирается из шаблона, и часть его полей админ подбирает сам. В mikan ядро нод — [Citrus](/mikan/start/citrus/), форк mihomo, поэтому профиль Clash для панели — родной формат её собственного ядра.
+
+## Что получает приложение
+
+Так выглядит VLESS REALITY по XHTTP в профиле, который панель отдаёт Clash-приложению (значения для примера):
+
+```yaml
+- name: "🇳🇱 VLESS XHTTP"
+  type: vless
+  server: 203.0.113.7
+  port: 443
+  client-fingerprint: chrome
+  network: xhttp
+  reality-opts:
+    public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+    short-id: a1b2c3d4
+  servername: www.example.com
+  tls: true
+  udp: true
+  uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  xhttp-opts:
+    mode: stream-one
+    path: /c8d1e2f3
+    reuse-settings:
+      h-max-request-times: 600-900
+      h-max-reusable-secs: 1800-3000
+      max-concurrency: 16-32
+```
+
+Всё это берётся из настроек протокола на ноде: публичный ключ панель вычисляет из закрытого, `short-id` — первый из его списка, `servername` — имя сайта маскировки из списка REALITY. Вручную переносить ничего не нужно.
+
+## Что панель делает сама
+
+- **Отпечаток.** REALITY в mihomo работает только через uTLS: без `client-fingerprint` ядро отказывается подключаться («REALITY is based on uTLS, please set a client-fingerprint»). Панель всегда пишет отпечаток: свой у протокола или общий из настроек, по умолчанию `chrome`.
+- **Имя сайта под нужным ключом.** У VLESS в mihomo TLS-имя называется `servername`, у Trojan — `sni`. Перепутанный ключ ядро молча пропускает, и REALITY уходит не с тем именем.
+- **Постквантовый обмен ключами.** Если в YAML протокола REALITY стоит `require-x25519mlkem768: true`, нода пускает только клиентов с X25519MLKEM768, а остальных отправляет на сайт маскировки. mihomo предлагает его, только когда в `reality-opts` есть `support-x25519mlkem768: true`, и панель пишет это сама. В Remnawave на 24 ноября 2026 года для этого у хоста есть флажок `mihomoX25519`, по умолчанию выключенный.
+- **Переиспользование соединений XHTTP.** Xray-клиенты держат несколько соединений HTTP/2 и пускают по ним запросы, mihomo без настройки открывает на каждое соединение приложения новое TLS-рукопожатие. Их всплески российский DPI замечает и замораживает порт сервера. Поэтому панель даёт `reuse-settings`, если в протоколе нет своих.
+- **Пинг gRPC.** У REALITY по gRPC в профиле `ping-interval: 15`: приложение пингует простаивающее соединение, и промежуточное оборудование не обрывает его молча.
+- **Версия ядра.** Приложение, которое сообщает в запросе версию mihomo, получает только то, что эта версия умеет: XHTTP с 1.19.22, постквантовое шифрование VLESS (пресет PQ) с 1.19.13. Остальные протоколы ноды оно получает как обычно. См. [Кто что получает](/mikan/protocols/presets/#кто-что-получает).
+- **Брошенные приложения.** Clash for Windows, Clash for Android и ClashX работают на ядре Clash Premium, где нет ни VLESS, ни REALITY. Встроенное [правило ответа](/mikan/subscriptions/clients/#правила-ответа) отдаёт им заглушку с подсказкой поставить актуальное приложение, а не профиль, который не загрузится.
+
+Профили, которые собирает панель, в автотестах загружает само ядро (Citrus, форк mihomo), а серверные протоколы Citrus проверяются против настоящих клиентов mihomo и Xray.
+
+## Как проверить
+
+1. Добавьте протокол из пресета **VLESS · REALITY · XHTTP** или **VLESS · REALITY · Vision**.
+2. Откройте карточку клиента и экран [«Что получит клиент»](/mikan/subscriptions/clients/#что-получит-клиент): выберите Clash-приложение и посмотрите профиль, который оно получит.
+3. Если приложение не подключается, загляните в [журнал запросов](/mikan/subscriptions/clients/#журнал-запросов): там видно, кем оно представилось и что ему ушло.
+
+## Если не подключается
+
+- **Нет серверов XHTTP.** Приложение сообщает ядро старше 1.19.22: обновите его. Vision и gRPC работают и на старых версиях.
+- **Пришла заглушка.** Это одно из брошенных приложений на Clash Premium: поставьте Clash Verge, FlClash, Koala Clash или другое на mihomo.
+- **Подключение не проходит.** Проверьте сайт маскировки кнопкой «Проверить» в настройках протокола: он должен открываться с ноды. Если сайт перестал подходить, его можно сменить кнопкой «Подобрать рядом с сервером».
+
+Дробить TLS-рукопожатие для REALITY не нужно: в ClientHello имя чужого сайта маскировки, которое DPI и так пропускает. Дробление есть у [адресов для клиентов](/mikan/protocols/behind-proxy/#несколько-адресов-для-клиентов) протоколов на сертификате ноды, и Clash-приложения его не получают: в mihomo такой настройки нет.
+
+## Источники
+
+- mikan: профиль Clash — [internal/sub/mihomo](https://github.com/Miroshka000/mikan/tree/dev/internal/sub/mihomo), версии ядра по приложениям — [internal/sub/apps](https://github.com/Miroshka000/mikan/tree/dev/internal/sub/apps).
+- mihomo: [отказ REALITY без отпечатка](https://github.com/MetaCubeX/mihomo/blob/Meta/transport/vmess/tls.go), [`support-x25519mlkem768`](https://github.com/MetaCubeX/mihomo/blob/Meta/adapter/outbound/reality.go).
+- Remnawave: [генератор профиля mihomo](https://github.com/remnawave/backend/blob/main/src/modules/subscription-template/generators/mihomo.generator.service.ts), [поле `mihomoX25519` хоста](https://github.com/remnawave/backend/blob/main/libs/contract/commands/hosts/create.command.ts).

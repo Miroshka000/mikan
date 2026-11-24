@@ -1,0 +1,67 @@
+---
+title: REALITY and mihomo clients
+description: 'A case: how mikan gives VLESS and Trojan REALITY to the Clash apps on the mihomo core: what goes into the profile, which versions it takes and what the panel does by itself.'
+---
+
+VLESS REALITY is the main protocol for Russia, and the Clash apps on the mihomo core (Clash Verge, FlClash, Koala Clash, Clash Meta for Android, ClashX Meta and others) are among the most used clients. In the panels built around Xray the Clash profile is made of a template, and some of its fields are the admin's to pick. In mikan the nodes run [Citrus](/mikan/en/start/citrus/), a fork of mihomo, so a Clash profile is the native format of the panel's own core.
+
+## What the app gets
+
+This is VLESS REALITY over XHTTP in the profile the panel gives a Clash app (the values are an example):
+
+```yaml
+- name: "🇳🇱 VLESS XHTTP"
+  type: vless
+  server: 203.0.113.7
+  port: 443
+  client-fingerprint: chrome
+  network: xhttp
+  reality-opts:
+    public-key: B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9_AsrhtHHw
+    short-id: a1b2c3d4
+  servername: www.example.com
+  tls: true
+  udp: true
+  uuid: 0b4ddc4c-7c4f-4a36-9d62-6f1a44b8c4e1
+  xhttp-opts:
+    mode: stream-one
+    path: /c8d1e2f3
+    reuse-settings:
+      h-max-request-times: 600-900
+      h-max-reusable-secs: 1800-3000
+      max-concurrency: 16-32
+```
+
+All of it comes from the protocol's settings on the node: the panel derives the public key from the private one, `short-id` is the first of its list, `servername` a name of the camouflage site from REALITY's list. Nothing is to be copied by hand.
+
+## What the panel does by itself
+
+- **The fingerprint.** REALITY in mihomo runs over uTLS alone: without `client-fingerprint` the core does not connect ("REALITY is based on uTLS, please set a client-fingerprint"). The panel always writes one: the protocol's own or the one of the settings, `chrome` by default.
+- **The site's name under the right key.** mihomo calls the TLS name of VLESS `servername` and that of Trojan `sni`. The core silently skips a key of the other one, and REALITY goes out with the wrong name.
+- **The post-quantum key exchange.** With `require-x25519mlkem768: true` in the YAML of a REALITY protocol the node lets in only clients that offer X25519MLKEM768 and sends the others to the camouflage site. mihomo offers it only with `support-x25519mlkem768: true` in `reality-opts`, and the panel writes that by itself. In Remnawave, as of November 24, 2026, a host has a `mihomoX25519` checkbox for it, off by default.
+- **Reusing XHTTP connections.** The Xray clients keep a few HTTP/2 connections and send the requests over them; mihomo, left alone, opens a new TLS handshake for every connection of the app. The Russian DPI notices bursts of them and freezes the server's port. So the panel gives `reuse-settings` when the protocol has none of its own.
+- **gRPC pings.** REALITY over gRPC has `ping-interval: 15` in the profile: the app pings an idle connection, so that a middlebox does not cut it silently.
+- **The core's version.** An app that tells its mihomo version in the request gets only what that version can do: XHTTP from 1.19.22, VLESS post-quantum encryption (the PQ preset) from 1.19.13. It gets the node's other protocols as usual. See [Who gets what](/mikan/en/protocols/presets/#who-gets-what).
+- **Discontinued apps.** Clash for Windows, Clash for Android and ClashX run the Clash Premium core, which has neither VLESS nor REALITY. A built-in [response rule](/mikan/en/subscriptions/clients/#response-rules) gives them a stub that tells to install a current app, not a profile that would not load.
+
+In the tests the profiles the panel makes are loaded by the core itself (Citrus, the mihomo fork), and the server protocols of Citrus are tested against real mihomo and Xray clients.
+
+## How to check
+
+1. Add a protocol of the **VLESS · REALITY · XHTTP** or the **VLESS · REALITY · Vision** preset.
+2. Open a client's card and the [What the client gets](/mikan/en/subscriptions/clients/#what-the-client-gets) screen: pick a Clash app and see the profile it gets.
+3. If the app does not connect, look at the [request log](/mikan/en/subscriptions/clients/#request-log): it shows what the app introduced itself as and what it was given.
+
+## If it does not connect
+
+- **No XHTTP servers.** The app tells a core older than 1.19.22: update it. Vision and gRPC work on older versions too.
+- **A stub came.** It is one of the discontinued apps on Clash Premium: install Clash Verge, FlClash, Koala Clash or another app on mihomo.
+- **The connection does not go through.** Check the camouflage site with "Check" in the protocol's settings: the node must reach it. If the site no longer fits, "Find near the server" finds another.
+
+REALITY needs no split TLS handshake: its ClientHello carries the name of someone else's camouflage site, which a DPI lets through anyway. The [addresses for clients](/mikan/en/protocols/behind-proxy/#several-addresses-for-clients) of the protocols on the node's certificate can split it, and the Clash apps do not get that: mihomo has no such setting.
+
+## Sources
+
+- mikan: the Clash profile in [internal/sub/mihomo](https://github.com/Miroshka000/mikan/tree/dev/internal/sub/mihomo), the core versions by app in [internal/sub/apps](https://github.com/Miroshka000/mikan/tree/dev/internal/sub/apps).
+- mihomo: [REALITY refused without a fingerprint](https://github.com/MetaCubeX/mihomo/blob/Meta/transport/vmess/tls.go), [`support-x25519mlkem768`](https://github.com/MetaCubeX/mihomo/blob/Meta/adapter/outbound/reality.go).
+- Remnawave: [the mihomo profile generator](https://github.com/remnawave/backend/blob/main/src/modules/subscription-template/generators/mihomo.generator.service.ts), [the `mihomoX25519` field of a host](https://github.com/remnawave/backend/blob/main/libs/contract/commands/hosts/create.command.ts).
