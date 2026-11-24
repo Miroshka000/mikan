@@ -69,16 +69,17 @@ func (h *Handler) Preview(sub Subscription, r *http.Request) Preview {
 		p.Body = nil // the subscription page, as a browser opens it
 	}
 	if tr.profiled {
-		// What went out: the built-in profile in place of a template that did not render.
-		t := tr.tpl
+		// What went out: the built-in profile in place of a template that did not render, and
+		// the built-in profile of its routing for a simple template.
+		rc, t := cfg.Routed(tr.tpl)
 		if tr.failed {
 			t = model.Template{}
 		}
 		switch ex.format {
 		case FormatSingBox:
-			p.Notes = append(singbox.Notes(tr.prof, cfg.Groups, cfg.Mode, t), singbox.Dropped(tr.prof, cfg.Groups, cfg.Mode, t)...)
+			p.Notes = append(singbox.Notes(tr.prof, rc.Groups, rc.Mode, t), singbox.Dropped(tr.prof, rc.Groups, rc.Mode, t)...)
 		case FormatXray:
-			p.Notes = append(xray.Notes(tr.prof, cfg.Groups, cfg.Mode, t), xray.Dropped(tr.prof, cfg.Groups, cfg.Mode, t)...)
+			p.Notes = append(xray.Notes(tr.prof, rc.Groups, rc.Mode, t), xray.Dropped(tr.prof, rc.Groups, rc.Mode, t)...)
 		}
 	}
 	return p

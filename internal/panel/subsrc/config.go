@@ -106,7 +106,7 @@ func LoadConfig(ctx context.Context, d ConfigDeps) (Config, error) {
 	if cfg.Routes, _, err = settings.Get[routing.Routes](ctx, set, settings.KeyRoutes); err != nil {
 		return Config{}, err
 	}
-	if cfg.Templates, err = LoadTemplates(ctx, d.Q); err != nil {
+	if cfg.Templates, cfg.Routings, err = LoadTemplates(ctx, d.Q, groups.WithDefaults(lang)); err != nil {
 		return Config{}, err
 	}
 	if cfg.Binding, err = set.On(ctx, settings.DeviceBinding); err != nil {

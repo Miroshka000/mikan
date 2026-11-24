@@ -2,15 +2,15 @@
 // country whatever DNS the user's device asked. On from the start; the routing's DNS part
 // tunes it and saves it with the rest of the routing.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, unwrap, type Schemas } from "../../../api/client";
-import { qk } from "../../../api/hooks";
-import { SwitchRow } from "../../../components/switch";
-import { useToast } from "../../../components/toast";
-import { Field } from "../../../components/ui";
-import { t } from "../../../i18n";
-import { fieldErrors, onFormError } from "../../../lib/fields";
-import { splitList } from "../../../lib/list";
-import { Select } from "../../../components/select";
+import { api, unwrap, type Schemas } from "../../../../api/client";
+import { qk } from "../../../../api/hooks";
+import { SwitchRow } from "../../../../components/switch";
+import { useToast } from "../../../../components/toast";
+import { Field } from "../../../../components/ui";
+import { t } from "../../../../i18n";
+import { fieldErrors, onFormError } from "../../../../lib/fields";
+import { splitList } from "../../../../lib/list";
+import { Select } from "../../../../components/select";
 
 export type ExitDnsInfo = Schemas["ExitDNSInfo"];
 type Resolver = ExitDnsInfo["resolver"];

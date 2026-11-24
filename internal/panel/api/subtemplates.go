@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"mikan/internal/panel/subsrc"
 	submodel "mikan/internal/sub/model"
 	"mikan/internal/sub/ready"
+	"mikan/internal/sub/routing"
 )
 
 // The subscription templates: the admin's own profiles of the cores (internal/sub/<core>)
@@ -24,15 +26,34 @@ import (
 // rules name; and the preview of one before it is saved. Every change is the session's: it
 // decides what every subscriber's app is given. A template may hold the admin's own
 // servers, a controller secret or DNS tokens, so a key or an operator that is not shown
-// secrets reads no text.
+// secrets reads no text, and no routing of a simple one either: its lists and DNS are
+// links of the admin's.
+//
+// A template is of text (body: the core's config) or simple (routing: the built-in profile of
+// every core made by a routing of its own, kept as a Clash template). What a create or a change
+// sends decides which: a body makes a template of text, a routing a simple one, never both.
+
+// The kinds of a template, as the API names them.
+const (
+	templateText   = "text"
+	templateSimple = "simple"
+)
+
+func templateKind(simple bool) string {
+	if simple {
+		return templateSimple
+	}
+	return templateText
+}
 
 // SubTemplateHead is a template as the list shows it.
 type SubTemplateHead struct {
 	ID        int64     `json:"id"`
-	Core      string    `json:"core" enum:"mihomo,singbox,xray" doc:"Ядро: mihomo (Clash, YAML), singbox или xray (JSON)"`
+	Core      string    `json:"core" enum:"mihomo,singbox,xray" doc:"Ядро: mihomo (Clash, YAML), singbox или xray (JSON); у простого шаблона mihomo"`
+	Kind      string    `json:"kind" enum:"text,simple" doc:"text — свой конфиг ядра текстом, simple — простой: своя маршрутизация вместо текста, профиль для всех приложений"`
 	Name      string    `json:"name"`
 	Default   bool      `json:"default" doc:"Приложения этого ядра получают его, если правило ответа не выбрало другой"`
-	Size      int64     `json:"size" doc:"Размер текста в байтах"`
+	Size      int64     `json:"size" doc:"Размер текста в байтах; 0 у простого шаблона"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Rules     []string  `json:"rules" doc:"Правила ответа, которые выбирают этот шаблон"`
 }
@@ -43,17 +64,20 @@ type SubTemplatesView struct {
 	MaxSize   int               `json:"max_size" doc:"Наибольший размер текста шаблона в байтах"`
 }
 
-// SubTemplate is one template with its text.
+// SubTemplate is one template with its text, or its routing when it is a simple one.
 type SubTemplate struct {
 	ID        int64     `json:"id"`
 	Core      string    `json:"core" enum:"mihomo,singbox,xray"`
+	Kind      string    `json:"kind" enum:"text,simple"`
 	Name      string    `json:"name"`
 	Default   bool      `json:"default"`
 	Size      int64     `json:"size"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Rules     []string  `json:"rules" doc:"Правила ответа, которые выбирают этот шаблон"`
-	Body      string    `json:"body" doc:"Текст шаблона; пусто, когда он скрыт"`
-	Hidden    bool      `json:"hidden" doc:"Текст скрыт от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты"`
+	Body      string    `json:"body" doc:"Текст шаблона; пусто у простого и когда он скрыт"`
+	// Routing is nil for a template of text, and where secrets are hidden.
+	Routing *subsrc.TemplateRouting `json:"routing" doc:"Маршрутизация простого шаблона; null у шаблона текстом и когда она скрыта"`
+	Hidden  bool                    `json:"hidden" doc:"Текст и маршрутизация скрыты от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты"`
 }
 
 type subTemplatesOutput struct{ Body SubTemplatesView }
@@ -68,27 +92,30 @@ type subTemplateIDInput struct {
 // filter. checkTemplateSize counts the bytes the limit is in.
 type createSubTemplateInput struct {
 	Body struct {
-		Core    string `json:"core" enum:"mihomo,singbox,xray"`
-		Name    string `json:"name" minLength:"1" maxLength:"80"`
-		Body    string `json:"body" maxLength:"524288" doc:"Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray"`
-		Default bool   `json:"default,omitempty" doc:"Сделать шаблоном ядра по умолчанию"`
+		Core    string                  `json:"core" enum:"mihomo,singbox,xray" doc:"Ядро; простой шаблон — mihomo"`
+		Name    string                  `json:"name" minLength:"1" maxLength:"80"`
+		Body    string                  `json:"body,omitempty" maxLength:"524288" doc:"Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray. Вместе с routing не передаётся"`
+		Routing *subsrc.TemplateRouting `json:"routing,omitempty" doc:"Простой шаблон вместо body: своя маршрутизация, из которой собирается встроенный профиль каждого ядра"`
+		Default bool                    `json:"default,omitempty" doc:"Сделать шаблоном ядра по умолчанию"`
 	}
 }
 
 type patchSubTemplateInput struct {
 	ID   int64 `path:"id" minimum:"1"`
 	Body struct {
-		Name    *string `json:"name,omitempty" minLength:"1" maxLength:"80"`
-		Body    *string `json:"body,omitempty" maxLength:"524288"`
-		Default *bool   `json:"default,omitempty" doc:"true — шаблон ядра по умолчанию, false — у ядра снова встроенный профиль"`
+		Name    *string                 `json:"name,omitempty" minLength:"1" maxLength:"80"`
+		Body    *string                 `json:"body,omitempty" maxLength:"524288" doc:"Новый текст; простой шаблон с ним становится шаблоном текстом"`
+		Routing *subsrc.TemplateRouting `json:"routing,omitempty" doc:"Новая маршрутизация; шаблон Clash текстом с ней становится простым. Вместе с body не передаётся"`
+		Default *bool                   `json:"default,omitempty" doc:"true — шаблон ядра по умолчанию, false — у ядра снова встроенный профиль"`
 	}
 }
 
 type previewSubTemplateInput struct {
 	Body struct {
-		Core    string `json:"core" enum:"mihomo,singbox,xray"`
-		Body    string `json:"body,omitempty" maxLength:"524288" doc:"Шаблон; пусто — встроенный профиль ядра"`
-		Starter bool   `json:"starter,omitempty" doc:"Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами, или пример для sing-box и Xray"`
+		Core    string                  `json:"core" enum:"mihomo,singbox,xray" doc:"Ядро профиля; для простого шаблона — любое: Clash, sing-box или Xray"`
+		Body    string                  `json:"body,omitempty" maxLength:"524288" doc:"Шаблон; пусто — встроенный профиль ядра"`
+		Routing *subsrc.TemplateRouting `json:"routing,omitempty" doc:"Маршрутизация простого шаблона вместо body: встроенный профиль ядра, собранный из неё"`
+		Starter bool                    `json:"starter,omitempty" doc:"Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами (с routing — из этой маршрутизации), или пример для sing-box и Xray"`
 	}
 }
 
@@ -211,7 +238,7 @@ func (h *handlers) listSubTemplates(ctx context.Context, _ *struct{}) (*subTempl
 	}
 	v := SubTemplatesView{Templates: make([]SubTemplateHead, 0, len(rows)), Max: subsrc.MaxTemplates, MaxSize: subsrc.MaxTemplateSize}
 	for _, r := range rows {
-		v.Templates = append(v.Templates, SubTemplateHead{ID: r.ID, Core: r.Core, Name: r.Name, Default: r.IsDefault, Size: r.Size,
+		v.Templates = append(v.Templates, SubTemplateHead{ID: r.ID, Core: r.Core, Kind: templateKind(r.Simple), Name: r.Name, Default: r.IsDefault, Size: r.Size,
 			UpdatedAt: store.Time(r.UpdatedAt), Rules: rulesOf(named, r.ID)})
 	}
 	return &subTemplatesOutput{Body: v}, nil
@@ -224,16 +251,21 @@ func rulesOf(named map[int64][]string, id int64) []string {
 	return []string{}
 }
 
-// subTemplateView is row as the API gives it: without its text where secrets are hidden.
+// subTemplateView is row as the API gives it: without its text or routing where secrets are
+// hidden.
 func (h *handlers) subTemplateView(ctx context.Context, row db.SubTemplate) (SubTemplate, error) {
 	named, err := templateRules(ctx, h.d.Store.Q)
 	if err != nil {
 		return SubTemplate{}, err
 	}
-	v := SubTemplate{ID: row.ID, Core: row.Core, Name: row.Name, Default: row.IsDefault, Size: int64(len(row.Body)), UpdatedAt: store.Time(row.UpdatedAt),
-		Rules: rulesOf(named, row.ID), Body: row.Body}
+	v := SubTemplate{ID: row.ID, Core: row.Core, Kind: templateKind(row.Routing.Valid), Name: row.Name, Default: row.IsDefault, Size: int64(len(row.Body)),
+		UpdatedAt: store.Time(row.UpdatedAt), Rules: rulesOf(named, row.ID), Body: row.Body}
+	if row.Routing.Valid {
+		r := subsrc.TemplateRoutingOf(row.Routing.String)
+		v.Routing = &r
+	}
 	if hidesSecrets(ctx) {
-		v.Body, v.Hidden = "", true
+		v.Body, v.Routing, v.Hidden = "", nil, true
 	}
 	return v, nil
 }
@@ -286,6 +318,98 @@ func checkTemplateSize(body string) error {
 	return nil
 }
 
+// oneContent refuses a body and a routing sent together: a template is of text or simple.
+func oneContent(body string, r *subsrc.TemplateRouting) error {
+	if r != nil && body != "" {
+		return fieldErr("body.routing", "template_body_or_routing")
+	}
+	return nil
+}
+
+// checkTemplateRoutes refuses the routes of a simple template that would break the profiles, as
+// the setting sub_routes is refused (routing.Routes.Check).
+func (h *handlers) checkTemplateRoutes(ctx context.Context, r routing.Routes) error {
+	if err := r.Check(h.nodeExists(ctx)); err != nil {
+		return fieldErr("body.routing.routes", err.Error())
+	}
+	return nil
+}
+
+// templateRouting checks the routing r of a simple template of core with the checks the
+// settings it stands for take (sub_routes, sub_rules), at the field of body.routing it is
+// about, and gives it as the row keeps it: the rules without the blank end the settings drop.
+func (h *handlers) templateRouting(ctx context.Context, core submodel.Core, r subsrc.TemplateRouting) (sql.NullString, error) {
+	if core != submodel.CoreMihomo {
+		return sql.NullString{}, fieldErr("body.core", "template_simple_core")
+	}
+	if err := h.checkTemplateRoutes(ctx, r.Routes); err != nil {
+		return sql.NullString{}, err
+	}
+	g, err := subsrc.LoadGroups(ctx, h.d.Settings)
+	if err != nil {
+		return sql.NullString{}, err
+	}
+	r.Rules = strings.TrimRight(r.Rules, " \n\r\t")
+	if _, err := routing.ParseRules(r.Rules, g); err != nil {
+		var re *routing.RuleError
+		if !errors.As(err, &re) {
+			return sql.NullString{}, err
+		}
+		return sql.NullString{}, fieldErrValue("body.routing.rules", re.Code, re.Line)
+	}
+	doc, err := json.Marshal(r)
+	if err != nil {
+		return sql.NullString{}, err
+	}
+	return sql.NullString{Valid: true, String: string(doc)}, nil
+}
+
+// groupInTemplateRules refuses the groups cur renamed to next (main: the main one is renamed,
+// else the automatic one) when a rule of a simple template that reads now sends to a name that
+// goes: the rule would point nowhere, as the settings' own rules are kept from (group_in_rules).
+// The value names the templates; nil when no rule does.
+func (h *handlers) groupInTemplateRules(ctx context.Context, cur, next submodel.GroupNames, main bool) (*huma.ErrorDetail, error) {
+	rows, err := h.d.Store.Q.ListSimpleSubTemplates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, r := range rows {
+		rules := subsrc.TemplateRoutingOf(r.Routing.String).Rules
+		if _, err := routing.ParseRules(rules, cur); err != nil {
+			continue // broken before the rename: not this change's to refuse
+		}
+		if _, err := routing.ParseRules(rules, next); err != nil {
+			names = append(names, r.Name)
+		}
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	field := "body.sub_group_auto"
+	if main {
+		field = "body.sub_group_main"
+	}
+	return fieldDetail(field, "group_in_template_rules", strings.Join(names, ", ")), nil
+}
+
+// templateContent is what a template of core holds as a create or a change sends it: a body
+// (checkSubTemplate) or a routing (templateRouting), never both.
+func (h *handlers) templateContent(ctx context.Context, core submodel.Core, body *string, r *subsrc.TemplateRouting) (string, sql.NullString, error) {
+	var text string
+	if body != nil {
+		text = *body
+	}
+	if err := oneContent(text, r); err != nil {
+		return "", sql.NullString{}, err
+	}
+	if r == nil {
+		return text, sql.NullString{}, h.checkSubTemplate(ctx, core, text)
+	}
+	doc, err := h.templateRouting(ctx, core, *r)
+	return "", doc, err
+}
+
 // setTemplateDefault makes the template of core the core's default (on), or leaves the core
 // without one when it was (off), in the caller's transaction.
 func setTemplateDefault(ctx context.Context, q *db.Queries, row db.SubTemplate, on bool) error {
@@ -306,11 +430,12 @@ func (h *handlers) createSubTemplate(ctx context.Context, in *createSubTemplateI
 	if name == "" {
 		return nil, fieldErr("body.name", "template_name")
 	}
-	if err := h.checkSubTemplate(ctx, core, in.Body.Body); err != nil {
+	body, doc, err := h.templateContent(ctx, core, &in.Body.Body, in.Body.Routing)
+	if err != nil {
 		return nil, err
 	}
 	var row db.SubTemplate
-	err := h.d.Store.TxRC(ctx, func(q *db.Queries) error {
+	err = h.d.Store.TxRC(ctx, func(q *db.Queries) error {
 		// Two creates at once must not both count 19 and make 21.
 		if err := q.LockSubTemplates(ctx); err != nil {
 			return err
@@ -322,7 +447,7 @@ func (h *handlers) createSubTemplate(ctx context.Context, in *createSubTemplateI
 		if n >= subsrc.MaxTemplates {
 			return huma.Error409Conflict("template_limit", &huma.ErrorDetail{Message: "template_limit", Value: subsrc.MaxTemplates})
 		}
-		if row, err = q.CreateSubTemplate(ctx, db.CreateSubTemplateParams{Core: in.Body.Core, Name: name, Body: in.Body.Body, At: h.d.Now().Unix()}); err != nil {
+		if row, err = q.CreateSubTemplate(ctx, db.CreateSubTemplateParams{Core: in.Body.Core, Name: name, Body: body, Routing: doc, At: h.d.Now().Unix()}); err != nil {
 			return err
 		}
 		if !in.Body.Default {
@@ -339,7 +464,8 @@ func (h *handlers) createSubTemplate(ctx context.Context, in *createSubTemplateI
 	}
 	// The subscriptions' config holds the templates: built again on the next fetch.
 	settings.Touch()
-	h.audit(ctx, sessionOf(ctx).AdminID, "sub_template.create", "sub_template", strconv.FormatInt(row.ID, 10), map[string]any{"core": row.Core, "name": row.Name, "default": row.IsDefault})
+	h.audit(ctx, sessionOf(ctx).AdminID, "sub_template.create", "sub_template", strconv.FormatInt(row.ID, 10),
+		map[string]any{"core": row.Core, "kind": templateKind(row.Routing.Valid), "name": row.Name, "default": row.IsDefault})
 	v, err := h.subTemplateView(ctx, row)
 	if err != nil {
 		return nil, err
@@ -356,15 +482,17 @@ func (h *handlers) patchSubTemplate(ctx context.Context, in *patchSubTemplateInp
 		return nil, err
 	}
 	b := in.Body
-	name, body := row.Name, row.Body
+	name, body, doc := row.Name, row.Body, row.Routing
+	wasSimple := row.Routing.Valid
 	if b.Name != nil {
 		if name = strings.TrimSpace(*b.Name); name == "" {
 			return nil, fieldErr("body.name", "template_name")
 		}
 	}
-	if b.Body != nil {
-		body = *b.Body
-		if err := h.checkSubTemplate(ctx, submodel.Core(row.Core), body); err != nil {
+	// A body makes the template one of text, a routing a simple one, whatever it was.
+	content := b.Body != nil || b.Routing != nil
+	if content {
+		if body, doc, err = h.templateContent(ctx, submodel.Core(row.Core), b.Body, b.Routing); err != nil {
 			return nil, err
 		}
 	}
@@ -374,8 +502,8 @@ func (h *handlers) patchSubTemplate(ctx context.Context, in *patchSubTemplateInp
 		if err := q.LockSubTemplates(ctx); err != nil {
 			return err
 		}
-		if b.Name != nil || b.Body != nil {
-			if row, err = q.UpdateSubTemplate(ctx, db.UpdateSubTemplateParams{ID: row.ID, Name: name, Body: body, UpdatedAt: h.d.Now().Unix()}); err != nil {
+		if b.Name != nil || content {
+			if row, err = q.UpdateSubTemplate(ctx, db.UpdateSubTemplateParams{ID: row.ID, Name: name, Body: body, Routing: doc, UpdatedAt: h.d.Now().Unix()}); err != nil {
 				return err
 			}
 		}
@@ -391,8 +519,11 @@ func (h *handlers) patchSubTemplate(ctx context.Context, in *patchSubTemplateInp
 		return nil, err
 	}
 	settings.Touch()
-	h.audit(ctx, sessionOf(ctx).AdminID, "sub_template.update", "sub_template", strconv.FormatInt(row.ID, 10),
-		map[string]any{"core": row.Core, "name": row.Name, "default": row.IsDefault, "body": b.Body != nil})
+	audit := map[string]any{"core": row.Core, "kind": templateKind(row.Routing.Valid), "name": row.Name, "default": row.IsDefault, "body": b.Body != nil, "routing": b.Routing != nil}
+	if wasSimple != row.Routing.Valid {
+		audit["kind_was"] = templateKind(wasSimple)
+	}
+	h.audit(ctx, sessionOf(ctx).AdminID, "sub_template.update", "sub_template", strconv.FormatInt(row.ID, 10), audit)
 	v, err := h.subTemplateView(ctx, row)
 	if err != nil {
 		return nil, err
@@ -436,10 +567,22 @@ func (h *handlers) previewSubTemplate(ctx context.Context, in *previewSubTemplat
 	if h.d.TemplatePreview == nil {
 		return nil, huma.Error503ServiceUnavailable("preview_unavailable")
 	}
-	if err := checkTemplateSize(in.Body.Body); err != nil {
+	b := in.Body
+	if err := checkTemplateSize(b.Body); err != nil {
 		return nil, err
 	}
-	pv, err := h.d.TemplatePreview(ctx, subsrc.TemplatePreview{Core: submodel.Core(in.Body.Core), Body: in.Body.Body, Starter: in.Body.Starter})
+	// A simple template's routing is checked as it is while it is typed: the routes, which
+	// would break the profile; a rule line that does not parse yet is left out, as the routing
+	// page's preview leaves it.
+	if err := oneContent(b.Body, b.Routing); err != nil {
+		return nil, err
+	}
+	if b.Routing != nil {
+		if err := h.checkTemplateRoutes(ctx, b.Routing.Routes); err != nil {
+			return nil, err
+		}
+	}
+	pv, err := h.d.TemplatePreview(ctx, subsrc.TemplatePreview{Core: submodel.Core(b.Core), Body: b.Body, Routing: b.Routing, Starter: b.Starter})
 	if errors.Is(err, submodel.ErrNoProxies) {
 		return nil, huma.Error409Conflict("no_proxies")
 	}

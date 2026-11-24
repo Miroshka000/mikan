@@ -358,6 +358,22 @@
   .sortable-handle:active { cursor: grabbing; }
   .sortable-item[aria-disabled="true"] .sortable-handle { cursor: default; color: var(--ink-300); }
   .sortable-item[aria-disabled="true"] .sortable-handle:hover { background: none; }
+  /* The services as a board of where they go (settings/routing/board.tsx): the services that
+     follow the mode across the top, a column of each place under them. A column makes no
+     stacking context of its own, so a tile dragged out of it stays over the others. */
+  .board { display: grid; grid-template-columns: repeat(auto-fill, minmax(208px, 1fr)); gap: 12px; }
+  .board-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border-radius: 16px; background: var(--surface-soft); border: 1.5px dashed var(--hairline); transition: border-color 0.2s, background-color 0.2s; }
+  .board-col[data-pool] { grid-column: 1 / -1; border-style: solid; }
+  .board-col[data-over] { border-color: var(--mikan-500); background: color-mix(in srgb, var(--mikan-500) 8%, var(--surface-soft)); }
+  .board-col-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink-700); }
+  .board-count { flex: none; min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--surface); font-size: 11px; line-height: 20px; text-align: center; color: var(--ink-500); }
+  .board-list { display: grid; gap: 8px; }
+  .board-col[data-pool] .board-list { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); }
+  .board-tile { position: relative; display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 2px 4px 2px 0; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-sm); list-style: none; }
+  .board-tile-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-width: 0; flex: 1; font-size: 13px; font-weight: 500; line-height: 16px; color: var(--ink-900); overflow-wrap: anywhere; }
+  .board-tile .sortable-handle { width: 28px; height: 40px; }
+  .board-tile[data-lifted] { z-index: 2; border-color: var(--mikan-500); box-shadow: var(--shadow-lg); }
+  .board-empty { display: grid; place-items: center; min-height: 44px; font-size: 12px; color: var(--ink-400); text-align: center; }
   .gauge { position: relative; }
   .gauge svg { display: block; transform: rotate(-90deg); }
   .gauge .track { stroke: var(--ink-100); }

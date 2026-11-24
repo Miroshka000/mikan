@@ -4999,13 +4999,18 @@ export interface components {
             tags?: string[];
         };
         CreateSubTemplateInputBody: {
-            /** @description Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray */
-            body: string;
-            /** @enum {string} */
+            /** @description Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray. Вместе с routing не передаётся */
+            body?: string;
+            /**
+             * @description Ядро; простой шаблон — mihomo
+             * @enum {string}
+             */
             core: "mihomo" | "singbox" | "xray";
             /** @description Сделать шаблоном ядра по умолчанию */
             default?: boolean;
             name: string;
+            /** @description Простой шаблон вместо body: своя маршрутизация, из которой собирается встроенный профиль каждого ядра */
+            routing?: components["schemas"]["TemplateRouting"];
         };
         CreateSupportGrantInputBody: {
             /** @description Одноразовый код из обращения в боте поддержки: без него доступ не открывается */
@@ -7347,10 +7352,13 @@ export interface components {
             wide_sni_scan?: boolean;
         };
         PatchSubTemplateInputBody: {
+            /** @description Новый текст; простой шаблон с ним становится шаблоном текстом */
             body?: string;
             /** @description true — шаблон ядра по умолчанию, false — у ядра снова встроенный профиль */
             default?: boolean;
             name?: string;
+            /** @description Новая маршрутизация; шаблон Clash текстом с ней становится простым. Вместе с body не передаётся */
+            routing?: components["schemas"]["TemplateRouting"];
         };
         PatchTelegramInputBody: {
             config?: components["schemas"]["Config"];
@@ -7667,9 +7675,14 @@ export interface components {
         PreviewSubTemplateInputBody: {
             /** @description Шаблон; пусто — встроенный профиль ядра */
             body?: string;
-            /** @enum {string} */
+            /**
+             * @description Ядро профиля; для простого шаблона — любое: Clash, sing-box или Xray
+             * @enum {string}
+             */
             core: "mihomo" | "singbox" | "xray";
-            /** @description Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами, или пример для sing-box и Xray */
+            /** @description Маршрутизация простого шаблона вместо body: встроенный профиль ядра, собранный из неё */
+            routing?: components["schemas"]["TemplateRouting"];
+            /** @description Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами (с routing — из этой маршрутизации), или пример для sing-box и Xray */
             starter?: boolean;
         };
         PreviewSubTemplateOutputBody: {
@@ -8778,6 +8791,11 @@ export interface components {
             core: "mihomo" | "singbox" | "xray";
             /** Format: int64 */
             id: number;
+            /**
+             * @description simple — простой шаблон: встроенный профиль из его маршрутизации
+             * @enum {string}
+             */
+            kind: "text" | "simple";
             name: string;
         };
         SubRuleLimits: {
@@ -8838,16 +8856,20 @@ export interface components {
             rules: components["schemas"]["Rule"][];
         };
         SubTemplate: {
-            /** @description Текст шаблона; пусто, когда он скрыт */
+            /** @description Текст шаблона; пусто у простого и когда он скрыт */
             body: string;
             /** @enum {string} */
             core: "mihomo" | "singbox" | "xray";
             default: boolean;
-            /** @description Текст скрыт от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты */
+            /** @description Текст и маршрутизация скрыты от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты */
             hidden: boolean;
             /** Format: int64 */
             id: number;
+            /** @enum {string} */
+            kind: "text" | "simple";
             name: string;
+            /** @description Маршрутизация простого шаблона; null у шаблона текстом и когда она скрыта */
+            routing: components["schemas"]["TemplateRouting"];
             /** @description Правила ответа, которые выбирают этот шаблон */
             rules: string[];
             /** Format: int64 */
@@ -8857,7 +8879,7 @@ export interface components {
         };
         SubTemplateHead: {
             /**
-             * @description Ядро: mihomo (Clash, YAML), singbox или xray (JSON)
+             * @description Ядро: mihomo (Clash, YAML), singbox или xray (JSON); у простого шаблона mihomo
              * @enum {string}
              */
             core: "mihomo" | "singbox" | "xray";
@@ -8865,12 +8887,17 @@ export interface components {
             default: boolean;
             /** Format: int64 */
             id: number;
+            /**
+             * @description text — свой конфиг ядра текстом, simple — простой: своя маршрутизация вместо текста, профиль для всех приложений
+             * @enum {string}
+             */
+            kind: "text" | "simple";
             name: string;
             /** @description Правила ответа, которые выбирают этот шаблон */
             rules: string[];
             /**
              * Format: int64
-             * @description Размер текста в байтах
+             * @description Размер текста в байтах; 0 у простого шаблона
              */
             size: number;
             /** Format: date-time */
@@ -9233,6 +9260,17 @@ export interface components {
             token_hint?: string;
             /** @description Токен сохранён */
             token_set: boolean;
+        };
+        TemplateRouting: {
+            /**
+             * @description Режим, как sub_routing
+             * @enum {string}
+             */
+            mode: "ru_direct" | "all" | "blocked";
+            /** @description Сервисы, свои списки, приложения мимо туннеля, DNS, группы серверов и тонкая настройка, как sub_routes */
+            routes: components["schemas"]["Routes"];
+            /** @description Свои правила Clash, по одному на строку, как sub_rules; строки с # и пустые пропускаются */
+            rules: string;
         };
         TermBody: {
             /**

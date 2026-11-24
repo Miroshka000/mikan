@@ -73,15 +73,20 @@ func (h *handlers) routesCatalog(context.Context, *struct{}) (*routesCatalogOutp
 	return out, nil
 }
 
+// nodeExists is whether the panel has a node of the id, for routing.Routes.Check: a service
+// or a list sent to one server needs the server to be there.
+func (h *handlers) nodeExists(ctx context.Context) func(int64) bool {
+	return func(id int64) bool {
+		_, err := h.d.Store.Q.GetNode(ctx, id)
+		return err == nil
+	}
+}
+
 func (h *handlers) routesPreview(ctx context.Context, in *routesPreviewInput) (*routesPreviewOutput, error) {
 	if h.d.RoutesPreview == nil {
 		return nil, huma.Error503ServiceUnavailable("preview_unavailable")
 	}
-	exists := func(id int64) bool {
-		_, err := h.d.Store.Q.GetNode(ctx, id)
-		return err == nil
-	}
-	if err := in.Body.SubRoutes.Check(exists); err != nil {
+	if err := in.Body.SubRoutes.Check(h.nodeExists(ctx)); err != nil {
 		return nil, fieldErr("body.sub_routes", err.Error())
 	}
 	req := subsrc.PreviewRequest{Mode: routing.ParseMode(in.Body.SubRouting), Routes: in.Body.SubRoutes, Rules: in.Body.SubRules}

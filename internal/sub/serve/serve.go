@@ -93,7 +93,10 @@ type Config struct {
 	Routes  routing.Routes // services, direct apps and DNS (settings.KeyRoutes)
 	// Templates are the admin's own profiles of the cores, the subscription templates; the
 	// one a profile is made of (Template) takes the place of Groups, Mode, Rules and Routes.
+	// A simple one keeps the built-in profile and takes the place of Mode, Rules and Routes
+	// with its routing in Routings, by its id (Routed).
 	Templates []model.Template
+	Routings  map[int64]Routing
 	// Fingerprint is the default uTLS profile for inbounds that set none.
 	Fingerprint string
 	// Binding gives every device that sends its id keys of its own; RequireHWID refuses
@@ -122,6 +125,35 @@ type Config struct {
 	// Page names which of its pages the source shows as the subscription page; 0: its own.
 	// Only the source reads it (Handler.SetPage).
 	Page int64
+}
+
+// Routing is what the built-in profile is made by beside the servers: the mode, the routes and
+// the admin's own rules, checked (routing.ServedRules). The settings are one; a simple template
+// has one of its own (Config.Routings).
+type Routing struct {
+	Mode   routing.Mode
+	Routes routing.Routes
+	Rules  []routing.Rule
+}
+
+// Routed is cfg and t as the profiles made of t are rendered by them. A simple template is the
+// zero one, the built-in profile, with cfg made by its routing (WithRouting; one whose routing
+// is not there keeps the settings'); any other template is as it is, with cfg as it is.
+func (cfg Config) Routed(t model.Template) (Config, model.Template) {
+	if !t.Simple {
+		return cfg, t
+	}
+	if r, ok := cfg.Routings[t.ID]; ok {
+		cfg = cfg.WithRouting(r)
+	}
+	return cfg, model.Template{}
+}
+
+// WithRouting is cfg with r in place of the settings' Mode, Rules and Routes: what the built-in
+// profile is made by.
+func (cfg Config) WithRouting(r Routing) Config {
+	cfg.Mode, cfg.Rules, cfg.Routes = r.Mode, r.Rules, r.Routes
+	return cfg
 }
 
 // Profile is the profile of the proxies ps as cfg sets it for every core: the admin's rules
@@ -327,7 +359,8 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 	userInfoHeaders(hd, u, cfg, vars)
 	h.operatorHeaders(hd, r, sub, u, cfg, count)
 	// Happ's routing profile is the one of the Clash profile the request would get.
-	appHeaders(hd, ua, cfg, Template(cfg.Templates, FormatClash, dec.Action.Template).Body)
+	clashCfg, clash := cfg.Routed(Template(cfg.Templates, FormatClash, dec.Action.Template))
+	appHeaders(hd, ua, clashCfg, clash.Body)
 	ruleHeaders(hd, cfg.Headers)
 	ruleHeaders(hd, dec.Action.Headers)
 	noStore(hd)
@@ -374,9 +407,11 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 			h.Warn("skip/"+strconv.FormatInt(in.ID, 10)+"/"+err.Error(), "subscription: an inbound is left out of the profiles", "inbound", in.Label, "err", err)
 		}})
 	ex.trace.made(proxies)
-	prof := cfg.Profile(proxies)
 	tpl := ProfileTemplate(cfg.Templates, format, dec.Action.Template, app)
 	ex.trace.template(tpl)
+	// A simple template is the built-in profile made by its own routing.
+	cfg, tpl = cfg.Routed(tpl)
+	prof := cfg.Profile(proxies)
 	switch format {
 	case FormatClash:
 		prof.Rules, prof.App = mihomo.RulesFor(cfg.Rules, app), app

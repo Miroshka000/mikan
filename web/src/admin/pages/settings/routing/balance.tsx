@@ -1,8 +1,8 @@
-import type { Schemas } from "../../../api/client";
-import { Card } from "../../../components/layout";
-import { Select } from "../../../components/select";
-import { Field } from "../../../components/ui";
-import { t } from "../../../i18n";
+import type { Schemas } from "../../../../api/client";
+import { Card } from "../../../../components/layout";
+import { Select } from "../../../../components/select";
+import { Field } from "../../../../components/ui";
+import { t } from "../../../../i18n";
 
 type Servers = NonNullable<Schemas["Routes"]["servers"]>;
 type Mihomo = NonNullable<Servers["mihomo"]>;

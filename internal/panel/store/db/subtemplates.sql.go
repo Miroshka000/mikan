@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const clearSubTemplateDefault = `-- name: ClearSubTemplateDefault :exec
@@ -32,23 +33,26 @@ func (q *Queries) CountSubTemplates(ctx context.Context, core string) (int64, er
 }
 
 const createSubTemplate = `-- name: CreateSubTemplate :one
-INSERT INTO sub_templates (core, name, body, is_default, created_at, updated_at)
-VALUES ($1, $2, $3, false, $4, $4)
-RETURNING id, core, name, body, is_default, created_at, updated_at
+INSERT INTO sub_templates (core, name, body, routing, is_default, created_at, updated_at)
+VALUES ($1, $2, $3, $4, false, $5, $5)
+RETURNING id, core, name, body, is_default, created_at, updated_at, routing
 `
 
 type CreateSubTemplateParams struct {
-	Core string
-	Name string
-	Body string
-	At   int64
+	Core    string
+	Name    string
+	Body    string
+	Routing sql.NullString
+	At      int64
 }
 
+// A template of text (routing NULL) or a simple one (routing set, body empty).
 func (q *Queries) CreateSubTemplate(ctx context.Context, arg CreateSubTemplateParams) (SubTemplate, error) {
 	row := q.db.QueryRowContext(ctx, createSubTemplate,
 		arg.Core,
 		arg.Name,
 		arg.Body,
+		arg.Routing,
 		arg.At,
 	)
 	var i SubTemplate
@@ -60,6 +64,7 @@ func (q *Queries) CreateSubTemplate(ctx context.Context, arg CreateSubTemplatePa
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Routing,
 	)
 	return i, err
 }
@@ -77,7 +82,7 @@ func (q *Queries) DeleteSubTemplate(ctx context.Context, id int64) (int64, error
 }
 
 const getSubTemplate = `-- name: GetSubTemplate :one
-SELECT id, core, name, body, is_default, created_at, updated_at FROM sub_templates WHERE id = $1
+SELECT id, core, name, body, is_default, created_at, updated_at, routing FROM sub_templates WHERE id = $1
 `
 
 func (q *Queries) GetSubTemplate(ctx context.Context, id int64) (SubTemplate, error) {
@@ -91,12 +96,48 @@ func (q *Queries) GetSubTemplate(ctx context.Context, id int64) (SubTemplate, er
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Routing,
 	)
 	return i, err
 }
 
+const listSimpleSubTemplates = `-- name: ListSimpleSubTemplates :many
+SELECT id, name, routing FROM sub_templates WHERE routing IS NOT NULL ORDER BY id
+`
+
+type ListSimpleSubTemplatesRow struct {
+	ID      int64
+	Name    string
+	Routing sql.NullString
+}
+
+// The simple templates with their routing, without the texts of the others.
+func (q *Queries) ListSimpleSubTemplates(ctx context.Context) ([]ListSimpleSubTemplatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSimpleSubTemplates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSimpleSubTemplatesRow{}
+	for rows.Next() {
+		var i ListSimpleSubTemplatesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Routing); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSubTemplateHeads = `-- name: ListSubTemplateHeads :many
-SELECT id, core, name, is_default, OCTET_LENGTH(body)::BIGINT AS size, created_at, updated_at FROM sub_templates ORDER BY core, id
+SELECT id, core, name, is_default, OCTET_LENGTH(body)::BIGINT AS size, (routing IS NOT NULL)::BOOLEAN AS simple, created_at, updated_at
+FROM sub_templates ORDER BY core, id
 `
 
 type ListSubTemplateHeadsRow struct {
@@ -105,11 +146,13 @@ type ListSubTemplateHeadsRow struct {
 	Name      string
 	IsDefault bool
 	Size      int64
+	Simple    bool
 	CreatedAt int64
 	UpdatedAt int64
 }
 
-// The templates as the admin panel lists them: no text, its size.
+// The templates as the admin panel lists them: no text, its size, and whether the template is
+// a simple one (a routing of its own, no text).
 func (q *Queries) ListSubTemplateHeads(ctx context.Context) ([]ListSubTemplateHeadsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSubTemplateHeads)
 	if err != nil {
@@ -125,6 +168,7 @@ func (q *Queries) ListSubTemplateHeads(ctx context.Context) ([]ListSubTemplateHe
 			&i.Name,
 			&i.IsDefault,
 			&i.Size,
+			&i.Simple,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -142,10 +186,10 @@ func (q *Queries) ListSubTemplateHeads(ctx context.Context) ([]ListSubTemplateHe
 }
 
 const listSubTemplates = `-- name: ListSubTemplates :many
-SELECT id, core, name, body, is_default, created_at, updated_at FROM sub_templates ORDER BY core, id
+SELECT id, core, name, body, is_default, created_at, updated_at, routing FROM sub_templates ORDER BY core, id
 `
 
-// Every template with its text: what the subscriptions are served by.
+// Every template with its text or routing: what the subscriptions are served by.
 func (q *Queries) ListSubTemplates(ctx context.Context) ([]SubTemplate, error) {
 	rows, err := q.db.QueryContext(ctx, listSubTemplates)
 	if err != nil {
@@ -163,6 +207,7 @@ func (q *Queries) ListSubTemplates(ctx context.Context) ([]SubTemplate, error) {
 			&i.IsDefault,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Routing,
 		); err != nil {
 			return nil, err
 		}
@@ -199,14 +244,15 @@ func (q *Queries) SetSubTemplateDefault(ctx context.Context, id int64) error {
 }
 
 const updateSubTemplate = `-- name: UpdateSubTemplate :one
-UPDATE sub_templates SET name = $2, body = $3, updated_at = $4 WHERE id = $1
-RETURNING id, core, name, body, is_default, created_at, updated_at
+UPDATE sub_templates SET name = $2, body = $3, routing = $4, updated_at = $5 WHERE id = $1
+RETURNING id, core, name, body, is_default, created_at, updated_at, routing
 `
 
 type UpdateSubTemplateParams struct {
 	ID        int64
 	Name      string
 	Body      string
+	Routing   sql.NullString
 	UpdatedAt int64
 }
 
@@ -215,6 +261,7 @@ func (q *Queries) UpdateSubTemplate(ctx context.Context, arg UpdateSubTemplatePa
 		arg.ID,
 		arg.Name,
 		arg.Body,
+		arg.Routing,
 		arg.UpdatedAt,
 	)
 	var i SubTemplate
@@ -226,6 +273,7 @@ func (q *Queries) UpdateSubTemplate(ctx context.Context, arg UpdateSubTemplatePa
 		&i.IsDefault,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Routing,
 	)
 	return i, err
 }

@@ -329,7 +329,7 @@ func (h *handlers) testedTemplate(ctx context.Context, format, ua string, named 
 	}
 	ts := make([]submodel.Template, 0, len(rows))
 	for _, r := range rows {
-		ts = append(ts, submodel.Template{ID: r.ID, Core: submodel.Core(r.Core), Default: r.IsDefault})
+		ts = append(ts, submodel.Template{ID: r.ID, Core: submodel.Core(r.Core), Simple: r.Simple, Default: r.IsDefault})
 	}
 	return serve.ProfileTemplate(ts, format, named, apps.DetectApp(ua)).ID, nil
 }

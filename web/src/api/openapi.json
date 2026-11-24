@@ -2846,11 +2846,12 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "description": "Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray",
+            "description": "Конфиг ядра без серверов: YAML для mihomo, JSON для sing-box и Xray. Вместе с routing не передаётся",
             "maxLength": 524288,
             "type": "string"
           },
           "core": {
+            "description": "Ядро; простой шаблон — mihomo",
             "enum": [
               "mihomo",
               "singbox",
@@ -2866,12 +2867,15 @@
             "maxLength": 80,
             "minLength": 1,
             "type": "string"
+          },
+          "routing": {
+            "$ref": "#/components/schemas/TemplateRouting",
+            "description": "Простой шаблон вместо body: своя маршрутизация, из которой собирается встроенный профиль каждого ядра"
           }
         },
         "required": [
           "core",
-          "name",
-          "body"
+          "name"
         ],
         "type": "object"
       },
@@ -9204,6 +9208,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
+            "description": "Новый текст; простой шаблон с ним становится шаблоном текстом",
             "maxLength": 524288,
             "type": "string"
           },
@@ -9215,6 +9220,10 @@
             "maxLength": 80,
             "minLength": 1,
             "type": "string"
+          },
+          "routing": {
+            "$ref": "#/components/schemas/TemplateRouting",
+            "description": "Новая маршрутизация; шаблон Clash текстом с ней становится простым. Вместе с body не передаётся"
           }
         },
         "type": "object"
@@ -10006,6 +10015,7 @@
             "type": "string"
           },
           "core": {
+            "description": "Ядро профиля; для простого шаблона — любое: Clash, sing-box или Xray",
             "enum": [
               "mihomo",
               "singbox",
@@ -10013,8 +10023,12 @@
             ],
             "type": "string"
           },
+          "routing": {
+            "$ref": "#/components/schemas/TemplateRouting",
+            "description": "Маршрутизация простого шаблона вместо body: встроенный профиль ядра, собранный из неё"
+          },
           "starter": {
-            "description": "Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами, или пример для sing-box и Xray",
+            "description": "Начало нового шаблона вместо профиля: встроенный профиль Clash, где группы просят серверы сами (с routing — из этой маршрутизации), или пример для sing-box и Xray",
             "type": "boolean"
           }
         },
@@ -13131,6 +13145,14 @@
             "format": "int64",
             "type": "integer"
           },
+          "kind": {
+            "description": "simple — простой шаблон: встроенный профиль из его маршрутизации",
+            "enum": [
+              "text",
+              "simple"
+            ],
+            "type": "string"
+          },
           "name": {
             "type": "string"
           }
@@ -13138,6 +13160,7 @@
         "required": [
           "id",
           "core",
+          "kind",
           "name"
         ],
         "type": "object"
@@ -13300,7 +13323,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "description": "Текст шаблона; пусто, когда он скрыт",
+            "description": "Текст шаблона; пусто у простого и когда он скрыт",
             "type": "string"
           },
           "core": {
@@ -13315,15 +13338,26 @@
             "type": "boolean"
           },
           "hidden": {
-            "description": "Текст скрыт от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты",
+            "description": "Текст и маршрутизация скрыты от этого ключа или оператора: в шаблоне могут быть свои серверы и секреты",
             "type": "boolean"
           },
           "id": {
             "format": "int64",
             "type": "integer"
           },
+          "kind": {
+            "enum": [
+              "text",
+              "simple"
+            ],
+            "type": "string"
+          },
           "name": {
             "type": "string"
+          },
+          "routing": {
+            "$ref": "#/components/schemas/TemplateRouting",
+            "description": "Маршрутизация простого шаблона; null у шаблона текстом и когда она скрыта"
           },
           "rules": {
             "description": "Правила ответа, которые выбирают этот шаблон",
@@ -13344,12 +13378,14 @@
         "required": [
           "id",
           "core",
+          "kind",
           "name",
           "default",
           "size",
           "updated_at",
           "rules",
           "body",
+          "routing",
           "hidden"
         ],
         "type": "object"
@@ -13358,7 +13394,7 @@
         "additionalProperties": false,
         "properties": {
           "core": {
-            "description": "Ядро: mihomo (Clash, YAML), singbox или xray (JSON)",
+            "description": "Ядро: mihomo (Clash, YAML), singbox или xray (JSON); у простого шаблона mihomo",
             "enum": [
               "mihomo",
               "singbox",
@@ -13374,6 +13410,14 @@
             "format": "int64",
             "type": "integer"
           },
+          "kind": {
+            "description": "text — свой конфиг ядра текстом, simple — простой: своя маршрутизация вместо текста, профиль для всех приложений",
+            "enum": [
+              "text",
+              "simple"
+            ],
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -13385,7 +13429,7 @@
             "type": "array"
           },
           "size": {
-            "description": "Размер текста в байтах",
+            "description": "Размер текста в байтах; 0 у простого шаблона",
             "format": "int64",
             "type": "integer"
           },
@@ -13397,6 +13441,7 @@
         "required": [
           "id",
           "core",
+          "kind",
           "name",
           "default",
           "size",
@@ -14296,6 +14341,35 @@
           "infrastructure",
           "admin_chat_set",
           "discord_set"
+        ],
+        "type": "object"
+      },
+      "TemplateRouting": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "description": "Режим, как sub_routing",
+            "enum": [
+              "ru_direct",
+              "all",
+              "blocked"
+            ],
+            "type": "string"
+          },
+          "routes": {
+            "$ref": "#/components/schemas/Routes",
+            "description": "Сервисы, свои списки, приложения мимо туннеля, DNS, группы серверов и тонкая настройка, как sub_routes"
+          },
+          "rules": {
+            "description": "Свои правила Clash, по одному на строку, как sub_rules; строки с # и пустые пропускаются",
+            "maxLength": 65536,
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "routes",
+          "rules"
         ],
         "type": "object"
       },

@@ -9,3 +9,8 @@ sql:
         out: internal/panel/store/db
         sql_package: database/sql
         emit_empty_slices: true
+        overrides:
+          # A JSON document the panel writes and reads whole, as text: sqlc's own type of a
+          # NULL jsonb (pqtype.NullRawMessage) is a dependency for nothing.
+          - column: sub_templates.routing
+            go_type: database/sql.NullString

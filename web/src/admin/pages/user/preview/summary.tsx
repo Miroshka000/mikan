@@ -5,6 +5,7 @@ import { Pill } from "../../../../components/ui";
 import { t } from "../../../../i18n";
 import { ruleLabel } from "../../../../lib/sub-rules";
 import { GroupBadge } from "../../groups/badge";
+import { choiceName } from "../../settings/sub-templates/model";
 import { madeByTemplate, OUTCOME_TONE, serversFrom, type Preview } from "./model";
 
 /**
@@ -49,7 +50,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 function Template({ p }: { p: Preview }) {
   if (!p.template) return <>{t("settings.subRules.test.builtinProfile")}</>;
   if (p.template_failed) return <span className="text-[var(--honey-600)]">{t("userDrawer.preview.templateFailed", { name: p.template.name || `#${p.template.id}` })}</span>;
-  return <>{p.template.name || `#${p.template.id}`}</>;
+  return <>{choiceName({ name: p.template.name || `#${p.template.id}`, kind: p.template.kind })}</>;
 }
 
 // Where the client's servers come from: the group by its badge, the tariff by its name.

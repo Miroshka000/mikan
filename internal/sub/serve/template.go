@@ -12,10 +12,10 @@ import (
 // one the deciding response rule names (named; 0 for none) when it is written for the
 // format's core, else the core's default. sing-box and xray with none of their own are made
 // of the Clash template picked the same way, read as they can (mihomo.TemplateParts), as
-// they were before they had templates of their own. The zero Template is the built-in
-// profile, and so it is for the formats of no core (the links, the page). Happ and INCY
-// read their routing of the Clash one (appHeaders) whatever app asks; the profile itself is
-// made of ProfileTemplate.
+// they were before they had templates of their own; a simple one is their built-in profile
+// of its routing. The zero Template is the built-in profile, and so it is for the formats of
+// no core (the links, the page). Happ and INCY read their routing of the Clash one
+// (appHeaders) whatever app asks; the profile itself is made of ProfileTemplate.
 func Template(ts []model.Template, format string, named int64) model.Template {
 	var c model.Core
 	switch format {
@@ -37,13 +37,15 @@ func Template(ts []model.Template, format string, named int64) model.Template {
 
 // ProfileTemplate is the own template the profile in format is made of for app: Template,
 // but the zero one, the built-in profile, for a Clash app that takes no own profile
-// (apps.App.TakesOwnProfile: Stash, an app of another core). Which template a profile is
-// made of is decided here, for Serve and the rule tester alike, and nowhere else.
+// (apps.App.TakesOwnProfile: Stash, an app of another core). A simple template is a built-in
+// profile itself, and goes to such an app too. Which template a profile is made of is decided
+// here, for Serve and the rule tester alike, and nowhere else.
 func ProfileTemplate(ts []model.Template, format string, named int64, app apps.App) model.Template {
-	if format == FormatClash && !app.TakesOwnProfile() {
+	t := Template(ts, format, named)
+	if format == FormatClash && !app.TakesOwnProfile() && !t.Simple {
 		return model.Template{}
 	}
-	return Template(ts, format, named)
+	return t
 }
 
 // pickTemplate is the template of core c the rule named, else c's default; false for none.

@@ -25,6 +25,11 @@ type Template struct {
 	ID   int64
 	Core Core
 	Body string
+	// Simple: a template of switches, with no Body: the built-in profile of every core, made
+	// by a routing of the template's own (serve.Config.Routings; this package knows no
+	// routing). It is a Clash template, so that sing-box and xray with no default of their own
+	// take it as they take one.
+	Simple bool
 	// Default: the core's apps get it when no response rule names another.
 	Default bool
 }

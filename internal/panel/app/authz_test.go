@@ -240,6 +240,19 @@ func TestReadKeyDoesNotGetSecrets(t *testing.T) {
 	if _, body := k.asKey(k.full, http.MethodGet, "/sub-templates/"+idOf(tpl.ID), nil); !strings.Contains(string(body), "controller-secret-1234") {
 		t.Errorf("a full key misses the template: %s", body)
 	}
+	// So may a simple template's routing: a list or a DNS server with a token in its link.
+	simple, err := k.st.Q.CreateSubTemplate(ctx, db.CreateSubTemplateParams{Core: "mihomo", Name: "simple", At: 1,
+		Routing: sql.NullString{Valid: true, String: `{"mode": "all", "routes": {"dns": {"nameserver": ["https://dns.example/dns-query/token-5678"]}}, "rules": ""}`}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp, body := k.asKey(k.read, http.MethodGet, "/sub-templates/"+idOf(simple.ID), nil); resp.StatusCode != http.StatusOK || strings.Contains(string(body), "token-5678") ||
+		!strings.Contains(string(body), `"routing":null`) || !strings.Contains(string(body), `"hidden":true`) {
+		t.Errorf("a read key sees the simple template's routing: %d %s", resp.StatusCode, body)
+	}
+	if _, body := k.asKey(k.full, http.MethodGet, "/sub-templates/"+idOf(simple.ID), nil); !strings.Contains(string(body), "token-5678") {
+		t.Errorf("a full key misses the simple template's routing: %s", body)
+	}
 }
 
 // Making a key needs the password (and the 2FA code), not just a session: a stolen cookie

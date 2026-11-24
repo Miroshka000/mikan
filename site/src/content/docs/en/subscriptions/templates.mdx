@@ -1,19 +1,24 @@
 ---
 title: Subscription templates
-description: Your own config for Clash, sing-box and Xray apps, a default template for each core, picking a template with a response rule, and how the panel puts the servers in.
+description: A simple template of switches for every app and your own config for Clash, sing-box and Xray apps, a default template for each core, picking a template with a response rule, and how the panel puts the servers in.
 ---
 
 :::note[New in 0.5.2.1]
 Subscription templates are new in 0.5.2.1. Before, the panel had one own Clash profile; now it is the default Clash template.
 :::
 
-A subscription template is a whole core config: DNS, TUN, groups, rules. It has no servers: the panel puts the user's servers in itself on every subscription request. Templates live in **Settings → Subscription → Templates**, each core with a list of its own, up to 20 templates of up to 512 KB. The size is counted in bytes: a Cyrillic letter takes two, so a text with comments in Russian reaches the limit sooner.
+A subscription template is one of two kinds:
+
+- **Simple**: switches and drag and drop, as in **Routing**, only its own. The panel makes the built-in profile of every app of them: Clash, Stash, sing-box and Xray. More: [Simple template](#simple-template).
+- **Own config**: a whole core config as text (DNS, TUN, groups, rules) for the apps of one core. It has no servers: the panel puts the user's servers in itself on every subscription request.
+
+Templates live in **Settings → Subscription → Templates**: the top shows what Clash, sing-box and Xray apps get now (a default template, the Clash one, or the built-in profile of **Routing**), and below are all templates with their kind, their core and the response rules and groups of clients that pick them. Each core has up to 20 templates of up to 512 KB, and a simple template counts as a Clash one. The size is counted in bytes: a Cyrillic letter takes two, so a text with comments in Russian reaches the limit sooner.
 
 ## Cores and apps
 
 | Core | Text | Who gets it |
 | --- | --- | --- |
-| Clash (mihomo) | YAML | Koala Clash, FlClash, Clash Verge, Mikan, Kabosu and other apps on mihomo. Stash always gets the built-in profile. |
+| Clash (mihomo) | YAML | Koala Clash, FlClash, Clash Verge, Mikan, Kabosu and other apps on mihomo. Stash gets a simple template, and the built-in profile in place of one of text. |
 | sing-box | JSON | The official sing-box apps (SFA, SFI, SFM) and links with `?format=singbox`. |
 | Xray | JSON | Happ and INCY while "Xray configs for Happ and INCY" is on (**Settings → Subscription**), and links with `?format=xray`. |
 
@@ -24,16 +29,29 @@ Apps that get links only (v2RayTun, v2rayNG, Hiddify, Karing and others) get no 
 1. A response rule picked a template (**Settings → Subscription → Response rules**, the "Give the profile" answer, the "Template" field), and it is a template of the app's core: the profile is made of it.
 2. Otherwise of the core's template the [client's group](/mikan/en/billing/groups/#appearance) picked (**Clients → Groups**, the group, the "Appearance" tab).
 3. Otherwise of the core's default template. A core has one, picked with the "Make default" button in the list or with the switch in the editor.
-4. sing-box and Xray have no default of their own: they take the groups and rules of the Clash template picked the same way: by a rule, by the group or by default.
+4. sing-box and Xray have no default of their own: they take the groups and rules of the Clash template picked the same way: by a rule, by the group or by default. A simple Clash template reaches them whole: their own built-in profile of its routing.
 5. There is none of that either: the app gets the profile the panel makes of the routing settings.
 
-The **Check** button on the response rules page shows which template the profile for that User-Agent is made of. A template a rule picks cannot be deleted: take it out of the rule first.
+The **Check** button on the response rules page and "What the client gets" in a client's card show which template the profile is made of, and say so of a simple one. A template a rule picks cannot be deleted: take it out of the rule first.
 
-If a template does not build for some user, that user's app gets the built-in profile and the panel log gets a warning.
+If a template of text does not build for some user, that user's app gets the built-in profile and the panel log gets a warning.
 
-## Editor
+## Simple template
 
-Next to the text you see the profile a user with every connection gets. It updates as you type, and its keys are placeholders. Saving checks the template on such a user, and an error names the line, the group or the tag.
+A simple template keeps a routing of its own in place of a text: the mode, the services, your own lists, the apps past the tunnel, your own rules, DNS on the device, the server groups and the fine settings, all as in **Settings → Routing**. The panel makes its profiles with the very code of the built-in profile, for each core in its own terms: Clash, Stash, sing-box and Xray, and the routing header of Happ and INCY is made of it too. So sing-box and Xray get a profile of their own, not a translation of a Clash template.
+
+- **New template → Simple** starts as a copy of the current **Routing** settings.
+- **Services** are laid out in columns: "As the mode", "Through the VPN", "Direct", "Block" and "Server: …" of each node. A tile is dragged by its handle with the mouse or a finger, and from the keyboard and with a tap the arrows button moves it ("Move to…").
+- **Your own rules** are rows of "type · value · target" (and no-resolve where it applies), put in order by dragging. The **As text** button shows the same rules as one text, and lines with `#` stay comments.
+- On the right is the profile a user with every connection gets, with a switch of the core: Clash, sing-box or Xray.
+- Saving checks the routing as the **Routing** settings are checked: the nodes, the lists, DNS and every line of the rules.
+- **Open as text**, once confirmed, puts the template's Clash YAML in the editor. Once saved, it is a Clash template of text, and sing-box and Xray read its groups and rules their own way, as of any Clash template of your own.
+
+Renaming the main group or the automatic one that a rule of a simple template sends to is refused, and the refusal names the template: fix its rules first.
+
+## Own config
+
+A new own config opens with what the panel gives the apps now, not empty: Clash gets the built-in profile of **Routing**, with groups that ask for servers themselves, and sing-box and Xray get mikan's working config. Next to the text you see the profile a user with every connection gets. It updates as you type, and its keys are placeholders. Saving checks the template on such a user, and an error names the line, the group or the tag.
 
 - **Start from the routing settings** (Clash): the current built-in profile as a starting point, with groups that ask for servers themselves.
 - **Insert an example** (sing-box and Xray): a working config with a TUN or local proxies, DNS through the tunnel and local networks direct.
@@ -53,7 +71,7 @@ The "Load a ready template" button shows only when a core has more than mikan's 
 
 The privWL and Davoyan templates link the lists instead of copying them (Davoyan's lists have no license, so mikan holds none of them: the apps download them from his repository), and the links are pinned to a commit, as the built-in routes are: a change in the lists' repository does not reach the apps until you move the commit in the template's text yourself. The Clash templates reach sing-box and Xray too: the panel converts their groups and rules as it does for any Clash template of your own. sing-box gets the lists whole, while the Xray configs (Happ, INCY) get only what the app's geo files have, so the privWL and Davoyan lists do not reach them: in those apps the privWL template sends everything direct, and the Davoyan template sends everything through the VPN, Russian sites too.
 
-Only administrators see a template's text: API keys without full access and support operators get it hidden, as a template may hold your own servers and secrets.
+Only administrators see a template's text and a simple template's routing: API keys without full access and support operators get them hidden, as a template may hold your own servers, secrets and links to lists and DNS with keys.
 
 ## Clash template
 

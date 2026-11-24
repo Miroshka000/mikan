@@ -616,6 +616,7 @@ type SubTemplate struct {
 	IsDefault bool
 	CreatedAt int64
 	UpdatedAt int64
+	Routing   sql.NullString
 }
 
 type SupportGrant struct {

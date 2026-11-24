@@ -17,7 +17,7 @@ import { fieldErrors, onFormError } from "../../../lib/fields";
 import { cleanRule } from "../../../lib/sub-rules";
 import { ResponseHeaders } from "./response-headers";
 import { RuleTester } from "./sub-rules-test";
-import { CORES, coreName } from "./sub-templates";
+import { choiceName, CORES, coreName } from "./sub-templates/model";
 import { HeaderNames, WhenEditor, blankCond } from "./sub-rules-when";
 
 type Rule = Schemas["Rule"];
@@ -365,7 +365,7 @@ function TemplateSelect({ id, at, a, set, errors }: { id: string; at: string; a:
               .filter((x) => x.core === c)
               .map((x) => (
                 <option key={x.id} value={String(x.id)}>
-                  {x.default ? `${x.name} · ${t("settings.subTemplates.default")}` : x.name}
+                  {x.default ? `${choiceName(x)} · ${t("settings.subTemplates.default")}` : choiceName(x)}
                 </option>
               ))}
           </optgroup>

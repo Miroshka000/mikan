@@ -15,7 +15,7 @@ The routes of this page go into every profile an app takes whole: **Clash apps o
 
 ## Services
 
-For each service you can choose: "Like the rest" (follows the mode), "Through the VPN", "Direct", "Block" or "Through a server", meaning a specific node. The services: ads and trackers, YouTube, Telegram, Discord, WhatsApp and Signal, Instagram and Facebook, TikTok, X (Twitter), ChatGPT, Claude and Gemini, Netflix and Spotify, Twitch, games (Steam, Epic, Riot…), GitHub, torrents.
+The services are laid out in columns of where they go: "As the mode" (follows the mode), "Through the VPN", "Direct", "Block" and "Server: …", meaning a specific node. A service's tile is dragged by its handle into another column with the mouse or a finger, and from the keyboard and with a tap the arrows button moves it ("Move to…"). The services: ads and trackers, YouTube, Telegram, Discord, WhatsApp and Signal, Instagram and Facebook, TikTok, X (Twitter), ChatGPT, Claude and Gemini, Netflix and Spotify, Twitch, games (Steam, Epic, Riot…), GitHub, torrents.
 
 **Past the VPN**: Russian apps and sites (banks, government services, marketplaces) bypass the tunnel. On Android and desktop this works by app names, on iPhone by sites.
 
@@ -42,11 +42,11 @@ Nodes older than 0.5.2.0 skip this setting; after `mikan update` it works by its
 The templates replace the one own profile of earlier versions: it became the default Clash template, and sing-box and Xray got templates of their own.
 :::
 
-A whole mihomo config of your own (DNS, fake-ip, TUN, sniffer, groups, rules) is a subscription template in **Settings → Subscription → Templates**. While Clash has a default template, the settings of this page don't reach Clash apps, and the **Routing** section says so at the top. How to write templates and how response rules pick them: [Subscription templates](/mikan/en/subscriptions/templates/).
+A whole mihomo config of your own (DNS, fake-ip, TUN, sniffer, groups, rules) is a subscription template in **Settings → Subscription → Templates**. Another routing for some of the clients without YAML is a simple template: the mode, services, lists and rules of this page, only its own, for every app. While Clash has a default template, the settings of this page don't reach Clash apps, and the **Routing** section says so at the top. How to write templates and how response rules pick them: [Subscription templates](/mikan/en/subscriptions/templates/).
 
 ## Custom rules
 
-**Settings → Clash rules**: one rule per line, `TYPE,VALUE,TARGET[,no-resolve]`, lines with `#` are comments. Rules go before the routing mode in every Clash profile, while the addresses of the panel and nodes still go direct.
+**Settings → Routing → Own rules**: the rules are rows of "type · value · target" (and no-resolve where it applies), put in order by dragging the handle or from the keyboard. The **As text** button shows the same rules as one text, one rule per line, `TYPE,VALUE,TARGET[,no-resolve]`, and lines with `#` are comments that stay lines in either view. The panel remembers the view picked in this browser. Rules go before the routing mode in every Clash profile, while the addresses of the panel and nodes still go direct.
 
 ```text
 DOMAIN-SUFFIX,example.ru,DIRECT

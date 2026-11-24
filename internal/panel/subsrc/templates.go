@@ -2,10 +2,13 @@ package subsrc
 
 import (
 	"context"
+	"encoding/json"
 
 	"mikan/internal/panel/store/db"
 	"mikan/internal/sub/mihomo"
 	submodel "mikan/internal/sub/model"
+	"mikan/internal/sub/routing"
+	"mikan/internal/sub/serve"
 	"mikan/internal/sub/singbox"
 	"mikan/internal/sub/xray"
 )
@@ -22,17 +25,47 @@ const (
 	MaxTemplateSize = 512 << 10
 )
 
-// LoadTemplates reads every template with its text.
-func LoadTemplates(ctx context.Context, q *db.Queries) ([]submodel.Template, error) {
+// TemplateRouting is a simple template's routing as the panel keeps it (sub_templates.routing)
+// and the API gives it: what the settings sub_routing, sub_routes and sub_rules are to the
+// built-in profile, for the template's profiles alone.
+type TemplateRouting struct {
+	Mode   string         `json:"mode" enum:"ru_direct,all,blocked" doc:"Режим, как sub_routing"`
+	Routes routing.Routes `json:"routes" doc:"Сервисы, свои списки, приложения мимо туннеля, DNS, группы серверов и тонкая настройка, как sub_routes"`
+	Rules  string         `json:"rules" maxLength:"65536" doc:"Свои правила Clash, по одному на строку, как sub_rules; строки с # и пустые пропускаются"`
+}
+
+// TemplateRoutingOf is the routing a row keeps. One that does not read (edited by hand) is the
+// zero routing, the default mode and nothing else: the template's subscriptions keep working.
+func TemplateRoutingOf(raw string) TemplateRouting {
+	var r TemplateRouting
+	if json.Unmarshal([]byte(raw), &r) != nil {
+		return TemplateRouting{}
+	}
+	return r
+}
+
+// Served is r as the profiles are made by it: its rules checked against the groups g
+// (routing.ServedRules), a line that no longer parses left out.
+func (r TemplateRouting) Served(g submodel.GroupNames) serve.Routing {
+	return serve.Routing{Mode: routing.ParseMode(r.Mode), Routes: r.Routes, Rules: routing.ServedRules(r.Rules, g)}
+}
+
+// LoadTemplates reads every template with its text, and the routing of each simple one by its
+// id, its rules checked against the groups g.
+func LoadTemplates(ctx context.Context, q *db.Queries, g submodel.GroupNames) ([]submodel.Template, map[int64]serve.Routing, error) {
 	rows, err := q.ListSubTemplates(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	out := make([]submodel.Template, 0, len(rows))
+	routings := map[int64]serve.Routing{}
 	for _, r := range rows {
-		out = append(out, submodel.Template{ID: r.ID, Core: submodel.Core(r.Core), Body: r.Body, Default: r.IsDefault})
+		out = append(out, submodel.Template{ID: r.ID, Core: submodel.Core(r.Core), Body: r.Body, Simple: r.Routing.Valid, Default: r.IsDefault})
+		if r.Routing.Valid {
+			routings[r.ID] = TemplateRoutingOf(r.Routing.String).Served(g)
+		}
 	}
-	return out, nil
+	return out, routings, nil
 }
 
 // TemplateIDs are the ids of the templates there are, for the response rules to name.
@@ -71,8 +104,11 @@ func (h *Handler) CheckTemplate(ctx context.Context, core submodel.Core, src str
 type TemplatePreview struct {
 	Core submodel.Core
 	Body string // "": the core's built-in profile
+	// Routing is a simple template's, in place of Body: the core's built-in profile made by it.
+	Routing *TemplateRouting
 	// Starter asks for the start of a new template in place of a profile: the built-in Clash
-	// profile as a template (mihomo.Starter), an example for the JSON cores.
+	// profile (of Routing, when set) as a template (mihomo.Starter), an example for the JSON
+	// cores.
 	Starter bool
 }
 
@@ -85,8 +121,13 @@ func (h *Handler) PreviewTemplate(ctx context.Context, req TemplatePreview) (Pre
 	}
 	g := cfg.Groups.WithDefaults(cfg.Lang)
 	t := submodel.Template{Core: req.Core, Body: req.Body}
-	if req.Body == "" {
+	if req.Body == "" || req.Routing != nil {
 		t = submodel.Template{}
+	}
+	if req.Routing != nil {
+		// The simple template's routing over the settings', as Serve lays it (serve.Config.Routed).
+		cfg.Config = cfg.WithRouting(req.Routing.Served(g))
+		prof.Rules, prof.Routes = cfg.Rules, cfg.Routes
 	}
 	var out Preview
 	switch req.Core {

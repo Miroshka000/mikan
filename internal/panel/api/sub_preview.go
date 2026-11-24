@@ -71,6 +71,7 @@ type SubPreviewLeft struct {
 type SubPreviewTemplate struct {
 	ID   int64  `json:"id"`
 	Core string `json:"core" enum:"mihomo,singbox,xray"`
+	Kind string `json:"kind" enum:"text,simple" doc:"simple — простой шаблон: встроенный профиль из его маршрутизации"`
 	Name string `json:"name"`
 }
 
@@ -161,7 +162,7 @@ func (h *handlers) subPreviewView(ctx context.Context, p subsrc.UserPreview) (Su
 		v.Notes = []submodel.Note{}
 	}
 	if p.Template.ID != 0 {
-		t := &SubPreviewTemplate{ID: p.Template.ID, Core: string(p.Template.Core)}
+		t := &SubPreviewTemplate{ID: p.Template.ID, Core: string(p.Template.Core), Kind: templateKind(p.Template.Simple)}
 		heads, err := h.d.Store.Q.ListSubTemplateHeads(ctx)
 		if err != nil {
 			return v, err

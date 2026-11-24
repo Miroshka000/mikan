@@ -7,6 +7,7 @@ import { Button, Field, Pill } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { cleanRule, namedHeaders, ruleLabel } from "../../../lib/sub-rules";
 import { RequestHeaders } from "./request-headers";
+import { choiceName } from "./sub-templates/model";
 
 type Header = Schemas["Header"];
 type Result = Schemas["SubRuleTest"];
@@ -57,6 +58,11 @@ export function RuleTester({ rules, builtin, onResult }: { rules: Schemas["Rule"
 
 function Answer({ r }: { r: Result }) {
   const templates = useSubTemplates().data?.templates ?? [];
+  // The template the profile is made of by its name, a simple one said so; its id while the list loads.
+  const tested = (id: number) => {
+    const x = templates.find((h) => h.id === id);
+    return x ? choiceName(x) : `#${id}`;
+  };
   const respond =
     r.respond === "serve"
       ? t("settings.subRules.test.serve")
@@ -82,7 +88,7 @@ function Answer({ r }: { r: Result }) {
       {r.respond === "serve" && r.format && r.format !== "uri" ? (
         <>
           <dt className="text-[var(--ink-500)]">{t("settings.subRules.test.template")}</dt>
-          <dd className="break-words">{r.template ? (templates.find((x) => x.id === r.template)?.name ?? `#${r.template}`) : t("settings.subRules.test.builtinProfile")}</dd>
+          <dd className="break-words">{r.template ? tested(r.template) : t("settings.subRules.test.builtinProfile")}</dd>
         </>
       ) : null}
       {r.text ? (

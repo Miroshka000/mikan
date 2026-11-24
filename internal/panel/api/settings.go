@@ -491,6 +491,13 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 		if b.SubGroupMain != nil || b.SubGroupAuto != nil {
 			details = append(details, h.checkGroups(ctx, next)...)
+			d, err := h.groupInTemplateRules(ctx, cur, next, b.SubGroupMain != nil)
+			if err != nil {
+				return nil, err
+			}
+			if d != nil {
+				details = append(details, d)
+			}
 		}
 		// The rules are checked against the groups they will meet: a renamed group must
 		// not leave a rule pointing nowhere.
@@ -525,11 +532,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 	}
 	if b.SubRoutes != nil {
-		exists := func(id int64) bool {
-			_, err := h.d.Store.Q.GetNode(ctx, id)
-			return err == nil
-		}
-		if err := b.SubRoutes.Check(exists); err != nil {
+		if err := b.SubRoutes.Check(h.nodeExists(ctx)); err != nil {
 			details = append(details, fieldDetail("body.sub_routes", err.Error(), nil))
 		}
 	}

@@ -3,6 +3,7 @@ import { useSubTemplates } from "../../../../api/hooks";
 import { Select } from "../../../../components/select";
 import { Field, Skeleton } from "../../../../components/ui";
 import { t } from "../../../../i18n";
+import { choiceName } from "../../settings/sub-templates/model";
 import { CORES, type Core } from "./model";
 
 /**
@@ -28,7 +29,7 @@ export function TemplatesFields({ value, onChange, errors }: { value: Record<Cor
               <option value="">{def ? t("groups.appearance.templateDefault", { name: def.name }) : t("groups.appearance.templateAsAll")}</option>
               {own.map((x) => (
                 <option key={x.id} value={x.id}>
-                  {x.name}
+                  {choiceName(x)}
                 </option>
               ))}
             </Select>
