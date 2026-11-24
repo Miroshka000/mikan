@@ -22,7 +22,8 @@ export function getDensity(): Density {
 export function setDensity(d: Density, opts: { keep?: boolean } = {}) {
   if (opts.keep !== false) {
     try {
-      window.localStorage.setItem(DENSITY_KEY, d);
+      // Only the two known words are ever written, whatever reached d at runtime.
+      window.localStorage.setItem(DENSITY_KEY, d === "compact" ? "compact" : "comfortable");
     } catch {
       // Storage can be unavailable in private/restricted browser contexts.
     }

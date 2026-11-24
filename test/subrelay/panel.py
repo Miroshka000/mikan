@@ -1,7 +1,11 @@
 """An isolated TLS origin for the relay integration test; no real panel data."""
 import http.server
+import re
 import ssl
 from pathlib import Path
+
+# The relay's nonce is crypto/rand.Text(): 26 base32 characters. Anything else is not echoed back.
+NONCE = re.compile(r"[A-Z2-7]{26}")
 
 
 class Panel(http.server.BaseHTTPRequestHandler):
@@ -16,6 +20,9 @@ class Panel(http.server.BaseHTTPRequestHandler):
             self.send_error(404)
             return
         nonce = self.headers.get("X-Mikan-Relay-Nonce", "")
+        if not NONCE.fullmatch(nonce):
+            self.send_error(400)
+            return
         if not self.authorized():
             if self.headers.get("Authorization") == "Bearer ci-subscription-token" and self.headers.get("X-Mikan-Relay-Proof") == "ci-issued-proof":
                 self.send_response(204)
@@ -46,6 +53,7 @@ class Panel(http.server.BaseHTTPRequestHandler):
 
 server = http.server.ThreadingHTTPServer(("0.0.0.0", 8443), Panel)
 context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.minimum_version = ssl.TLSVersion.TLSv1_2
 context.load_cert_chain("/tmp/test-ca.pem", "/tmp/test-key.pem")
 server.socket = context.wrap_socket(server.socket, server_side=True)
 server.serve_forever()

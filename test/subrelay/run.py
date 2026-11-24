@@ -111,6 +111,7 @@ def main():
             docker("cp", str(directory), ca + ":/tmp")
             docker("start", ca)
             trust = ssl.create_default_context(cafile=str(cert))
+            trust.minimum_version = ssl.TLSVersion.TLSv1_2
             management = port(ca, 15000)
             def root_certificate():
                 connection = http.client.HTTPSConnection("127.0.0.1", management, context=trust, timeout=5)
@@ -123,6 +124,7 @@ def main():
                     connection.close()
             root = until(root_certificate)
             issued_trust = ssl.create_default_context(cadata=root)
+            issued_trust.minimum_version = ssl.TLSVersion.TLSv1_2
             trust_volume = prefix + "-trust"
             volumes.append(trust_volume)
             origin = prefix + "-origin"
