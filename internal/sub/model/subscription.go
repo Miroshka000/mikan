@@ -78,8 +78,9 @@ type AddressOverride struct {
 
 // Host is one place clients reach an inbound at; an empty field (port 0) keeps what they get
 // without it: the node's address, the inbound's port, the usual TLS name, the server's HTTP
-// Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing, the inbound's name. The host's
-// own fields (ALPN to Name) are the default host's too, and no template holds them.
+// Host, the panel's fingerprint, the app's own ALPN, IP version and multiplexing, a TLS hello
+// sent whole, the inbound's name. The host's own fields (ALPN to Name) are the default host's
+// too, and no template holds them.
 type Host struct {
 	ID int64 // the panel's, for good: a user's choice of Addresses and SNIs follows it
 	// Order is the host's place among the servers of every node (the admin's order of the
@@ -97,6 +98,8 @@ type Host struct {
 	MuxPadding  bool
 	// CDN: a CDN in front shows its own certificate, so the node's is not pinned.
 	CDN bool
+	// Fragment is how the apps split the TLS ClientHello (Proxy.Fragment); "": not at all.
+	Fragment string
 	// Name is the proxy's name, the variables of the profile title in it ({days}, {left}…)
 	// filled for the user (build.Profile.Vars); "": the inbound's.
 	Name string

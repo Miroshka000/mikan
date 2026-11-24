@@ -2,6 +2,7 @@ package xray
 
 import (
 	"encoding/hex"
+	"slices"
 	"strings"
 
 	"mikan/internal/proto"
@@ -15,25 +16,88 @@ import (
 // their own; an address for clients' sing-mux is not xray's mux and stays out too.
 func outbound(p model.Proxy, tag string) (map[string]any, bool) {
 	o, ok := outboundOf(p, tag)
-	if ok && p.IPVersion != "" {
-		ss, _ := o["streamSettings"].(map[string]any)
-		if ss == nil {
-			ss = map[string]any{}
-			o["streamSettings"] = ss
-		}
-		sock, _ := ss["sockopt"].(map[string]any)
-		if sock == nil {
-			sock = map[string]any{}
-			ss["sockopt"] = sock
-		}
-		sock["domainStrategy"] = ipStrategy[p.IPVersion]
+	if !ok {
+		return nil, false
 	}
-	return o, ok
+	if p.IPVersion != "" {
+		sockopt(o)["domainStrategy"] = ipStrategy[p.IPVersion]
+	}
+	// The connection is dialed through the outbound that splits the TLS hello; a config
+	// carries the ones its servers name (withFragments).
+	if f, ok := fragments[p.Fragment]; ok {
+		sockopt(o)["dialerProxy"] = f.tag
+	}
+	return o, true
+}
+
+// sockopt is the socket options of the outbound o, put in when it has none.
+func sockopt(o map[string]any) map[string]any {
+	ss, _ := o["streamSettings"].(map[string]any)
+	if ss == nil {
+		ss = map[string]any{}
+		o["streamSettings"] = ss
+	}
+	sock, _ := ss["sockopt"].(map[string]any)
+	if sock == nil {
+		sock = map[string]any{}
+		ss["sockopt"] = sock
+	}
+	return sock
 }
 
 // ipStrategy is xray's domainStrategy of a dial for mihomo's ip-version: the strict ones
 // use that version alone, the preferring ones fall back to the other.
 var ipStrategy = map[string]string{"ipv4": "ForceIPv4", "ipv6": "ForceIPv6", "ipv4-prefer": "UseIPv4v6", "ipv6-prefer": "UseIPv6v4"}
+
+// fragments are the outbounds a server dials through for its TLS hello to be split, by the
+// way of splitting (model.Proxy.Fragment): their tag, and the pause between the records in
+// ms, 0 for none: then xray writes them at once.
+var fragments = map[string]struct{ tag, interval string }{
+	model.FragmentRecord: {"fragment-record", "0"},
+	model.FragmentTCP:    {"fragment-tcp", "10-20"},
+}
+
+// fragmentOutbound is the freedom outbound tagged tag that splits the TLS hello of the
+// connections dialed through it into records of 100 to 200 bytes, interval ms apart. The
+// ranges are strings: Xray before 25 reads them as no other type, and every Xray from 1.8 on
+// takes the outbound.
+func fragmentOutbound(tag, interval string) map[string]any {
+	return map[string]any{"tag": tag, "protocol": "freedom", "settings": map[string]any{
+		"fragment": map[string]any{"packets": "tlshello", "length": "100-200", "interval": interval}}}
+}
+
+// withFragments is the servers of a config and, after them, the outbounds that split the
+// TLS hello of those that dial through one, each once. A tag of the config's other outbounds
+// (taken, an own template's) is not taken twice: the servers dial through a free one, a copy
+// of them, as the configs share them. The servers' own tags begin with proxy.
+func withFragments(servers []map[string]any, taken map[string]bool) []map[string]any {
+	out := slices.Clip(servers) // what is appended does not reach the caller's array
+	for _, mode := range []string{model.FragmentRecord, model.FragmentTCP} {
+		f := fragments[mode]
+		if !slices.ContainsFunc(out, func(o map[string]any) bool { return dialerOf(o) == f.tag }) {
+			continue
+		}
+		tag := model.FreeTag(f.tag, taken)
+		if tag != f.tag {
+			out = slices.Clone(out)
+			for i, o := range out {
+				if dialerOf(o) == f.tag {
+					out[i] = dialing(o, tag)
+				}
+			}
+		}
+		out = append(out, fragmentOutbound(tag, f.interval))
+	}
+	return out
+}
+
+// dialerOf is the outbound o dials through (sockopt.dialerProxy); "": none.
+func dialerOf(o map[string]any) string {
+	ss, _ := o["streamSettings"].(map[string]any)
+	sock, _ := ss["sockopt"].(map[string]any)
+	d, _ := sock["dialerProxy"].(string)
+	return d
+}
 
 // outboundOf is outbound without the IP version.
 func outboundOf(p model.Proxy, tag string) (map[string]any, bool) {

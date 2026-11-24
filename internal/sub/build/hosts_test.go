@@ -140,27 +140,34 @@ func TestHostPortStopsHopping(t *testing.T) {
 
 // An address's own fields go on its proxy where the protocol carries them, and one the
 // template no longer takes is left out rather than breaking the proxy. A CDN in front
-// leaves the node's self-signed certificate unpinned.
+// leaves the node's self-signed certificate unpinned. The TLS hello is split of TLS on the
+// node's certificate alone: not REALITY's, not over QUIC.
 func TestHostOptionsOnProxies(t *testing.T) {
 	pinned := model.Node{ID: 1, Name: "n", Endpoint: model.Endpoint{Host: "198.51.100.1", PinSHA256: strings.Repeat("ab", 32)}}
 	ws := "type: vless\nws-path: /w\nmikan: {tls: node}\n"
 	grpc := "type: trojan\ngrpc-service-name: g\nmikan: {tls: node}\n"
 	hy2 := proto.Marshal(proto.Template{"type": "hysteria2", "alpn": []any{"h3"}})
 	vision := "type: vless\nmikan: {tls: node, flow: xtls-rprx-vision}\n"
-	all := Options{ALPN: []string{"http/1.1", "h2", "h3"}, IPVersion: "ipv4", Mux: true, MuxProtocol: "yamux", MuxPadding: true}
+	anytls := proto.Marshal(proto.Template{"type": "anytls"})
+	reality := "type: vless\nreality-config: {dest: www.microsoft.com:443, private-key: " + realityKey(t) + ", short-id: [ab], server-names: [www.microsoft.com]}\n"
+	all := Options{ALPN: []string{"http/1.1", "h2", "h3"}, IPVersion: "ipv4", Mux: true, MuxProtocol: "yamux", MuxPadding: true, Fragment: model.FragmentTCP}
 	for _, c := range []struct {
 		name, src string
 		o         Options
 		alpn      string
 		mux       bool
 		pin       bool
+		fragment  string
 	}{
-		{"ws", ws, all, "http/1.1,h2", true, true},
-		{"ws without http/1.1", ws, Options{ALPN: []string{"h2"}}, "", false, true},
-		{"grpc", grpc, all, "http/1.1,h2", true, true},
-		{"hysteria2", hy2, all, "h3", false, true},
-		{"vision", vision, all, "http/1.1,h2", false, true},
-		{"ws behind a CDN", ws, Options{CDN: true}, "", false, false},
+		{"ws", ws, all, "http/1.1,h2", true, true, model.FragmentTCP},
+		{"ws without http/1.1", ws, Options{ALPN: []string{"h2"}}, "", false, true, ""},
+		{"grpc", grpc, all, "http/1.1,h2", true, true, model.FragmentTCP},
+		{"hysteria2", hy2, all, "h3", false, true, ""},
+		{"vision", vision, all, "http/1.1,h2", false, true, model.FragmentTCP},
+		{"ws behind a CDN", ws, Options{CDN: true, Fragment: model.FragmentRecord}, "", false, false, model.FragmentRecord},
+		{"anytls", anytls, Options{Fragment: model.FragmentRecord}, "", false, true, model.FragmentRecord},
+		{"reality", reality, Options{Fragment: model.FragmentRecord}, "", false, false, ""},
+		{"an unknown way", ws, Options{Fragment: "fast"}, "", false, true, ""},
 	} {
 		tpl, err := proto.Parse(c.src)
 		if err != nil {
@@ -181,6 +188,9 @@ func TestHostOptionsOnProxies(t *testing.T) {
 		}
 		if p.IPVersion != c.o.IPVersion {
 			t.Errorf("%s: IP version %q", c.name, p.IPVersion)
+		}
+		if p.Fragment != c.fragment {
+			t.Errorf("%s: fragment %q, want %q", c.name, p.Fragment, c.fragment)
 		}
 	}
 }

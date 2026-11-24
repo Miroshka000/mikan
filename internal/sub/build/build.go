@@ -114,7 +114,7 @@ func hosts(in model.Inbound, seed string, sniOK bool) []host {
 			}
 			continue
 		}
-		o := Options{ALPN: h.ALPN, IPVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.CDN}
+		o := Options{ALPN: h.ALPN, IPVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, CDN: h.CDN, Fragment: h.Fragment}
 		addr := pick(seed, "address", h.ID, h.Address, h.Addresses)
 		sni := h.SNI
 		if sniOK {

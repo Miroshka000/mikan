@@ -192,9 +192,9 @@ func TestOtherHosts(t *testing.T) {
 	}
 }
 
-// A host's own fields (ALPN, IP version, multiplexing, CDN) are saved trimmed, held to what
-// the inbound's protocol can use, and the default host's stay through every write of the
-// template, which does not hold them, and go with a copy of the inbound.
+// A host's own fields (ALPN, IP version, multiplexing, CDN, the split TLS hello) are saved
+// trimmed, held to what the inbound's protocol can use, and the default host's stay through
+// every write of the template, which does not hold them, and go with a copy of the inbound.
 func TestHostOwnFields(t *testing.T) {
 	now := time.Unix(1_800_000_000, 0)
 	_, s := inbounds(t, &now, nil)
@@ -204,13 +204,13 @@ func TestHostOwnFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	h, err := s.AddHost(ctx, ws.ID, Host{Address: "edge.example.com", ALPN: []string{" H2 ", "h2", "http/1.1"}, IPVersion: "ipv4-prefer", Mux: true, MuxProtocol: "smux", MuxPadding: true, CDN: true, Name: " Edge · {days} ",
-		States: []string{StateExpired, StateActive, StateExpired}, Trial: "only"})
+		States: []string{StateExpired, StateActive, StateExpired}, Trial: "only", Fragment: " tcp "})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// The states in their own order, each once.
 	if strings.Join(h.Alpn, ",") != "h2,http/1.1" || h.IpVersion != "ipv4-prefer" || !h.Mux || h.MuxProtocol != "smux" || !h.MuxPadding || !h.Cdn || h.Name != "Edge · {days}" ||
-		strings.Join(h.States, ",") != "active,expired" || h.Trial != "only" {
+		strings.Join(h.States, ",") != "active,expired" || h.Trial != "only" || h.Fragment != "tcp" {
 		t.Fatalf("added: %+v", h)
 	}
 	// A multiplexing that is off keeps no protocol or padding; no ALPN is an empty list.
@@ -228,7 +228,8 @@ func TestHostOwnFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn || h.Name != "" || len(h.Addresses) != 0 || len(h.Snis) != 0 {
+	if h.Alpn == nil || len(h.Alpn) != 0 || h.IpVersion != "" || h.Mux || h.MuxProtocol != "" || h.MuxPadding || h.Cdn || h.Name != "" || len(h.Addresses) != 0 || len(h.Snis) != 0 ||
+		h.Fragment != "" {
 		t.Fatalf("cleared: %+v", h)
 	}
 
@@ -272,6 +273,9 @@ func TestHostOwnFields(t *testing.T) {
 		{ws, Host{Addresses: manyAddresses(HostChoicesMax + 1)}, "addresses", "host_choices_long"},
 		{ws, Host{States: []string{StateActive, StateExpiring}}, "states", "host_state"}, // an expiring one is active
 		{ws, Host{Trial: "maybe"}, "trial", "host_trial"},
+		{ws, Host{Fragment: "fast"}, "fragment", "host_fragment"},
+		{reality, Host{Fragment: "record"}, "fragment", "host_fragment_tls"}, // the target's name
+		{hy2, Host{Fragment: "record"}, "fragment", "host_fragment_tls"},     // no hello over TCP
 	} {
 		if _, err := s.AddHost(ctx, c.in.ID, c.h); !errors.As(err, &edit) || edit.Field != c.field || edit.Err.Code != c.code {
 			t.Errorf("%s %+v: %v, want %s %s", c.in.Preset, c.h, err, c.field, c.code)
@@ -283,6 +287,9 @@ func TestHostOwnFields(t *testing.T) {
 	}
 	if _, err := s.AddHost(ctx, reality.ID, Host{Mux: true, MuxProtocol: "h2mux"}); err != nil {
 		t.Fatalf("REALITY's multiplexing: %v", err)
+	}
+	if _, err := s.AddHost(ctx, vision.ID, Host{Fragment: "record"}); err != nil {
+		t.Fatalf("a split hello of Vision on the node's certificate: %v", err)
 	}
 
 	// The default host: its own fields through the hosts, beside the template's five.
@@ -299,12 +306,12 @@ func TestHostOwnFields(t *testing.T) {
 		}
 		d := hosts[0]
 		if strings.Join(d.Alpn, ",") != "h2,http/1.1" || d.IpVersion != "ipv6-prefer" || !d.Mux || d.MuxProtocol != "yamux" || d.MuxPadding || !d.Cdn || d.Name != "Main {left}" || strings.Join(d.Addresses, ",") != "front2.example.com" ||
-			strings.Join(d.States, ",") != "limited" || d.Trial != "never" {
+			strings.Join(d.States, ",") != "limited" || d.Trial != "never" || d.Fragment != "record" {
 			t.Fatalf("%s: the default host %+v", when, d)
 		}
 	}
 	if _, err := s.UpdateHost(ctx, ws.ID, def.ID, Host{Address: "front.example.com", ALPN: []string{"h2", "http/1.1"}, IPVersion: "ipv6-prefer", Mux: true, MuxProtocol: "yamux", CDN: true, Name: "Main {left}", Addresses: []string{"front2.example.com"},
-		States: []string{StateLimited}, Trial: "never"}); err != nil {
+		States: []string{StateLimited}, Trial: "never", Fragment: "record"}); err != nil {
 		t.Fatal(err)
 	}
 	own("the hosts")
@@ -346,8 +353,33 @@ func TestHostOwnFields(t *testing.T) {
 		t.Fatalf("the copy's hosts: %+v %v", ch, err)
 	}
 	if strings.Join(ch[0].Alpn, ",") != "h2,http/1.1" || ch[0].IpVersion != "ipv6-prefer" || !ch[0].Mux || ch[0].MuxProtocol != "yamux" || !ch[0].Cdn || ch[0].Name != "Main {left}" || strings.Join(ch[0].Addresses, ",") != "front2.example.com" ||
-		strings.Join(ch[0].States, ",") != "limited" || ch[0].Trial != "never" {
+		strings.Join(ch[0].States, ",") != "limited" || ch[0].Trial != "never" || ch[0].Fragment != "record" {
 		t.Fatalf("the copy's default host: %+v", ch[0])
+	}
+	if ch[1].Fragment != "" {
+		t.Fatalf("the copy's other host: %+v", ch[1])
+	}
+}
+
+// The hello a host's clients may split is of TLS on the node's certificate, sent over TCP
+// by an Xray or sing-box app: VLESS, Trojan and AnyTLS, never REALITY.
+func TestHostFragmentOf(t *testing.T) {
+	for src, want := range map[string]bool{
+		"type: vless\nws-path: /w\nmikan: {tls: node}\n":           true,
+		"type: trojan\ngrpc-service-name: g\nmikan: {tls: node}\n": true,
+		"type: anytls\n": true,
+		"type: vless\nreality-config: {dest: www.example.com:443}\n": false,
+		"type: hysteria2\n":   false,
+		"type: trusttunnel\n": false,
+		"type: shadowsocks\n": false,
+	} {
+		tpl, err := proto.Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := HostFragmentOf(tpl); got != want {
+			t.Errorf("%q: %v, want %v", src, got, want)
+		}
 	}
 }
 

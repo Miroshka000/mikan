@@ -55,9 +55,10 @@ type frame struct {
 	// outbounds of each one's servers, by its tag.
 	balancers []map[string]any
 	servers   map[string][]tagged
-	choices   []string // the balancers with a config of their own
-	own       []any    // the template's outbounds
-	outs      []tagged // the user's servers xray carries
+	choices   []string         // the balancers with a config of their own
+	own       []map[string]any // the template's outbounds
+	tags      map[string]bool  // their tags
+	outs      []tagged         // the user's servers xray carries
 }
 
 func templateConfigs(p profile.Profile, src string) ([]map[string]any, error) {
@@ -90,6 +91,7 @@ func readFrame(p profile.Profile, src string) (frame, error) {
 		return frame{}, model.TemplateErr("template_shape", "outbounds")
 	}
 	tags := map[string]bool{}
+	f.tags = tags
 	freedom, blackhole := "", ""
 	for i, x := range raw {
 		o, _ := x.(map[string]any)
@@ -172,6 +174,7 @@ func readFrame(p profile.Profile, src string) (frame, error) {
 	}
 	if len(closed) > 0 && blackhole == "" {
 		blackhole = model.FreeTag("block", tags)
+		tags[blackhole] = true
 		f.own = append(f.own, map[string]any{"tag": blackhole, "protocol": "blackhole"})
 	}
 	for _, b := range closed {
@@ -198,6 +201,7 @@ func readFrame(p profile.Profile, src string) (frame, error) {
 		for _, fl := range fields(r.When, routing.Common) {
 			if freedom == "" {
 				freedom = model.FreeTag(directTag, tags)
+				tags[freedom] = true
 				f.own = append(f.own, map[string]any{"tag": freedom, "protocol": "freedom"})
 			}
 			head = append(head, withRef(fl, Ref{Tag: freedom}))
@@ -240,11 +244,11 @@ func (f frame) config(name string, choice *tagged, balancer string) map[string]a
 			named[t] = true
 		}
 	}
-	var outbounds []any
+	var servers []map[string]any
 	if choice != nil {
 		o := maps.Clone(choice.out)
 		o["tag"] = proxyTag
-		outbounds = append(outbounds, o)
+		servers = append(servers, o)
 	}
 	var balancers []any
 	carry := map[string]bool{}
@@ -260,10 +264,11 @@ func (f frame) config(name string, choice *tagged, balancer string) map[string]a
 	}
 	for _, o := range f.outs {
 		if carry[o.tag] {
-			outbounds = append(outbounds, o.out)
+			servers = append(servers, o.out)
 		}
 	}
-	outbounds = append(outbounds, f.own...)
+	// The template's own tags stay its own: a splitter of the servers' TLS hello takes another.
+	outbounds := append(withFragments(servers, f.tags), f.own...)
 	rt := maps.Clone(f.routing)
 	rt["rules"] = rules
 	if len(balancers) > 0 {

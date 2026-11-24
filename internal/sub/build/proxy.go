@@ -52,6 +52,9 @@ type Options struct {
 	// CDN: a CDN in front shows the apps its own certificate, so the node's self-signed
 	// one is not pinned.
 	CDN bool
+	// Fragment is how the apps split the TLS ClientHello: model.FragmentRecord or
+	// model.FragmentTCP; "": not at all.
+	Fragment string
 }
 
 // Proxy is the client side of the template t for in: what the apps of the user dial.
@@ -99,6 +102,14 @@ func options(p *model.Proxy, o Options) {
 		switch p.Type {
 		case "vless", "trojan", "shadowsocks":
 			p.Smux = &model.Smux{Protocol: o.MuxProtocol, Padding: o.MuxPadding}
+		}
+	}
+	// The hello split is of TLS on the node's certificate (or a CDN's) over TCP: REALITY's
+	// carries the target site's name, and the QUIC protocols send theirs over UDP.
+	if (o.Fragment == model.FragmentRecord || o.Fragment == model.FragmentTCP) && p.TLS != nil && p.TLS.Reality == nil {
+		switch p.Type {
+		case "vless", "trojan", "anytls":
+			p.Fragment = o.Fragment
 		}
 	}
 }

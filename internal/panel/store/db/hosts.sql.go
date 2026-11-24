@@ -12,7 +12,7 @@ import (
 )
 
 const addInboundHost = `-- name: AddInboundHost :one
-INSERT INTO inbound_hosts (inbound_id, position, sort, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, group_mode, groups)
+INSERT INTO inbound_hosts (inbound_id, position, sort, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, group_mode, groups, fragment)
 VALUES ($1, (SELECT COALESCE(max(position), 0) + 1 FROM inbound_hosts WHERE inbound_id = $1),
   COALESCE(
     (SELECT max(sort) FROM inbound_hosts WHERE inbound_id = $1),
@@ -21,8 +21,8 @@ VALUES ($1, (SELECT COALESCE(max(position), 0) + 1 FROM inbound_hosts WHERE inbo
   $2, $3, $4, $5, $6,
   COALESCE($7::text[], '{}'), $8, $9, $10, $11, $12, $13,
   COALESCE($14::text[], '{}'), COALESCE($15::text[], '{}'), COALESCE($16::text[], '{}'), $17,
-  $18, COALESCE($19::bigint[], '{}'))
-RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups
+  $18, COALESCE($19::bigint[], '{}'), $20)
+RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups, fragment
 `
 
 type AddInboundHostParams struct {
@@ -45,6 +45,7 @@ type AddInboundHostParams struct {
 	Trial       string
 	GroupMode   string
 	Groups      []int64
+	Fragment    string
 }
 
 // A new host goes after the others; position 0 stays the default one's. In the subscriptions
@@ -70,6 +71,7 @@ func (q *Queries) AddInboundHost(ctx context.Context, arg AddInboundHostParams) 
 		arg.Trial,
 		arg.GroupMode,
 		pq.Array(arg.Groups),
+		arg.Fragment,
 	)
 	var i InboundHost
 	err := row.Scan(
@@ -95,6 +97,7 @@ func (q *Queries) AddInboundHost(ctx context.Context, arg AddInboundHostParams) 
 		&i.Sort,
 		&i.GroupMode,
 		pq.Array(&i.Groups),
+		&i.Fragment,
 	)
 	return i, err
 }
@@ -103,7 +106,7 @@ const copyDefaultHostOptions = `-- name: CopyDefaultHostOptions :exec
 UPDATE inbound_hosts dst SET alpn = src.alpn, ip_version = src.ip_version, mux = src.mux, mux_protocol = src.mux_protocol,
   mux_padding = src.mux_padding, cdn = src.cdn, name = src.name,
   addresses = src.addresses, snis = src.snis, states = src.states, trial = src.trial,
-  group_mode = src.group_mode, groups = src.groups
+  group_mode = src.group_mode, groups = src.groups, fragment = src.fragment
 FROM inbound_hosts src
 WHERE src.inbound_id = $1 AND src.position = 0 AND dst.inbound_id = $2 AND dst.position = 0
 `
@@ -121,7 +124,7 @@ func (q *Queries) CopyDefaultHostOptions(ctx context.Context, arg CopyDefaultHos
 }
 
 const copyInboundHosts = `-- name: CopyInboundHosts :exec
-INSERT INTO inbound_hosts (inbound_id, position, sort, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, group_mode, groups)
+INSERT INTO inbound_hosts (inbound_id, position, sort, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, group_mode, groups, fragment)
 SELECT $1, src.position,
   COALESCE(
     (SELECT max(sort) FROM inbound_hosts WHERE inbound_id = $1),
@@ -129,7 +132,7 @@ SELECT $1, src.position,
     (SELECT COALESCE(max(sort), 0) + 1 FROM inbound_hosts)),
   src.address, src.port, src.sni, src.host, src.fingerprint,
   src.alpn, src.ip_version, src.mux, src.mux_protocol, src.mux_padding, src.cdn, src.name, src.addresses, src.snis, src.states, src.trial,
-  src.group_mode, src.groups FROM inbound_hosts src
+  src.group_mode, src.groups, src.fragment FROM inbound_hosts src
 WHERE src.inbound_id = $2 AND src.position > 0
 `
 
@@ -164,7 +167,7 @@ func (q *Queries) DeleteInboundHost(ctx context.Context, arg DeleteInboundHostPa
 }
 
 const getInboundHost = `-- name: GetInboundHost :one
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups FROM inbound_hosts WHERE id = $1 AND inbound_id = $2
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups, fragment FROM inbound_hosts WHERE id = $1 AND inbound_id = $2
 `
 
 type GetInboundHostParams struct {
@@ -198,12 +201,13 @@ func (q *Queries) GetInboundHost(ctx context.Context, arg GetInboundHostParams) 
 		&i.Sort,
 		&i.GroupMode,
 		pq.Array(&i.Groups),
+		&i.Fragment,
 	)
 	return i, err
 }
 
 const listHostsInOrder = `-- name: ListHostsInOrder :many
-SELECT h.id, h.inbound_id, h.position, h.address, h.port, h.sni, h.host, h.fingerprint, h.alpn, h.ip_version, h.mux, h.mux_protocol, h.mux_padding, h.cdn, h.name, h.addresses, h.snis, h.states, h.trial, h.sort, h.group_mode, h.groups, i.node_id FROM inbound_hosts h
+SELECT h.id, h.inbound_id, h.position, h.address, h.port, h.sni, h.host, h.fingerprint, h.alpn, h.ip_version, h.mux, h.mux_protocol, h.mux_padding, h.cdn, h.name, h.addresses, h.snis, h.states, h.trial, h.sort, h.group_mode, h.groups, h.fragment, i.node_id FROM inbound_hosts h
 JOIN inbounds i ON i.id = h.inbound_id
 JOIN nodes n ON n.id = i.node_id
 ORDER BY h.sort, n.sort, n.id, i.id, h.position
@@ -249,6 +253,7 @@ func (q *Queries) ListHostsInOrder(ctx context.Context) ([]ListHostsInOrderRow, 
 			&i.InboundHost.Sort,
 			&i.InboundHost.GroupMode,
 			pq.Array(&i.InboundHost.Groups),
+			&i.InboundHost.Fragment,
 			&i.NodeID,
 		); err != nil {
 			return nil, err
@@ -265,7 +270,7 @@ func (q *Queries) ListHostsInOrder(ctx context.Context) ([]ListHostsInOrderRow, 
 }
 
 const listHostsOfInbounds = `-- name: ListHostsOfInbounds :many
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups FROM inbound_hosts WHERE inbound_id = ANY($1::bigint[]) ORDER BY inbound_id, position
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups, fragment FROM inbound_hosts WHERE inbound_id = ANY($1::bigint[]) ORDER BY inbound_id, position
 `
 
 func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]InboundHost, error) {
@@ -300,6 +305,7 @@ func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]Inbou
 			&i.Sort,
 			&i.GroupMode,
 			pq.Array(&i.Groups),
+			&i.Fragment,
 		); err != nil {
 			return nil, err
 		}
@@ -315,7 +321,7 @@ func (q *Queries) ListHostsOfInbounds(ctx context.Context, ids []int64) ([]Inbou
 }
 
 const listInboundHosts = `-- name: ListInboundHosts :many
-SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups FROM inbound_hosts WHERE inbound_id = $1 ORDER BY position
+SELECT id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups, fragment FROM inbound_hosts WHERE inbound_id = $1 ORDER BY position
 `
 
 func (q *Queries) ListInboundHosts(ctx context.Context, inboundID int64) ([]InboundHost, error) {
@@ -350,6 +356,7 @@ func (q *Queries) ListInboundHosts(ctx context.Context, inboundID int64) ([]Inbo
 			&i.Sort,
 			&i.GroupMode,
 			pq.Array(&i.Groups),
+			&i.Fragment,
 		); err != nil {
 			return nil, err
 		}
@@ -441,8 +448,9 @@ func (q *Queries) SetHostSort(ctx context.Context, arg SetHostSortParams) error 
 const setInboundHostOptions = `-- name: SetInboundHostOptions :exec
 UPDATE inbound_hosts SET alpn = COALESCE($1::text[], '{}'), ip_version = $2, mux = $3, mux_protocol = $4, mux_padding = $5, cdn = $6,
   name = $7, addresses = COALESCE($8::text[], '{}'), snis = COALESCE($9::text[], '{}'),
-  states = COALESCE($10::text[], '{}'), trial = $11, group_mode = $12, groups = COALESCE($13::bigint[], '{}')
-WHERE id = $14 AND inbound_id = $15
+  states = COALESCE($10::text[], '{}'), trial = $11, group_mode = $12, groups = COALESCE($13::bigint[], '{}'),
+  fragment = $14
+WHERE id = $15 AND inbound_id = $16
 `
 
 type SetInboundHostOptionsParams struct {
@@ -459,6 +467,7 @@ type SetInboundHostOptionsParams struct {
 	Trial       string
 	GroupMode   string
 	Groups      []int64
+	Fragment    string
 	ID          int64
 	InboundID   int64
 }
@@ -480,6 +489,7 @@ func (q *Queries) SetInboundHostOptions(ctx context.Context, arg SetInboundHostO
 		arg.Trial,
 		arg.GroupMode,
 		pq.Array(arg.Groups),
+		arg.Fragment,
 		arg.ID,
 		arg.InboundID,
 	)
@@ -490,9 +500,10 @@ const updateInboundHost = `-- name: UpdateInboundHost :one
 UPDATE inbound_hosts SET address = $1, port = $2, sni = $3, host = $4, fingerprint = $5,
   alpn = COALESCE($6::text[], '{}'), ip_version = $7, mux = $8, mux_protocol = $9, mux_padding = $10, cdn = $11,
   name = $12, addresses = COALESCE($13::text[], '{}'), snis = COALESCE($14::text[], '{}'),
-  states = COALESCE($15::text[], '{}'), trial = $16, group_mode = $17, groups = COALESCE($18::bigint[], '{}')
-WHERE id = $19 AND inbound_id = $20
-RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups
+  states = COALESCE($15::text[], '{}'), trial = $16, group_mode = $17, groups = COALESCE($18::bigint[], '{}'),
+  fragment = $19
+WHERE id = $20 AND inbound_id = $21
+RETURNING id, inbound_id, position, address, port, sni, host, fingerprint, alpn, ip_version, mux, mux_protocol, mux_padding, cdn, name, addresses, snis, states, trial, sort, group_mode, groups, fragment
 `
 
 type UpdateInboundHostParams struct {
@@ -514,6 +525,7 @@ type UpdateInboundHostParams struct {
 	Trial       string
 	GroupMode   string
 	Groups      []int64
+	Fragment    string
 	ID          int64
 	InboundID   int64
 }
@@ -538,6 +550,7 @@ func (q *Queries) UpdateInboundHost(ctx context.Context, arg UpdateInboundHostPa
 		arg.Trial,
 		arg.GroupMode,
 		pq.Array(arg.Groups),
+		arg.Fragment,
 		arg.ID,
 		arg.InboundID,
 	)
@@ -565,6 +578,7 @@ func (q *Queries) UpdateInboundHost(ctx context.Context, arg UpdateInboundHostPa
 		&i.Sort,
 		&i.GroupMode,
 		pq.Array(&i.Groups),
+		&i.Fragment,
 	)
 	return i, err
 }

@@ -294,6 +294,7 @@ type InboundHost struct {
 	Sort        int64
 	GroupMode   string
 	Groups      []int64
+	Fragment    string
 }
 
 type InboundReach struct {

@@ -4855,6 +4855,11 @@
             "maxLength": 32,
             "type": "string"
           },
+          "fragment": {
+            "description": "Дробить TLS ClientHello клиентов: record — на TLS-записи одним пакетом, tcp — каждую запись отдельным TCP-пакетом с паузой (надёжнее против DPI, медленнее). VLESS, Trojan и AnyTLS на сертификате ноды, не REALITY; получают приложения на Xray (JSON-конфиги) и sing-box; пусто — не дробить",
+            "maxLength": 8,
+            "type": "string"
+          },
           "group_mode": {
             "description": "only — только клиентам групп groups, never — всем, кроме них; пусто — всем. Группа клиента — своя или его тарифа",
             "maxLength": 8,
@@ -5104,6 +5109,10 @@
             "description": "Отпечаток TLS (uTLS); пусто — общий из настроек",
             "type": "string"
           },
+          "fragment": {
+            "description": "Как клиенты дробят TLS ClientHello: record — на TLS-записи одним пакетом, tcp — каждую запись отдельным TCP-пакетом с паузой; пусто — не дробят",
+            "type": "string"
+          },
           "group_mode": {
             "description": "Кому адрес выдаётся по группе клиента: only — только клиентам групп groups, never — всем, кроме них; пусто — всем",
             "type": "string"
@@ -5182,6 +5191,7 @@
           "ip_version",
           "mux",
           "cdn",
+          "fragment",
           "name",
           "addresses",
           "snis",
@@ -5586,6 +5596,10 @@
             },
             "type": "array"
           },
+          "host_fragment": {
+            "description": "Можно ли адресам для клиентов дробить TLS ClientHello: VLESS, Trojan и AnyTLS на сертификате ноды, не REALITY",
+            "type": "boolean"
+          },
           "id": {
             "format": "int64",
             "type": "integer"
@@ -5722,6 +5736,7 @@
           "cdn_possible",
           "sni443",
           "sni443_possible",
+          "host_fragment",
           "tags"
         ],
         "type": "object"

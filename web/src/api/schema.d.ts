@@ -5750,6 +5750,8 @@ export interface components {
             cdn?: boolean;
             /** @description Отпечаток TLS у клиентов, как fingerprint подключения; пусто — общий из настроек */
             fingerprint: string;
+            /** @description Дробить TLS ClientHello клиентов: record — на TLS-записи одним пакетом, tcp — каждую запись отдельным TCP-пакетом с паузой (надёжнее против DPI, медленнее). VLESS, Trojan и AnyTLS на сертификате ноды, не REALITY; получают приложения на Xray (JSON-конфиги) и sing-box; пусто — не дробить */
+            fragment?: string;
             /** @description only — только клиентам групп groups, never — всем, кроме них; пусто — всем. Группа клиента — своя или его тарифа */
             group_mode?: string;
             /** @description Группы для group_mode, по id; с режимом нужна хотя бы одна */
@@ -5828,6 +5830,8 @@ export interface components {
             default: boolean;
             /** @description Отпечаток TLS (uTLS); пусто — общий из настроек */
             fingerprint: string;
+            /** @description Как клиенты дробят TLS ClientHello: record — на TLS-записи одним пакетом, tcp — каждую запись отдельным TCP-пакетом с паузой; пусто — не дробят */
+            fragment: string;
             /** @description Кому адрес выдаётся по группе клиента: only — только клиентам групп groups, never — всем, кроме них; пусто — всем */
             group_mode: string;
             /** @description Группы для group_mode, по id; при only без групп (все удалены) адрес не выдаётся никому */
@@ -6010,6 +6014,8 @@ export interface components {
             fingerprint?: string;
             /** @description ALPN, которые можно задать адресам для клиентов: у QUIC — из ALPN самого подключения, у TLS по TCP — h2 и http/1.1, без TLS ноды — ничего */
             host_alpn: string[];
+            /** @description Можно ли адресам для клиентов дробить TLS ClientHello: VLESS, Trojan и AnyTLS на сертификате ноды, не REALITY */
+            host_fragment: boolean;
             /** Format: int64 */
             id: number;
             /** @description Подключение входит в «Авто» подписки; выключено — только в списке и группе страны (выключенная нода убирает все свои) */

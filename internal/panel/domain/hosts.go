@@ -10,6 +10,7 @@ import (
 	"mikan/internal/panel/store"
 	"mikan/internal/panel/store/db"
 	"mikan/internal/proto"
+	submodel "mikan/internal/sub/model"
 )
 
 // The hosts of an inbound (#01) are the places its clients reach it at: an address, a port,
@@ -21,7 +22,8 @@ import (
 // (UpdateHost). Every other host is one more proxy of the inbound in the subscriptions.
 //
 // A host also has fields of its own that no template holds (ALPN, the IP version,
-// multiplexing, a CDN in front, its name, more addresses and TLS names, who it is shown to): the default host has them too,
+// multiplexing, a CDN in front, how clients split the TLS hello, its name, more addresses and
+// TLS names, who it is shown to): the default host has them too,
 // written only through the hosts, and a write of the template leaves them as they are.
 
 var (
@@ -47,6 +49,9 @@ type Host struct {
 	// CDN: a CDN in front of the host shows clients its own certificate, so the node's
 	// self-signed one is not to be pinned for them.
 	CDN bool
+	// Fragment is how clients split the TLS ClientHello they send, of HostFragments: into
+	// TLS records at once (record), or each record in a TCP packet of its own (tcp).
+	Fragment string
 	// Name is the host's proxy name in subscriptions, with the variables of the profile
 	// title filled for each user; "": the inbound's, numbered after the default host's.
 	Name string
@@ -74,6 +79,7 @@ var (
 	HostALPN         = []string{"h3", "h2", "http/1.1"}
 	HostIPVersions   = []string{"ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"}
 	HostMuxProtocols = []string{"smux", "yamux", "h2mux"}
+	HostFragments    = []string{submodel.FragmentRecord, submodel.FragmentTCP}
 	HostStates       = []string{StateActive, StateLimited, StateExpired, StateDisabled}
 	HostTrials       = []string{"only", "never"}
 )
@@ -162,7 +168,7 @@ func (s *Inbounds) AddHost(ctx context.Context, id int64, h Host) (db.InboundHos
 		}
 		row, err = q.AddInboundHost(ctx, db.AddInboundHostParams{InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
 			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial,
-			GroupMode: h.GroupMode, Groups: h.Groups})
+			GroupMode: h.GroupMode, Groups: h.Groups, Fragment: h.Fragment})
 		return err
 	})
 	return row, err
@@ -212,7 +218,7 @@ func (s *Inbounds) UpdateHost(ctx context.Context, id, hostID int64, h Host) (db
 		}
 		row, err = q.UpdateInboundHost(ctx, db.UpdateInboundHostParams{ID: hostID, InboundID: id, Address: h.Address, Port: int64(h.Port), Sni: h.SNI, Host: h.Host, Fingerprint: h.Fingerprint,
 			Alpn: h.ALPN, IpVersion: h.IPVersion, Mux: h.Mux, MuxProtocol: h.MuxProtocol, MuxPadding: h.MuxPadding, Cdn: h.CDN, Name: h.Name, Addresses: h.Addresses, Snis: h.SNIs, States: h.States, Trial: h.Trial,
-			GroupMode: h.GroupMode, Groups: h.Groups})
+			GroupMode: h.GroupMode, Groups: h.Groups, Fragment: h.Fragment})
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrUnknownHost
 		}
@@ -268,7 +274,7 @@ type defaultHost struct {
 func (d defaultHost) write(ctx context.Context, q *db.Queries, inboundID int64) error {
 	return q.SetInboundHostOptions(ctx, db.SetInboundHostOptionsParams{ID: d.id, InboundID: inboundID,
 		Alpn: d.h.ALPN, IpVersion: d.h.IPVersion, Mux: d.h.Mux, MuxProtocol: d.h.MuxProtocol, MuxPadding: d.h.MuxPadding, Cdn: d.h.CDN, Name: d.h.Name, Addresses: d.h.Addresses, Snis: d.h.SNIs, States: d.h.States, Trial: d.h.Trial,
-		GroupMode: d.h.GroupMode, Groups: d.h.Groups})
+		GroupMode: d.h.GroupMode, Groups: d.h.Groups, Fragment: d.h.Fragment})
 }
 
 // lock keeps the groups the fields name until the transaction ends: first in it, as a group's
@@ -283,7 +289,7 @@ func (h Host) trimmed() Host {
 	h.Address, h.SNI, h.Host, h.Fingerprint = strings.TrimSpace(h.Address), strings.TrimSpace(h.SNI), strings.TrimSpace(h.Host), strings.TrimSpace(h.Fingerprint)
 	h.Name = strings.TrimSpace(h.Name)
 	h.Addresses, h.SNIs = choices(h.Addresses, h.Address), choices(h.SNIs, h.SNI)
-	h.IPVersion, h.MuxProtocol = strings.TrimSpace(h.IPVersion), strings.TrimSpace(h.MuxProtocol)
+	h.IPVersion, h.MuxProtocol, h.Fragment = strings.TrimSpace(h.IPVersion), strings.TrimSpace(h.MuxProtocol), strings.TrimSpace(h.Fragment)
 	// The states in HostStates' order, each once; an unknown one stays for hostOptions to refuse.
 	states := []string{}
 	for _, st := range HostStates {
@@ -489,7 +495,27 @@ func hostOptions(t proto.Template, h Host) error {
 			return err
 		}
 	}
+	if h.Fragment != "" {
+		if !slices.Contains(HostFragments, h.Fragment) {
+			return refuse("fragment", "host_fragment")
+		}
+		if !HostFragmentOf(t) {
+			return refuse("fragment", "host_fragment_tls")
+		}
+	}
 	return nil
+}
+
+// HostFragmentOf says whether the clients of a host of t may split their TLS ClientHello:
+// the Xray and sing-box apps split the one they send over TCP to the node's certificate (or
+// to a CDN's in front), of VLESS, Trojan and AnyTLS. A REALITY client sends the target
+// site's name, which sing-box never splits; the QUIC protocols send no hello over TCP.
+func HostFragmentOf(t proto.Template) bool {
+	switch t.Type() {
+	case "vless", "trojan", "anytls":
+		return t.NodeCert()
+	}
+	return false
 }
 
 // hostRefusal refuses a host's own field as an *EditError named by the field.

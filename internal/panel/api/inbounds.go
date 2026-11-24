@@ -60,6 +60,8 @@ type InboundView struct {
 	// SNI443: behind the node's SNI router, clients reach it on 443.
 	SNI443         bool `json:"sni443" doc:"Подключение делит порт 443 ноды с другими по имени TLS (SNI-роутер ноды); клиенты подключаются на 443"`
 	SNI443Possible bool `json:"sni443_possible" doc:"Можно ли поставить за SNI-роутер: VLESS, Trojan или AnyTLS по TCP с TLS или REALITY"`
+	// HostFragment: a host's clients may split their TLS hello (HostView.fragment).
+	HostFragment bool `json:"host_fragment" doc:"Можно ли адресам для клиентов дробить TLS ClientHello: VLESS, Trojan и AnyTLS на сертификате ноды, не REALITY"`
 	// SNIClash: others of the node ask for its name behind the shared 443 and the router
 	// cannot tell them apart; absent when it has the name to itself.
 	SNIClash *SNIClashView `json:"sni_clash,omitempty" doc:"То же имя за общим 443 у других подключений ноды, и роутер их не различает: подключения дойдут только до одного из них"`
@@ -210,6 +212,7 @@ type HostView struct {
 	IPVersion string   `json:"ip_version" doc:"Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении"`
 	Mux       HostMux  `json:"mux" doc:"Мультиплексирование соединений (sing-mux)"`
 	CDN       bool     `json:"cdn" doc:"Перед адресом CDN со своим сертификатом: самоподписанный сертификат ноды клиентам не закрепляется"`
+	Fragment  string   `json:"fragment" doc:"Как клиенты дробят TLS ClientHello: record — на TLS-записи одним пакетом, tcp — каждую запись отдельным TCP-пакетом с паузой; пусто — не дробят"`
 	Name      string   `json:"name" doc:"Имя в подписке, с переменными заголовка ({days}, {left}…) для каждого пользователя; пусто — имя подключения"`
 	Addresses []string `json:"addresses" doc:"Ещё адреса: каждый клиент получает один из address и этих, всегда один и тот же"`
 	SNIs      []string `json:"snis" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же"`
@@ -239,6 +242,7 @@ type HostInput struct {
 	IPVersion   string   `json:"ip_version,omitempty" maxLength:"16" doc:"Как клиенты доходят до адреса: ipv4, ipv6, ipv4-prefer, ipv6-prefer; пусто — как в приложении"`
 	Mux         HostMux  `json:"mux,omitempty" doc:"Мультиплексирование соединений (sing-mux): VLESS, Trojan и Shadowsocks, не XHTTP и не Vision; выключенное не хранит протокол и padding"`
 	CDN         bool     `json:"cdn,omitempty" doc:"Перед адресом CDN со своим сертификатом: VLESS и Trojan на сертификате ноды по XHTTP, WebSocket или gRPC"`
+	Fragment    string   `json:"fragment,omitempty" maxLength:"8" doc:"Дробить TLS ClientHello клиентов: record — на TLS-записи одним пакетом, tcp — каждую запись отдельным TCP-пакетом с паузой (надёжнее против DPI, медленнее). VLESS, Trojan и AnyTLS на сертификате ноды, не REALITY; получают приложения на Xray (JSON-конфиги) и sing-box; пусто — не дробить"`
 	Name        string   `json:"name,omitempty" maxLength:"48" doc:"Имя в подписке; можно с переменными заголовка: «🇳🇱 NL · осталось {left}». Пусто — имя подключения, у доп. адресов с номером"`
 	Addresses   []string `json:"addresses,omitempty" maxItems:"16" doc:"Ещё адреса для клиентов: каждый получает один из address и этих, всегда один и тот же (по токену подписки); пустой address среди них — адрес ноды"`
 	SNIs        []string `json:"snis,omitempty" maxItems:"16" doc:"Ещё SNI: каждый клиент получает одно из sni и этих, всегда одно и то же; только где можно задать sni"`
@@ -250,7 +254,7 @@ type HostInput struct {
 
 func (b HostInput) host() domain.Host {
 	return domain.Host{Address: b.Address, Port: b.Port, SNI: b.SNI, Host: b.Host, Fingerprint: b.Fingerprint,
-		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Name: b.Name, Addresses: b.Addresses, SNIs: b.SNIs, States: b.States, Trial: b.Trial,
+		ALPN: b.ALPN, IPVersion: b.IPVersion, Mux: b.Mux.Enabled, MuxProtocol: b.Mux.Protocol, MuxPadding: b.Mux.Padding, CDN: b.CDN, Fragment: b.Fragment, Name: b.Name, Addresses: b.Addresses, SNIs: b.SNIs, States: b.States, Trial: b.Trial,
 		GroupMode: b.GroupMode, Groups: b.Groups}
 }
 
@@ -295,7 +299,7 @@ func viewHost(r db.InboundHost) HostView {
 		alpn = []string{}
 	}
 	return HostView{Addresses: strsOrEmpty(r.Addresses), SNIs: strsOrEmpty(r.Snis), ID: r.ID, Default: r.Position == 0, Address: r.Address, Port: int(r.Port), SNI: r.Sni, Host: r.Host, Fingerprint: r.Fingerprint,
-		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Name: r.Name, States: strsOrEmpty(r.States), Trial: r.Trial,
+		ALPN: alpn, IPVersion: r.IpVersion, Mux: HostMux{Enabled: r.Mux, Protocol: r.MuxProtocol, Padding: r.MuxPadding}, CDN: r.Cdn, Fragment: r.Fragment, Name: r.Name, States: strsOrEmpty(r.States), Trial: r.Trial,
 		GroupMode: r.GroupMode, Groups: int64sOrEmpty(r.Groups)}
 }
 
@@ -376,7 +380,7 @@ func (h *handlers) auditHost(ctx context.Context, action string, inboundID int64
 	}
 	h.audit(ctx, sessionOf(ctx).AdminID, action, "inbound", name, map[string]any{"host_id": r.ID, "default": r.Position == 0,
 		"address": r.Address, "port": r.Port, "sni": r.Sni, "host": r.Host, "fingerprint": r.Fingerprint,
-		"alpn": r.Alpn, "ip_version": r.IpVersion, "mux": r.Mux, "mux_protocol": r.MuxProtocol, "mux_padding": r.MuxPadding, "cdn": r.Cdn,
+		"alpn": r.Alpn, "ip_version": r.IpVersion, "mux": r.Mux, "mux_protocol": r.MuxProtocol, "mux_padding": r.MuxPadding, "cdn": r.Cdn, "fragment": r.Fragment,
 		"group_mode": r.GroupMode, "groups": r.Groups})
 }
 
@@ -458,7 +462,7 @@ func (h *handlers) viewInbound(ctx context.Context, in db.Inbound, last map[int6
 		v.Type, v.Network = t.Type(), t.Network()
 		v.Shared = proto.Shared(t)
 		v.NodeCert = t.NodeCert()
-		v.HostALPN = domain.HostALPNOf(t)
+		v.HostALPN, v.HostFragment = domain.HostALPNOf(t), domain.HostFragmentOf(t)
 		for _, f := range apps.For(proto.NeedsOf(t)) {
 			v.Apps = append(v.Apps, string(f))
 		}

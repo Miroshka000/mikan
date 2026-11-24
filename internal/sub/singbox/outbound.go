@@ -279,6 +279,16 @@ func singboxTLS(p model.Proxy) (map[string]any, bool) {
 	if fp != "" && p.Type != "hysteria2" && p.Type != "tuic" {
 		t["utls"] = map[string]any{"enabled": true, "fingerprint": fp}
 	}
+	// The hello is split into records at the labels of the name in it, and each record goes
+	// in a packet of its own after the one before is acknowledged (fragment). sing-box 1.12
+	// and 1.13 split packets only of a hello split into records, so the records go with it:
+	// what Xray sends for the same (fragmentOutbound).
+	switch p.Fragment {
+	case model.FragmentRecord:
+		t["record_fragment"] = true
+	case model.FragmentTCP:
+		t["record_fragment"], t["fragment"] = true, true
+	}
 	return t, true
 }
 

@@ -415,6 +415,7 @@ func (pl plan) config(name string, choice Ref, b Balancing) map[string]any {
 			outbounds = append(outbounds, dialing(o.out, b.Dialers[o.tag]))
 		}
 	}
+	outbounds = withFragments(outbounds, map[string]bool{directTag: true, blockTag: true, dnsOutTag: true})
 	outbounds = append(outbounds,
 		map[string]any{"tag": directTag, "protocol": "freedom"},
 		map[string]any{"tag": blockTag, "protocol": "blackhole"},

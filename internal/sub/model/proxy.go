@@ -48,7 +48,12 @@ type Proxy struct {
 	ALPN []string
 	// IPVersion is how the app reaches Server: ipv4, ipv6, ipv4-prefer or ipv6-prefer
 	// (mihomo's names); "": the core's own.
-	IPVersion  string
+	IPVersion string
+	// Fragment is how the app splits the TLS ClientHello it sends over TCP, so that a DPI
+	// that reads the name in it finds it cut: FragmentRecord or FragmentTCP; "": whole.
+	// Only TLS of the node's certificate (or of a CDN in front) is split, never REALITY's:
+	// xray and sing-box take it, mihomo has no such setting.
+	Fragment   string
 	Obfs       *Obfs  // Hysteria2's obfuscation; nil: none
 	Congestion string // TUIC's congestion control
 	// UDPRelay is how TUIC relays UDP: quic; "": native, packet by packet. An own Clash
@@ -67,6 +72,16 @@ type Proxy struct {
 	Sudoku *Sudoku
 	Snell  *Snell
 }
+
+// The ways of splitting the TLS ClientHello (Proxy.Fragment).
+const (
+	// FragmentRecord: into several TLS records, sent at once. Fast; beats a DPI that reads
+	// the first record alone.
+	FragmentRecord = "record"
+	// FragmentTCP: those records each in a TCP packet of its own, with a pause between. A
+	// few round trips slower to connect; beats a DPI that reads the first packet alone.
+	FragmentTCP = "tcp"
+)
 
 // TLS is a connection's TLS as the app sends it.
 type TLS struct {

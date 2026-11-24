@@ -18,7 +18,7 @@ import { hostGroupsBody, HostGroupsField, type HostGroups } from "./host-groups"
 type Host = Schemas["HostView"];
 
 /** A host's own fields as its inputs hold them: those no template holds, the default host's too. */
-type OwnForm = HostGroups & { name: string; addresses: string; snis: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean; states: string[]; trial: string };
+type OwnForm = HostGroups & { name: string; addresses: string; snis: string; alpn: string[]; ipVersion: string; mux: boolean; muxProtocol: string; muxPadding: boolean; cdn: boolean; fragment: string; states: string[]; trial: string };
 
 /** A host as its inputs hold it; id 0 is one not saved yet. */
 type HostForm = OwnForm & { id: number; address: string; port: string; sni: string; host: string; fingerprint: string };
@@ -39,6 +39,7 @@ const formOf = (h: Host): HostForm => ({
   muxProtocol: h.mux.protocol,
   muxPadding: h.mux.padding,
   cdn: h.cdn,
+  fragment: h.fragment,
   states: h.states,
   trial: h.trial,
   groupMode: h.group_mode,
@@ -60,6 +61,7 @@ const emptyForm: HostForm = {
   muxProtocol: "",
   muxPadding: false,
   cdn: false,
+  fragment: "",
   states: [],
   trial: "",
   groupMode: "",
@@ -68,11 +70,13 @@ const emptyForm: HostForm = {
 
 const IP_VERSIONS = ["ipv4", "ipv6", "ipv4-prefer", "ipv6-prefer"] as const;
 const MUX_PROTOCOLS = ["smux", "yamux", "h2mux"];
+/** How clients split the TLS ClientHello: into records at once, or each record in a TCP packet of its own. */
+const FRAGMENTS = ["record", "tcp"] as const;
 /** The states of the subscriptions a host may be shown to; an expiring one is active. */
 const HOST_STATES = ["active", "limited", "expired", "disabled"] as const;
 const HOST_TRIALS = ["only", "never"] as const;
 
-type OwnFieldsCan = { sni: boolean; alpn: boolean; alpnValues: string[]; mux: boolean; cdn: boolean };
+type OwnFieldsCan = { sni: boolean; alpn: boolean; alpnValues: string[]; mux: boolean; cdn: boolean; fragment: boolean };
 
 /** Which own fields the inbound's protocol can use; the panel refuses the others with a reason. */
 function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
@@ -85,6 +89,8 @@ function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
     // sing-mux on VLESS, Trojan and Shadowsocks; XHTTP multiplexes its own requests.
     mux: ["vless", "trojan", "shadowsocks"].includes(inbound.type) && !inbound.xhttp,
     cdn: inbound.cdn_possible,
+    // The panel's word: TLS on the node's certificate; REALITY's hello carries another site's name.
+    fragment: inbound.host_fragment,
   };
 }
 
@@ -92,7 +98,7 @@ function ownFieldsOf(inbound: Inbound): OwnFieldsCan {
 const lines = (s: string) => s.split(/[\s,]+/).filter(Boolean);
 
 /** The own fields of a form as the API takes them. */
-function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "addresses" | "snis" | "alpn" | "ip_version" | "mux" | "cdn" | "states" | "trial" | "group_mode" | "groups"> {
+function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "name" | "addresses" | "snis" | "alpn" | "ip_version" | "mux" | "cdn" | "fragment" | "states" | "trial" | "group_mode" | "groups"> {
   return {
     ...hostGroupsBody(f),
     name: f.name.trim(),
@@ -103,6 +109,7 @@ function ownBody(f: OwnForm, can: OwnFieldsCan): Pick<Schemas["HostInput"], "nam
     ip_version: f.ipVersion,
     mux: can.mux && f.mux ? { enabled: true, protocol: f.muxProtocol, padding: f.muxPadding } : { enabled: false, protocol: "", padding: false },
     cdn: can.cdn && f.cdn,
+    fragment: can.fragment ? f.fragment : "",
     states: HOST_STATES.filter((st) => f.states.includes(st)),
     trial: f.trial,
   };
@@ -292,6 +299,18 @@ function OwnFields({ uid, f, set, can, errors, inbound }: { uid: string; f: OwnF
       ) : null}
       {can.cdn ? (
         <SwitchRow label={t("inbounds.hosts.cdn")} sub={errors.cdn ?? t("inbounds.hosts.cdnSub")} warn={!!errors.cdn} checked={f.cdn} onChange={(cdn) => set({ cdn })} />
+      ) : null}
+      {can.fragment ? (
+        <Field label={t("inbounds.hosts.fragment")} htmlFor={`${uid}-fragment`} hint={t("inbounds.hosts.fragmentHint")} error={errors.fragment}>
+          <Select id={`${uid}-fragment`} className="input max-w-[320px]" value={f.fragment} onChange={(e) => set({ fragment: e.target.value })}>
+            <option value="">{t("inbounds.hosts.fragmentOff")}</option>
+            {FRAGMENTS.map((v) => (
+              <option key={v} value={v}>
+                {t(`inbounds.hosts.fragments.${v}`)}
+              </option>
+            ))}
+          </Select>
+        </Field>
       ) : null}
       <Field label={t("inbounds.hosts.states")} hint={t("inbounds.hosts.statesHint")} error={errors.states}>
         <div className="flex flex-wrap gap-4">

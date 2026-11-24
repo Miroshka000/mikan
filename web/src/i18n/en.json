@@ -821,6 +821,8 @@
       "host_mux_type": "Only VLESS, Trojan and Shadowsocks multiplex, and not over XHTTP",
       "host_choices_long": "At most 16 values in the list",
       "host_mux_flow": "Multiplexing does not work with Vision (xtls-rprx-vision)",
+      "host_fragment": "Splitting: record or tcp",
+      "host_fragment_tls": "Only TLS on the node's certificate is split: of VLESS, Trojan and AnyTLS. REALITY's ClientHello carries another site's name, there is nothing to hide",
       "cdn_header": "A header name: Latin letters, digits and hyphens",
       "cdn_trusted_needed": "Enter the CDN's networks: without them the node must not believe the header",
       "cdn_trusted": "A CDN network: a CIDR, an address or cloudflare",
@@ -2293,6 +2295,13 @@
       "muxPaddingSub": "Pad frames with random data",
       "cdn": "Through a CDN with its own certificate",
       "cdnSub": "The apps see the CDN's certificate, so the node's self-signed one is not pinned for them",
+      "fragment": "Split the TLS handshake",
+      "fragmentOff": "don't split",
+      "fragments": {
+        "record": "into TLS records (fast)",
+        "tcp": "into TCP packets (sturdier)"
+      },
+      "fragmentHint": "The app cuts its ClientHello so that a DPI cannot read the server name in it. TCP packets go with a pause: sturdier, but the connection takes longer to start. sing-box apps and Xray configs (Happ and INCY) get it; Clash apps and links do not.",
       "states": "Shown by status",
       "statesHint": "None or all: to everyone. An expiring subscription counts as active. Expired and other inactive ones get the address only when the notice in place of servers is off in the subscription settings.",
       "trial": "Trial",
