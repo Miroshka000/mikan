@@ -160,6 +160,18 @@ func (q *Queries) LockUserName(ctx context.Context, name string) error {
 	return err
 }
 
+const lockUserNames = `-- name: LockUserNames :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-user-name:' || n, 0))
+FROM unnest($1::text[]) AS n ORDER BY n
+`
+
+// LockUserName of every name at once, in one order for every caller: two batches of
+// clients (#295) that share names wait for each other instead of locking in a circle.
+func (q *Queries) LockUserNames(ctx context.Context, names []string) error {
+	_, err := q.db.ExecContext(ctx, lockUserNames, pq.Array(names))
+	return err
+}
+
 const setImportedUsage = `-- name: SetImportedUsage :exec
 UPDATE users SET used_down = $2, total_down = $3, updated_at = $4 WHERE id = $1
 `

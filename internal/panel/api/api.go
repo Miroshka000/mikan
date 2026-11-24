@@ -352,6 +352,8 @@ func New(d Deps) (http.Handler, huma.API, error) {
 	h.registerPasskeys()
 	h.registerIdentities()
 	h.registerUsers()
+	h.registerUsersBatch()
+	h.registerUserTemplates()
 	h.registerFolders()
 	h.registerCustomFields()
 	h.registerGroups()

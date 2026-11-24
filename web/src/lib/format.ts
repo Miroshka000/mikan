@@ -57,6 +57,9 @@ export function num(n: number): string {
   return nf(0).format(n);
 }
 
+/** A folder's or a group's name as a list of them says it: the icon first, when it has one. */
+export const emojiName = (x: { emoji: string; name: string }) => (x.emoji ? `${x.emoji} ${x.name}` : x.name);
+
 export const days = (n: number) => t("time.days", { n });
 
 export const months = (n: number) => t("time.months", { n });

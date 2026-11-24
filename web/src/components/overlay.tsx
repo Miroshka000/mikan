@@ -195,6 +195,9 @@ function NameForm({
   const ok = (optional || clean !== "") && clean !== initial.trim();
   const send = (e: FormEvent) => {
     e.preventDefault();
+    // React carries a submit through the portal to the forms around the dialog: a dialog
+    // opened from a form must not send that form too.
+    e.stopPropagation();
     if (ok && !loading) onSubmit(clean);
   };
   return (

@@ -18,7 +18,7 @@ import { pagedItems } from "../../lib/paging";
 import { useUrlSearchText } from "../../lib/url-search";
 import { USER_HIDDEN, USER_SOURCES, USER_STATES, type UsersSearch } from "../search";
 import { LifecycleDrawer } from "./lifecycle";
-import { CreateUserDrawer } from "./user-create";
+import { CreateUserDrawer } from "./user-create/drawer";
 import { UserDrawer } from "./user-drawer";
 import { FolderBadge, FolderMark, FolderMenuItems, FoldersDrawer, type Folder } from "./user-folders";
 import { GroupBadge } from "./groups/badge";

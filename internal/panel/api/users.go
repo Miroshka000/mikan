@@ -131,13 +131,27 @@ func (h *handlers) lifecycleOf(ctx context.Context, e *userEnv, ids []int64) err
 	return err
 }
 
-func (h *handlers) userEnv(ctx context.Context) userEnv {
-	var e userEnv
-	// A subscription link is the user's credential: a read-only key does not get it, nor does
-	// a support operator the admin did not let see the subscribers.
-	if h.d.SubBase != nil && !hidesLinks(ctx) {
-		e.subBase = h.d.SubBase(ctx)
+// linkBase is where the subscription links of the answer start: "" when the panel has no
+// address yet, or when the caller may not see links. A link is the user's credential: a
+// read-only key does not get it, nor does a support operator the admin did not let see the
+// subscribers.
+func (h *handlers) linkBase(ctx context.Context) string {
+	if h.d.SubBase == nil || hidesLinks(ctx) {
+		return ""
 	}
+	return h.d.SubBase(ctx)
+}
+
+// subLink is the subscription link of token under base (linkBase); "" without a base.
+func subLink(base, token string) string {
+	if base == "" {
+		return ""
+	}
+	return base + "/" + token
+}
+
+func (h *handlers) userEnv(ctx context.Context) userEnv {
+	e := userEnv{subBase: h.linkBase(ctx)}
 	e.online = h.online()
 	// Without them every user shows only the group of its own.
 	if g, err := domain.TariffGroupIDs(ctx, h.d.Store.Q); err == nil {
@@ -185,9 +199,7 @@ func (h *handlers) viewUser(u db.User, slots []string, bound int64, grants domai
 	if t, ok := domain.NextReset(u, now); ok {
 		v.ResetsAt = &t
 	}
-	if env.subBase != "" {
-		v.SubURL = env.subBase + "/" + u.SubToken
-	}
+	v.SubURL = subLink(env.subBase, u.SubToken)
 	if until, ok := env.bans[u.ID]; ok {
 		v.TorrentBan = store.TimePtr(sql.NullInt64{Int64: until, Valid: true})
 	}
@@ -276,15 +288,13 @@ type userIDInput struct {
 
 type createUserInput struct {
 	Body struct {
-		Name     string   `json:"name" minLength:"1" maxLength:"100"`
-		Contact  string   `json:"contact,omitempty" maxLength:"100"`
-		Note     string   `json:"note,omitempty" maxLength:"2000"`
-		Tags     []string `json:"tags,omitempty" maxItems:"20"`
-		TariffID int64    `json:"tariff_id" minimum:"1"`
+		Name    string `json:"name" minLength:"1" maxLength:"100"`
+		Contact string `json:"contact,omitempty" maxLength:"100"`
+		// What the client gets over its tariff: a template of clients fills it in the form.
+		ClientSpecBody
+		TemplateID int64 `json:"template_id,omitempty" minimum:"1" doc:"Шаблон клиентов, из которого взяты значения: только для журнала"`
 		// CustomFields are values of the admin's own fields, by key.
 		CustomFields map[string]string `json:"custom_fields,omitempty" maxProperties:"30" doc:"Значения своих полей по ключу; пустая строка — без значения"`
-		// StartsOnConnect over the tariff's own word; nil: the tariff's.
-		StartsOnConnect *bool `json:"starts_on_connect,omitempty" doc:"Срок начнётся с первого подключения; не задано — как у тарифа"`
 	}
 }
 
@@ -787,13 +797,12 @@ func (h *handlers) createUser(ctx context.Context, in *createUserInput) (*userOu
 	if err != nil {
 		return nil, err
 	}
-	u, err := h.d.Users.Create(ctx, domain.CreateInput{Name: in.Body.Name, Contact: in.Body.Contact, Note: in.Body.Note, Tags: in.Body.Tags, TariffID: in.Body.TariffID,
-		Source: domain.UserFromAdmin, StartsOnConnect: in.Body.StartsOnConnect})
+	u, err := h.d.Users.CreateClient(ctx, in.Body.Name, in.Body.Contact, in.Body.spec())
 	if errors.Is(err, domain.ErrNotFound) {
 		return nil, fieldErr("body.tariff_id", "tariff_not_found")
 	}
 	if err == nil {
-		h.audit(ctx, sessionOf(ctx).AdminID, "user.create", "user", strconv.FormatInt(u.ID, 10), map[string]any{"tariff_id": in.Body.TariffID})
+		h.audit(ctx, sessionOf(ctx).AdminID, "user.create", "user", strconv.FormatInt(u.ID, 10), byTemplate(map[string]any{"tariff_id": in.Body.TariffID}, in.Body.TemplateID))
 		// The user is there already: a field deleted since the check is skipped (liveChanges).
 		if len(fields) > 0 {
 			err = h.d.Store.Tx(ctx, func(q *db.Queries) error { return setUserFields(ctx, q, u.ID, fields) })

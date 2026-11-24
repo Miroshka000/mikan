@@ -88,7 +88,7 @@ type NewInbound struct {
 	Port   string   // "": the preset's
 	Dest   string   // a REALITY preset's target; "": the default
 	Config string   // the template of presets.Custom
-	Tags   []string // the admin's labels, as a user's (encodeTags)
+	Tags   []string // the admin's labels, as a user's (EncodeTags)
 }
 
 // InboundPatch changes an inbound; a nil field stays as it is.
@@ -114,7 +114,7 @@ type InboundPatch struct {
 	PoolID     *int64  // 0: the main traffic
 	// InAuto: the inbound is in the subscriptions' automatic choice (as a node's switch).
 	InAuto *bool
-	// Tags are the admin's labels (encodeTags): the panel's own, clients see none of them.
+	// Tags are the admin's labels (EncodeTags): the panel's own, clients see none of them.
 	Tags *[]string
 
 	// FromPort, when set, applies the patch only while the inbound is on this port: an
@@ -205,7 +205,7 @@ func (s *Inbounds) Create(ctx context.Context, in NewInbound) (db.Inbound, error
 		if err != nil || len(in.Tags) == 0 {
 			return err
 		}
-		if row.Tags, err = encodeTags(in.Tags); err != nil {
+		if row.Tags, err = EncodeTags(in.Tags); err != nil {
 			return err
 		}
 		return q.SetInboundTags(ctx, db.SetInboundTagsParams{Tags: row.Tags, ID: row.ID})
@@ -415,7 +415,7 @@ func (s *Inbounds) update(ctx context.Context, id int64, p InboundPatch) (prev, 
 			}
 		}
 		if p.Tags != nil {
-			tags, err := encodeTags(*p.Tags)
+			tags, err := EncodeTags(*p.Tags)
 			if err != nil {
 				return err
 			}

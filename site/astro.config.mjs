@@ -130,6 +130,7 @@ export default defineConfig({
 					items: [
 						{ slug: 'billing/plans' },
 						{ slug: 'billing/groups' },
+						{ slug: 'billing/client-templates' },
 						{ slug: 'billing/lifecycle' },
 						{ slug: 'billing/pools' },
 						{ slug: 'billing/telegram' },

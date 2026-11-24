@@ -957,6 +957,24 @@ type UserStart struct {
 	FrozenAt int64
 }
 
+type UserTemplate struct {
+	ID              int64
+	Name            string
+	TariffID        int64
+	TrafficLimit    sql.NullInt64
+	DeviceLimit     sql.NullInt64
+	SpeedLimit      sql.NullInt64
+	TermDays        sql.NullInt64
+	StartsOnConnect sql.NullBool
+	FolderID        sql.NullInt64
+	GroupID         sql.NullInt64
+	Tags            string
+	Note            string
+	NamePattern     string
+	CreatedAt       int64
+	UpdatedAt       int64
+}
+
 type WebCheckout struct {
 	PaymentID    int64
 	ReceiptEmail string

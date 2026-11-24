@@ -20,7 +20,7 @@ import { TariffDrawer } from "./tariffs/drawer";
 import { modeOf } from "./user/device-mode";
 
 /** How long a term on the tariff runs: days, or months up to the billing day. */
-function tariffTerm(tr: Tariff): string {
+export function tariffTerm(tr: Tariff): string {
   if (!tr.duration_days) return t("time.forever");
   if (tr.billing_day != null) return t("tariffs.termToDay", { months: months(termMonths(tr.duration_days)), d: tr.billing_day });
   return days(tr.duration_days);

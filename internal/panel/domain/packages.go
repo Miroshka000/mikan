@@ -283,3 +283,11 @@ func NullInt(p *int64) sql.NullInt64 {
 	}
 	return sql.NullInt64{Int64: *p, Valid: true}
 }
+
+// NullBool is an optional yes or no as the database keeps it: NULL for nil.
+func NullBool(p *bool) sql.NullBool {
+	if p == nil {
+		return sql.NullBool{}
+	}
+	return sql.NullBool{Bool: *p, Valid: true}
+}

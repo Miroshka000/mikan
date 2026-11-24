@@ -62,6 +62,7 @@ export const qk = {
   readySubTemplates: ["sub-templates-ready"] as const,
   userSubLog: (id: number) => ["users", "sub-log", id] as const,
   folders: ["folders"] as const,
+  userTemplates: ["user-templates"] as const,
   customFields: ["custom-fields"] as const,
   groups: ["groups"] as const,
   // Under the groups: a group's page is read again with them.
@@ -375,6 +376,7 @@ export const userActions = {
   reset: (id: number) => unwrap(api.POST("/api/v1/users/{id}/reset-traffic", { params: { path: { id } } })),
   reissue: (id: number) => unwrap(api.POST("/api/v1/users/{id}/reissue", { params: { path: { id } } })),
   remove: (id: number) => unwrap(api.DELETE("/api/v1/users/{id}", { params: { path: { id } } })),
+  batch: (body: Schemas["CreateUsersBatchInputBody"]) => unwrap(api.POST("/api/v1/users/batch", { body })),
   bulk: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk", { body })),
   bulkPreview: (body: Schemas["BulkInputBody"]) => unwrap(api.POST("/api/v1/users/bulk/preview", { body })),
   setNextTariff: ({ id, ...body }: { id: number } & Schemas["NextTariffInputBody"]) =>
@@ -439,6 +441,22 @@ export const folderActions = {
   update: ({ id, body }: { id: number; body: Schemas["PatchFolderInputBody"] }) => unwrap(api.PATCH("/api/v1/folders/{id}", { params: { path: { id } }, body })),
   remove: (id: number) => unwrap(api.DELETE("/api/v1/folders/{id}", { params: { path: { id } } })),
   order: (ids: number[]) => unwrap(api.PUT("/api/v1/folders/order", { body: { ids } })),
+};
+
+/** The templates of clients: what a new client gets over its tariff, a batch's names. */
+export function useUserTemplates() {
+  return useQuery({ queryKey: qk.userTemplates, queryFn: ({ signal }) => unwrap(api.GET("/api/v1/user-templates", { signal })) });
+}
+
+export function useUserTemplateMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: fn, onSettled: () => void qc.invalidateQueries({ queryKey: qk.userTemplates }) });
+}
+
+export const userTemplateActions = {
+  create: (body: Schemas["UserTemplateBody"]) => unwrap(api.POST("/api/v1/user-templates", { body })),
+  update: ({ id, body }: { id: number; body: Schemas["UserTemplateBody"] }) => unwrap(api.PUT("/api/v1/user-templates/{id}", { params: { path: { id } }, body })),
+  remove: (id: number) => unwrap(api.DELETE("/api/v1/user-templates/{id}", { params: { path: { id } } })),
 };
 
 /** The groups of clients: each with its clients, tariffs, servers and the addresses shown by it. */

@@ -3273,6 +3273,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/user-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Шаблоны клиентов */
+        get: operations["list-user-templates"];
+        put?: never;
+        /** Создать шаблон клиентов */
+        post: operations["create-user-template"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/user-templates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Изменить шаблон клиентов целиком
+         * @description Клиенты, созданные по шаблону раньше, не меняются.
+         */
+        put: operations["update-user-template"];
+        post?: never;
+        /** Удалить шаблон клиентов: созданные по нему клиенты остаются */
+        delete: operations["delete-user-template"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users": {
         parameters: {
             query?: never;
@@ -3285,6 +3324,26 @@ export interface paths {
         put?: never;
         /** Создать пользователя по тарифу */
         post: operations["create-user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Создать пачку клиентов
+         * @description Все клиенты одной транзакцией: созданы все или ни один. Имя, которое уже есть у другого клиента, отклоняет всю пачку: 409 user_names_taken с первыми такими именами. Оператору поддержки без показа подписчиков закрыт: 403 support_denied
+         */
+        post: operations["create-users-batch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4295,6 +4354,13 @@ export interface components {
             /** Format: int64 */
             tg_id: number;
         };
+        BatchUser: {
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description Ссылка подписки; пусто, если ключу или оператору ссылки не показываются */
+            sub_url: string;
+        };
         BotPreview: {
             /**
              * Format: int64
@@ -4979,13 +5045,108 @@ export interface components {
             custom_fields?: {
                 [key: string]: string;
             };
+            /**
+             * Format: int64
+             * @description Устройств; 0 — без лимита; не передан — как в тарифе
+             */
+            device_limit?: number;
+            /**
+             * Format: int64
+             * @description Папка; не передана — вне папок
+             */
+            folder_id?: number;
+            /**
+             * Format: int64
+             * @description Своя группа клиента; не передана — группа тарифа
+             */
+            group_id?: number;
             name: string;
             note?: string;
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; 0 — без ограничения; не передан — как в тарифе
+             */
+            speed_limit?: number;
             /** @description Срок начнётся с первого подключения; не задано — как у тарифа */
             starts_on_connect?: boolean;
             tags?: string[];
             /** Format: int64 */
             tariff_id: number;
+            /**
+             * Format: int64
+             * @description Шаблон клиентов, из которого взяты значения: только для журнала
+             */
+            template_id?: number;
+            /**
+             * Format: int64
+             * @description Срок в днях с создания; 0 — бессрочно; не передан — как в тарифе
+             */
+            term_days?: number;
+            /**
+             * Format: int64
+             * @description Байты за период; 0 — без лимита; не передан — как в тарифе
+             */
+            traffic_limit?: number;
+        };
+        CreateUsersBatchInputBody: {
+            /**
+             * Format: int64
+             * @description Сколько клиентов создать
+             */
+            count: number;
+            /**
+             * Format: int64
+             * @description Устройств; 0 — без лимита; не передан — как в тарифе
+             */
+            device_limit?: number;
+            /**
+             * Format: int64
+             * @description Папка; не передана — вне папок
+             */
+            folder_id?: number;
+            /**
+             * Format: int64
+             * @description Своя группа клиента; не передана — группа тарифа
+             */
+            group_id?: number;
+            /** @description Имена клиентов: {n} — номер клиента, {nnn} — номер не короче трёх цифр (007) */
+            name_pattern: string;
+            note?: string;
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; 0 — без ограничения; не передан — как в тарифе
+             */
+            speed_limit?: number;
+            /**
+             * Format: int64
+             * @description Номер первого клиента
+             * @default 1
+             */
+            start: number;
+            /** @description Срок начнётся с первого подключения; не задано — как у тарифа */
+            starts_on_connect?: boolean;
+            tags?: string[];
+            /** Format: int64 */
+            tariff_id: number;
+            /**
+             * Format: int64
+             * @description Шаблон клиентов, из которого взяты значения: только для журнала
+             */
+            template_id?: number;
+            /**
+             * Format: int64
+             * @description Срок в днях с создания; 0 — бессрочно; не передан — как в тарифе
+             */
+            term_days?: number;
+            /**
+             * Format: int64
+             * @description Байты за период; 0 — без лимита; не передан — как в тарифе
+             */
+            traffic_limit?: number;
+        };
+        CreateUsersBatchOutputBody: {
+            /** @description Созданные клиенты по порядку номеров */
+            users: components["schemas"]["BatchUser"][];
         };
         CreateWebhookInputBody: {
             /** @description Разрешить адреса этого сервера и его сети: localhost, 10.x, 172.16-31.x, 192.168.x, 100.64-127.x. Метаданные облака (169.254.169.254 и подобные) закрыты всегда */
@@ -9445,6 +9606,92 @@ export interface components {
             days: number;
             /** @description Новые сверху */
             items: components["schemas"]["SubLogItem"][];
+        };
+        UserTemplateBody: {
+            /**
+             * Format: int64
+             * @description Устройств; 0 — без лимита; не передан — как в тарифе
+             */
+            device_limit?: number;
+            /**
+             * Format: int64
+             * @description Папка; не передана — вне папок
+             */
+            folder_id?: number;
+            /**
+             * Format: int64
+             * @description Своя группа клиента; не передана — группа тарифа
+             */
+            group_id?: number;
+            name: string;
+            /** @description Имена клиентов пачки: {n} — номер, {nnn} — номер не короче трёх цифр (007); не передан — предложит панель */
+            name_pattern?: string;
+            note?: string;
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; 0 — без ограничения; не передан — как в тарифе
+             */
+            speed_limit?: number;
+            /** @description Срок начнётся с первого подключения; не задано — как у тарифа */
+            starts_on_connect?: boolean;
+            tags?: string[];
+            /** Format: int64 */
+            tariff_id: number;
+            /**
+             * Format: int64
+             * @description Срок в днях с создания; 0 — бессрочно; не передан — как в тарифе
+             */
+            term_days?: number;
+            /**
+             * Format: int64
+             * @description Байты за период; 0 — без лимита; не передан — как в тарифе
+             */
+            traffic_limit?: number;
+        };
+        UserTemplateView: {
+            /**
+             * Format: int64
+             * @description 0 — без лимита; null — как в тарифе
+             */
+            device_limit: number | null;
+            /**
+             * Format: int64
+             * @description null — вне папок
+             */
+            folder_id: number | null;
+            /**
+             * Format: int64
+             * @description null — группа тарифа
+             */
+            group_id: number | null;
+            /** Format: int64 */
+            id: number;
+            name: string;
+            /** @description Имена клиентов пачки, как name_pattern у POST /users/batch; пусто — предложит панель */
+            name_pattern: string;
+            note: string;
+            /**
+             * Format: int64
+             * @description Мбит/с в каждую сторону; 0 — без ограничения; null — как в тарифе
+             */
+            speed_limit: number | null;
+            /** @description null — как у тарифа */
+            starts_on_connect: boolean | null;
+            tags: string[];
+            /** Format: int64 */
+            tariff_id: number;
+            /**
+             * Format: int64
+             * @description Срок в днях; 0 — бессрочно; null — как в тарифе
+             */
+            term_days: number | null;
+            /**
+             * Format: int64
+             * @description Байты за период; 0 — без лимита; null — как в тарифе
+             */
+            traffic_limit: number | null;
+            /** Format: date-time */
+            updated_at: string;
         };
         UserView: {
             /**
@@ -17555,6 +17802,132 @@ export interface operations {
             };
         };
     };
+    "list-user-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserTemplateView"][];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-user-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserTemplateBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserTemplateView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "update-user-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserTemplateBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserTemplateView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "delete-user-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "list-users": {
         parameters: {
             query?: {
@@ -17619,6 +17992,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "create-users-batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUsersBatchInputBody"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateUsersBatchOutputBody"];
                 };
             };
             /** @description Error */

@@ -164,7 +164,7 @@ type NodePatch struct {
 	// OwnPorts: the ports the node's users reach on its server's own addresses, besides the
 	// ones the panel keeps open there (NormalizeOwnPorts).
 	OwnPorts *[]int
-	// Tags are the admin's labels of the node, as a user's (encodeTags).
+	// Tags are the admin's labels of the node, as a user's (EncodeTags).
 	Tags  *[]string
 	Rules NodeRules
 }
@@ -321,7 +321,7 @@ func UpdateNode(ctx context.Context, st *store.Store, id int64, p NodePatch, now
 			}
 		}
 		if p.Tags != nil {
-			tags, err := encodeTags(*p.Tags)
+			tags, err := EncodeTags(*p.Tags)
 			if err != nil {
 				return err
 			}

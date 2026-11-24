@@ -127,46 +127,53 @@ func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
 	}
 	in.Name = name
 	var u db.User
-	err = s.WithSlots(ctx, func() (err error) {
-		u, err = s.create(ctx, in)
-		return err
-	})
-	if err != nil {
-		return db.User{}, err
-	}
-	s.hub.Kick()
-	s.changes.PoliciesChanged()
-	return u, nil
-}
-
-func (s *Users) create(ctx context.Context, in CreateInput) (db.User, error) {
-	var u db.User
-	err := s.st.Tx(ctx, func(q *db.Queries) error {
-		var err error
+	err = s.makeUsers(ctx, func(q *db.Queries) (err error) {
 		u, err = s.createTx(ctx, q, in, false)
 		return err
 	})
 	return u, err
 }
 
-// createTx makes a user on q's transaction; anyTariff also takes an archived tariff (one
-// that was paid for before the admin archived it).
+// makeUsers runs fn, which makes users on q, in one transaction: once more after the pool is
+// topped up when it ran out of slots (WithSlots). The nodes are told once, after the commit.
+func (s *Users) makeUsers(ctx context.Context, fn func(q *db.Queries) error) error {
+	if err := s.WithSlots(ctx, func() error { return s.st.Tx(ctx, fn) }); err != nil {
+		return err
+	}
+	s.hub.Kick()
+	s.changes.PoliciesChanged()
+	return nil
+}
+
+// liveTariff is the tariff of id a new user is made of; anyTariff also takes an archived one
+// (one that was paid for before the admin archived it).
+func liveTariff(ctx context.Context, q *db.Queries, id int64, anyTariff bool) (db.Tariff, error) {
+	t, err := q.GetTariff(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && t.Archived != 0 && !anyTariff) {
+		return db.Tariff{}, fmt.Errorf("tariff %d: %w", id, ErrNotFound)
+	}
+	return t, err
+}
+
+// createTx makes a user on q's transaction; anyTariff also takes an archived tariff.
 func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, anyTariff bool) (db.User, error) {
+	t, err := liveTariff(ctx, q, in.TariffID, anyTariff)
+	if err != nil {
+		return db.User{}, err
+	}
+	return s.createOfTariff(ctx, q, in, t)
+}
+
+// createOfTariff makes a user of the tariff t, read by the caller, on q's transaction.
+func (s *Users) createOfTariff(ctx context.Context, q *db.Queries, in CreateInput, t db.Tariff) (db.User, error) {
 	now := s.now().Unix()
-	tags, err := encodeTags(in.Tags)
+	tags, err := EncodeTags(in.Tags)
 	if err != nil {
 		return db.User{}, err
 	}
 	source := cmp.Or(in.Source, UserFromAdmin)
 	if !ValidOrigin(source) {
 		return db.User{}, fieldErr("source", "bad_source")
-	}
-	t, err := q.GetTariff(ctx, in.TariffID)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && t.Archived != 0 && !anyTariff) {
-		return db.User{}, fmt.Errorf("tariff %d: %w", in.TariffID, ErrNotFound)
-	}
-	if err != nil {
-		return db.User{}, err
 	}
 	slot, err := q.TakeFreeSlot(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -566,7 +573,7 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 	// The folder is locked before the user's row, as a deleted folder locks its own first
 	// and then its users': the two never wait for each other in a circle. So is the group.
 	if p.FolderID != nil {
-		if err := lockFolder(ctx, q, *p.FolderID); err != nil {
+		if err := LockFolder(ctx, q, *p.FolderID); err != nil {
 			return db.User{}, err
 		}
 	}
@@ -629,7 +636,7 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		par.Note = *p.Note
 	}
 	if p.Tags != nil {
-		if par.Tags, err = encodeTags(*p.Tags); err != nil {
+		if par.Tags, err = EncodeTags(*p.Tags); err != nil {
 			return db.User{}, err
 		}
 	}
@@ -759,9 +766,9 @@ func (s *Users) waitOn(ctx context.Context, q *db.Queries, out db.User, p Patch)
 	return out, nil
 }
 
-// lockFolder keeps a folder from being deleted until the transaction ends; a folder that
+// LockFolder keeps a folder from being deleted until the transaction ends; a folder that
 // is not there is the caller's mistake, not a missing record.
-func lockFolder(ctx context.Context, q *db.Queries, id int64) error {
+func LockFolder(ctx context.Context, q *db.Queries, id int64) error {
 	if _, err := q.LockFolder(ctx, id); errors.Is(err, sql.ErrNoRows) {
 		return fieldErr("folder_id", "folder_not_found")
 	} else if err != nil {
@@ -965,7 +972,7 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 		// The folder first, then the users: the order a deleted folder takes its own. The group
 		// too.
 		if action == BulkMove && opt.Folder != nil {
-			if err := lockFolder(ctx, q, *opt.Folder); err != nil {
+			if err := LockFolder(ctx, q, *opt.Folder); err != nil {
 				return err
 			}
 		}
@@ -1032,9 +1039,9 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	return done, nil
 }
 
-// encodeTags is how labels are kept (users.tags, nodes.tags, inbounds.tags): trimmed, the
+// EncodeTags is how labels are kept (users.tags, nodes.tags, inbounds.tags): trimmed, the
 // empty ones dropped, as a JSON array.
-func encodeTags(tags []string) (string, error) {
+func EncodeTags(tags []string) (string, error) {
 	clean := make([]string, 0, len(tags))
 	for _, t := range tags {
 		if t = strings.TrimSpace(t); t != "" {
@@ -1054,7 +1061,7 @@ func DecodeTags(raw string) []string {
 	return t
 }
 
-// HasTag: the labels raw (encodeTags) hold tag, in any letter case.
+// HasTag: the labels raw (EncodeTags) hold tag, in any letter case.
 func HasTag(raw, tag string) bool {
 	tag = strings.TrimSpace(tag)
 	return slices.ContainsFunc(DecodeTags(raw), func(t string) bool { return strings.EqualFold(t, tag) })

@@ -1216,6 +1216,28 @@
         ],
         "type": "object"
       },
+      "BatchUser": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sub_url": {
+            "description": "Ссылка подписки; пусто, если ключу или оператору ссылки не показываются",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sub_url"
+        ],
+        "type": "object"
+      },
       "BotPreview": {
         "additionalProperties": false,
         "properties": {
@@ -2952,6 +2974,25 @@
             "maxProperties": 30,
             "type": "object"
           },
+          "device_limit": {
+            "description": "Устройств; 0 — без лимита; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "folder_id": {
+            "description": "Папка; не передана — вне папок",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "group_id": {
+            "description": "Своя группа клиента; не передана — группа тарифа",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
           "name": {
             "maxLength": 100,
             "minLength": 1,
@@ -2960,6 +3001,13 @@
           "note": {
             "maxLength": 2000,
             "type": "string"
+          },
+          "speed_limit": {
+            "description": "Мбит/с в каждую сторону; 0 — без ограничения; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "integer"
           },
           "starts_on_connect": {
             "description": "Срок начнётся с первого подключения; не задано — как у тарифа",
@@ -2976,11 +3024,143 @@
             "format": "int64",
             "minimum": 1,
             "type": "integer"
+          },
+          "template_id": {
+            "description": "Шаблон клиентов, из которого взяты значения: только для журнала",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок в днях с создания; 0 — бессрочно; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 3650,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "traffic_limit": {
+            "description": "Байты за период; 0 — без лимита; не передан — как в тарифе",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
           "name",
           "tariff_id"
+        ],
+        "type": "object"
+      },
+      "CreateUsersBatchInputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "description": "Сколько клиентов создать",
+            "format": "int64",
+            "maximum": 500,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "device_limit": {
+            "description": "Устройств; 0 — без лимита; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "folder_id": {
+            "description": "Папка; не передана — вне папок",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "group_id": {
+            "description": "Своя группа клиента; не передана — группа тарифа",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "name_pattern": {
+            "description": "Имена клиентов: {n} — номер клиента, {nnn} — номер не короче трёх цифр (007)",
+            "maxLength": 100,
+            "minLength": 1,
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "speed_limit": {
+            "description": "Мбит/с в каждую сторону; 0 — без ограничения; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start": {
+            "default": 1,
+            "description": "Номер первого клиента",
+            "format": "int64",
+            "maximum": 999999999,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "starts_on_connect": {
+            "description": "Срок начнётся с первого подключения; не задано — как у тарифа",
+            "type": "boolean"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "tariff_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "template_id": {
+            "description": "Шаблон клиентов, из которого взяты значения: только для журнала",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок в днях с создания; 0 — бессрочно; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 3650,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "traffic_limit": {
+            "description": "Байты за период; 0 — без лимита; не передан — как в тарифе",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "name_pattern",
+          "tariff_id"
+        ],
+        "type": "object"
+      },
+      "CreateUsersBatchOutputBody": {
+        "additionalProperties": false,
+        "properties": {
+          "users": {
+            "description": "Созданные клиенты по порядку номеров",
+            "items": {
+              "$ref": "#/components/schemas/BatchUser"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "users"
         ],
         "type": "object"
       },
@@ -15068,6 +15248,190 @@
         ],
         "type": "object"
       },
+      "UserTemplateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "device_limit": {
+            "description": "Устройств; 0 — без лимита; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "folder_id": {
+            "description": "Папка; не передана — вне папок",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "group_id": {
+            "description": "Своя группа клиента; не передана — группа тарифа",
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "name": {
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          "name_pattern": {
+            "description": "Имена клиентов пачки: {n} — номер, {nnn} — номер не короче трёх цифр (007); не передан — предложит панель",
+            "maxLength": 100,
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "speed_limit": {
+            "description": "Мбит/с в каждую сторону; 0 — без ограничения; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "starts_on_connect": {
+            "description": "Срок начнётся с первого подключения; не задано — как у тарифа",
+            "type": "boolean"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "tariff_id": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок в днях с создания; 0 — бессрочно; не передан — как в тарифе",
+            "format": "int64",
+            "maximum": 3650,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "traffic_limit": {
+            "description": "Байты за период; 0 — без лимита; не передан — как в тарифе",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "tariff_id"
+        ],
+        "type": "object"
+      },
+      "UserTemplateView": {
+        "additionalProperties": false,
+        "properties": {
+          "device_limit": {
+            "description": "0 — без лимита; null — как в тарифе",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "folder_id": {
+            "description": "null — вне папок",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "group_id": {
+            "description": "null — группа тарифа",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "name_pattern": {
+            "description": "Имена клиентов пачки, как name_pattern у POST /users/batch; пусто — предложит панель",
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "speed_limit": {
+            "description": "Мбит/с в каждую сторону; 0 — без ограничения; null — как в тарифе",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "starts_on_connect": {
+            "description": "null — как у тарифа",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tariff_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "term_days": {
+            "description": "Срок в днях; 0 — бессрочно; null — как в тарифе",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "traffic_limit": {
+            "description": "Байты за период; 0 — без лимита; null — как в тарифе",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "tariff_id",
+          "traffic_limit",
+          "device_limit",
+          "speed_limit",
+          "term_days",
+          "starts_on_connect",
+          "folder_id",
+          "group_id",
+          "tags",
+          "note",
+          "name_pattern",
+          "updated_at"
+        ],
+        "type": "object"
+      },
       "UserView": {
         "additionalProperties": false,
         "properties": {
@@ -26184,6 +26548,167 @@
         "x-session-only": true
       }
     },
+    "/api/v1/user-templates": {
+      "get": {
+        "operationId": "list-user-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserTemplateView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Шаблоны клиентов",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "create-user-template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserTemplateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserTemplateView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Создать шаблон клиентов",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/user-templates/{id}": {
+      "delete": {
+        "operationId": "delete-user-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Удалить шаблон клиентов: созданные по нему клиенты остаются",
+        "tags": [
+          "users"
+        ]
+      },
+      "put": {
+        "description": "Клиенты, созданные по шаблону раньше, не меняются.",
+        "operationId": "update-user-template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserTemplateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserTemplateView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Изменить шаблон клиентов целиком",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/v1/users": {
       "get": {
         "operationId": "list-users",
@@ -26365,6 +26890,48 @@
           }
         },
         "summary": "Создать пользователя по тарифу",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/batch": {
+      "post": {
+        "description": "Все клиенты одной транзакцией: созданы все или ни один. Имя, которое уже есть у другого клиента, отклоняет всю пачку: 409 user_names_taken с первыми такими именами. Оператору поддержки без показа подписчиков закрыт: 403 support_denied",
+        "operationId": "create-users-batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUsersBatchInputBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateUsersBatchOutputBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Создать пачку клиентов",
         "tags": [
           "users"
         ]

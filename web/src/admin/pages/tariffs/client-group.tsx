@@ -6,6 +6,7 @@ import { useGroups } from "../../../api/hooks";
 import { Select } from "../../../components/select";
 import { Field } from "../../../components/ui";
 import { t } from "../../../i18n";
+import { emojiName } from "../../../lib/format";
 
 export function ClientGroupField({ value, onChange, error }: { value: number; onChange: (id: number) => void; error?: string }) {
   const uid = useId();
@@ -20,7 +21,7 @@ export function ClientGroupField({ value, onChange, error }: { value: number; on
         <option value="0">{t("tariffs.clientGroupNone")}</option>
         {list.map((g) => (
           <option key={g.id} value={String(g.id)}>
-            {g.emoji ? `${g.emoji} ${g.name}` : g.name}
+            {emojiName(g)}
           </option>
         ))}
       </Select>
