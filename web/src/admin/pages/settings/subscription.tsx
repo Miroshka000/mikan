@@ -6,7 +6,7 @@ import { Button, Field, Pill } from "../../../components/ui";
 import { Select } from "../../../components/select";
 import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
-import { useDraft } from "../../../lib/draft";
+import { same, useDraft } from "../../../lib/draft";
 import { safeHref } from "../../../lib/url";
 import { fieldErrors } from "../../../lib/fields";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
@@ -353,8 +353,13 @@ export function PaymentAccessCard({ s }: { s: Schemas["SettingsView"] }) {
   const errors = fieldErrors(save.error);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const domains = draft.domains.split("\n").map((host) => host.trim()).filter(Boolean);
-    save.mutate({ sub_payment_access: { ...draft, domains } }, { onSuccess: (v) => setDraft(paymentForm(v)) });
+    const submitted = draft;
+    const value = submitted.inbound_id === 0
+      ? { ...s.sub_payment_access, inbound_id: 0 }
+      : { ...submitted, domains: submitted.domains.split("\n").map((host) => host.trim()).filter(Boolean) };
+    save.mutate({ sub_payment_access: value }, {
+      onSuccess: (v) => setDraft((current) => same(current, submitted) ? paymentForm(v) : current),
+    });
   };
   const fields = [
     { key: "days", label: t("settings.paymentAccess.days"), max: 14 },

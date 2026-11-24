@@ -56,6 +56,20 @@ func TestPaymentAccessProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	group, err := h.st.Q.CreateGroup(ctx, db.CreateGroupParams{Name: "payment", Color: "gray", CreatedAt: h.now.Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.Tx(ctx, func(q *db.Queries) error {
+		if err := q.SetUserGroup(ctx, db.SetUserGroupParams{UserID: u.ID, GroupID: group.ID}); err != nil {
+			return err
+		}
+		return domain.SetGroupAddresses(ctx, q, group.ID, []domain.GroupAddress{{
+			InboundID: cfg.InboundID, Address: "renewal.example.com", Port: 9443, Name: "regular-group-proxy",
+		}})
+	}); err != nil {
+		t.Fatal(err)
+	}
 	setExpiry := func(when time.Time) {
 		t.Helper()
 		u.ExpiresAt.Valid, u.ExpiresAt.Int64 = true, when.Unix()
@@ -78,8 +92,8 @@ func TestPaymentAccessProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	key := domain.PaymentSlot(u, base.Secret)
-	if got := fetch(); !strings.Contains(got, "vless://"+key.UUID+"@") || strings.Contains(got, "127.0.0.1:1") {
-		t.Fatalf("expired subscription did not get the payment profile")
+	if got := fetch(); !strings.Contains(got, "vless://"+key.UUID+"@renewal.example.com:9443?") || strings.Contains(got, "#regular-group-proxy") {
+		t.Fatal("expired subscription did not get the payment profile at its group's address")
 	}
 	if err := h.st.Q.AddPaymentAccessTraffic(ctx, db.AddPaymentAccessTrafficParams{UserID: u.ID, ExpiredAt: u.ExpiresAt.Int64, Bytes: cfg.Remaining(0)}); err != nil {
 		t.Fatal(err)

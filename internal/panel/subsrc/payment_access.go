@@ -43,6 +43,8 @@ func (s *subscription) PaymentProfile(ctx context.Context) (proto.Slot, []model.
 		label = "Продлить подписку"
 	}
 	out := Inbound(in, hosts[in.ID])
+	out.Override = s.cfg.addressOf(group, in.ID)
+	out.Override.Name = "" // The payment profile keeps its renewal label.
 	out.Name, out.Named = label, true
 	for i := range out.Hosts {
 		out.Hosts[i].Name = label
