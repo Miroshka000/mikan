@@ -318,7 +318,10 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 	if n.FairShare != 0 && n.ChannelMbps.Valid {
 		st.Shaping = &nodeapi.Shaping{ChannelMbps: int(n.ChannelMbps.Int64)}
 	}
-	st.Epoch, st.Policies, _ = s.policiesFrom(snap)
+	st.Epoch, st.Policies, _, st.PaymentAccess = s.policiesFrom(snap)
+	if p := st.PaymentAccess; p != nil && !slices.ContainsFunc(st.Inbounds, func(in nodeapi.Inbound) bool { return in.Name == p.Inbound }) {
+		st.PaymentAccess = nil
+	}
 	return st, pin, nil
 }
 
@@ -478,13 +481,13 @@ func (s *Syncer) policies(ctx context.Context) (epoch string, out []nodeapi.Poli
 	if err != nil {
 		return "", nil, nil, err
 	}
-	epoch, out, slotUser = s.policiesFrom(snap)
+	epoch, out, slotUser, _ = s.policiesFrom(snap)
 	return epoch, out, slotUser, nil
 }
 
 // policiesFrom builds the policies from one snapshot: the quotas refer to the counters
 // position read with them.
-func (s *Syncer) policiesFrom(snap *snapshot) (epoch string, out []nodeapi.Policy, slotUser map[string]int64) {
+func (s *Syncer) policiesFrom(snap *snapshot) (epoch string, out []nodeapi.Policy, slotUser map[string]int64, payment *nodeapi.PaymentAccess) {
 	pos := snap.counters[s.id]
 	epoch, seq := pos.epoch, pos.seq
 	slotUser = make(map[string]int64, len(snap.owners))
@@ -535,6 +538,9 @@ func (s *Syncer) policiesFrom(snap *snapshot) (epoch string, out []nodeapi.Polic
 		access := domain.AccessOf(u, snap.servers.Of(u))
 		for _, name := range names {
 			p := userPolicy(u, grants.Main(u.ID), name, seq, now, here, access, shut[u.ID], others[name])
+			if snap.payment.InboundID != 0 && u.ExpiresAt.Valid {
+				p.ExpiresAt = u.ExpiresAt.Int64
+			}
 			p.Pools = userPoolQuotas(u.ID, rows[u.ID], groupsHere, p.QuotaRemaining, grants)
 			p.TorrentExempt = snap.torrent.IsExempt(u.ID)
 			if !p.TorrentExempt {
@@ -544,7 +550,12 @@ func (s *Syncer) policiesFrom(snap *snapshot) (epoch string, out []nodeapi.Polic
 			out = append(out, p)
 		}
 	}
-	return epoch, out, slotUser
+	if in, ok := s.paymentInbound(snap); ok {
+		var ps []nodeapi.Policy
+		payment, ps = s.paymentAccess(snap, in.Name, now)
+		out = append(out, ps...)
+	}
+	return epoch, out, slotUser, payment
 }
 
 // userPolicy is the user's rules for one of the user's slots; grants is what is left of
@@ -665,6 +676,12 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 		// grants included.
 		b := domain.TrafficBatch{Main: map[int64]domain.Bytes{}, Pools: map[[2]int64]domain.Bytes{}, Node: s.id}
 		for slot, t := range c.Slots {
+			if id, expired, ok := domain.ParsePaymentSlot(slot); ok {
+				if err := q.AddPaymentAccessTraffic(ctx, db.AddPaymentAccessTrafficParams{UserID: id, ExpiredAt: expired, Bytes: t.Up + t.Down}); err != nil {
+					return err
+				}
+				continue
+			}
 			if uid, ok := owner[slot]; ok {
 				cur := b.Main[uid]
 				b.Main[uid] = domain.Bytes{Up: cur.Up + t.Up, Down: cur.Down + t.Down}

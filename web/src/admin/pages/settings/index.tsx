@@ -21,7 +21,7 @@ import { AccessCard, ApiCard, CertificateCard, LoginCard, SessionsCard } from ".
 import { SalesCard } from "./sales";
 import { SecurityPresetsCard } from "./security-presets";
 import { SupportCard } from "./support";
-import { AppsCard, DevicesCard, InactiveCard, SubPortCard, SubscriptionCard, XrayJSONCard } from "./subscription";
+import { AppsCard, DevicesCard, InactiveCard, PaymentAccessCard, SubPortCard, SubscriptionCard, XrayJSONCard } from "./subscription";
 import { SubDomainCard } from "./sub-domain";
 import { SiteCard } from "./site";
 import { HappCard } from "./happ";
@@ -122,6 +122,7 @@ export function SettingsPage() {
                     <HappCard s={s} />
                     <SubscriptionCard s={s} />
                     <InactiveCard s={s} />
+                    <PaymentAccessCard s={s} />
                     <LogDaysCard s={s} />
                     <SubDomainCard s={s} />
                     <SubPortCard s={s} />

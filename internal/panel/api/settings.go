@@ -3,6 +3,7 @@ package api
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"path/filepath"
@@ -32,13 +33,16 @@ import (
 )
 
 type SettingsView struct {
-	Brand          string `json:"brand"`
-	PanelAppName   string `json:"panel_app_name" doc:"Название панели, установленной как приложение (ярлык на рабочем столе, в меню, на главном экране); пусто — бренд, без бренда — mikan"`
-	SupportURL     string `json:"support_url"`
-	SubTitle       string `json:"sub_title" doc:"Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего, {devices} — привязанные устройства (2/3); без срока или лимита — ∞"`
-	Announce       string `json:"sub_announce" doc:"Объявление над профилем в приложениях (заголовок announce): Happ и v2RayTun показывают его под названием подписки; пусто — нет. Те же переменные, что в sub_title"`
-	AnnounceURL    string `json:"sub_announce_url" doc:"Куда ведёт нажатие на объявление"`
-	AppBranding    bool   `json:"app_branding" doc:"Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки"`
+	Brand        string `json:"brand"`
+	PanelAppName string `json:"panel_app_name" doc:"Название панели, установленной как приложение (ярлык на рабочем столе, в меню, на главном экране); пусто — бренд, без бренда — mikan"`
+	SupportURL   string `json:"support_url"`
+	SubTitle     string `json:"sub_title" doc:"Название подписки в приложениях (заголовок profile-title); пусто — бренд. Переменные: {brand} — бренд, {name} — имя пользователя, {date} — дата окончания (ДД.ММ.ГГГГ, МСК), {days} — дней осталось, {used} — израсходовано, {left} — осталось трафика, {total} — всего, {devices} — привязанные устройства (2/3); без срока или лимита — ∞"`
+	Announce     string `json:"sub_announce" doc:"Объявление над профилем в приложениях (заголовок announce): Happ и v2RayTun показывают его под названием подписки; пусто — нет. Те же переменные, что в sub_title"`
+	AnnounceURL  string `json:"sub_announce_url" doc:"Куда ведёт нажатие на объявление"`
+	AppBranding  bool   `json:"app_branding" doc:"Брендинг в приложениях, читающих операторские заголовки (ClashFest, SlothClash): название, логотип, цвет, ссылки"`
+
+	PaymentAccess domain.PaymentAccess `json:"sub_payment_access"`
+
 	InactiveServer bool   `json:"sub_inactive_server" doc:"Подписка, которая не может подключиться (кончился срок или трафик, отключена), получает вместо серверов одну запись с объяснением"`
 	InactiveText   string `json:"sub_inactive_text" doc:"Свой текст этой записи; пусто — свой по причине. Переменные как в названии подписки"`
 	XrayJSON       bool   `json:"sub_xray_json" doc:"Happ и INCY получают полные конфиги Xray (JSON) вместо ссылок: маршрутизация, DNS и «Авто» панели доходят до них; запрос с ?format= получает свой формат в любом случае"`
@@ -110,13 +114,16 @@ type patchSettingsInput struct {
 // patchSettingsBody is the body of PATCH /settings; an alias of the struct, so the API's
 // schema keeps its name (PatchSettingsInputBody). settingFields says how each is written.
 type patchSettingsBody = struct {
-	Brand           *string              `json:"brand,omitempty" maxLength:"40"`
-	PanelAppName    *string              `json:"panel_app_name,omitempty" maxLength:"30" doc:"Пусто — по бренду"`
-	SupportURL      *string              `json:"support_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
-	SubTitle        *string              `json:"sub_title,omitempty" maxLength:"200" doc:"Переменные — см. SettingsView.sub_title"`
-	Announce        *string              `json:"sub_announce,omitempty" maxLength:"1000" doc:"До 10 строк: страница подписки и Mini App показывают их с переносами, приложения получают одну строку до 200 символов"`
-	AnnounceURL     *string              `json:"sub_announce_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
-	AppBranding     *bool                `json:"app_branding,omitempty"`
+	Brand        *string `json:"brand,omitempty" maxLength:"40"`
+	PanelAppName *string `json:"panel_app_name,omitempty" maxLength:"30" doc:"Пусто — по бренду"`
+	SupportURL   *string `json:"support_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
+	SubTitle     *string `json:"sub_title,omitempty" maxLength:"200" doc:"Переменные — см. SettingsView.sub_title"`
+	Announce     *string `json:"sub_announce,omitempty" maxLength:"1000" doc:"До 10 строк: страница подписки и Mini App показывают их с переносами, приложения получают одну строку до 200 символов"`
+	AnnounceURL  *string `json:"sub_announce_url,omitempty" maxLength:"200" doc:"https://… или tg://…"`
+	AppBranding  *bool   `json:"app_branding,omitempty"`
+
+	PaymentAccess *domain.PaymentAccess `json:"sub_payment_access,omitempty"`
+
 	InactiveServer  *bool                `json:"sub_inactive_server,omitempty"`
 	InactiveText    *string              `json:"sub_inactive_text,omitempty" maxLength:"120"`
 	XrayJSON        *bool                `json:"sub_xray_json,omitempty"`
@@ -312,6 +319,9 @@ func (h *handlers) readSettings(ctx context.Context) (SettingsView, error) {
 	if v.LinkReissue, err = domain.LoadReissueRules(ctx, h.d.Settings); err != nil {
 		return v, err
 	}
+	if v.PaymentAccess, err = domain.LoadPaymentAccess(ctx, h.d.Settings); err != nil {
+		return v, err
+	}
 	if v.InactiveServer, err = h.d.Settings.On(ctx, settings.InactiveServer); err != nil {
 		return v, err
 	}
@@ -415,6 +425,20 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 	}
 	var details []error
+	if b.PaymentAccess != nil {
+		cfg := b.PaymentAccess
+		if err := cfg.Validate(); err != nil {
+			details = append(details, fieldDetail("body.sub_payment_access", err.Error(), nil))
+		} else if cfg.InboundID != 0 {
+			in, err := h.d.Store.Q.GetInbound(ctx, cfg.InboundID)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return nil, err
+			}
+			if !cfg.Matches(in) {
+				details = append(details, fieldDetail("body.sub_payment_access.inbound_id", "payment_access_inbound", nil))
+			}
+		}
+	}
 	if b.PublicHost != nil && !hostname.Valid(*b.PublicHost) {
 		details = append(details, fieldDetail("body.public_host", "public_host_invalid", nil))
 	}
@@ -654,7 +678,7 @@ func (h *handlers) updateSettings(ctx context.Context, in *patchSettingsInput) (
 		}
 	}
 	// The panel's own node keeps the subscription port open to its users (nodesync.ownPorts).
-	if b.SubPort != nil {
+	if b.SubPort != nil || b.PaymentAccess != nil {
 		h.d.Changes.SlotsChanged()
 	}
 	// The certificate is for the domain, or the address without one: a new name gets its

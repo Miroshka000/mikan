@@ -3,6 +3,7 @@ import type { Schemas } from "../../../api/client";
 import { useInbounds, useNodes, usePaymentSettings } from "../../../api/hooks";
 import { CardHead, Disclosure, FormActions } from "../../../components/layout";
 import { Button, Field, Pill } from "../../../components/ui";
+import { Select } from "../../../components/select";
 import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
@@ -334,6 +335,60 @@ export function XrayJSONCard({ s }: { s: Schemas["SettingsView"] }) {
         disabled={save.isPending}
         onChange={(v) => save.mutate({ sub_xray_json: v })}
       />
+    </section>
+  );
+}
+
+const paymentForm = (s: Schemas["SettingsView"]) => ({
+  ...s.sub_payment_access,
+  domains: s.sub_payment_access.domains.join("\n"),
+});
+
+export function PaymentAccessCard({ s }: { s: Schemas["SettingsView"] }) {
+  const save = useSaveSettings();
+  const nodes = useNodes();
+  const inbounds = useInbounds();
+  const { draft, setDraft, dirty, reset } = useDraft(paymentForm(s));
+  const choices = (inbounds.data ?? []).filter((i) => i.enabled && i.type === "vless" && i.pool_id == null);
+  const errors = fieldErrors(save.error);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const domains = draft.domains.split("\n").map((host) => host.trim()).filter(Boolean);
+    save.mutate({ sub_payment_access: { ...draft, domains } }, { onSuccess: (v) => setDraft(paymentForm(v)) });
+  };
+  const fields = [
+    { key: "days", label: t("settings.paymentAccess.days"), max: 14 },
+    { key: "traffic_mib", label: t("settings.paymentAccess.traffic"), max: 200 },
+    { key: "speed_mbps", label: t("settings.paymentAccess.speed"), max: 5 },
+  ] as const;
+  return (
+    <section className="card glass reveal">
+      <form onSubmit={submit}>
+        <CardHead title={t("settings.paymentAccess.title")} sub={t("settings.paymentAccess.sub")} />
+        <Field label={t("settings.paymentAccess.inbound")} htmlFor="s-payment-inbound" error={errors.inbound_id ?? errors.sub_payment_access}>
+          <Select id="s-payment-inbound" className="input" value={draft.inbound_id} onChange={(e) => setDraft({ ...draft, inbound_id: Number(e.target.value) })}>
+            <option value={0}>{t("settings.paymentAccess.off")}</option>
+            {draft.inbound_id > 0 && !choices.some((i) => i.id === draft.inbound_id) ? <option value={draft.inbound_id}>#{draft.inbound_id}</option> : null}
+            {choices.map((i) => <option key={i.id} value={i.id}>{nodes.data?.find((n) => n.id === i.node_id)?.name ?? i.node_id} · {i.name}</option>)}
+          </Select>
+        </Field>
+        {draft.inbound_id > 0 ? (
+          <>
+            <div className="grid gap-x-3 sm:grid-cols-3">
+              {fields.map(({ key, label, max }) => (
+                <Field key={key} label={label} htmlFor={`s-payment-${key}`}>
+                  <input id={`s-payment-${key}`} className="input" type="number" min={1} max={max} required
+                    value={draft[key] || ""} onChange={(e) => setDraft({ ...draft, [key]: Number(e.target.value) })} />
+                </Field>
+              ))}
+            </div>
+            <Field label={t("settings.paymentAccess.domains")} htmlFor="s-payment-domains" hint={t("settings.paymentAccess.domainsHint")}>
+              <textarea id="s-payment-domains" className="input mono" rows={3} value={draft.domains} onChange={(e) => setDraft({ ...draft, domains: e.target.value })} />
+            </Field>
+          </>
+        ) : null}
+        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} disabled={!dirty} />
+      </form>
     </section>
   );
 }

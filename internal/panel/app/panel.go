@@ -652,7 +652,7 @@ type subNodes struct{ m *nodesync.Manager }
 
 func (s subNodes) Health(id int64) (subsrc.NodeHealth, bool) {
 	hv, ok := s.m.Health(id)
-	return subsrc.NodeHealth{OK: hv.OK, Since: hv.Since, Version: hv.Health.Version}, ok
+	return subsrc.NodeHealth{OK: hv.OK, Since: hv.Since, Version: hv.Health.Version, PaymentAccess: hv.Health.PaymentAccess}, ok
 }
 
 func (s subNodes) ServedPin(id int64) (string, bool) { return s.m.ServedPin(id) }

@@ -96,3 +96,11 @@ Subscription links can be built on a separate domain with its own certificate, s
 ## Your brand in the apps
 
 The **Your brand in the apps** switch: ClashFest (Android) and SlothClash (Windows, macOS, Linux) show your name, the user's name, your logo and color, plus links to support, the bot and renewal. The logo is an https link to a square PNG, WebP or JPEG image, 256×256, up to 512 KB. Other apps don't read these fields.
+
+## Payment access after expiry
+
+Under **Settings → Subscription → Payment access after expiry**, select an enabled VLESS inbound that has no traffic group. Both the panel and the selected node must support payment access. The feature is off by default. The initial limits per subscription are 3 days, 150 MiB and 1 Mbit/s.
+
+After expiry, subscribers can refresh their existing subscription link to get the **Renew subscription** connection. The link must be reachable directly for the first refresh. After paying, refresh again to get the regular connections.
+
+The node permits TCP on port 443 to Telegram addresses and the approved HTTPS hostnames. The subscription page is reachable on its configured HTTPS port. The list includes YooKassa and CryptoBot domains. Add the exact hostnames your payment flow uses, including bank confirmation pages. Test the checkout in the app your subscribers use. The node blocks UDP and other destinations and accounts for renewal traffic separately.

@@ -91,6 +91,7 @@ type slot struct {
 
 	mu          sync.Mutex
 	allowed     bool
+	expiresAt   int64
 	exhausted   bool            // the main quota: inbounds outside every group, and the groups that count to it (mode main)
 	budget      int64           // the main quota left when the panel last sent it
 	budgetGen   int64           // moves with every quota the panel sends
@@ -147,8 +148,11 @@ func (r *Registry) SetSlots(list []nodeapi.Slot) {
 	byKey := make(map[string]*slot, 2*len(list))
 	for _, sl := range list {
 		s := r.byName[sl.Name]
-		if s == nil || s.uuid != sl.UUID {
+		if s == nil || s.uuid != sl.UUID && !paymentUser(sl.Name) {
 			s = newSlot(sl.Name, sl.UUID)
+		} else if s.uuid != sl.UUID {
+			// Payment traffic belongs to the expiry window even if the subscription key rotates.
+			s.uuid = sl.UUID
 		}
 		byName[sl.Name] = s
 		byKey[sl.Name] = s
@@ -210,6 +214,7 @@ func (r *Registry) SetPolicies(epoch string, list []nodeapi.Policy) {
 		s.group.Store(g)
 		s.mu.Lock()
 		s.allowed = ok && p.Allowed
+		s.expiresAt = p.ExpiresAt
 		s.inbounds = nil
 		s.deviceLimit = 0
 		s.otherIPs = nil
@@ -408,7 +413,7 @@ func (r *Registry) admitIn(user, inName, ip string) *slot {
 func (s *slot) deniedLocked(inName, pool string, now time.Time) bool {
 	pool = s.quotaOfLocked(pool)
 	switch {
-	case !s.allowed, s.banned(now), s.inbounds != nil && !s.inbounds[inName]:
+	case !s.allowed, s.expiresAt != 0 && now.Unix() >= s.expiresAt, s.banned(now), s.inbounds != nil && !s.inbounds[inName]:
 		return true
 	case pool != "":
 		b := s.pools[pool]

@@ -22,7 +22,10 @@ type DesiredState struct {
 	Inbounds []Inbound `json:"inbounds"`
 	Slots    []Slot    `json:"slots"`
 	Policies []Policy  `json:"policies"`
-	TLS      *TLSFiles `json:"tls,omitempty"`
+
+	PaymentAccess *PaymentAccess `json:"payment_access,omitempty"`
+
+	TLS *TLSFiles `json:"tls,omitempty"`
 	// SelfStealPort allows REALITY dest 127.0.0.1:<port> (the panel's own HTTPS).
 	SelfStealPort int `json:"self_steal_port,omitempty"`
 	// Warp is Cloudflare WARP as an outbound; nil: everything leaves directly.
@@ -184,6 +187,7 @@ type ValidateRequest struct {
 }
 
 type Policy struct {
+	ExpiresAt      int64    `json:"expires_at,omitempty"` // unix seconds; 0 has no deadline
 	Slot           string   `json:"slot"`
 	Allowed        bool     `json:"allowed"`
 	Inbounds       []string `json:"inbounds,omitempty"` // allowed inbound names; empty = all
@@ -284,6 +288,8 @@ type Online struct {
 }
 
 type Health struct {
+	PaymentAccess bool `json:"payment_access,omitempty"`
+
 	Version   string           `json:"version"`
 	Core      string           `json:"core"`
 	Revision  int64            `json:"revision"`

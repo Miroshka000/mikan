@@ -23,19 +23,22 @@ type snapshot struct {
 	changes uint64           // Manager.changes when it was read
 	batches map[int64]uint64 // Manager.batches when it was read
 
-	users    []db.User
-	owners   []db.ListSlotUsersRow
-	inbounds []db.Inbound
-	slots    []db.Slot
-	grants   domain.GrantsLeft
-	pools    []db.UserPool
-	servers  domain.ServerBook // what every user stands on: its group's or its tariff's servers
-	counters map[int64]counterPos
-	torrent  torrent.Config
-	bans     map[int64]int64 // user → when the torrent blocker's ban ends (unix)
-	filters  filters.Config
-	exitDNS  exitdns.Config
-	detail   bool // the nodes sum the bytes by site
+	users       []db.User
+	owners      []db.ListSlotUsersRow
+	inbounds    []db.Inbound
+	slots       []db.Slot
+	grants      domain.GrantsLeft
+	pools       []db.UserPool
+	servers     domain.ServerBook // what every user stands on: its group's or its tariff's servers
+	counters    map[int64]counterPos
+	torrent     torrent.Config
+	bans        map[int64]int64 // user → when the torrent blocker's ban ends (unix)
+	filters     filters.Config
+	exitDNS     exitdns.Config
+	detail      bool // the nodes sum the bytes by site
+	payment     domain.PaymentAccess
+	paymentPage string
+	paymentUsed map[[2]int64]int64
 }
 
 type counterPos struct {
@@ -104,6 +107,25 @@ func (m *Manager) readSnapshot(ctx context.Context) (s *snapshot, err error) {
 	}
 	if s.detail, err = settings.New(q).On(ctx, settings.TrafficDetail); err != nil {
 		return nil, err
+	}
+	if s.payment, err = domain.LoadPaymentAccess(ctx, settings.New(q)); err != nil {
+		return nil, err
+	}
+	if s.payment.InboundID != 0 {
+		set := settings.New(q)
+		ep, err := set.SubEndpoint(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.paymentPage = ep.URL()
+		rows, err := q.ListPaymentAccessTraffic(ctx, m.now().Unix()-14*86400)
+		if err != nil {
+			return nil, err
+		}
+		s.paymentUsed = make(map[[2]int64]int64, len(rows))
+		for _, row := range rows {
+			s.paymentUsed[[2]int64{row.UserID, row.ExpiredAt}] = row.Bytes
+		}
 	}
 	if s.torrent.Enabled {
 		bans, err := q.ActiveTorrentBans(ctx, m.now().Unix())

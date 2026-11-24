@@ -27,6 +27,9 @@ const (
 // keys burn) and moves the subscriptions' lifecycle on.
 func (p *Panel) maintain(ctx context.Context) {
 	now := p.now()
+	if err := p.st.Q.PrunePaymentAccessTraffic(ctx, now.Add(-30*24*time.Hour).Unix()); err != nil {
+		p.log.Error("prune payment access traffic", "err", err)
+	}
 	if err := p.st.Q.PruneTrafficDaily(ctx, now.Add(-trafficDailyKeep).Unix()/86400); err != nil {
 		p.log.Error("prune daily traffic", "err", err)
 	}
