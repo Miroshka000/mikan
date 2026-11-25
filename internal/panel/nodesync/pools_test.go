@@ -3,8 +3,10 @@ package nodesync
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strconv"
 	"testing"
+	"time"
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
@@ -122,5 +124,87 @@ func TestGroupInTheMainTraffic(t *testing.T) {
 	got, _ := q.GetUser(ctx, u.ID)
 	if got.UsedDown != 300 || got.TotalDown != 300 {
 		t.Fatalf("the group's traffic spends the main traffic: used %d total %d", got.UsedDown, got.TotalDown)
+	}
+}
+
+// A group with a limit of the user's own, on a tariff with nothing to reset, is renewed once
+// the user is given a reset of its own (the client's card): the scheduled reset zeroes the
+// group, at once when the period the new rule counts is already over. Taking the tariff
+// again brings the tariff's reset back; a reset in the same patch wins over it.
+func TestOwnResetOfAUser(t *testing.T) {
+	s, node, st, users, now := setup(t)
+	ctx := context.Background()
+	q := st.Q
+	pool, err := q.CreateTrafficPool(ctx, db.CreateTrafficPoolParams{Name: "WL", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ins, _ := q.ListInbounds(ctx)
+	if err := q.SetInboundPool(ctx, db.SetInboundPoolParams{PoolID: sql.NullInt64{Int64: pool.ID, Valid: true}, ID: ins[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	tariffs, _ := q.ListTariffs(ctx)
+	unlimited := tariffs[2]
+	if unlimited.TrafficLimit.Valid || unlimited.ResetStrategy != "none" {
+		t.Fatalf("the seed's tariff without limits: %+v", unlimited)
+	}
+	u, err := users.Create(ctx, domain.CreateInput{Name: "a", TariffID: unlimited.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The client's card gives the group a limit of this user's own.
+	if err := q.SetUserPool(ctx, db.SetUserPoolParams{UserID: u.ID, PoolID: pool.ID, Mode: domain.PoolOwn, TrafficLimit: sql.NullInt64{Int64: 1000, Valid: true}}); err != nil {
+		t.Fatal(err)
+	}
+	slot, _ := q.GetSlot(ctx, u.SlotID.Int64)
+	key := strconv.FormatInt(pool.ID, 10)
+	node.batch = nodeapi.Counters{Epoch: "e1", Seq: 1, Pools: map[string]map[string]nodeapi.Traffic{slot.Name: {key: {Down: 900}}}}
+	s.pullCounters(ctx)
+	used := func() int64 {
+		t.Helper()
+		ups, err := q.ListUserPools(ctx, u.ID)
+		if err != nil || len(ups) != 1 {
+			t.Fatalf("the user's groups: %+v %v", ups, err)
+		}
+		return ups[0].UsedUp + ups[0].UsedDown
+	}
+	if n := used(); n != 900 {
+		t.Fatalf("the group used %d", n)
+	}
+	// Forty days on, a user without a reset keeps what the group used.
+	*now = now.Add(40 * 24 * time.Hour)
+	if err := s.m.resetPeriods(ctx, *now); err != nil {
+		t.Fatal(err)
+	}
+	if n := used(); n != 900 {
+		t.Fatalf("reset with no reset: %d", n)
+	}
+
+	bad := "weekly"
+	if _, err := users.Update(ctx, u.ID, domain.Patch{ResetStrategy: &bad}); !errors.As(err, new(*domain.FieldError)) {
+		t.Fatalf("a reset the panel does not know: %v", err)
+	}
+	period := "period"
+	if u, err = users.Update(ctx, u.ID, domain.Patch{ResetStrategy: &period}); err != nil || u.ResetStrategy != period {
+		t.Fatalf("the user's own reset: %q %v", u.ResetStrategy, err)
+	}
+	// The period that began forty days ago is over by the new rule: the group is reset now,
+	// and the new period goes on from where the first one of 30 days ended.
+	if err := s.m.resetPeriods(ctx, *now); err != nil {
+		t.Fatal(err)
+	}
+	if n := used(); n != 0 {
+		t.Fatalf("the group after the reset: %d", n)
+	}
+	if got, _ := q.GetUser(ctx, u.ID); got.PeriodStart != u.PeriodStart+30*86400 {
+		t.Fatalf("the period starts at %d, not %d", got.PeriodStart, u.PeriodStart+30*86400)
+	}
+
+	if u, err = users.Update(ctx, u.ID, domain.Patch{TariffID: &unlimited.ID}); err != nil || u.ResetStrategy != "none" {
+		t.Fatalf("the tariff's reset back: %q %v", u.ResetStrategy, err)
+	}
+	month := "month_start"
+	if u, err = users.Update(ctx, u.ID, domain.Patch{TariffID: &unlimited.ID, ResetStrategy: &month}); err != nil || u.ResetStrategy != month {
+		t.Fatalf("the patch's reset over its tariff's: %q %v", u.ResetStrategy, err)
 	}
 }

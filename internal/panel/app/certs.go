@@ -70,9 +70,13 @@ func checkCerts(st *store.Store, set *settings.Settings, certs, subCerts *acme.M
 			Expected: certs.Served(), Status: certs.Status(), Challenge: certs.Challenge()}
 		// The subscription domain is checked where its links lead: a proxy in front of the
 		// panel that answers for it with a certificate of its own breaks them all.
+		external, _, err := settings.Get[bool](ctx, set, settings.KeySubExternal)
+		if err != nil {
+			return certcheck.CertReport{}, err
+		}
 		if subDomain, err := set.String(ctx, settings.KeySubDomain); err != nil {
 			return certcheck.CertReport{}, err
-		} else if subDomain != "" && subCerts != nil {
+		} else if subDomain != "" && subCerts != nil && !external {
 			subEP, err := set.SubEndpoint(ctx)
 			if err != nil {
 				return certcheck.CertReport{}, err

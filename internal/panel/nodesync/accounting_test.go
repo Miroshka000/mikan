@@ -46,14 +46,20 @@ func TestBackgroundAccountingWritersDoNotConflict(t *testing.T) {
 
 	const batches = 30
 	const bytes = 1000
+	online := map[string]nodeapi.Online{}
+	for _, slot := range slots {
+		online[slot] = nodeapi.Online{IPs: []string{"203.0.113.7"}, Conns: 1}
+	}
+	// The users are online from the start: the online marks are not left to whether the
+	// first batch is pulled before the devices goroutine is done.
+	s1.online.Store(&online)
+	s2.online.Store(&online)
 	before := st.Conflicts()
 	feed := func(s *Syncer, node *fakeNode, epoch string) {
 		for seq := int64(1); seq <= batches; seq++ {
 			traffic := map[string]nodeapi.Traffic{}
-			online := map[string]nodeapi.Online{}
 			for _, slot := range slots {
 				traffic[slot] = nodeapi.Traffic{Up: bytes, Down: bytes}
-				online[slot] = nodeapi.Online{IPs: []string{"203.0.113.7"}, Conns: 1}
 			}
 			node.batch = nodeapi.Counters{Epoch: epoch, Seq: seq, Slots: traffic, Online: online}
 			s.pullCounters(ctx)

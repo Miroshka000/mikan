@@ -1,0 +1,78 @@
+---
+title: mikan и другие панели
+description: Чем mikan отличается от Remnawave, Marzban, PasarGuard и 3x-ui — по ядру, нодам, подпискам, продажам и администрированию.
+---
+
+Сравнение собрано по README, коду и релизам самих проектов на GitHub на 17 ноября 2026 года. Панели быстро меняются. Если что-то устарело или неточно, поправьте эту страницу через PR.
+
+«—» в таблице значит, что в README и коде проекта этого не нашлось. Это не всегда значит, что возможности нет совсем.
+
+## Коротко
+
+| | mikan | Remnawave | Marzban | PasarGuard | 3x-ui |
+| --- | --- | --- | --- | --- | --- |
+| Ядро нод | Citrus (форк mihomo) | Xray | Xray | Xray, WireGuard | Xray |
+| Лицензия | GPL-3.0 | AGPL-3.0 | AGPL-3.0 | AGPL-3.0, нода GPL-3.0 | GPL-3.0 |
+| Панель написана на | Go, React | TypeScript (NestJS), React | Python, React | Python, React; нода на Go | Go, React |
+| База | PostgreSQL | PostgreSQL и Valkey | SQLite, MySQL, MariaDB | SQLite, MySQL, MariaDB, PostgreSQL, TimescaleDB | SQLite, PostgreSQL |
+| Несколько нод | да | да | да | да | да |
+| Лимит устройств (HWID) | да | да | — | да | да |
+| Шаблоны подписки под приложение | да | да | шаблоны Clash и страницы через `.env` | частично | вывод по User-Agent и свои страницы |
+| Бот для клиентов, продажа и оплата | Telegram-бот и Mini App, оплата Stars и аддонами | — | — | — | — |
+| Несколько админов с ролями | один админ, ключи API, доступ поддержки | админы и ключи API, две роли | в работе у проекта | да, с ролями | — |
+| Вход без пароля и 2FA | 2FA, ключи доступа, GitHub, Telegram | ключи доступа, вход через OAuth2 | — | ключи доступа | 2FA |
+| Метрики Prometheus | да | да | — | — | — |
+| Импорт из других панелей | Marzban, PasarGuard, Remnawave, 3x-ui | Marzban, Marzneshin, 3x-ui (отдельной утилитой) | — | — | — |
+| Установка | одна команда | Docker Compose | одна команда | одна команда | одна команда |
+| Языки интерфейса | ru, en | en, fa, ru, zh | несколько | en, fa, ru, zh | 14 языков |
+
+Marzban не выпускал стабильных релизов с 9 января 2025 года. В ветке `dev` последние изменения от июня 2026 года. Остальные панели выпускали релизы в октябре и ноябре 2026 года.
+
+## В чём mikan другой
+
+### Ядро
+
+Все остальные панели строятся вокруг Xray. В mikan ноды работают на [Citrus](/mikan/start/citrus/), нашем форке mihomo. Нода встраивает его как библиотеку, а не запускает отдельным процессом, поэтому:
+
+- трафик считается по каждому соединению каждого пользователя внутри ядра;
+- лимиты скорости, соединений и квоты действуют на самой ноде;
+- пользователи добавляются и удаляются без перезапуска ноды.
+
+Это касается протоколов, где у каждого пользователя свой ключ. Sudoku, Snell и Shadowsocks-2022 с ChaCha20 работают с одним ключом на всех, и на них учёта и лимитов нет, см. [Список протоколов](/mikan/protocols/presets/#список).
+
+Протоколы тоже отличаются. Кроме VLESS REALITY, Trojan и Shadowsocks есть Hysteria2, TUIC, AnyTLS, TrustTunnel, Mieru и другие из [пресетов](/mikan/protocols/presets/). Протоколы Citrus проверены автотестами против клиентов Xray и mihomo. Как это выглядит для REALITY в Clash-приложениях, разобрано в кейсе [REALITY и mihomo-клиенты](/mikan/start/reality-mihomo/). Какому приложению уходит какой протокол, зависит от протокола: VLESS, Trojan, Hysteria2 и другие получают и приложения на Xray (Happ, v2RayTun), и Clash-приложения, а TrustTunnel, Mieru и некоторые другие — только Clash-приложения. См. [Кто что получает](/mikan/protocols/presets/#кто-что-получает).
+
+### Продажи из коробки
+
+Ни у одной из четырёх панелей в коде нет приёма оплаты от клиентов. Продают через отдельных ботов, например [Bedolaga](/mikan/operations/import/#бот-продаж-bedolaga) для Remnawave. В mikan всё это часть панели:
+- Telegram-бот и Mini App;
+- тарифы, пробный период, промокоды, пакеты трафика и баланс;
+- оплата через Telegram Stars и платёжные аддоны.
+
+См. [Тарифы](/mikan/billing/plans/) и [Бот в Telegram](/mikan/billing/telegram/).
+
+### Подписка
+
+Как и в Remnawave, приложению уходит формат, который оно умеет: Clash, sing-box, Xray JSON или ссылки. Ещё у mikan есть:
+- [правила ответа](/mikan/subscriptions/clients/#правила-ответа) по заголовкам запроса;
+- шаблоны для каждого ядра;
+- [журнал запросов](/mikan/subscriptions/clients/#журнал-запросов) подписки;
+- экран [«что получит клиент»](/mikan/subscriptions/clients/#что-получит-клиент).
+
+### Чего в mikan пока нет
+
+- **Нескольких админов с разными правами.** Сейчас админ один, плюс ключи API «Чтение» и «Полный доступ» и временный [доступ поддержки](/mikan/operations/support-access/). Роли есть в [дорожной карте](https://github.com/users/Miroshka000/projects/2) (#283). В PasarGuard они уже есть.
+- **WireGuard и AmneziaWG на нодах.** Они есть в PasarGuard и 3x-ui, у mikan они в дорожной карте (#297).
+- **Языков интерфейса** у mikan два, а у 3x-ui 14.
+
+## Как перейти
+
+mikan переносит пользователей из Marzban, PasarGuard, Remnawave и 3x-ui, а аккаунты, балансы и историю — из бота Bedolaga. Старые ссылки подписки продолжают работать. См. [Миграция](/mikan/start/migrate/) и [Импорт](/mikan/operations/import/).
+
+## Источники
+
+- mikan: [github.com/Miroshka000/mikan](https://github.com/Miroshka000/mikan).
+- Remnawave: [panel](https://github.com/remnawave/panel), [backend](https://github.com/remnawave/backend) (схема базы, роли, метрики, шаблоны), [node](https://github.com/remnawave/node), [migrate](https://github.com/remnawave/migrate).
+- Marzban: [README и релизы](https://github.com/Gozargah/Marzban).
+- PasarGuard: [panel](https://github.com/PasarGuard/panel), [node](https://github.com/PasarGuard/node).
+- 3x-ui: [README](https://github.com/MHSanaei/3x-ui).

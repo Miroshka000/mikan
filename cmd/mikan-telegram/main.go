@@ -85,7 +85,10 @@ func (a *addon) Run(ctx context.Context) {
 func (a *addon) setUp(ctx context.Context) {
 	for fails := 0; ; fails++ {
 		err := a.bot.Started(ctx)
-		if err == nil || ctx.Err() != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
 			return
 		}
 		a.log.Warn("set up the chats", "err", err)

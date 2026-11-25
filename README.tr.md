@@ -2,17 +2,17 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-en-dark.svg">
-  <img alt="mikan: mihomo çekirdeği üzerinde VPN paneli" src=".github/assets/banner-en-light.svg" width="100%">
+  <img alt="mikan: Citrus çekirdeği üzerinde VPN paneli" src=".github/assets/banner-en-light.svg" width="100%">
 </picture>
 
 <br>
 
-**[mihomo](https://github.com/MetaCubeX/mihomo) çekirdeği üzerinde hızlı ve güzel bir VPN paneli: tek komutla kurulur, başında beklemek gerekmez.**
+**[Citrus](https://github.com/getmikan/Citrus) çekirdeği üzerinde hızlı ve güzel bir VPN paneli: tek komutla kurulur, başında beklemek gerekmez.**
 
 [![Sürüm](https://img.shields.io/github/v/release/Miroshka000/mikan?color=f07a2e&label=sürüm&style=flat-square)](https://github.com/Miroshka000/mikan/releases)
 [![İmaj](https://img.shields.io/badge/ghcr.io-miroshka000%2Fmikan-2b8c9e?style=flat-square&logo=docker&logoColor=white)](https://github.com/Miroshka000/mikan/pkgs/container/mikan)
 [![Lisans](https://img.shields.io/badge/lisans-GPL--3.0-2f9e6b?style=flat-square)](LICENSE)
-[![mihomo](https://img.shields.io/badge/çekirdek-mihomo%201.19.32-9e8eff?style=flat-square)](https://github.com/MetaCubeX/mihomo)
+[![Citrus](https://img.shields.io/badge/çekirdek-Citrus-9e8eff?style=flat-square)](https://github.com/getmikan/Citrus)
 [![Telegram](https://img.shields.io/badge/Telegram-kanal-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/mikanvpn)
 [![Telegram](https://img.shields.io/badge/Telegram-forum-26a5e4?style=flat-square&logo=telegram&logoColor=white)](https://t.me/+I2JFR7DbPow1ZmQy)
 
@@ -61,7 +61,7 @@ Abonelikler uygulamayı tanır (Happ, v2RayTun, Koala Clash, SlothClash, Clash V
 <td valign="top">
 
 ### 📊 Bayt hassasiyetinde sayım
-mihomo bir kütüphane olarak gömülüdür, bu yüzden trafik her bağlantıda kullanıcı bazında sayılır, örneklenmez. Süreye ve gigabayta göre planlar, faturalama günleri, cihaz sınırları ve anahtar paylaşımına karşı cihaz bağlama.
+[Citrus](https://github.com/getmikan/Citrus) (mihomo çatalımız) bir kütüphane olarak gömülüdür, bu yüzden trafik her bağlantıda kullanıcı bazında sayılır, örneklenmez. Süreye ve gigabayta göre planlar, faturalama günleri, cihaz sınırları ve anahtar paylaşımına karşı cihaz bağlama.
 
 </td>
 <td valign="top">
@@ -164,7 +164,7 @@ On yedi protokol, her biri sizin için üretilmiş anahtarlarla hazır bir ön a
 ```mermaid
 flowchart LR
     A[Browser] -- HTTPS, secret link --> P[mikan panel<br>users · plans · subscriptions]
-    P -- unix socket / pinned TLS --> N1[mikan node<br>mihomo inside]
+    P -- unix socket / pinned TLS --> N1[mikan node<br>Citrus inside]
     P -- pinned TLS --> N2[remote node]
     C[VPN apps] -- REALITY · QUIC · … --> N1
     C --> N2
@@ -229,7 +229,7 @@ Geliştirme `dev` dalında yapılır. `main` dalına açılan çekme istekleri d
 
 ## Lisans
 
-mikan, [GNU GPL v3](LICENSE) ve [NOTICE.md](NOTICE.md) dosyasındaki ek koşullar altında özgür yazılımdır: atıf korunur, değiştirilmiş bir sürüm orijinal gibi tanıtılmaz, ad ve logo üzerinde hak verilmez. Copyright (C) 2026 Miroshka and Mikan. İçine [mihomo](https://github.com/MetaCubeX/mihomo) (GPL-3.0) gömülüdür ve [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) kodunun bazı bölümleri uyarlanmıştır. Yazı tipleri: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
+mikan, [GNU GPL v3](LICENSE) ve [NOTICE.md](NOTICE.md) dosyasındaki ek koşullar altında özgür yazılımdır: atıf korunur, değiştirilmiş bir sürüm orijinal gibi tanıtılmaz, ad ve logo üzerinde hak verilmez. Copyright (C) 2026 Miroshka and Mikan. İçine [Citrus](https://github.com/getmikan/Citrus) ([mihomo](https://github.com/MetaCubeX/mihomo) çatalı) (GPL-3.0) gömülüdür ve [3x-ui](https://github.com/MHSanaei/3x-ui) (GPL-3.0) kodunun bazı bölümleri uyarlanmıştır. Yazı tipleri: Unbounded, Onest, JetBrains Mono (SIL OFL 1.1).
 
 <div align="center">
 <sub>🍊 ile yapıldı</sub>

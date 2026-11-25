@@ -52,6 +52,15 @@ func TestBalancer(t *testing.T) {
 		}
 		return u.ID
 	}
+	// Peek shows the node a new client would be placed on, and places it nowhere.
+	peeked := user(100)
+	got, err := b.Peek(ctx, peeked, on)
+	if err != nil || !got[1] || !got[solo.ID] || got[a.ID] == got[big.ID] {
+		t.Fatalf("peek: one node of the group and every other: %v %v", got, err)
+	}
+	if held, err := st.Q.ListUserAssignments(ctx, peeked); err != nil || len(held) != 0 {
+		t.Fatalf("peek placed the client: %+v %v", held, err)
+	}
 	placed := map[int64]int{}
 	where := map[int64]int64{}
 	for i := range 6 {

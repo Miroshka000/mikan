@@ -251,3 +251,32 @@ func TestHelloLimiterCannotBeFilled(t *testing.T) {
 		t.Fatal("a new address of the same /64 got a fresh allowance")
 	}
 }
+
+// A node the panel cannot reach where it knows it says hello from a new address: the panel
+// moves it there once it answers there, and says so; a node the panel reaches stays put,
+// and one that does not answer at the new address is only flagged.
+func TestHelloMovesANodeThePanelLost(t *testing.T) {
+	s := newStand(t)
+	var asked []string
+	moved := true
+	s.h.d.Readdress = func(_ context.Context, id int64, seen string) (nodehello.Result, bool) {
+		asked = append(asked, strconv.FormatInt(id, 10)+"@"+seen)
+		if !moved {
+			return nodehello.Result{}, false
+		}
+		return nodehello.Result{OK: true}, true
+	}
+	s.ip = "198.51.100.4"
+	if r := s.send(); !r.OK || r.Params[nodehello.MovedFrom] != "" || len(asked) != 0 {
+		t.Fatalf("a node the panel reaches is not moved: %+v %v", r, asked)
+	}
+	s.dial = nodehello.Result{Code: "timeout"}
+	r := s.send()
+	if !r.OK || r.Params[nodehello.MovedFrom] != "203.0.113.7" || r.Host != "198.51.100.4" || r.Params[nodehello.IPDiffers] != "" || len(asked) != 1 || asked[0] != "2@198.51.100.4" {
+		t.Fatalf("moved: %+v %v", r, asked)
+	}
+	moved = false
+	if r := s.send(); r.OK || r.Code != "timeout" || r.Params[nodehello.IPDiffers] != "1" {
+		t.Fatalf("not answering at the new address: %+v", r)
+	}
+}

@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	ykShop   = "506751"
-	ykSecret = "test_Fh8hUAVVBGUGbjmlzba6TB0iyUbos_lueTHE-axOwM0"
+	ykShop   = "100000"
+	ykSecret = "test_not-a-real-key-made-up-for-the-tests"
 )
 
 // ykAdapter is the marketplace's YooKassa adapter as far as the panel uses it: its keys,

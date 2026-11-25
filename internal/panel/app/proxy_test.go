@@ -78,7 +78,7 @@ func TestInboundsBehindAProxy(t *testing.T) {
 
 	// An address of its own turns the port move and the site switch off in the same
 	// update: the proxy in front forwards to the port and may route by the site.
-	h.now = h.now.Add(time.Hour)
+	h.advance(time.Hour)
 	code, body, v := patch(xhttp, map[string]any{"listen": " 127.0.0.1 "})
 	if code != http.StatusOK || v.Listen != "127.0.0.1" || v.AutoPort || v.AutoSNI || v.ClientSNI {
 		t.Fatalf("listen: %d %s", code, body)
@@ -129,7 +129,7 @@ func TestInboundsBehindAProxy(t *testing.T) {
 
 	// Share links and the Clash profile: the proxy's endpoint, the usual REALITY name.
 	// Xray apps (Happ) get no AnyTLS: its link is checked in the profile.
-	resp, raw = h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "Happ/3.4.1"})
+	resp, raw = h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken+"?format=uri", nil, map[string]string{"User-Agent": "Happ/3.4.1"})
 	links, err := base64.StdEncoding.DecodeString(string(raw))
 	if resp.StatusCode != http.StatusOK || err != nil {
 		t.Fatalf("subscription: %d %v", resp.StatusCode, err)

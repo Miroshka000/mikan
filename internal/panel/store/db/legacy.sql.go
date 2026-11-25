@@ -47,6 +47,18 @@ func (q *Queries) CountLegacySubTokens(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countLegacyUsers = `-- name: CountLegacyUsers :one
+SELECT count(DISTINCT user_id) FROM legacy_sub_tokens
+`
+
+// The users with an old link: a PasarGuard user has two keys (name and id), one person.
+func (q *Queries) CountLegacyUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countLegacyUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteLegacySubTokensOf = `-- name: DeleteLegacySubTokensOf :exec
 DELETE FROM legacy_sub_tokens WHERE user_id = $1
 `
@@ -145,6 +157,18 @@ SELECT pg_advisory_xact_lock(hashtextextended('mikan-user-name:' || $1::text, 0)
 // find it free.
 func (q *Queries) LockUserName(ctx context.Context, name string) error {
 	_, err := q.db.ExecContext(ctx, lockUserName, name)
+	return err
+}
+
+const lockUserNames = `-- name: LockUserNames :exec
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-user-name:' || n, 0))
+FROM unnest($1::text[]) AS n ORDER BY n
+`
+
+// LockUserName of every name at once, in one order for every caller: two batches of
+// clients (#295) that share names wait for each other instead of locking in a circle.
+func (q *Queries) LockUserNames(ctx context.Context, names []string) error {
+	_, err := q.db.ExecContext(ctx, lockUserNames, pq.Array(names))
 	return err
 }
 

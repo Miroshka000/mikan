@@ -58,3 +58,25 @@ func TestCachedSettings(t *testing.T) {
 		t.Fatal("a plain Settings reads the table every time")
 	}
 }
+
+// The seed of the front pages is made once and stays: a page that changed at every start
+// would be no page of a site.
+func TestFrontSeed(t *testing.T) {
+	ctx := context.Background()
+	st, err := storetest.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	set := New(st.Q)
+	first, err := set.FrontSeed(ctx)
+	if err != nil || len(first) < 20 {
+		t.Fatalf("the seed: %q %v", first, err)
+	}
+	if again, err := New(st.Q).FrontSeed(ctx); err != nil || again != first {
+		t.Fatalf("read again: %q %v, want %q", again, err, first)
+	}
+	if stored, err := set.String(ctx, KeyFrontSeed); err != nil || stored != first {
+		t.Fatalf("stored: %q %v", stored, err)
+	}
+}

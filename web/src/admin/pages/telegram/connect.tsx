@@ -1,6 +1,6 @@
 // Connecting the bot: its token, and how the panel reaches Telegram (directly, through a node or a proxy).
 import { Link } from "@tanstack/react-router";
-import { Globe, Link2, Network, Shield, Trash2 } from "lucide-react";
+import { ExternalLink, Globe, Link2, Network, Shield, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { ApiError, errorText, type Schemas } from "../../../api/client";
 import { useNodes } from "../../../api/hooks";
@@ -10,7 +10,9 @@ import { useToast } from "../../../components/toast";
 import { Button, Field, Segmented, Skeleton } from "../../../components/ui";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
+import { ownBotDocs } from "../market-common";
 import { rise, usePatchTelegram, type View } from "./shared";
+import { Select } from "../../../components/select";
 
 export function ConnectCard({ v }: { v: View }) {
   const patch = usePatchTelegram();
@@ -73,6 +75,12 @@ export function ConnectCard({ v }: { v: View }) {
           </Button>
         </div>
       )}
+      <p className="mt-4 text-xs text-[var(--ink-500)]">
+        {t("telegram.ownBot")}{" "}
+        <a className="link-btn inline-flex items-center gap-1" href={ownBotDocs()} target="_blank" rel="noopener noreferrer">
+          {t("telegram.ownBotDocs")} <ExternalLink size={12} aria-hidden />
+        </a>
+      </p>
       <Confirm
         open={removing}
         onOpenChange={setRemoving}
@@ -187,7 +195,7 @@ export function RouteCard({ v }: { v: View }) {
             </div>
           ) : (
             <Field label={t("telegram.routeNodeLabel")} htmlFor="tg-route-node" hint={t("telegram.routeNodeHint")} error={error}>
-              <select id="tg-route-node" className="input max-w-[320px]" value={picked} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
+              <Select id="tg-route-node" className="input max-w-[320px]" value={picked} onChange={(e) => setNodeId(Number(e.target.value))} aria-invalid={!!error}>
                 <option value={0} disabled>
                   {t("telegram.routeNodePick")}
                 </option>
@@ -196,7 +204,7 @@ export function RouteCard({ v }: { v: View }) {
                     {tunnels(n.version) ? n.name : t("telegram.routeNodeOld", { name: n.name })}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           )
         ) : null}

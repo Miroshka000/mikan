@@ -2,7 +2,7 @@ import { Copy, ExternalLink, RefreshCw, Send } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, errorText, unwrap, type Inbound, type User } from "../../../api/client";
-import { qk, useInbounds, useNodes, userActions, useTariffs, useUserMutation } from "../../../api/hooks";
+import { qk, useGroups, useInbounds, useNodes, userActions, useTariffs, useUserMutation } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
 import { useToast } from "../../../components/toast";
 import { Button, ErrorState, QR, Skeleton } from "../../../components/ui";
@@ -12,6 +12,7 @@ import { useCopy } from "../../../lib/copy";
 import { useDraft } from "../../../lib/draft";
 import { nodeLabel } from "../../../lib/node-label";
 import { safeHref } from "../../../lib/url";
+import { groupHas } from "../groups/model";
 import { serversHas } from "../sale-rules";
 import { byNode } from "../servers-tree";
 import { Section } from "./section";
@@ -86,9 +87,9 @@ function HappLink({ id, token }: { id: number; token: string }) {
 
 type Legacy = NonNullable<User["legacy"]>;
 
-const SOURCES = { marzban: "Marzban", pasarguard: "PasarGuard", remnawave: "Remnawave" } as Record<string, string>;
+const SOURCES = { marzban: "Marzban", pasarguard: "PasarGuard", remnawave: "Remnawave", "3xui": "3x-ui" } as Record<string, string>;
 
-/** The link the user had in the panel they came from. Only Remnawave's can be shown whole:
+/** The link the user had in the panel they came from. Only Remnawave's and 3x-ui's can be shown whole:
  * Marzban and PasarGuard sign a new token for every request, so the panel keeps none. */
 function LegacyLink({ legacy }: { legacy: Legacy }) {
   const copyText = useCopy();
@@ -97,7 +98,7 @@ function LegacyLink({ legacy }: { legacy: Legacy }) {
     ? t("userDrawer.legacyOff")
     : legacy.url
       ? t("userDrawer.legacyUrl")
-      : legacy.source === "remnawave"
+      : legacy.source === "remnawave" || legacy.source === "3xui"
         ? t("userDrawer.legacyNoHost")
         : t("userDrawer.legacySigned");
   return (
@@ -163,12 +164,14 @@ export function TelegramSection({ u }: { u: User }) {
   );
 }
 
-/** The protocols the client may use: the tariff's servers, or a list of the card's own
- * that stays over them until it is reset. A protocol of a server group the client has
- * closed ("not included") is off whatever the list says: the group's mode decides. */
+/** The protocols the client may use: its group's servers when the group chose them, else the
+ * tariff's, or a list of the card's own that stays over them until it is reset. A protocol of
+ * a server group the client has closed ("not included") is off whatever the list says: the
+ * group's mode decides. */
 export function ProtocolsSection({ u }: { u: User }) {
   const inbounds = useInbounds();
   const tariffs = useTariffs();
+  const clientGroups = useGroups();
   const nodes = useNodes();
   // The same query as the card's server groups: it is read once for both.
   const groups = useQuery({ queryKey: qk.userPools(u.id), queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/pools", { params: { path: { id: u.id } }, signal })) });
@@ -176,7 +179,9 @@ export function ProtocolsSection({ u }: { u: User }) {
   const toast = useToast();
   const all = (inbounds.data ?? []).filter((i) => i.enabled);
   const tariff = tariffs.data?.find((tr) => tr.id === u.tariff_id);
-  const base = new Set(all.filter((i) => !tariff || serversHas(tariff.servers, i)).map((i) => i.id));
+  // The client's group stands in for the tariff once it chose servers of its own.
+  const group = clientGroups.data?.find((g) => g.id === u.effective_group_id && !g.servers.as_tariff);
+  const base = new Set(all.filter((i) => (group ? groupHas(group, i) : !tariff || serversHas(tariff.servers, i))).map((i) => i.id));
   const closed = new Map((groups.data ?? []).filter((g) => g.mode === "closed").map((g) => [g.pool_id, g.name]));
   const closedBy = (i: Inbound) => (i.pool_id != null ? closed.get(i.pool_id) : undefined);
   const shut = new Set(all.filter((i) => closedBy(i) !== undefined).map((i) => i.id));
@@ -198,8 +203,8 @@ export function ProtocolsSection({ u }: { u: User }) {
   const tree = byNode(all);
   // Every list counts: without the tariff the base is every protocol, without the groups
   // none is closed, and a switch flipped then would send a list of the wrong ones.
-  const failed = [inbounds, tariffs, groups].find((q) => q.data === undefined && q.isError);
-  const loading = inbounds.data === undefined || tariffs.data === undefined || groups.data === undefined;
+  const failed = [inbounds, tariffs, clientGroups, groups].find((q) => q.data === undefined && q.isError);
+  const loading = inbounds.data === undefined || tariffs.data === undefined || clientGroups.data === undefined || groups.data === undefined;
   if (failed || loading) {
     return (
       <Section title={t("userDrawer.protocols")}>
@@ -225,12 +230,13 @@ export function ProtocolsSection({ u }: { u: User }) {
       aside={
         own ? (
           <button type="button" className="link-btn text-xs" onClick={() => send([])} disabled={update.isPending}>
-            {t("servers.asTariff")}
+            {group ? t("groups.asGroup") : t("servers.asTariff")}
           </button>
         ) : undefined
       }
     >
-      {own ? <p className="mb-1 text-xs text-[var(--honey-600)]">{t("servers.notAsTariff")}</p> : null}
+      {own ? <p className="mb-1 text-xs text-[var(--honey-600)]">{group ? t("groups.notAsGroup") : t("servers.notAsTariff")}</p> : null}
+      {!own && group ? <p className="mb-1 text-xs text-[var(--ink-500)]">{t("groups.serversByGroup", { name: group.name })}</p> : null}
       {tree.length === 0 ? <p className="text-[13px] text-[var(--ink-500)]">{t("userDrawer.noProtocols")}</p> : null}
       {tree.map(([nodeId, list]) => {
         const node = nodes.data?.find((n) => n.id === nodeId);
@@ -245,21 +251,21 @@ export function ProtocolsSection({ u }: { u: User }) {
               </div>
             ) : null}
             {list.map((i) => {
-              const group = closedBy(i);
+              const closedGroup = closedBy(i);
               return (
                 <div key={i.id} className="flex items-center justify-between gap-3 py-2">
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-medium">{i.sub_name}</div>
                     <div className="text-xs text-[var(--ink-500)]">
                       {i.title} · {i.port}/{i.network}
-                      {group !== undefined ? ` · ${t("servers.groupClosed", { name: group })}` : own || base.has(i.id) ? "" : ` · ${t("servers.notInTariff")}`}
+                      {closedGroup !== undefined ? ` · ${t("servers.groupClosed", { name: closedGroup })}` : own || base.has(i.id) ? "" : ` · ${group ? t("groups.notInGroup") : t("servers.notInTariff")}`}
                     </div>
                   </div>
                   <Switch
-                    checked={allowed.has(i.id) && group === undefined}
+                    checked={allowed.has(i.id) && closedGroup === undefined}
                     onChange={(v) => toggle(i.id, v)}
                     label={i.sub_name}
-                    disabled={update.isPending || group !== undefined}
+                    disabled={update.isPending || closedGroup !== undefined}
                   />
                 </div>
               );

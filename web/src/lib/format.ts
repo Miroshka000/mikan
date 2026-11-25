@@ -57,6 +57,9 @@ export function num(n: number): string {
   return nf(0).format(n);
 }
 
+/** A folder's or a group's name as a list of them says it: the icon first, when it has one. */
+export const emojiName = (x: { emoji: string; name: string }) => (x.emoji ? `${x.emoji} ${x.name}` : x.name);
+
 export const days = (n: number) => t("time.days", { n });
 
 export const months = (n: number) => t("time.months", { n });
@@ -112,6 +115,15 @@ const calendarDay = (ms: number) => {
  */
 export function daysUntil(iso: string, now = Date.now()): number {
   return calendarDay(new Date(iso).getTime()) - calendarDay(now);
+}
+
+/**
+ * The days a term that waits for its first connection will have: its end moves on with the
+ * clock every ten minutes, so the days are rounded from the time left. Counted by the calendar
+ * they would drop a day for ten minutes past midnight, when the last move was before it.
+ */
+export function waitingDays(iso: string, now = Date.now()): number {
+  return Math.max(0, Math.round((new Date(iso).getTime() - now) / 86_400_000));
 }
 
 export function expiryText(iso: string | null | undefined, now = Date.now()): { text: string; tone: "" | "warn" | "bad" } {

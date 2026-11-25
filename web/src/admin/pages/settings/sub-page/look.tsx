@@ -30,7 +30,11 @@ function ColorField({ id, label, value, onChange, error, hint }: { id: string; l
   );
 }
 
-export function LookSection({ draft, setDraft, set, errors, accentMissing, background }: SectionProps & { accentMissing: boolean; background?: Asset }) {
+/**
+ * The page's look. accentShared: the page is a group's, whose brand colour is the panel's,
+ * shown and not edited here.
+ */
+export function LookSection({ draft, setDraft, set, errors, accentMissing, background, accentShared }: SectionProps & { accentMissing: boolean; background?: Asset; accentShared?: boolean }) {
   const look = draft.config.look;
   const setLook = (patch: Partial<Look>) => set((c) => ({ ...c, look: { ...c.look, ...patch } }));
   const bg = look.background;
@@ -102,8 +106,9 @@ export function LookSection({ draft, setDraft, set, errors, accentMissing, backg
             value={look.accent}
             onChange={(accent) => {
               setLook({ accent });
-              // The brand's colour starts as the palette's, not as an empty field to fill.
-              if (accent === "brand" && !COLOR.test(draft.brand_accent.trim())) setDraft((d) => ({ ...d, brand_accent: "#F07A2E" }));
+              // The brand's colour starts as the palette's, not as an empty field to fill; a
+              // group's page takes the panel's as it is.
+              if (accent === "brand" && !accentShared && !COLOR.test(draft.brand_accent.trim())) setDraft((d) => ({ ...d, brand_accent: "#F07A2E" }));
             }}
             options={[
               { value: "theme", label: t("settings.page.accentTheme") },
@@ -111,7 +116,14 @@ export function LookSection({ draft, setDraft, set, errors, accentMissing, backg
             ]}
           />
         </Field>
-        {look.accent === "brand" ? (
+        {look.accent === "brand" && accentShared ? (
+          <Field label={t("settings.brandAccent")} hint={t("settings.page.accentShared")} error={errors["config.look.accent"]}>
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 shrink-0 rounded-[var(--r-md)] border border-[var(--hairline)]" style={{ background: COLOR.test(draft.brand_accent.trim()) ? draft.brand_accent.trim() : "transparent" }} aria-hidden />
+              <span className="mono text-[13px]">{draft.brand_accent.trim() || "—"}</span>
+            </div>
+          </Field>
+        ) : look.accent === "brand" ? (
           <ColorField
             id="sp-accent"
             label={t("settings.brandAccent")}

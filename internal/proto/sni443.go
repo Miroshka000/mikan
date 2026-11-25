@@ -55,3 +55,18 @@ func Reality(t Template) bool {
 	_, ok := t["reality-config"].(map[string]any)
 	return ok
 }
+
+// Silent says whether the template is a protocol with no handshake a stranger could read:
+// its TCP port takes a connection and answers nothing to whatever is sent. Nothing makes
+// such a port look like a site's, and it cannot go behind the router, which tells its
+// inbounds apart by a TLS name.
+func Silent(t Template) bool {
+	if t.Network() != "tcp" || CanSNI443(t) {
+		return false
+	}
+	switch t.Type() {
+	case "shadowsocks", "mieru", "sudoku", "snell":
+		return true
+	}
+	return false
+}

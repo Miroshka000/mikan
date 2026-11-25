@@ -4,6 +4,8 @@ import { safeHref } from "../lib/url";
 // Telegram the page runs as the bot's Mini App at /<sub path>/tg: the subscription then
 // comes from Telegram's sign-in instead of the address.
 export const pageURL = location.origin + location.pathname.replace(/\/$/, "");
+export const webShopMode = /\/shop$/.test(pageURL);
+export const checkoutRoot = pageURL.slice(0, pageURL.lastIndexOf("/")) + "/shop";
 export const tgMode = /\/tg$/.test(pageURL);
 export const subRoot = pageURL.replace(/\/tg$/, "");
 // What follows the #. Telegram puts its launch data there; an address with its own anchor

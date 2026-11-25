@@ -47,7 +47,8 @@ func TestRenameAndBanOverHTTP(t *testing.T) {
 		if hwid != "" {
 			hdr["X-Hwid"], hdr["X-Device-Os"], hdr["X-Device-Model"] = hwid, "Android", "Pixel 9"
 		}
-		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+token, nil, hdr)
+		// The keys are read from the links, which Happ gets by asking for them.
+		resp, body := h.do(http.MethodGet, "/"+subPath+"/"+token+"?format=uri", nil, hdr)
 		links, _ := base64.StdEncoding.DecodeString(string(body))
 		return resp, string(links)
 	}

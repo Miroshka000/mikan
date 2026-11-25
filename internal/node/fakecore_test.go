@@ -12,8 +12,9 @@ type fakeCore struct {
 	mu     sync.Mutex
 	users  map[userKey]*userStat
 	held   map[userKey]fakeLimit
-	fresh  int // budgets set to count from now
-	passes int // calls of limits
+	fresh  int      // budgets set to count from now
+	passes int      // calls of limits
+	closed []string // users whose connections were closed, as "inbound/user"
 }
 
 type fakeLimit struct {
@@ -96,6 +97,28 @@ func (f *fakeCore) limits(set map[userKey]coreLimit, remove, fresh []userKey) {
 		}
 		f.held[k] = fl
 	}
+}
+
+// closeConns closes what a user has open: its connections drop to none, its addresses stay
+// listed.
+func (f *fakeCore) closeConns(keys []userKey) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, k := range keys {
+		f.closed = append(f.closed, k.inbound+"/"+k.user)
+		u := f.users[k]
+		if u == nil {
+			continue
+		}
+		n += int(u.Conns)
+		u.Conns = 0
+		for i := range u.IPs {
+			u.IPs[i].Conns = 0
+		}
+	}
+	sort.Strings(f.closed)
+	return n
 }
 
 // keptOut lists the users the core keeps out, as "inbound/user", sorted.

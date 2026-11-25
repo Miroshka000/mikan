@@ -75,3 +75,16 @@ func (q *Queries) TakeTrial(ctx context.Context, arg TakeTrialParams) (int64, er
 	}
 	return result.RowsAffected()
 }
+
+const userPaidBeyondTrial = `-- name: UserPaidBeyondTrial :one
+SELECT EXISTS (SELECT 1 FROM payments WHERE user_id = $1::bigint AND status IN ('paid', 'applied', 'refunded') AND kind <> 'trial')
+`
+
+// Whether the user paid for anything besides the trial: a payment refunded since included,
+// it was a purchase.
+func (q *Queries) UserPaidBeyondTrial(ctx context.Context, userID int64) (bool, error) {
+	row := q.db.QueryRowContext(ctx, userPaidBeyondTrial, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}

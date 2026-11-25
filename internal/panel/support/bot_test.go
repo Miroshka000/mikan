@@ -23,7 +23,7 @@ func TestNormCode(t *testing.T) {
 }
 
 func TestNewHTTPBot(t *testing.T) {
-	for _, ok := range []string{"https://vpn.aurausa.me:8790", "https://bot.example.org/", "http://127.0.0.1:9000", "http://[::1]:9000"} {
+	for _, ok := range []string{DefaultBotURL, "https://desk.example.com:8790", "https://bot.example.org/", "http://127.0.0.1:9000", "http://[::1]:9000"} {
 		if _, err := NewHTTPBot(ok); err != nil {
 			t.Errorf("%s: %v", ok, err)
 		}

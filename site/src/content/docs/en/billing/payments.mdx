@@ -7,6 +7,25 @@ import { Steps } from '@astrojs/starlight/components';
 
 Subscribers buy and renew access in the bot and Mini App. The panel creates or extends the subscription as soon as the payment system confirms the payment, and the bot sends the link.
 
+## Purchases and renewals in the browser
+
+Turn on **Payments → Rules → Sell on the website**. This setting is off by default, including after an update.
+
+Open `<subscription base URL>/shop` to buy a subscription. Pick a plan, term and payment method, and enter an email address.
+Once the panel confirms the payment, the shop displays the subscription link in the same browser, including when you return in a new tab. Save the link. If you lose access to the checkout, an administrator can find your subscription using the email you entered.
+If the bot is configured, use **Open in Telegram** on the subscription page to link it later.
+
+To renew, open your subscription link in a browser and choose a plan in the shop block.
+The store uses the shared catalog and the enabled payment addons. New purchases also require
+**Sell to new people**. The shop block is on by default in the subscription page settings. In a browser it shows plans when website sales are enabled. Email is optional for renewals and the field appears for payment methods that accept a receipt email.
+
+Sharing the storefront URL reveals the subscription path. A storefront on the subscription host also makes the purpose of that host visible. Leave website sales off if the subscription host and path should stay private.
+
+To send receipts via YooKassa, update the addon and set its website receipt VAT code.
+YooKassa receives the buyer's email and delivers the receipt. Other addons can receive the receipt
+email if they advertise support for it. A payment provider may require its own sign-in.
+
+
 ## Turn on selling
 
 <Steps>
@@ -19,7 +38,11 @@ Subscribers buy and renew access in the bot and Mini App. The panel creates or e
 
 </Steps>
 
-The same place has the "Sell to new people" and "Renewal resets traffic" switches. A renewal adds the plan's term after the current one and, unless switched off, starts a new traffic period.
+The same place has the "Sell to new people" and "Renewal resets traffic" switches. A renewal adds the plan's term after the current one and, unless switched off, starts a new traffic period. The leftover of the last period goes into the new one if that is turned on in the [subscription rules](/mikan/en/billing/lifecycle/#leftover-traffic).
+
+:::note[New in 0.5.2.1]
+Carrying the leftover over, and taking it back with a refund (see [History and refunds](#history-and-refunds)), are new in 0.5.2.1.
+:::
 
 If no plan with a price for an enabled payment method is on sale, the **Payments** section warns you: the bot will only tell people to message support.
 
@@ -55,6 +78,7 @@ Adapters are installed only by the mikan program on the host: the panel itself d
 - a new subscription is disabled, but not deleted;
 - a renewal loses the term it bought, and if nothing changed after the payment, the previous plan and limits are restored;
 - a traffic package is deleted;
+- the leftover of the last period that this payment carried over is taken away with it;
 - a promo code can be used again.
 
 Traffic reset by a renewal is not restored. Refunds that Telegram makes on its own are handled the same way. The buyer gets a message in the bot.

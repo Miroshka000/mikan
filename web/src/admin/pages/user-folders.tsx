@@ -64,8 +64,55 @@ export function FolderMenuItems({ folders, current, onPick }: { folders: Folder[
   );
 }
 
-type Draft = { name: string; emoji: string; color: FolderColor };
-const EMPTY: Draft = { name: "", emoji: "", color: "gray" };
+/** A chip's name, emoji and colour: what a folder and a group of clients are told apart by. */
+export type ChipDraft = { name: string; emoji: string; color: FolderColor };
+const EMPTY: ChipDraft = { name: "", emoji: "", color: "gray" };
+
+/** The chip's own fields as the API keeps them: a colour it does not know is gray. */
+export const chipOf = (c: { name: string; emoji: string; color: string }): ChipDraft => ({ name: c.name, emoji: c.emoji, color: colorOf(c.color) });
+
+/** The inputs of a chip's name, emoji and colour; error stands under the name. */
+export function ChipFields({ uid, value, onChange, error, namePlaceholder }: { uid: string; value: ChipDraft; onChange: (d: ChipDraft) => void; error?: string; namePlaceholder: string }) {
+  return (
+    <>
+      <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
+        <Field label={t("folders.name")} htmlFor={`${uid}-name`} error={error}>
+          <input
+            id={`${uid}-name`}
+            className="input"
+            value={value.name}
+            maxLength={40}
+            placeholder={namePlaceholder}
+            aria-invalid={!!error}
+            autoFocus
+            onChange={(e) => onChange({ ...value, name: e.target.value })}
+          />
+        </Field>
+        <Field label={t("folders.emoji")} htmlFor={`${uid}-emoji`}>
+          <input id={`${uid}-emoji`} className="input text-center" value={value.emoji} maxLength={16} placeholder="🙂" onChange={(e) => onChange({ ...value, emoji: e.target.value })} />
+        </Field>
+      </div>
+      <Field label={t("folders.color")}>
+        <div role="radiogroup" aria-label={t("folders.color")} className="flex flex-wrap gap-2">
+          {FOLDER_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={value.color === c}
+              aria-label={t(`folders.colors.${c}`)}
+              title={t(`folders.colors.${c}`)}
+              className={clsx("swatch", `fc-${c}`)}
+              onClick={() => onChange({ ...value, color: c })}
+            >
+              {value.color === c ? <Check size={16} aria-hidden /> : null}
+            </button>
+          ))}
+        </div>
+      </Field>
+    </>
+  );
+}
 
 function FolderForm({
   initial,
@@ -74,8 +121,8 @@ function FolderForm({
   error,
   onCancel,
 }: {
-  initial: Draft;
-  submit: (d: Draft) => void;
+  initial: ChipDraft;
+  submit: (d: ChipDraft) => void;
   busy: boolean;
   error?: string;
   onCancel?: () => void;
@@ -89,41 +136,7 @@ function FolderForm({
   };
   return (
     <form onSubmit={send} noValidate className="flex flex-col gap-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
-        <Field label={t("folders.name")} htmlFor={`${uid}-name`} error={error}>
-          <input
-            id={`${uid}-name`}
-            className="input"
-            value={draft.name}
-            maxLength={40}
-            placeholder={t("folders.namePlaceholder")}
-            aria-invalid={!!error}
-            autoFocus
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          />
-        </Field>
-        <Field label={t("folders.emoji")} htmlFor={`${uid}-emoji`}>
-          <input id={`${uid}-emoji`} className="input text-center" value={draft.emoji} maxLength={16} placeholder="🙂" onChange={(e) => setDraft({ ...draft, emoji: e.target.value })} />
-        </Field>
-      </div>
-      <Field label={t("folders.color")}>
-        <div role="radiogroup" aria-label={t("folders.color")} className="flex flex-wrap gap-2">
-          {FOLDER_COLORS.map((c) => (
-            <button
-              key={c}
-              type="button"
-              role="radio"
-              aria-checked={draft.color === c}
-              aria-label={t(`folders.colors.${c}`)}
-              title={t(`folders.colors.${c}`)}
-              className={clsx("swatch", `fc-${c}`)}
-              onClick={() => setDraft({ ...draft, color: c })}
-            >
-              {draft.color === c ? <Check size={16} aria-hidden /> : null}
-            </button>
-          ))}
-        </div>
-      </Field>
+      <ChipFields uid={uid} value={draft} onChange={setDraft} error={error} namePlaceholder={t("folders.namePlaceholder")} />
       <div className="flex justify-end gap-2">
         {onCancel ? (
           <Button variant="ghost" onClick={onCancel}>
@@ -202,7 +215,7 @@ export function FoldersDrawer({ open, onOpenChange }: { open: boolean; onOpenCha
                   <li key={f.id} className="py-3">
                     {editing === f.id ? (
                       <FolderForm
-                        initial={{ name: f.name, emoji: f.emoji, color: colorOf(f.color) }}
+                        initial={chipOf(f)}
                         busy={update.isPending}
                         error={nameError(update.error)}
                         onCancel={() => {

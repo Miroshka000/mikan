@@ -103,3 +103,76 @@ func TestCascadeOverHTTP(t *testing.T) {
 		t.Fatalf("direct: %d %s", resp.StatusCode, body)
 	}
 }
+
+// A relay's site over HTTP: the panel's by default; the admin's own is checked as an
+// inbound's (a site by IP needs a name, a name that leads to a private network is refused)
+// and kept; handed back, it is the panel's again.
+func TestRelaySiteOverHTTP(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	panel, _ := nodetls.Generate("mikan-panel", x509.ExtKeyUsageClientAuth, time.Now())
+	b, _, err := domain.AddNode(ctx, h.st, panel, domain.NodeInput{Name: "B", Host: "198.51.100.20", APIPort: 40000}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	url := "/" + adminPath + "/api/v1/nodes/" + strconv.FormatInt(b.ID, 10) + "/cascade"
+	resp, body := h.do(http.MethodPatch, url, map[string]any{"outbound": "direct"}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"auto_sni":true`) || !strings.Contains(string(body), `"target":"default"`) ||
+		!strings.Contains(string(body), `"server_name":"www.microsoft.com"`) {
+		t.Fatalf("new relay: %d %s", resp.StatusCode, body)
+	}
+	for name, c := range map[string]struct {
+		body           map[string]any
+		location, code string
+	}{
+		"a site by IP without a name": {map[string]any{"outbound": "direct", "auto_sni": false, "dest": "203.0.113.5:443"}, "body.server_name", "reality_sni"},
+		"a private network":           {map[string]any{"outbound": "direct", "auto_sni": false, "dest": "internal.attacker.example:443"}, "body.dest", "reality_dest_private"},
+		"no site":                     {map[string]any{"outbound": "direct", "auto_sni": false}, "body.dest", "dest_format"},
+	} {
+		resp, body := h.do(http.MethodPatch, url, c.body, csrf)
+		if resp.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(string(body), c.location) || !strings.Contains(string(body), c.code) {
+			t.Fatalf("%s: %d %s", name, resp.StatusCode, body)
+		}
+	}
+	resp, body = h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_sni": false, "dest": "203.0.113.5:443", "server_name": "near.example"}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"dest":"203.0.113.5:443"`) || !strings.Contains(string(body), `"server_name":"near.example"`) ||
+		!strings.Contains(string(body), `"auto_sni":false`) || !strings.Contains(string(body), `"target":"manual"`) {
+		t.Fatalf("the admin's site: %d %s", resp.StatusCode, body)
+	}
+	// A route change alone keeps the site.
+	if _, body := h.do(http.MethodPatch, url, map[string]any{"outbound": "warp"}, csrf); !strings.Contains(string(body), `"server_name":"near.example"`) {
+		t.Fatalf("route only: %s", body)
+	}
+	// The admin's own port: a malformed one and B's node API port are refused, a free one kept.
+	if resp, body := h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": false, "port": "70000"}, csrf); resp.StatusCode != http.StatusUnprocessableEntity ||
+		!strings.Contains(string(body), "body.port") || !strings.Contains(string(body), "bad_port") {
+		t.Fatalf("past 65535: %d %s", resp.StatusCode, body)
+	}
+	if resp, body := h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": false, "port": "40000"}, csrf); resp.StatusCode != http.StatusConflict ||
+		!strings.Contains(string(body), "port_node_api") {
+		t.Fatalf("the node API's port: %d %s", resp.StatusCode, body)
+	}
+	resp, body = h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": false, "port": "9443"}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"port":"9443"`) || !strings.Contains(string(body), `"auto_port":false`) {
+		t.Fatalf("the admin's port: %d %s", resp.StatusCode, body)
+	}
+	resp, body = h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_port": true}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"port":"9443"`) || !strings.Contains(string(body), `"auto_port":true`) {
+		t.Fatalf("the port back to the panel: %d %s", resp.StatusCode, body)
+	}
+
+	// Handed back on a node whose protocols show no site of their own: the default, which the
+	// tuner replaces once nodes leave through B; the admin's site is not kept as the panel's.
+	resp, body = h.do(http.MethodPatch, url, map[string]any{"outbound": "direct", "auto_sni": true}, csrf)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"auto_sni":true`) || !strings.Contains(string(body), `"target":"default"`) ||
+		strings.Contains(string(body), "near.example") {
+		t.Fatalf("back to the panel: %d %s", resp.StatusCode, body)
+	}
+}

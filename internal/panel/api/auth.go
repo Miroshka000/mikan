@@ -61,7 +61,7 @@ type passwordInput struct {
 		Current string `json:"current" minLength:"1" maxLength:"256"`
 		// A struct tag takes no constant: minLength repeats auth.MinPassword (TestPasswordTagIsMinPassword).
 		New        string `json:"new" minLength:"12" maxLength:"256" doc:"Не короче 12 символов"`
-		RevokeKeys *bool  `json:"revoke_keys,omitempty" doc:"Отозвать и ключи API (по умолчанию да): другие сессии завершаются при смене пароля, ключ, выпущенный из угнанной сессии, пережил бы это"`
+		RevokeKeys *bool  `json:"revoke_keys,omitempty" doc:"Отозвать ключи API и ключи доступа (passkey), отвязать аккаунты GitHub и Telegram (по умолчанию да): другие сессии завершаются при смене пароля, а выпущенное или привязанное из угнанной сессии пережило бы это"`
 	}
 }
 
@@ -325,7 +325,7 @@ func (h *handlers) changePassword(ctx context.Context, in *passwordInput) (*stru
 	if err != nil {
 		return nil, err
 	}
-	var keys int64
+	var keys, passkeys, identities int64
 	err = h.d.Store.Tx(ctx, func(q *db.Queries) error {
 		if err := q.SetAdminPassword(ctx, db.SetAdminPasswordParams{PasswordHash: hash, ID: admin.ID}); err != nil {
 			return err
@@ -333,11 +333,18 @@ func (h *handlers) changePassword(ctx context.Context, in *passwordInput) (*stru
 		if err := q.DeleteAdminSessionsExcept(ctx, db.DeleteAdminSessionsExceptParams{AdminID: admin.ID, IDHash: sess.IDHash}); err != nil {
 			return err
 		}
-		// The other sessions end with the old password; so do the keys, unless the admin
-		// keeps them: a key made from a hijacked session would otherwise outlive the reaction.
+		// The other sessions end with the old password; so do the API keys, the passkeys and
+		// the linked accounts, unless the admin keeps them: one made from a hijacked session
+		// would otherwise outlive the reaction.
 		if in.Body.RevokeKeys == nil || *in.Body.RevokeKeys {
 			var err error
-			keys, err = q.DeleteAPIKeysOf(ctx, admin.ID)
+			if keys, err = q.DeleteAPIKeysOf(ctx, admin.ID); err != nil {
+				return err
+			}
+			if passkeys, err = q.DeleteAdminPasskeysOf(ctx, admin.ID); err != nil {
+				return err
+			}
+			identities, err = q.DeleteAdminIdentitiesOf(ctx, admin.ID)
 			return err
 		}
 		return nil
@@ -345,7 +352,7 @@ func (h *handlers) changePassword(ctx context.Context, in *passwordInput) (*stru
 	if err != nil {
 		return nil, err
 	}
-	h.audit(ctx, admin.ID, "auth.password_changed", "admin", admin.Username, map[string]any{"keys_revoked": keys})
+	h.audit(ctx, admin.ID, "auth.password_changed", "admin", admin.Username, map[string]any{"keys_revoked": keys, "passkeys_revoked": passkeys, "identities_revoked": identities})
 	return nil, nil
 }
 

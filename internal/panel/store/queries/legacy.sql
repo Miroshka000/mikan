@@ -11,6 +11,10 @@ SELECT token, source FROM legacy_sub_tokens WHERE user_id = $1 ORDER BY token;
 -- name: CountLegacySubTokens :one
 SELECT count(*) FROM legacy_sub_tokens;
 
+-- name: CountLegacyUsers :one
+-- The users with an old link: a PasarGuard user has two keys (name and id), one person.
+SELECT count(DISTINCT user_id) FROM legacy_sub_tokens;
+
 -- name: DeleteLegacySubTokensOf :exec
 DELETE FROM legacy_sub_tokens WHERE user_id = $1;
 
@@ -24,6 +28,12 @@ SELECT DISTINCT name FROM users WHERE name = ANY(sqlc.arg(names)::text[]);
 -- Holds a name until the transaction ends: two imports (or retries) at once cannot both
 -- find it free.
 SELECT pg_advisory_xact_lock(hashtextextended('mikan-user-name:' || sqlc.arg(name)::text, 0));
+
+-- name: LockUserNames :exec
+-- LockUserName of every name at once, in one order for every caller: two batches of
+-- clients (#295) that share names wait for each other instead of locking in a circle.
+SELECT pg_advisory_xact_lock(hashtextextended('mikan-user-name:' || n, 0))
+FROM unnest(sqlc.arg(names)::text[]) AS n ORDER BY n;
 
 -- name: UserNameTaken :one
 SELECT EXISTS (SELECT 1 FROM users WHERE name = $1);

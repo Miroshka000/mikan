@@ -3,6 +3,7 @@ package panelapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -160,6 +161,9 @@ func (s *Server) inboundPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	case errors.Is(err, domain.ErrBadPort):
 		Fail(w, http.StatusBadRequest, "bad_request", "port is 1 to 65535 or a range")
+		return
+	case errors.Is(err, domain.ErrPortRangeWide):
+		Fail(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("a port range is at most %d ports", domain.MaxHopPorts))
 		return
 	case errors.Is(err, domain.ErrInboundChanged):
 		Fail(w, http.StatusConflict, "conflict", "the inbound changed meanwhile; read it again")

@@ -11,9 +11,9 @@ import (
 // LegacyLinks is what a user kept from the panel they were imported from: their old
 // subscription links (settings.KeyLegacySubPath).
 type LegacyLinks struct {
-	Source string `json:"source" doc:"Из какой панели: marzban, pasarguard или remnawave"`
+	Source string `json:"source" doc:"Из какой панели: marzban, pasarguard, remnawave или 3xui"`
 	Active bool   `json:"active" doc:"Старые ссылки сейчас открываются: задан их путь, а для подписанных ещё и секрет старой панели"`
-	URL    string `json:"url,omitempty" doc:"Ссылка целиком. Только у Remnawave: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи"`
+	URL    string `json:"url,omitempty" doc:"Ссылка целиком. Только у Remnawave и 3x-ui: токен Marzban и PasarGuard подписан, импорт его не видел и не хранит, а ссылки, что уже у людей, проверяются по подписи"`
 }
 
 // legacyLinks reads the old links of a user; nil when they had none. The address is the

@@ -13,6 +13,14 @@ func Int64Ptr(v sql.NullInt64) *int64 {
 	return &v.Int64
 }
 
+// BoolPtr is a nullable column as a pointer: nil for NULL.
+func BoolPtr(v sql.NullBool) *bool {
+	if !v.Valid {
+		return nil
+	}
+	return &v.Bool
+}
+
 const (
 	// MinUnix and MaxUnix bound RFC 3339 4-digit years [0000, 9999].
 	// Outside this range, time.Time.MarshalJSON fails with "year outside of range [0,9999]".

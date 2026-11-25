@@ -1,4 +1,5 @@
-// YAML editor for listener templates and for the own Clash profile. Loaded lazily:
+// YAML editor for listener templates and for the subscription templates (the Clash ones in
+// YAML, the sing-box and Xray ones in JSON, which the YAML grammar reads too). Loaded lazily:
 // CodeMirror is only needed when an admin opens one of them.
 import { autocompletion, type CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -171,7 +172,20 @@ const theme = EditorView.theme({
   ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "var(--mikan-50)", color: "var(--ink-900)" },
 });
 
-export default function ConfigEditor({ value, onChange, label, invalid, kind = "inbound" }: { value: string; onChange: (v: string) => void; label: string; invalid?: boolean; kind?: "inbound" | "profile" }) {
+export default function ConfigEditor({
+  value,
+  onChange,
+  label,
+  invalid,
+  kind = "inbound",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  invalid?: boolean;
+  /** What is edited: a listener's template, a Clash profile (both completed as typed), a JSON config. */
+  kind?: "inbound" | "profile" | "json";
+}) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const change = useRef(onChange);
@@ -195,7 +209,7 @@ export default function ConfigEditor({ value, onChange, label, invalid, kind = "
           syntaxHighlighting(highlight),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           yaml(),
-          autocompletion({ override: [kind === "profile" ? completeProfile : complete] }),
+          ...(kind === "json" ? [] : [autocompletion({ override: [kind === "profile" ? completeProfile : complete] })]),
           theme,
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({ "aria-label": label, spellcheck: "false" }),

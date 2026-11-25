@@ -16,6 +16,7 @@ export function Drawer({
   footer,
   wide,
   titleAction,
+  layoutScroll,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -28,6 +29,8 @@ export function Drawer({
   footer?: ReactNode;
   /** A record's card with many sections: a little wider than a form. */
   wide?: boolean;
+  /** The body holds items that move under the pointer (a list dragged into order): motion measures its scroll. */
+  layoutScroll?: boolean;
 }) {
   const reduce = useReducedMotion();
   return (
@@ -63,7 +66,13 @@ export function Drawer({
                     <X size={18} />
                   </Dialog.Close>
                 </header>
-                <div className="dr-body">{children}</div>
+                {layoutScroll ? (
+                  <motion.div className="dr-body" layoutScroll>
+                    {children}
+                  </motion.div>
+                ) : (
+                  <div className="dr-body">{children}</div>
+                )}
                 {footer ? <footer className="dr-foot">{footer}</footer> : null}
               </motion.aside>
             </Dialog.Content>
@@ -186,6 +195,9 @@ function NameForm({
   const ok = (optional || clean !== "") && clean !== initial.trim();
   const send = (e: FormEvent) => {
     e.preventDefault();
+    // React carries a submit through the portal to the forms around the dialog: a dialog
+    // opened from a form must not send that form too.
+    e.stopPropagation();
     if (ok && !loading) onSubmit(clean);
   };
   return (

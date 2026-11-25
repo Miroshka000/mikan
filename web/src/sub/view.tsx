@@ -110,7 +110,7 @@ function block(b: PageBlock, p: BlocksProps): ReactNode {
     case "devices":
       return info.binding || info.devices?.length ? <Devices info={info} subURL={p.subURL} reload={p.reload} title={b.title} /> : null;
     case "apps":
-      return <Apps key={p.platform} block={b} config={p.config} subURL={p.subURL} brand={info.brand} happ={info.happ_link} tgMode={p.tgMode} platform={p.platform} />;
+      return <Apps key={p.platform} block={b} config={p.config} subURL={p.subURL} brand={info.brand} happ={info.happ_link} blocked={info.blocked_apps} tgMode={p.tgMode} platform={p.platform} />;
     case "guide":
       return <Guide block={b} />;
     case "instructions":
@@ -257,8 +257,9 @@ export function firstPlatform(config: PageConfig, detected: Platform): Platform 
   return config.apps.platform === "auto" ? detected : config.apps.platform;
 }
 
-function Apps({ block: b, config, subURL, brand, happ, tgMode, platform }: { block: PageBlock; config: PageConfig; subURL: string; brand: string; happ?: string; tgMode: boolean; platform?: Platform }) {
-  const lists = Object.fromEntries(PLATFORMS.map((k) => [k, orderApps(APPS[k], config.apps[k])])) as Record<Platform, (typeof APPS)[Platform]>;
+function Apps({ block: b, config, subURL, brand, happ, blocked, tgMode, platform }: { block: PageBlock; config: PageConfig; subURL: string; brand: string; happ?: string; blocked?: string[]; tgMode: boolean; platform?: Platform }) {
+  // The apps the admin turned away are not offered: they would be given a stub, not the servers.
+  const lists = Object.fromEntries(PLATFORMS.map((k) => [k, orderApps(APPS[k], config.apps[k]).filter((a) => !blocked?.includes(a.id))])) as Record<Platform, (typeof APPS)[Platform]>;
   const shown = PLATFORMS.filter((k) => lists[k].length > 0);
   const want = platform ?? firstPlatform(config, detectOnce());
   const [current, setCurrent] = useState<Platform>(shown.includes(want) ? want : (shown[0] ?? want));

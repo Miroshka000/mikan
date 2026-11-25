@@ -92,6 +92,26 @@ type Admin struct {
 	LastLoginAt   sql.NullInt64
 }
 
+type AdminIdentity struct {
+	ID         int64
+	AdminID    int64
+	Provider   string
+	Subject    string
+	Name       string
+	CreatedAt  int64
+	LastUsedAt sql.NullInt64
+}
+
+type AdminPasskey struct {
+	ID           int64
+	AdminID      int64
+	CredentialID []byte
+	Name         string
+	Credential   string
+	CreatedAt    int64
+	LastUsedAt   sql.NullInt64
+}
+
 type ApiKey struct {
 	ID         int64
 	AdminID    int64
@@ -157,6 +177,16 @@ type Campaign struct {
 	CreatedAt int64
 }
 
+type CustomField struct {
+	ID        int64
+	Scope     string
+	Key       string
+	Label     string
+	Kind      string
+	Sort      int64
+	CreatedAt int64
+}
+
 type Device struct {
 	UserID    int64
 	Ip        string
@@ -188,6 +218,26 @@ type FreePlan struct {
 	CreatedAt int64
 }
 
+type ImportedAccount struct {
+	Source string
+	TgID   int64
+	Amount int64
+	At     int64
+}
+
+type ImportedPayment struct {
+	ID          int64
+	Source      string
+	ExternalID  string
+	TgID        int64
+	Kind        string
+	Amount      int64
+	Currency    string
+	Method      string
+	Description string
+	CreatedAt   int64
+}
+
 type Inbound struct {
 	ID          int64
 	NodeID      int64
@@ -205,6 +255,8 @@ type Inbound struct {
 	ExitNodeID  sql.NullInt64
 	PoolID      sql.NullInt64
 	Listen      string
+	NoAuto      int64
+	Tags        string
 }
 
 type InboundEvent struct {
@@ -217,6 +269,32 @@ type InboundEvent struct {
 	NewValue  string
 	Reason    string
 	CreatedAt int64
+}
+
+type InboundHost struct {
+	ID          int64
+	InboundID   int64
+	Position    int64
+	Address     string
+	Port        int64
+	Sni         string
+	Host        string
+	Fingerprint string
+	Alpn        []string
+	IpVersion   string
+	Mux         bool
+	MuxProtocol string
+	MuxPadding  bool
+	Cdn         bool
+	Name        string
+	Addresses   []string
+	Snis        []string
+	States      []string
+	Trial       string
+	Sort        int64
+	GroupMode   string
+	Groups      []int64
+	Fragment    string
 }
 
 type InboundReach struct {
@@ -250,28 +328,39 @@ type MikanSqliteImport struct {
 }
 
 type Node struct {
-	ID           int64
-	Name         string
-	Address      string
-	PublicHost   string
-	Domain       string
-	CertSha256   string
-	Enabled      int64
-	CreatedAt    int64
-	UpdatedAt    int64
-	PublicName   string
-	Sort         int64
-	TotalUp      int64
-	TotalDown    int64
-	FairShare    int64
-	ChannelMbps  sql.NullInt64
-	Capacity     sql.NullInt64
-	BalanceGroup string
-	HttpRedirect int64
-	SniRouter    int64
-	ApiLockdown  int64
-	ApiAllow     []string
-	FrontPage    string
+	ID              int64
+	Name            string
+	Address         string
+	PublicHost      string
+	Domain          string
+	CertSha256      string
+	Enabled         int64
+	CreatedAt       int64
+	UpdatedAt       int64
+	PublicName      string
+	Sort            int64
+	TotalUp         int64
+	TotalDown       int64
+	FairShare       int64
+	ChannelMbps     sql.NullInt64
+	Capacity        sql.NullInt64
+	BalanceGroup    string
+	HttpRedirect    int64
+	SniRouter       int64
+	ApiLockdown     int64
+	ApiAllow        []string
+	FrontPage       string
+	NoAuto          int64
+	BillingProvider string
+	PayDay          int64
+	PayMonths       int64
+	RemindDays      int64
+	TrafficLimit    int64
+	ResetDay        int64
+	TrafficAlert    int64
+	Tags            string
+	OwnPorts        []int64
+	SniByKey        int64
 }
 
 type NodeAssignment struct {
@@ -281,6 +370,12 @@ type NodeAssignment struct {
 	AssignedAt   int64
 }
 
+type NodeFieldValue struct {
+	NodeID  int64
+	FieldID int64
+	Value   string
+}
+
 type NodeRelay struct {
 	NodeID     int64
 	Port       string
@@ -288,6 +383,8 @@ type NodeRelay struct {
 	Outbound   string
 	ExitNodeID sql.NullInt64
 	CreatedAt  int64
+	AutoSni    int64
+	AutoPort   int64
 }
 
 type NodeSpeedtest struct {
@@ -371,6 +468,12 @@ type Payment struct {
 	RefundedAt sql.NullInt64
 	TermDays   sql.NullInt64
 	Revert     string
+}
+
+type PaymentAccessTraffic struct {
+	UserID    int64
+	ExpiredAt int64
+	Bytes     int64
 }
 
 type PromoCode struct {
@@ -470,6 +573,10 @@ type SubAsset struct {
 	UpdatedAt   int64
 }
 
+type SubBlockedApp struct {
+	App string
+}
+
 type SubDoc struct {
 	ID        int64
 	Title     string
@@ -486,6 +593,37 @@ type SubFetch struct {
 	UserID    int64
 	Ip        string
 	FetchedAt int64
+}
+
+type SubLog struct {
+	ID      int64
+	UserID  int64
+	At      int64
+	Ip      string
+	Agent   string
+	App     string
+	Rule    string
+	Format  string
+	Outcome string
+}
+
+type SubRule struct {
+	Position int64
+	Name     string
+	Enabled  bool
+	Cond     string
+	Action   string
+}
+
+type SubTemplate struct {
+	ID        int64
+	Core      string
+	Name      string
+	Body      string
+	IsDefault bool
+	CreatedAt int64
+	UpdatedAt int64
+	Routing   sql.NullString
 }
 
 type SupportGrant struct {
@@ -539,6 +677,12 @@ type TariffGift struct {
 type TariffInbound struct {
 	TariffID  int64
 	InboundID int64
+}
+
+type TariffLifecycle struct {
+	TariffID       int64
+	CarryOver      sql.NullBool
+	StartOnConnect bool
 }
 
 type TariffNode struct {
@@ -712,6 +856,12 @@ type User struct {
 	ExtraDevicesUntil sql.NullInt64
 }
 
+type UserFieldValue struct {
+	UserID  int64
+	FieldID int64
+	Value   string
+}
+
 type UserFolder struct {
 	ID        int64
 	Name      string
@@ -719,6 +869,78 @@ type UserFolder struct {
 	Emoji     string
 	Sort      int64
 	CreatedAt int64
+}
+
+type UserGroup struct {
+	ID            int64
+	Name          string
+	Color         string
+	Emoji         string
+	Sort          int64
+	ChosenServers int64
+	CreatedAt     int64
+}
+
+type UserGroupAppearance struct {
+	GroupID         int64
+	TemplateMihomo  sql.NullInt64
+	TemplateSingbox sql.NullInt64
+	TemplateXray    sql.NullInt64
+	Title           sql.NullString
+	Announce        sql.NullString
+	AnnounceUrl     sql.NullString
+	SupportUrl      sql.NullString
+	UpdateHours     sql.NullInt64
+	Headers         string
+	RequireHwid     sql.NullBool
+	UnbindRules     sql.NullString
+	Page            sql.NullString
+}
+
+type UserGroupHost struct {
+	GroupID   int64
+	InboundID int64
+	Address   string
+	Port      int64
+	Sni       string
+	Host      string
+	Name      string
+	Cdn       bool
+}
+
+type UserGroupInbound struct {
+	GroupID   int64
+	InboundID int64
+}
+
+type UserGroupMember struct {
+	UserID  int64
+	GroupID int64
+}
+
+type UserGroupNode struct {
+	GroupID int64
+	NodeID  int64
+}
+
+type UserGroupTariff struct {
+	TariffID int64
+	GroupID  int64
+}
+
+type UserNextTariff struct {
+	UserID    int64
+	TariffID  int64
+	TermDays  sql.NullInt64
+	CreatedAt int64
+}
+
+type UserNodeTraffic struct {
+	UserID   int64
+	NodeID   int64
+	Up       int64
+	Down     int64
+	LastSeen int64
 }
 
 type UserPool struct {
@@ -736,4 +958,64 @@ type UserSite struct {
 	Site   string
 	Up     int64
 	Down   int64
+}
+
+type UserStart struct {
+	UserID   int64
+	FrozenAt int64
+}
+
+type UserTemplate struct {
+	ID              int64
+	Name            string
+	TariffID        int64
+	TrafficLimit    sql.NullInt64
+	DeviceLimit     sql.NullInt64
+	SpeedLimit      sql.NullInt64
+	TermDays        sql.NullInt64
+	StartsOnConnect sql.NullBool
+	FolderID        sql.NullInt64
+	GroupID         sql.NullInt64
+	Tags            string
+	Note            string
+	NamePattern     string
+	CreatedAt       int64
+	UpdatedAt       int64
+}
+
+type WebCheckout struct {
+	PaymentID    int64
+	ReceiptEmail string
+	TokenHash    string
+}
+
+type WebInvoiceLease struct {
+	PaymentID  int64
+	LeaseUntil int64
+}
+
+type WebhookDelivery struct {
+	ID           int64
+	EndpointID   int64
+	EventID      sql.NullInt64
+	Type         string
+	Status       string
+	Attempts     int64
+	ResponseCode int64
+	Error        string
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
+type WebhookEndpoint struct {
+	ID         int64
+	Name       string
+	Url        string
+	Secret     string
+	Events     []string
+	Enabled    bool
+	AllowLocal bool
+	LastID     int64
+	CreatedAt  int64
+	SecretAt   int64
 }

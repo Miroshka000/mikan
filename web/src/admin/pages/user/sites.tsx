@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Ban, Check } from "lucide-react";
+import { Ban } from "lucide-react";
 import { useState } from "react";
 import { api, errorText, unwrap, type User } from "../../../api/client";
 import { qk, useFilters, useTrafficDetail } from "../../../api/hooks";
@@ -14,7 +14,7 @@ const PERIODS = [1, 7, 30] as const;
 /**
  * Where the subscription goes: the bytes by site over a few days, summed on the nodes with
  * nothing else kept. Shown while the detail is on (Settings → Routing); a site may be
- * blocked for everyone from here, into the filters.
+ * blocked for everyone from here, into the filters, and let through again the same way.
  */
 export function SitesSection({ u }: { u: User }) {
   const [days, setDays] = useState<(typeof PERIODS)[number]>(7);
@@ -27,16 +27,18 @@ export function SitesSection({ u }: { u: User }) {
   const qc = useQueryClient();
   const toast = useToast();
   const blocked = new Set(filters.data?.egress.enabled ? filters.data.egress.domains : []);
-  const block = useMutation({
-    mutationFn: (site: string) => {
+  // Blocking adds the site to the egress filter and turns the filter on; unblocking takes the
+  // site out and leaves the filter's switch and its other entries as they are.
+  const toggle = useMutation({
+    mutationFn: ({ site, block }: { site: string; block: boolean }) => {
       const f = filters.data;
       if (!f) throw new Error("filters");
-      const domains = [...new Set([...f.egress.domains, site])];
-      return unwrap(api.PATCH("/api/v1/filters", { body: { egress: { ...f.egress, enabled: true, domains } } }));
+      const egress = block ? { ...f.egress, enabled: true, domains: [...new Set([...f.egress.domains, site])] } : { ...f.egress, domains: f.egress.domains.filter((d) => d !== site) };
+      return unwrap(api.PATCH("/api/v1/filters", { body: { egress } }));
     },
-    onSuccess: (_, site) => {
+    onSuccess: (_, { site, block }) => {
       void qc.invalidateQueries({ queryKey: qk.filters });
-      toast.ok(t("userDrawer.sites.blocked", { site }));
+      toast.ok(t(block ? "userDrawer.sites.blocked" : "userDrawer.sites.unblocked", { site }));
     },
     onError: (e) => toast.error(errorText(e)),
   });
@@ -69,7 +71,8 @@ export function SitesSection({ u }: { u: User }) {
             const total = s.up + s.down;
             const site = s.site === "*" ? t("userDrawer.sites.other") : s.site;
             const isDomain = s.site !== "*" && /[a-z]/i.test(s.site) && !s.site.includes(":");
-            const done = blocked.has(s.site);
+            const isBlocked = blocked.has(s.site);
+            const label = t(isBlocked ? "userDrawer.sites.unblock" : "userDrawer.sites.block", { site });
             return (
               <li key={s.site} className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
@@ -80,15 +83,19 @@ export function SitesSection({ u }: { u: User }) {
                   <Bar pct={top ? (total / top) * 100 : 0} className="mt-1" />
                 </div>
                 {isDomain ? (
-                  done ? (
-                    <span className="flex w-8 shrink-0 justify-center text-[var(--ink-500)]" title={t("userDrawer.sites.isBlocked")}>
-                      <Check size={16} aria-label={t("userDrawer.sites.isBlocked")} />
-                    </span>
-                  ) : (
-                    <Button size="sm" variant="ghost" aria-label={t("userDrawer.sites.block", { site })} title={t("userDrawer.sites.block", { site })} disabled={block.isPending || !filters.data} onClick={() => block.mutate(s.site)}>
-                      <Ban size={16} aria-hidden />
-                    </Button>
-                  )
+                  // One button for both ways: tinted while the site is in the filters, and its
+                  // label says what a press does now (block it, or let everyone there again).
+                  <Button
+                    size="sm"
+                    variant={isBlocked ? "danger" : "ghost"}
+                    aria-label={label}
+                    title={label}
+                    loading={toggle.isPending && toggle.variables?.site === s.site}
+                    disabled={toggle.isPending || !filters.data}
+                    onClick={() => toggle.mutate({ site: s.site, block: !isBlocked })}
+                  >
+                    {toggle.isPending && toggle.variables?.site === s.site ? null : <Ban size={16} aria-hidden />}
+                  </Button>
                 ) : (
                   <span className="w-8 shrink-0" aria-hidden />
                 )}

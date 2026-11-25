@@ -1,14 +1,17 @@
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { api, errorText, unwrap, type Schemas, type User } from "../../../api/client";
+import { api, errorText, unwrap, type Schemas, type Tariff, type User } from "../../../api/client";
 import { qk, userActions, usePools, useTariffs, useUserMutation, useUserTraffic } from "../../../api/hooks";
 import { Confirm } from "../../../components/overlay";
+import { Select } from "../../../components/select";
 import { useToast } from "../../../components/toast";
-import { Bar, Button, Ring } from "../../../components/ui";
+import { Bar, Button, Field, Ring } from "../../../components/ui";
 import { t } from "../../../i18n";
-import { bytes, dateShort } from "../../../lib/format";
+import { bytes, dateShort, days, months, termMonths } from "../../../lib/format";
 import { draftOf, GroupModesField, modeShort, settingsOf, type GroupDraft } from "../pools";
+import { ResetPicker } from "../reset-picker";
+import { renewsTraffic, resetToSend, startReset, type Reset } from "../reset-rules";
 import { tariffSummary } from "../tariffs";
 import { LimitPicker } from "./limit-picker";
 import { Section, Stat } from "./section";
@@ -49,6 +52,7 @@ export function TariffSection({ u }: { u: User }) {
           </Menu.Portal>
         </Menu.Root>
       </div>
+      <NextTariffRow u={u} />
       <SpeedRow u={u} />
       <Confirm
         open={pick !== null}
@@ -71,6 +75,126 @@ export function TariffSection({ u }: { u: User }) {
         }
       />
     </Section>
+  );
+}
+
+/** A term of so many days on tariff tr in words: months up to its billing day, or days. */
+function termLabel(tr: Tariff, n: number): string {
+  if (!n) return t("time.forever");
+  return tr.billing_day != null ? months(termMonths(n)) : days(n);
+}
+
+/** The tariff the client moves to by itself when the term ends: shown, set, changed and taken
+ * away here. A term with no end has nothing to follow. */
+function NextTariffRow({ u }: { u: User }) {
+  const tariffs = useTariffs();
+  const toast = useToast();
+  const set = useUserMutation(userActions.setNextTariff);
+  const clear = useUserMutation(userActions.clearNextTariff);
+  const [editing, setEditing] = useState(false);
+  const [tariffId, setTariffId] = useState(0);
+  const [term, setTerm] = useState("");
+  const next = tariffs.data?.find((x) => x.id === u.next_tariff?.tariff_id);
+  const chosen = tariffs.data?.find((x) => x.id === tariffId);
+  const open = () => {
+    setTariffId(u.next_tariff?.tariff_id ?? tariffs.data?.[0]?.id ?? 0);
+    setTerm(u.next_tariff?.term_days != null ? String(u.next_tariff.term_days) : "");
+    setEditing(true);
+  };
+  const save = () =>
+    set.mutate(
+      { id: u.id, tariff_id: tariffId, term_days: term === "" ? undefined : Number(term) },
+      {
+        onSuccess: (r) => {
+          setEditing(false);
+          toast.ok(r.switched ? t("userDrawer.nextSwitched", { name: chosen?.name ?? "" }) : t("userDrawer.nextSaved"));
+        },
+        onError: (e) => toast.error(errorText(e)),
+      },
+    );
+  if (!u.expires_at) {
+    return <p className="mt-3 text-xs text-[var(--ink-500)]">{t("userDrawer.nextNoEnd")}</p>;
+  }
+  if (editing) {
+    return (
+      <div className="panel-soft mt-3 p-4" role="group" aria-labelledby={`next-${u.id}`}>
+        <div id={`next-${u.id}`} className="mb-2 text-[13px] font-semibold">
+          {t("userDrawer.nextTitle")}
+        </div>
+        <div className="grid grid-cols-1 gap-x-3 sm:grid-cols-2">
+          <Field label={t("users.colTariff")} htmlFor={`next-tariff-${u.id}`}>
+            <Select
+              id={`next-tariff-${u.id}`}
+              className="input"
+              value={tariffId}
+              onChange={(e) => {
+                // Another tariff has other terms: its own first one again.
+                setTariffId(Number(e.target.value));
+                setTerm("");
+              }}
+            >
+              {(tariffs.data ?? []).map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t("userDrawer.nextTerm")} htmlFor={`next-term-${u.id}`}>
+            <Select id={`next-term-${u.id}`} className="input" value={term} onChange={(e) => setTerm(e.target.value)}>
+              <option value="">{chosen ? t("userDrawer.nextTermOwn", { term: termLabel(chosen, chosen.duration_days) }) : t("userDrawer.nextTermOwnPlain")}</option>
+              {/* The first term is the tariff's own, the option above. */}
+              {(chosen?.terms ?? []).slice(1).map((x) => (
+                <option key={x.days} value={x.days}>
+                  {termLabel(chosen!, x.days)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <p className="mb-3 text-xs text-[var(--ink-500)]">{t("userDrawer.nextHint", { date: dateShort(u.expires_at) })}</p>
+        <div className="flex gap-2">
+          <Button size="sm" variant="primary" loading={set.isPending} disabled={!tariffId} onClick={save}>
+            {t("common.save")}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+            {t("common.cancel")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+  if (!u.next_tariff) {
+    return (
+      <button type="button" className="link-btn mt-3 text-xs" disabled={!tariffs.data?.length} onClick={open}>
+        {t("userDrawer.nextAdd")}
+      </button>
+    );
+  }
+  const termDays = u.next_tariff.term_days ?? next?.duration_days;
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--hairline)] p-3">
+      <div className="min-w-0 text-[13px]">
+        <div className="font-medium">{t("userDrawer.nextThen", { name: next?.name ?? `#${u.next_tariff.tariff_id}` })}</div>
+        <div className="text-xs text-[var(--ink-500)]">
+          {t("userDrawer.nextFrom", { date: dateShort(u.expires_at) })}
+          {termDays != null && next ? ` · ${termLabel(next, termDays)}` : ""}
+        </div>
+      </div>
+      <div className="flex gap-1">
+        <Button size="sm" variant="ghost" onClick={open}>
+          {t("userDrawer.change")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          loading={clear.isPending}
+          onClick={() => clear.mutate(u.id, { onSuccess: () => toast.ok(t("userDrawer.nextCleared")), onError: (e) => toast.error(errorText(e)) })}
+        >
+          {t("userDrawer.nextClear")}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -147,7 +271,8 @@ export function TrafficSection({ u }: { u: User }) {
 }
 
 /** The server groups of the user: how the subscription has each one, what it used this
- * period and, with a limit of its own, how much of it is left. */
+ * period and, with a limit of its own, how much of it is left. The editor asks when the
+ * client's traffic is reset too, as a limit of its own is what makes that matter. */
 export function PoolsSection({ u }: { u: User }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -155,25 +280,41 @@ export function PoolsSection({ u }: { u: User }) {
   const pools = useQuery({ queryKey: qk.userPools(u.id), queryFn: ({ signal }) => unwrap(api.GET("/api/v1/users/{id}/pools", { params: { path: { id: u.id } }, signal })) });
   const tariffs = useTariffs();
   const [edit, setEdit] = useState<Record<number, GroupDraft> | null>(null);
+  const [reset, setReset] = useState<Reset>(u.reset_strategy);
   const [error, setError] = useState("");
   // The tariff's own setting of each group, which the editor tells the client's apart from.
   const tariff = tariffs.data?.find((x) => x.id === u.tariff_id);
   const base = tariff ? Object.fromEntries(tariff.pools.map((p) => [p.pool_id, draftOf(p)])) : undefined;
   const save = useMutation({
-    mutationFn: (settings: Schemas["PoolSetting"][]) => unwrap(api.PUT("/api/v1/users/{id}/pools", { params: { path: { id: u.id } }, body: { pools: settings } })),
+    mutationFn: async ({ settings, reset }: { settings: Schemas["PoolSetting"][]; reset?: Reset }) => {
+      // The reset first: one refused leaves the groups as they were.
+      if (reset) await userActions.update({ id: u.id, body: { reset_strategy: reset } });
+      return unwrap(api.PUT("/api/v1/users/{id}/pools", { params: { path: { id: u.id } }, body: { pools: settings } }));
+    },
     onSuccess: (v) => {
       qc.setQueryData(qk.userPools(u.id), v);
       setEdit(null);
       toast.ok(t("pools.userSaved"));
     },
     onError: (e) => toast.error(errorText(e)),
+    // A reset sent changes the client and its next reset in the card and the lists, whatever
+    // came of the groups after it.
+    onSettled: (_v, _e, sent) => {
+      if (sent.reset) void qc.invalidateQueries({ queryKey: qk.users });
+    },
   });
   if (!pools.data?.length) return null;
+  const mainLimited = u.traffic_limit != null;
+  // When to reset is asked while a period renews something of the client's: the main traffic
+  // with a limit, or a group with a limit of its own.
+  const renews = edit != null && renewsTraffic({ trafficLimited: mainLimited, groups: edit });
+  // A group's own limit that no reset renews.
+  const unrenewed = u.reset_strategy === "none" && pools.data.some((p) => p.mode === "own");
   const submit = () => {
     if (!edit) return;
     const { settings, error } = settingsOf(groups.data ?? pools.data.map((p) => ({ id: p.pool_id, name: p.name, inbounds: [], inbound_ids: [] })), edit);
     setError(error ?? "");
-    if (!error) save.mutate(settings);
+    if (!error) save.mutate({ settings, reset: resetToSend({ trafficLimited: mainLimited, groups: edit }, reset, u.reset_strategy) });
   };
   return (
     <Section
@@ -184,7 +325,9 @@ export function PoolsSection({ u }: { u: User }) {
             type="button"
             className="link-btn text-xs"
             onClick={() => {
-              setEdit(Object.fromEntries(pools.data.map((p) => [p.pool_id, draftOf(p)])));
+              const drafts = Object.fromEntries(pools.data.map((p) => [p.pool_id, draftOf(p)]));
+              setEdit(drafts);
+              setReset(startReset({ trafficLimited: mainLimited, groups: drafts }, u.reset_strategy));
               setError("");
             }}
           >
@@ -202,7 +345,14 @@ export function PoolsSection({ u }: { u: User }) {
               {error}
             </p>
           ) : null}
-          <div className="mt-3 flex gap-2">
+          {renews ? (
+            <div className="mt-4">
+              <Field label={t("tariffs.whenReset")} hint={t("pools.userResetHint")}>
+                <ResetPicker value={reset} onChange={setReset} billingDay={u.billing_day ?? null} disabled={save.isPending} />
+              </Field>
+            </div>
+          ) : null}
+          <div className={renews ? "flex gap-2" : "mt-3 flex gap-2"}>
             <Button size="sm" variant="primary" loading={save.isPending} onClick={submit}>
               {t("common.save")}
             </Button>
@@ -212,27 +362,30 @@ export function PoolsSection({ u }: { u: User }) {
           </div>
         </>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {pools.data.map((p) => {
-            const used = p.used_up + p.used_down;
-            return (
-              <li key={p.pool_id}>
-                <div className="mb-1 flex items-center justify-between gap-2 text-[13px]">
-                  <span className="font-medium">{p.name}</span>
-                  <span className="num text-xs text-[var(--ink-600)]">
-                    {p.mode === "own" && p.traffic_limit != null
-                      ? t("pools.usedOf", { used: bytes(used), limit: p.extra > 0 ? t("grants.plusPackages", { limit: bytes(p.traffic_limit), extra: bytes(p.extra) }) : bytes(p.traffic_limit) })
-                      : p.mode === "unlimited"
-                        ? t("pools.usedUnlimited", { used: bytes(used) })
-                        : modeShort(p.mode)}
-                  </span>
-                </div>
-                {p.mode === "own" && p.traffic_limit != null ? <Bar pct={Math.min(100, (used / (p.traffic_limit + p.extra)) * 100)} /> : null}
-                {p.exhausted ? <div className="mt-1 text-xs text-[var(--berry-600)]">{t("pools.exhausted")}</div> : null}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul className="flex flex-col gap-3">
+            {pools.data.map((p) => {
+              const used = p.used_up + p.used_down;
+              return (
+                <li key={p.pool_id}>
+                  <div className="mb-1 flex items-center justify-between gap-2 text-[13px]">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="num text-xs text-[var(--ink-600)]">
+                      {p.mode === "own" && p.traffic_limit != null
+                        ? t("pools.usedOf", { used: bytes(used), limit: p.extra > 0 ? t("grants.plusPackages", { limit: bytes(p.traffic_limit), extra: bytes(p.extra) }) : bytes(p.traffic_limit) })
+                        : p.mode === "unlimited"
+                          ? t("pools.usedUnlimited", { used: bytes(used) })
+                          : modeShort(p.mode)}
+                    </span>
+                  </div>
+                  {p.mode === "own" && p.traffic_limit != null ? <Bar pct={Math.min(100, (used / (p.traffic_limit + p.extra)) * 100)} /> : null}
+                  {p.exhausted ? <div className="mt-1 text-xs text-[var(--berry-600)]">{t("pools.exhausted")}</div> : null}
+                </li>
+              );
+            })}
+          </ul>
+          {unrenewed ? <p className="mt-3 text-xs text-[var(--honey-600)]">{t("pools.userNoReset")}</p> : null}
+        </>
       )}
     </Section>
   );

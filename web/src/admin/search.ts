@@ -4,13 +4,14 @@
 import type { User } from "../api/client";
 
 export const USER_STATES = ["all", "active", "expiring", "limited", "expired", "disabled"] as const;
-export const USER_SOURCES = ["all", "admin", "bot", "trial", "free", "import"] as const;
+export const USER_SOURCES = ["all", "admin", "bot", "web", "trial", "free", "import"] as const;
 /** Hidden users: left off the list, listed with the rest, or the only ones listed. */
 export const USER_HIDDEN = ["hide", "show", "only"] as const;
 /**
  * The filters of the users list live in the URL, so a reload or a shared link keeps them.
- * What is the default (any folder, any source, hidden left off) is left out of it.
- * folder: "none" (outside folders) or a folder's id.
+ * What is the default (any folder, any group, any source, hidden left off) is left out of it.
+ * folder: "none" (outside folders) or a folder's id; group: "none" (in no group) or the id
+ * of the group a client is in, its own or its tariff's.
  */
 export type UsersSearch = {
   state: "all" | User["state"];
@@ -18,17 +19,23 @@ export type UsersSearch = {
   user?: number;
   create?: true;
   folder?: number | "none";
+  group?: number | "none";
   source?: Exclude<(typeof USER_SOURCES)[number], "all">;
   hidden?: Exclude<(typeof USER_HIDDEN)[number], "hide">;
 };
 
+/** A node's card open by its id, or the form of a new one: the command palette's way in. */
+export type NodesSearch = { node?: number; add?: true };
+
 export const SETTINGS_TABS = ["general", "subscription", "page", "routing", "security", "support", "system", "import"] as const;
-/** The parts of the sections that have them: the subscription page's editor and the routing. */
+/** The parts of the sections that have them: the subscription (its settings, its apps, how it answers requests, its templates), the subscription page's editor and the routing. */
 export const SETTINGS_PARTS = {
-  page: ["look", "brand", "blocks", "apps", "docs", "css"],
-  routing: ["mode", "lists", "rules", "dns", "advanced", "yaml"],
+  subscription: ["main", "clients", "responses", "templates"],
+  page:["look", "brand", "blocks", "apps", "docs", "css"],
+  routing: ["mode", "lists", "rules", "dns", "advanced"],
 } as const;
-export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string };
+/** group: the subscription page's editor edits that group's own page (#290) instead of the panel's. */
+export type SettingsSearch = { tab: (typeof SETTINGS_TABS)[number]; part?: string; group?: number };
 
 export const TARIFF_TABS = ["tariffs", "pools", "packages"] as const;
 export type TariffsSearch = { tab: (typeof TARIFF_TABS)[number] };

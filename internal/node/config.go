@@ -2,6 +2,7 @@ package node
 
 import (
 	"encoding/json"
+	"slices"
 
 	"github.com/metacubex/mihomo/listener"
 
@@ -98,7 +99,13 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool, fr
 		listeners = append(listeners, l)
 	}
 	for _, in := range st.Inbounds {
-		l, err := listenerFor(in, st.Slots, cert, proto.Options{SelfStealPort: st.SelfStealPort})
+		slots := st.Slots
+		if st.PaymentAccess != nil && in.Name == st.PaymentAccess.Inbound && in.Pool == "" {
+			if t, err := template(in); err == nil && t.Type() == "vless" {
+				slots = slices.Concat(slots, st.PaymentAccess.Slots)
+			}
+		}
+		l, err := listenerFor(in, slots, cert, proto.Options{SelfStealPort: st.SelfStealPort})
 		// Behind the SNI router an inbound takes connections from it alone, each with the
 		// client's address in a PROXY header.
 		if err == nil && st.Router.Routed(in.Name) {
@@ -111,7 +118,7 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool, fr
 		keep(in.Name, l, err)
 	}
 	if st.Relay != nil {
-		l, err := relayListener(st.Relay, cert)
+		l, err := relayListener(st.Relay, cert, st.SelfStealPort)
 		keep(nodeapi.RelayListener, l, err)
 	}
 	proxies, err := outbounds(st)
@@ -130,6 +137,7 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool, fr
 		"sniffer":           snifferConfig(st.DNS),
 		"proxies":           proxies,
 		"rules":             rules(st, allowPrivate),
+		"sub-rules":         paymentRules(st),
 		"listeners":         listeners,
 	}
 	raw, err = json.Marshal(cfg)

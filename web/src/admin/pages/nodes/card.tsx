@@ -1,11 +1,12 @@
 // A node's card on the Servers page: its state, address, certificate and update, and what can be done with it.
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowDown, ArrowUp, ArrowUpCircle, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, ShieldCheck, Stethoscope, Trash2, Waypoints } from "lucide-react";
+import { Activity, ArrowUpCircle, Cloud, Copy, Gauge, KeyRound, LoaderCircle, MoreHorizontal, Pencil, RefreshCw, ShieldCheck, Stethoscope, Trash2, UsersRound, Waypoints } from "lucide-react";
 import { api, errorText, unwrap } from "../../../api/client";
 import { qk, useNodes } from "../../../api/hooks";
 import { AcmeAttempts, AcmeProblem, caName } from "../../../components/acme";
 import { certUntil } from "../../../components/cert-drawer";
+import { TagChips } from "../../../components/tags";
 import { useToast } from "../../../components/toast";
 import { Bar, Button, Pill } from "../../../components/ui";
 import { t, tMaybe } from "../../../i18n";
@@ -14,6 +15,7 @@ import { bytes, num } from "../../../lib/format";
 import { nodeLabel } from "../../../lib/node-label";
 import { HelloLine, NodeProblem, SkewLine } from "../node-check";
 import type { Node } from "../nodes";
+import { BillingRows } from "./billing";
 
 /** What a server before 0.5.0.2 runs once by hand: from then on the panel updates it. */
 const OLD_NODE_COMMAND = "mikan update";
@@ -26,11 +28,6 @@ export const updating = (n: Node) => n.update?.state === "running";
 export function NodeCard({
   n,
   idx,
-  total,
-  ordering,
-  sorting,
-  moving,
-  onMove,
   updating: asking,
   busy,
   onUpdate,
@@ -38,6 +35,7 @@ export function NodeCard({
   onWarp,
   onSpeed,
   onTraffic,
+  onClients,
   onCascade,
   onCert,
   onCheck,
@@ -45,16 +43,8 @@ export function NodeCard({
   onRemove,
 }: {
   n: Node;
+  /** Its place on the page, for the cards' staggered entrance. */
   idx: number;
-  /** How many nodes there are: with one there is nothing to order. */
-  total: number;
-  /** The admin is ordering the nodes: the arrows show. */
-  ordering: boolean;
-  /** The new order is on its way to the panel: no second move now. */
-  sorting: boolean;
-  /** This node is the one being moved. */
-  moving: boolean;
-  onMove: (by: -1 | 1) => void;
   /** The request for this node is on its way to the panel. */
   updating: boolean;
   /** Some node's request is: no second one now. */
@@ -64,6 +54,7 @@ export function NodeCard({
   onWarp: () => void;
   onSpeed: () => void;
   onTraffic: () => void;
+  onClients: () => void;
   onCascade: () => void;
   onCert: () => void;
   onCheck: () => void;
@@ -81,22 +72,14 @@ export function NodeCard({
             <span>·</span>
             <span>{n.local ? t("nodes.kindLocal") : t("nodes.kindRemote")}</span>
           </div>
+          {n.tags.length > 0 ? (
+            <div className="mt-1.5 text-xs">
+              <TagChips tags={n.tags} />
+            </div>
+          ) : null}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <NodeStatus n={n} />
-          {total > 1 && ordering ? (
-            <>
-              <span className="num w-6 text-center text-xs text-[var(--ink-500)]" role="img" aria-label={t("nodes.position", { n: idx + 1, total })}>
-                {moving ? <LoaderCircle size={14} className="spin inline" aria-hidden /> : idx + 1}
-              </span>
-              <button type="button" className="icon-btn" disabled={sorting || idx === 0} aria-busy={moving || undefined} aria-label={t("nodes.moveUp", { name: nodeLabel(n) })} title={t("nodes.moveUp", { name: nodeLabel(n) })} onClick={() => onMove(-1)}>
-                <ArrowUp size={18} aria-hidden />
-              </button>
-              <button type="button" className="icon-btn" disabled={sorting || idx === total - 1} aria-busy={moving || undefined} aria-label={t("nodes.moveDown", { name: nodeLabel(n) })} title={t("nodes.moveDown", { name: nodeLabel(n) })} onClick={() => onMove(1)}>
-                <ArrowDown size={18} aria-hidden />
-              </button>
-            </>
-          ) : null}
         </div>
       </div>
       {n.status === "error" && n.enabled ? <NodeProblem n={n} onCheck={onCheck} actions={{ rekey: onRekey, update: updatable(n) ? onUpdate : undefined, edit: onEdit }} /> : null}
@@ -165,6 +148,7 @@ export function NodeCard({
           </div>
         ) : null}
         <NodeCertRow n={n} />
+        <BillingRows n={n} />
       </dl>
       <NodeUpdate n={n} />
       {/* The actions stay at the card's bottom, level with the card beside it. */}
@@ -189,6 +173,9 @@ export function NodeCard({
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content className="menu glass-strong" align="end" sideOffset={6}>
+              <Menu.Item className="menu-item" onSelect={onClients}>
+                <UsersRound size={16} aria-hidden /> {t("nodeClients.button")}
+              </Menu.Item>
               <Menu.Item className="menu-item" onSelect={onCheck}>
                 <Stethoscope size={16} aria-hidden /> {t("nodeCheck.button")}
               </Menu.Item>
@@ -337,7 +324,8 @@ function NodeUpdate({ n }: { n: Node }) {
   );
 }
 
-function NodeStatus({ n }: { n: Node }) {
+/** Whether a node is on and answers the panel. */
+export function NodeStatus({ n }: { n: Node }) {
   if (!n.enabled) return <Pill tone="off">{t("nodes.disabled")}</Pill>;
   if (n.status === "ok") return <Pill tone="ok">{t("nodes.online")}</Pill>;
   if (n.status === "error") return <Pill tone="bad">{t("nodes.offline")}</Pill>;

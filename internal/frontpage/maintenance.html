@@ -4,32 +4,50 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Scheduled maintenance</title>
+<title>[[t "title"]]</title>
 <style>
-  :root { color-scheme: light dark; --bg: #f6f7f9; --card: #fff; --ink: #1b1f24; --muted: #5d6673; --line: #e3e6ea; --accent: #2f6fde; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #111418; --card: #181c21; --ink: #e8eaed; --muted: #9aa3ad; --line: #262b31; --accent: #6b9cf0; } }
+  :root { color-scheme: light dark; --bg: [[c "#f7f6f3"]]; --ink: [[c "#1c1f24"]]; --muted: [[c "#5b6470"]]; --line: [[c "#dcdad4"]]; --accent: [[c "#1f5fbf"]]; --done: [[c "#2d7a4f"]]; }
+  @media (prefers-color-scheme: dark) { :root { --bg: [[c "#121417"]]; --ink: [[c "#e9ebee"]]; --muted: [[c "#9aa3ad"]]; --line: [[c "#2a2e34"]]; --accent: [[c "#7fb0f5"]]; --done: [[c "#6cc494"]]; } }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  main { width: min(480px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 32px; text-align: center; }
-  .gear { width: 48px; height: 48px; margin: 0 auto 16px; color: var(--accent); animation: spin 6s linear infinite; }
-  @media (prefers-reduced-motion: reduce) { .gear { animation: none; } }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  h1 { margin: 0 0 8px; font-size: 24px; line-height: 32px; font-weight: 600; }
-  p { margin: 0; color: var(--muted); }
-  .bar { height: 4px; margin: 24px 0 0; border-radius: 4px; background: var(--line); overflow: hidden; }
-  .bar span { display: block; height: 100%; width: 40%; border-radius: 4px; background: var(--accent); animation: slide 2.4s ease-in-out infinite; }
-  @media (prefers-reduced-motion: reduce) { .bar span { animation: none; width: 64%; } }
-  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
-  small { display: block; margin-top: 16px; color: var(--muted); font-size: 13px; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  .[[id "wrap"]] { width: min([[n "width"]]px, 100% - [[n "pad"]]px * 2); margin-inline: auto; min-height: 100vh; display: flex; flex-direction: column; }
+  header, footer { display: flex; justify-content: space-between; gap: 16px; padding-block: [[n "pad"]]px; color: var(--muted); font-size: 14px; }
+  header { border-bottom: 1px solid var(--line); }
+  footer { margin-top: auto; border-top: 1px solid var(--line); }
+  header b { color: var(--ink); font-weight: 600; }
+  main { padding-block: [[n "gap"]]px; }
+  .[[id "state"]] { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 16px; color: var(--accent); font-size: 14px; font-weight: 600; }
+  .[[id "state"]]::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; animation: [[id "pulse"]] [[n "glide"]]s ease-in-out infinite; }
+  @keyframes [[id "pulse"]] { 50% { opacity: 0.35; } }
+  h1 { margin: 0 0 16px; font-size: clamp(32px, 6vw, 48px); line-height: 1.1; letter-spacing: -0.02em; font-weight: 700; text-wrap: balance; }
+  .[[id "lead"]] { margin: 0; max-width: 52ch; color: var(--muted); font-size: 19px; }
+  .[[id "steps"]] { list-style: none; margin: [[n "gap"]]px 0 0; padding: 0; border-top: 1px solid var(--line); }
+  .[[id "steps"]] li { position: relative; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+  .[[id "steps"]] span { flex: none; color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .[[id "steps"]] .[[id "done"]] span { color: var(--done); }
+  .[[id "steps"]] .[[id "now"]] { font-weight: 600; }
+  .[[id "steps"]] .[[id "now"]] span { color: var(--accent); font-weight: 600; }
+  .[[id "steps"]] .[[id "now"]]::after { content: ""; position: absolute; left: 0; bottom: -1px; height: 2px; width: 32%; background: var(--accent); animation: [[id "slide"]] [[n "glide"]]s ease-in-out infinite alternate; }
+  @keyframes [[id "slide"]] { to { left: 68%; } }
+  .[[id "thanks"]] { margin: 24px 0 0; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .[[id "state"]]::before, .[[id "steps"]] .[[id "now"]]::after { animation: none; } .[[id "steps"]] .[[id "now"]]::after { width: 100%; } }
 </style>
 </head>
 <body>
-<main>
-  <svg class="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-  <h1>Scheduled maintenance</h1>
-  <p>We are upgrading our servers to serve you better. The site will be back shortly.</p>
-  <div class="bar" role="progressbar" aria-label="Maintenance in progress"><span></span></div>
-  <small>Thank you for your patience.</small>
-</main>
+<div class="[[id "wrap"]]">
+  <header><b>[[t "head"]]</b><span>[[t "label"]]</span></header>
+  <main>
+    <p class="[[id "state"]]">[[t "label"]]</p>
+    <h1>[[t "title"]]</h1>
+    <p class="[[id "lead"]]">[[t "body"]]</p>
+    <ol class="[[id "steps"]]" aria-label="[[t "plan"]]">
+      <li class="[[id "done"]]">[[t "step.a"]]<span>[[t "state.a"]]</span></li>
+      <li class="[[id "now"]]">[[t "step.b"]]<span>[[t "state.b"]]</span></li>
+      <li>[[t "step.c"]]<span>[[t "state.c"]]</span></li>
+    </ol>
+    <p class="[[id "thanks"]]">[[t "thanks"]]</p>
+  </main>
+  <footer><span>[[t "foot"]]</span></footer>
+</div>
 </body>
 </html>

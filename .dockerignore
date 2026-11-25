@@ -15,6 +15,11 @@ test/e2e/.work
 installer/target
 release
 
+# the SDKs' build output (sdk/build.sh): a Python virtualenv made on Linux has symlinks
+# that a Windows host cannot read, and the image has no use for any of it
+sdk/.build
+sdk/dist
+
 # signing material never enters a build context, wherever it lies
 **/*.pem
 **/release-signing*

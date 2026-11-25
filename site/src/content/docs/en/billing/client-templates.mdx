@@ -1,0 +1,50 @@
+---
+title: Client templates and batches
+description: "One client or a batch of up to 500 from one form: own values over the plan, folder, group and tags, names by a pattern, links as a list or a CSV."
+---
+
+The **Clients → New client** window makes one client or a batch at once. A batch is for those who hand access out in batches rather than sell it through the bot: a class, a department, a group of friends. What the form holds can be saved as a **client template** to hand out the same in one click next time.
+
+## One client or a batch
+
+The switch at the top of the window is **One client / A batch of clients**:
+
+- **One client**: a name and a contact, as before. Once it is made, the subscription link is copied and the client's card opens.
+- **A batch of clients**: how many (up to 500 at a time), from which number, and the **name pattern**. `{n}` in the name is the client's number, `{nnn}` the number of at least three digits with zeros in front. For example, `pupil-{nn}` from number 9 gives pupil-09, pupil-10, pupil-11. The first and the last name of the batch show under the field.
+
+A batch is made whole or not at all. If even one of its names belongs to another client, the panel makes nothing and names the taken ones: start from another number or change the name pattern. One client can still be named as another one is, as before.
+
+## What the client gets
+
+The **plan** sets the term, the traffic, the device limit and the speed. Over it, the **Own values over the plan** block sets your own:
+
+- **traffic per period**, **devices**, **speed** and **term**: as in the plan (the button says how much that is), none (∞) or a value of your own;
+- **term from the first connection**: until the client connects the term stands still, handy when the links are handed out in advance.
+
+The **Folder, group and tags** block says where the clients go: a folder (only the order of the list), a [client group](/mikan/en/billing/groups/) (it decides which servers and addresses the client sees; without one, the plan's group), tags separated by commas (clients can be found by them in the list) and a note.
+
+## The links of a batch
+
+Once a batch is made, the window lists all its clients with their subscription links:
+
+- the button of a row copies one client's link;
+- **Copy all links** copies them as lines "name — link", ready to send;
+- **Download CSV** saves a table with the columns name and link.
+
+**Create more** goes back to the form. A support operator who is not shown the clients makes no batches: the refusal of a taken name would tell them that such a client exists.
+
+## Client templates
+
+The list of templates is above the form. Picking a template fills the form: the plan, the own values over it, the folder, the group, the tags, the note and the batch's name pattern. Anything can be changed before creating, and the template stays as it was.
+
+- **Save as a template** saves what the form holds now under a new name.
+- When a template is picked and the form has moved away from it, **Update "name"** saves the form into that template, and **Save as a new one** into a new one.
+- The bin next to them deletes the picked template.
+
+A template only fills the form: the clients made from it keep nothing of it, and changing or deleting the template changes none of them. A folder or a group deleted after the template was saved leaves it. If the template's plan was archived, the window asks for another one. There can be up to 50 templates.
+
+## API
+
+- `GET`, `POST /api/v1/user-templates`, `PUT`, `DELETE /api/v1/user-templates/{id}`: the templates. In a template a limit or a term of `null` means as in the plan, `0` none or never ending.
+- `POST /api/v1/users/batch`: a batch with `count`, `name_pattern`, `start` and what each client gets (`tariff_id`, `traffic_limit`, `device_limit`, `speed_limit`, `term_days`, `starts_on_connect`, `folder_id`, `group_id`, `tags`, `note`; a field left out comes from the plan). It answers the clients made, with `sub_url`. A taken name answers `409 user_names_taken` with the first taken names; a support operator who is not shown the clients gets `403 support_denied`. `template_id` goes to the activity log only.
+- `POST /api/v1/users` takes the same fields of what the client gets, for one client.

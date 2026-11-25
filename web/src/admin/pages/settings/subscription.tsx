@@ -1,17 +1,19 @@
 import { useState, type FormEvent } from "react";
 import type { Schemas } from "../../../api/client";
-import { useInbounds, useNodes } from "../../../api/hooks";
+import { useInbounds, useNodes, usePaymentSettings } from "../../../api/hooks";
 import { CardHead, Disclosure, FormActions } from "../../../components/layout";
 import { Button, Field, Pill } from "../../../components/ui";
+import { Select } from "../../../components/select";
 import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
-import { useDraft } from "../../../lib/draft";
+import { same, useDraft } from "../../../lib/draft";
+import { safeHref } from "../../../lib/url";
 import { fieldErrors } from "../../../lib/fields";
 import { FingerprintSelect } from "../../../components/fingerprint-select";
-import { period } from "../../../lib/format";
-import { ReissueRules, TimesPerPeriod } from "./reissue-rules";
+import { ReissueRules } from "./reissue-rules";
+import { UnbindRulesEditor } from "./unbind-rules";
 import { useSaveSettings } from "./shared";
-import { LimitPicker } from "../user/limit-picker";
+import { TITLE_VARS, unknownVars } from "../../../lib/title-vars";
 
 // Ports the installer opens in the firewall (443 and the HTTPS pool): a subscription
 // port among them needs nothing else on the server.
@@ -23,6 +25,7 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   const inbounds = useInbounds();
   const nodes = useNodes();
+  const payments = usePaymentSettings().data;
   const { draft: port, setDraft: setPort } = useDraft(s.sub_port ? String(s.sub_port) : "");
   const error = fieldErrors(save.error).sub_port;
   const own = nodes.data?.find((n) => n.local)?.id;
@@ -37,6 +40,7 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
     if (valid) save.mutate({ sub_port: next });
   };
   const current = s.sub_port || s.panel_port;
+  const shopURL = payments?.enabled && payments.website && payments.allow_new && s.sub_base_url && safeHref(s.sub_base_url + "shop");
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
       <form onSubmit={submit} noValidate>
@@ -50,6 +54,7 @@ export function SubPortCard({ s }: { s: Schemas["SettingsView"] }) {
           <div className="panel-soft mb-4 p-3">
             <div className="text-xs text-[var(--ink-500)]">{t("settings.subPortLinks")}</div>
             <div className="mono truncate text-[13px]">{s.sub_base_url.replace(/[^/]+\/$/, "…")}</div>
+            {shopURL ? <a href={shopURL} className="mt-2 inline-block text-sm underline" target="_blank" rel="noopener noreferrer">{t("settings.webShop")}</a> : null}
           </div>
         ) : null}
         <Field label={t("settings.subPortField")} htmlFor="s-sub-port" hint={t("settings.subPortHint", { panel: s.panel_port })} error={error ?? (valid ? undefined : t("settings.subPortInvalid"))}>
@@ -145,19 +150,6 @@ export function SubscriptionCard({ s }: { s: Schemas["SettingsView"] }) {
       </form>
     </section>
   );
-}
-
-// The variables the title and the announcement take (subs.titleValues fills them).
-const TITLE_VARS = ["brand", "name", "tariff", "date", "days", "used", "left", "total", "devices"] as const;
-
-// The {words} of a text that are no variable: they stay as text in the apps, so this only
-// warns (same case-sensitive match as the panel's substitution).
-function unknownVars(text: string): string[] {
-  const found = new Set<string>();
-  for (const m of text.matchAll(/\{([A-Za-z0-9_-]+)\}/g)) {
-    if (!(TITLE_VARS as readonly string[]).includes(m[1] ?? "")) found.add(m[0]);
-  }
-  return [...found];
 }
 
 // A subscription that cannot connect (its term or traffic over, turned off) gets one notice
@@ -315,58 +307,93 @@ export function DevicesCard({ s }: { s: Schemas["SettingsView"] }) {
   );
 }
 
-/** A pause in hours: "at once", "6 h", whole days as days, "never" (-1: until the admin lets it). */
-function pauseLabel(hours: number): string {
-  if (hours === 0) return t("settings.unbindAtOnce");
-  if (hours < 0) return t("settings.unbindNever");
-  if (hours % 24 === 0) return t("settings.unbindDays", { n: hours / 24 });
-  return t("settings.unbindHours", { n: hours });
-}
-
-/**
- * How subscribers unbind devices themselves: how many a period, and how long an unbound
- * device stays out, so that its app, still open, does not take the place back at once.
- */
+/** How subscribers unbind devices themselves, for every subscription without a group's own rules. */
 function UnbindRules({ s }: { s: Schemas["SettingsView"] }) {
   const save = useSaveSettings();
   const r = s.device_unbind;
-  const set = (patch: Partial<Schemas["UnbindRules"]>, done: () => void) => save.mutate({ device_unbind: { ...r, ...patch } }, { onSuccess: done });
-  const off = !!r.off;
-  const summary = off
-    ? t("settings.unbindSummaryOff")
-    : r.limit === 0
-      ? t("settings.unbindSummaryFree")
-      : t("settings.unbindSummary", { n: r.limit, period: period(r.days) });
-  const pause =
-    r.return_hours < 0
-      ? t("settings.unbindSummaryNever")
-      : r.return_hours > 0
-        ? t("settings.unbindSummaryPause", { pause: pauseLabel(r.return_hours) })
-        : t("settings.unbindSummaryNoPause");
   return (
     <div className="mt-4 border-t border-[var(--line)] pt-4">
       <h3 className="text-[14px] font-medium">{t("settings.unbindTitle")}</h3>
       <p className="mt-1 mb-3 text-xs text-[var(--ink-500)]">{t("settings.unbindSub")}</p>
-      <div className="flex flex-col gap-3">
-        <TimesPerPeriod label={t("settings.unbindLimit")} value={r} busy={save.isPending} onChange={set} />
-        {off ? null : (
-          <LimitPicker
-            label={t("settings.unbindReturn")}
-            value={r.return_hours}
-            presets={[0, 6, 24, 72, -1]}
-            min={0}
-            max={720}
-            unlimited={false}
-            format={pauseLabel}
-            fieldUnit={t("settings.unbindHoursUnit")}
-            busy={save.isPending}
-            onChange={(n, done) => set({ return_hours: n ?? 0 }, done)}
-          />
-        )}
-      </div>
-      <p className="mt-3 text-xs text-[var(--ink-600)]" role="status">
-        {off ? summary : `${summary} ${pause}`}
-      </p>
+      <UnbindRulesEditor value={r} busy={save.isPending} onChange={(patch, done) => save.mutate({ device_unbind: { ...r, ...patch } }, { onSuccess: done })} />
     </div>
+  );
+}
+
+// The apps that run whole xray configs (Happ, INCY) get the panel's routing, DNS and
+// automatic choice as xray configs, one per automatic group and per server; off, they get
+// links as the other xray apps do.
+export function XrayJSONCard({ s }: { s: Schemas["SettingsView"] }) {
+  const save = useSaveSettings();
+  return (
+    <section className="card glass reveal" style={{ "--i": 2 } as React.CSSProperties}>
+      <CardHead title={t("settings.xrayJson.title")} sub={t("settings.xrayJson.sub")} />
+      <SwitchRow
+        label={t("settings.xrayJson.on")}
+        sub={s.sub_xray_json ? t("settings.xrayJson.onSub") : t("settings.xrayJson.offSub")}
+        checked={s.sub_xray_json}
+        disabled={save.isPending}
+        onChange={(v) => save.mutate({ sub_xray_json: v })}
+      />
+    </section>
+  );
+}
+
+const paymentForm = (s: Schemas["SettingsView"]) => ({
+  ...s.sub_payment_access,
+  domains: s.sub_payment_access.domains.join("\n"),
+});
+
+export function PaymentAccessCard({ s }: { s: Schemas["SettingsView"] }) {
+  const save = useSaveSettings();
+  const nodes = useNodes();
+  const inbounds = useInbounds();
+  const { draft, setDraft, dirty, reset } = useDraft(paymentForm(s));
+  const choices = (inbounds.data ?? []).filter((i) => i.enabled && i.type === "vless" && i.pool_id == null);
+  const errors = fieldErrors(save.error);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const submitted = draft;
+    const value = submitted.inbound_id === 0
+      ? { ...s.sub_payment_access, inbound_id: 0 }
+      : { ...submitted, domains: submitted.domains.split("\n").map((host) => host.trim()).filter(Boolean) };
+    save.mutate({ sub_payment_access: value }, {
+      onSuccess: (v) => setDraft((current) => same(current, submitted) ? paymentForm(v) : current),
+    });
+  };
+  const fields = [
+    { key: "days", label: t("settings.paymentAccess.days"), max: 14 },
+    { key: "traffic_mib", label: t("settings.paymentAccess.traffic"), max: 200 },
+    { key: "speed_mbps", label: t("settings.paymentAccess.speed"), max: 5 },
+  ] as const;
+  return (
+    <section className="card glass reveal">
+      <form onSubmit={submit}>
+        <CardHead title={t("settings.paymentAccess.title")} sub={t("settings.paymentAccess.sub")} />
+        <Field label={t("settings.paymentAccess.inbound")} htmlFor="s-payment-inbound" error={errors.inbound_id ?? errors.sub_payment_access}>
+          <Select id="s-payment-inbound" className="input" value={draft.inbound_id} onChange={(e) => setDraft({ ...draft, inbound_id: Number(e.target.value) })}>
+            <option value={0}>{t("settings.paymentAccess.off")}</option>
+            {draft.inbound_id > 0 && !choices.some((i) => i.id === draft.inbound_id) ? <option value={draft.inbound_id}>#{draft.inbound_id}</option> : null}
+            {choices.map((i) => <option key={i.id} value={i.id}>{nodes.data?.find((n) => n.id === i.node_id)?.name ?? i.node_id} · {i.name}</option>)}
+          </Select>
+        </Field>
+        {draft.inbound_id > 0 ? (
+          <>
+            <div className="grid gap-x-3 sm:grid-cols-3">
+              {fields.map(({ key, label, max }) => (
+                <Field key={key} label={label} htmlFor={`s-payment-${key}`}>
+                  <input id={`s-payment-${key}`} className="input" type="number" min={1} max={max} required
+                    value={draft[key] || ""} onChange={(e) => setDraft({ ...draft, [key]: Number(e.target.value) })} />
+                </Field>
+              ))}
+            </div>
+            <Field label={t("settings.paymentAccess.domains")} htmlFor="s-payment-domains" hint={t("settings.paymentAccess.domainsHint")}>
+              <textarea id="s-payment-domains" className="input mono" rows={3} value={draft.domains} onChange={(e) => setDraft({ ...draft, domains: e.target.value })} />
+            </Field>
+          </>
+        ) : null}
+        <FormActions dirty={dirty} saving={save.isPending} onReset={reset} disabled={!dirty} />
+      </form>
+    </section>
   );
 }

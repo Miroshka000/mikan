@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"mikan/internal/panel/billing"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/settings"
 	"mikan/internal/panel/store/db"
@@ -69,6 +71,7 @@ type importReport struct {
 }
 
 type jobState struct {
+	raw     string
 	Mode    string        `json:"mode"`
 	State   string        `json:"state"`
 	Error   string        `json:"error"`
@@ -91,6 +94,7 @@ func waitJob(t *testing.T, h *harness, api string, csrf map[string]string) jobSt
 		if err := json.Unmarshal(body, &st); err != nil {
 			t.Fatal(err)
 		}
+		st.raw = string(body)
 		if st.State == "done" || st.State == "failed" {
 			return st
 		}
@@ -280,6 +284,146 @@ func TestImportFromRemnawaveKeepsShortUUIDLinks(t *testing.T) {
 	}
 }
 
+// Bedolaga on top of its Remnawave: the account owns the subscription its link names, its
+// balance comes once into mikan's balance and its history is there to read.
+func TestImportFromBedolagaOverRemnawave(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	conf := billing.DefaultConfig
+	conf.Balance.Currency = "RUB"
+	if err := settings.Set(ctx, settings.New(h.st.Q), billing.KeyConfig, conf); err != nil {
+		t.Fatal(err)
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	api := "/" + adminPath + "/api/v1"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	tariffs, _ := h.st.Q.ListTariffs(ctx)
+	rw := fakeRemnawave(t, []map[string]any{
+		{"id": 1, "shortUuid": "Abc123Def456Ghi7", "username": "masha", "status": "ACTIVE", "trafficLimitBytes": 0, "expireAt": "2099-12-31T00:00:00.000Z",
+			"userTraffic": map[string]any{"usedTrafficBytes": 0, "lifetimeUsedTrafficBytes": 0}},
+	})
+	if r := runImport(t, h, api, csrf, map[string]any{"kind": "remnawave", "url": rw.URL, "token": "rw-token", "tariff_id": tariffs[1].ID}); r.Created != 1 {
+		t.Fatalf("remnawave: %+v", r)
+	}
+	bot := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "bot-key" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var items []map[string]any
+		switch r.URL.Path {
+		case "/users":
+			items = []map[string]any{{"id": 1, "telegram_id": 777, "username": "masha_tg", "status": "active", "balance_kopeks": 12345, "created_at": "2025-01-01T00:00:00",
+				"subscriptions": []any{map[string]any{"subscription_url": "https://sub.example.com/Abc123Def456Ghi7"}}}}
+		case "/transactions":
+			items = []map[string]any{{"id": 5, "user_id": 1, "type": "deposit", "amount_kopeks": 20000, "payment_method": "yookassa", "is_completed": true, "created_at": "2025-01-02T00:00:00"}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "total": len(items)})
+	}))
+	t.Cleanup(bot.Close)
+	src := map[string]any{"kind": "bedolaga", "url": bot.URL, "token": "bot-key"}
+	st := runPreview(t, h, api, csrf, src)
+	if st.State != "done" || !strings.Contains(st.raw, `"bot_preview":{"accounts":1,"matched":1,"links":1`) || !strings.Contains(st.raw, `"balance_total":12345`) {
+		t.Fatalf("preview: %+v", st)
+	}
+	if resp, body := h.do(http.MethodPost, api+"/import/bot", src, csrf); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("start: %d %s", resp.StatusCode, body)
+	}
+	if st := waitJob(t, h, api, csrf); st.State != "done" || !strings.Contains(st.raw, `"links":1`) || !strings.Contains(st.raw, `"payments":1`) {
+		t.Fatalf("import: %+v", st)
+	}
+	list, _ := h.st.Q.ListUsers(ctx)
+	if l, err := h.st.Q.GetTgLink(ctx, list[len(list)-1].ID); err != nil || l.TgID != 777 {
+		t.Fatalf("masha's owner: %+v %v", l, err)
+	}
+	_, body := h.do(http.MethodGet, api+"/balances/777", nil, csrf)
+	if !strings.Contains(string(body), `"balance":12345`) || !strings.Contains(string(body), `"kind":"deposit"`) || !strings.Contains(string(body), `"method":"yookassa"`) {
+		t.Fatalf("balance: %s", body)
+	}
+}
+
+// 3x-ui (a version without CSRF) at its secret path: the clients of one subId become one
+// user, a client only on vmess is reported and not made, and the subId opens the old link.
+func TestImportFrom3xUIKeepsSubIDLinks(t *testing.T) {
+	h := newHarness(t)
+	ctx := t.Context()
+	if err := domain.Seed(ctx, h.st, h.now); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]any{settings.KeyPublicHost: "203.0.113.10", settings.KeyPanelPort: 21355} {
+		if err := settings.Set(ctx, settings.New(h.st.Q), k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if resp, _ := h.login(password, ""); resp.StatusCode != http.StatusOK {
+		t.Fatal("login")
+	}
+	api := "/" + adminPath + "/api/v1"
+	csrf := map[string]string{"X-CSRF-Token": h.csrf}
+	inbounds, err := os.ReadFile("../panelimport/testdata/3xui-inbounds.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/x7k/login":
+			_ = r.ParseForm()
+			if r.PostForm.Get("username") == "admin" && r.PostForm.Get("password") == "pw" {
+				http.SetCookie(w, &http.Cookie{Name: "3x-ui", Value: "s", Path: "/"})
+				_, _ = w.Write([]byte(`{"success":true}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"success":false}`))
+		case "/x7k/panel/api/inbounds/list":
+			if c, err := r.Cookie("3x-ui"); err != nil || c.Value != "s" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_, _ = w.Write(inbounds)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(old.Close)
+	tariffs, _ := h.st.Q.ListTariffs(ctx)
+	run := map[string]any{"kind": "3xui", "url": old.URL + "/x7k", "username": "admin", "password": "pw", "tariff_id": tariffs[1].ID}
+	r := runImport(t, h, api, csrf, run)
+	// anna, boris and egor have a subId fit to be a secret; vera's is too short, dima has none.
+	if r.Created != 5 || r.Links != 3 || r.Failed.Count != 1 || !strings.Contains(r.Failed.Names[0], "gleb") || r.NoLink.Count != 1 {
+		t.Fatalf("import: %+v", r)
+	}
+	users, _ := h.st.Q.ListUsers(ctx)
+	var anna db.User
+	for _, u := range users {
+		if u.Name == "anna" {
+			anna = u
+		}
+	}
+	if !anna.TrafficLimit.Valid || anna.TrafficLimit.Int64 != 10<<30 || anna.UsedDown != 1000 || !anna.DeviceLimit.Valid || anna.DeviceLimit.Int64 != 2 || anna.Contact != "tg:777" {
+		t.Fatalf("anna: %+v", anna)
+	}
+	if resp, body := h.do(http.MethodPatch, api+"/import/legacy", map[string]any{"path": "xui/sub"}, csrf); resp.StatusCode != http.StatusOK {
+		t.Fatalf("legacy path: %d %s", resp.StatusCode, body)
+	}
+	if _, err := h.p.Apply(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]int{
+		"/xui/sub/anna0sub0long0id": http.StatusOK,
+		"/xui/sub/anna0sub0long0ie": http.StatusNotFound,
+	} {
+		resp, body := h.do(http.MethodGet, path, nil, map[string]string{"User-Agent": "Happ/3.4.1"})
+		if resp.StatusCode != want {
+			t.Errorf("%s: %d %.80s, want %d", path, resp.StatusCode, body, want)
+		}
+	}
+}
+
 // PasarGuard: an API key instead of a login, ISO dates, and links signed with its own
 // format (v3, with the user's id) open once the secret is set.
 func TestImportFromPasarGuardKeepsSignedLinks(t *testing.T) {
@@ -310,12 +454,13 @@ func TestImportFromPasarGuardKeepsSignedLinks(t *testing.T) {
 	}))
 	defer old.Close()
 	run := map[string]any{"kind": "pasarguard", "url": old.URL, "token": "pg_key", "tariff_id": tariffs[1].ID}
-	if r := runImport(t, h, api, csrf, run); r.Created != 1 || r.Links != 2 {
+	// One person with two keys (the name and the id): one user with old links, not two.
+	if r := runImport(t, h, api, csrf, run); r.Created != 1 || r.Links != 1 {
 		t.Fatalf("import: %+v", r)
 	}
 	// PasarGuard's own code made this token for user id 42 with this secret.
 	const token = "djMsNDIsMTc1OTQwMDAwMA.fa-02Knno9F0qsz39WtypLtudEubWHfKFrYoyF8skR4"
-	if resp, body := h.do(http.MethodPatch, api+"/import/legacy", map[string]any{"path": "sub", "secret": "s3cr3t-key-from-jwt-table"}, csrf); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"kind":"pasarguard"`) {
+	if resp, body := h.do(http.MethodPatch, api+"/import/legacy", map[string]any{"path": "sub", "secret": "s3cr3t-key-from-jwt-table"}, csrf); resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"kind":"pasarguard"`) || !strings.Contains(string(body), `"links":1`) {
 		t.Fatalf("legacy: %d %s", resp.StatusCode, body)
 	}
 	if _, err := h.p.Apply(ctx); err != nil {
@@ -334,7 +479,7 @@ func TestImportIsSessionOnly(t *testing.T) {
 	k := newKeyHarness(t)
 	for _, c := range []struct{ method, path string }{
 		{http.MethodPost, "/import/preview"}, {http.MethodPost, "/import"}, {http.MethodGet, "/import/status"}, {http.MethodDelete, "/import"},
-		{http.MethodGet, "/import/legacy"}, {http.MethodPatch, "/import/legacy"},
+		{http.MethodGet, "/import/legacy"}, {http.MethodPatch, "/import/legacy"}, {http.MethodPost, "/import/bot"},
 	} {
 		resp, body := k.asKey(k.full, c.method, c.path, map[string]any{})
 		if resp.StatusCode != http.StatusForbidden || !strings.Contains(string(body), "session_only") {
@@ -370,6 +515,11 @@ func TestImportRefusesMixingSignedPanels(t *testing.T) {
 	}
 	if err := settings.Set(ctx, settings.New(h.st.Q), settings.KeyLegacySubKind, "pasarguard"); err != nil {
 		t.Fatal(err)
+	}
+	// The preview says so too, before the admin reads it and picks a plan.
+	check := map[string]any{"kind": "marzban", "url": "https://old.example.com", "username": "a", "password": "b"}
+	if resp, body := h.do(http.MethodPost, api+"/import/preview", check, csrf); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "import_kind_conflict") {
+		t.Fatalf("mixing, preview: %d %s", resp.StatusCode, body)
 	}
 	run := map[string]any{"kind": "marzban", "url": "https://old.example.com", "username": "a", "password": "b", "tariff_id": tariffs[1].ID}
 	if resp, body := h.do(http.MethodPost, api+"/import", run, csrf); resp.StatusCode != http.StatusConflict || !strings.Contains(string(body), "import_kind_conflict") {

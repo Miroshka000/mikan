@@ -40,7 +40,11 @@ type Deps struct {
 	// Resolve looks a node's name up, to compare it with where its hello came from; nil
 	// compares only addresses.
 	Resolve func(ctx context.Context, host string) ([]netip.Addr, error)
-	Now     func() time.Time
+	// Readdress moves a node the panel did not reach to the address its hello came from,
+	// when the node answers there, and says how the panel's dial there went; moved is false
+	// when it did not move the node. nil: never.
+	Readdress func(ctx context.Context, id int64, seen string) (res nodehello.Result, moved bool)
+	Now       func() time.Time
 }
 
 // Limits of the hellos the panel takes from one address: a node retries a few times in
@@ -98,7 +102,26 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) bool {
 	defer cancel()
 	res := h.d.Dial(ctx, n.ID)
 	res.SeenIP, res.Host = ip, n.Host
-	if h.differs(ctx, n.Host, ip) {
+	differs := h.differs(ctx, n.Host, ip)
+	// A node the panel cannot reach where it knows it, saying hello from elsewhere: its
+	// server got a new address. The hello is signed with the node's key; Readdress moves it
+	// only once the node answers at the new address too.
+	if differs && !res.OK && h.d.Readdress != nil {
+		// A budget of its own, past the hello's: the move is finished even when the node
+		// stopped waiting for the answer.
+		rctx, rcancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Second)
+		r, moved := h.d.Readdress(rctx, n.ID, ip)
+		rcancel()
+		if moved {
+			r.SeenIP, r.Host = ip, ip
+			if r.Params == nil {
+				r.Params = map[string]string{}
+			}
+			r.Params[nodehello.MovedFrom] = n.Host
+			res, differs = r, false
+		}
+	}
+	if differs {
 		if res.Params == nil {
 			res.Params = map[string]string{}
 		}

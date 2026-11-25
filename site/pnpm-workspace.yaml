@@ -9,3 +9,8 @@ minimumReleaseAgeExclude:
 overrides:
   # postcss-nested 6 pins postcss-selector-parser 6: quadratic flat selector parsing, fixed in 7.1.6.
   postcss-selector-parser: ^7.1.6
+  # httpsnippet (starlight-openapi) pins 4.0.4: CRLF injection through multipart field names, fixed in 4.0.6.
+  form-data: ^4.0.6
+  # starlight-links-validator takes satteri 0.10 while astro 7.4.12 takes 0.11: the built pages
+  # load one native binding for both, and 0.10 misreads 0.11's trees (Invalid typed array length).
+  satteri: ^0.11.7

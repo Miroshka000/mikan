@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,13 +20,30 @@ import (
 	"mikan/internal/proto"
 )
 
+// fakeNodes answers for the nodes. The tuner asks them as it asks the real ones:
+// checkTargets runs one goroutine per node, so what CheckTarget changes is safe for
+// concurrent use; the maps are set between steps only.
 type fakeNodes struct {
 	activity map[int64]nodeapi.Activity
 	targets  map[string]nodeapi.TargetResult // by dest; any other dest works
 	found    []nodeapi.TargetResult
-	checks   int
-	onScan   func() // runs while a scan is under way: the admin edits meanwhile
+	checks   atomic.Int64 // targets the nodes were asked to check
+	onScan   func()       // runs while a scan is under way: the admin edits meanwhile
 	health   map[int64]nodesync.HealthView
+	// probes are the nodes' answers by "node/outbound", made at clock unless they say when.
+	probes map[string]nodeapi.ProbeResult
+	clock  func() time.Time
+}
+
+func (f *fakeNodes) Probe(_ context.Context, id int64, proxy string) (nodeapi.ProbeResult, error) {
+	r, ok := f.probes[strconv.FormatInt(id, 10)+"/"+proxy]
+	if !ok {
+		return nodeapi.ProbeResult{}, nodeapi.ErrUnavailable
+	}
+	if r.CheckedAt.IsZero() {
+		r.CheckedAt = f.clock()
+	}
+	return r, nil
 }
 
 func (f *fakeNodes) Health(id int64) (nodesync.HealthView, bool) {
@@ -41,7 +60,7 @@ func (f *fakeNodes) Activity(_ context.Context, id int64) (nodeapi.Activity, err
 }
 
 func (f *fakeNodes) CheckTarget(_ context.Context, _ int64, req nodeapi.TargetCheckRequest) (nodeapi.TargetResult, error) {
-	f.checks++
+	f.checks.Add(1)
 	if r, ok := f.targets[req.Dest]; ok {
 		return r, nil
 	}
@@ -112,7 +131,7 @@ func setup(t *testing.T) *env {
 	}
 	e.slot, e.user = slot.Name, u.ID
 	e.refreshProfile(t)
-	e.nodes = &fakeNodes{activity: map[int64]nodeapi.Activity{}, targets: map[string]nodeapi.TargetResult{}}
+	e.nodes = &fakeNodes{activity: map[int64]nodeapi.Activity{}, targets: map[string]nodeapi.TargetResult{}, probes: map[string]nodeapi.ProbeResult{}, clock: clock}
 	e.tn = New(e.st, e.set, e.nodes, e.ch, slog.New(slog.NewTextHandler(io.Discard, nil)), clock, DefaultOptions())
 	e.tn.pick = func(int) int { return 0 }
 	return e
@@ -228,8 +247,8 @@ func TestMovesABlockedPortAfterHold(t *testing.T) {
 	if len(ev) != 1 || ev[0].Kind != "port" || ev[0].OldValue != "443" || ev[0].NewValue != "2053" || ev[0].Reason != "blocked" || ev[0].Network != "tcp" {
 		t.Fatalf("event: %+v", ev)
 	}
-	if e.ch.slots == 0 || e.nodes.checks == 0 {
-		t.Fatalf("the node must get the change (%d) and the target is checked first (%d)", e.ch.slots, e.nodes.checks)
+	if checks := e.nodes.checks.Load(); e.ch.slots == 0 || checks == 0 {
+		t.Fatalf("the node must get the change (%d) and the target is checked first (%d)", e.ch.slots, checks)
 	}
 	if s, _ := e.tn.Status(x.ID); s.CutOff {
 		t.Fatalf("state is reset after a move: %+v", s)
@@ -362,12 +381,14 @@ func TestEscalatesToTheTarget(t *testing.T) {
 	e := setup(t)
 	o := DefaultOptions()
 	x := e.inbound(t, "vless-xhttp")
-	e.nodes.found = []nodeapi.TargetResult{good("203.0.113.44:443", "shop.example.org")}
 	blocked := func(d time.Duration) {
 		e.reaches("hysteria2", "tuic", "vless-vision")
 		e.step(t, d)
 	}
 	e.worked(t)
+	// The site next to the server turns up only now: the inbounds have clients by then, and
+	// one with clients does not leave the stock site by itself (leaveStockSite).
+	e.nodes.found = []nodeapi.TargetResult{good("203.0.113.44:443", "shop.example.org")}
 	blocked(0)
 	blocked(o.Hold)
 	if e.inbound(t, "vless-xhttp").Port != "2053" {
@@ -412,22 +433,69 @@ func TestNeverReachedIsNoEvidence(t *testing.T) {
 // own fetch (not by the address), and remembers what they reached across a restart.
 func TestBoundDevices(t *testing.T) {
 	e := setup(t)
+	e.boundPhone(t, visit{profileTo: home})
+	if s, _ := e.tn.Status(e.inbound(t, "vless-xhttp").ID); !s.CutOff || s.Blocked != 2 {
+		t.Fatalf("the bound device must count, and what it reached must survive a restart: %+v", s)
+	}
+}
+
+// A bound device is seen as it asks for its keys, before its profile is made: one turned
+// away with a notice, or left without a profile by an error, took nothing and never counts.
+func TestBoundDeviceWithoutProfile(t *testing.T) {
+	for name, visits := range map[string][]visit{
+		"no profile": {{}},
+		// Past the 5 minutes a known device is written down at most once in: its last visit
+		// moves on, and it took nothing then.
+		"turned away after a profile": {{profileTo: home}, {after: 6 * time.Minute}},
+		"profile to another address":  {{profileTo: "192.0.2.99"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := setup(t)
+			e.boundPhone(t, visits...)
+			if s, _ := e.tn.Status(e.inbound(t, "vless-xhttp").ID); s.CutOff || s.Blocked != 0 {
+				t.Fatalf("a bound device that took no profile counted: %+v", s)
+			}
+		})
+	}
+}
+
+// home is where the bound phone asks for its keys from.
+const home = "198.51.100.30"
+
+// visit: after a pause, the phone asks for its keys from home, and its user's profile goes
+// out to profileTo ("" = the phone got none).
+type visit struct {
+	after     time.Duration
+	profileTo string
+}
+
+// boundPhone: a bound device makes its visits; then it reaches everything, and after a
+// restart all but XHTTP.
+func (e *env) boundPhone(t *testing.T, visits ...visit) {
+	t.Helper()
 	clock := func() time.Time { return e.now }
 	u, err := e.st.Q.GetUser(e.ctx, e.user)
 	if err != nil {
 		t.Fatal(err)
 	}
-	phone, err := domain.NewDevices(e.st, domain.NewPool(e.st, clock), e.ch, clock).Bind(e.ctx, u, domain.DeviceInfo{HWID: "phone-0123456789", App: "Happ/3.4.1"}, false)
-	if err != nil {
-		t.Fatal(err)
+	var phone db.Slot
+	for _, v := range visits {
+		e.now = e.now.Add(v.after)
+		if phone, err = domain.NewDevices(e.st, domain.NewPool(e.st, clock), e.ch, clock).Bind(e.ctx, u, domain.DeviceInfo{HWID: "phone-0123456789", App: "Happ/3.4.1", IP: home}, false); err != nil {
+			t.Fatal(err)
+		}
+		if v.profileTo != "" {
+			if err := e.st.Q.RecordSubFetch(e.ctx, db.RecordSubFetchParams{UserID: e.user, Ip: v.profileTo, FetchedAt: e.now.Unix()}); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
-	x := e.inbound(t, "vless-xhttp")
 	act := func(names ...string) {
 		seen := map[string]int64{}
 		for _, n := range names {
 			seen[n] = e.now.Add(-time.Minute).Unix()
 		}
-		// An address the user never fetched the subscription from.
+		// Addresses the user never fetched the subscription from.
 		e.nodes.activity[1] = nodeapi.Activity{Clients: []nodeapi.ClientActivity{{Slot: phone.Name, IP: "192.0.2.7", Seen: seen}, {Slot: phone.Name, IP: "203.0.113.70", Seen: seen}}}
 	}
 	act("vless-xhttp", "hysteria2", "tuic", "vless-vision")
@@ -437,9 +505,6 @@ func TestBoundDevices(t *testing.T) {
 	e.now = e.now.Add(time.Minute)
 	act("hysteria2", "tuic", "vless-vision")
 	e.tn.Step(e.ctx)
-	if s, _ := e.tn.Status(x.ID); !s.CutOff || s.Blocked != 2 {
-		t.Fatalf("the bound device must count, and what it reached must survive a restart: %+v", s)
-	}
 }
 
 // Behind a proxy the port is what the proxy forwards to, and the site may be what it

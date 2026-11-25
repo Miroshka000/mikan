@@ -30,6 +30,7 @@ type fakeTelegram struct {
 	blocked map[int64]bool // chats that blocked the bot
 	// conflict: another program polls the token, so getUpdates gets Telegram's 409
 	conflict bool
+	menu     any // the chats' menu button, as setChatMenuButton left it
 }
 
 type call struct {
@@ -92,6 +93,19 @@ func (f *fakeTelegram) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch method {
+	case "getChatMenuButton":
+		f.mu.Lock()
+		menu := f.menu
+		f.mu.Unlock()
+		if menu == nil {
+			menu = map[string]any{"type": "commands"}
+		}
+		ok(menu)
+	case "setChatMenuButton":
+		f.mu.Lock()
+		f.menu = body["menu_button"]
+		f.mu.Unlock()
+		ok(true)
 	case "createInvoiceLink":
 		ok("https://t.me/$inv" + strconv.FormatInt(id, 10))
 	case "sendMessage":

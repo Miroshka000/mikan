@@ -1,13 +1,19 @@
 ---
 title: API
-description: The panel's REST API, keys with "Read" and "Full access" scopes, OpenAPI documentation and request examples.
+description: The panel's REST API, keys with "Read" and "Full access" scopes, the methods reference, the OpenAPI file, SDKs and request examples.
 ---
 
-The panel has a REST API for bots, billing and monitoring. Its documentation is built into the panel itself.
+The panel has a REST API for bots, billing and monitoring. All the methods with their parameters and answers are in the [reference](/mikan/en/api/reference/) on this site, and the same reference is built into the panel itself. Guides: [create a user](/mikan/en/api/create-user/), [your own bot](/mikan/en/api/own-bot/), [SDK](/mikan/en/api/sdk/), [webhooks](/mikan/en/api/webhooks/), [stability and changes](/mikan/en/api/stability/).
 
 ## Where the documentation is
 
-**Settings → Security → API → Open**. The page has:
+:::note[New in 0.5.2.1]
+The methods reference on this site and the guides are new in 0.5.2.1, and so are the SDKs and webhooks.
+:::
+
+The methods reference: [all API methods](/mikan/en/api/reference/). Every method has its parameters, request body, answers and examples, and it says which key it needs.
+
+In the panel itself: **Settings → Security → API → Open**. The page has:
 
 - the API address and keys;
 - a list of all methods with parameters, responses and curl examples, and a "Try it" button for GET requests;
@@ -43,6 +49,8 @@ Authorization: Bearer mk_...
 
 Errors come in RFC 9457 format (`application/problem+json`), with the error code in the `detail` field. When fields of the request are refused (422, `detail` is `validation`), each field has its own code in `errors[].message` and the field in `errors[].location`, such as `body.port`; `errors[].value` may hold what the code names (the busy port, the line of a rule).
 
+Refusals that come with the key: 401 `unauthorized` (the key is wrong, revoked or expired; many failures from one address close the entrance for a while: 429 `rate_limited`, the time is in the `Retry-After` header), 403 `read_only_key` (a "Read" key tries to change data) and 403 `session_only` (the method is for the administrator's session only).
+
 ## Examples
 
 ```bash
@@ -64,7 +72,7 @@ curl -X POST "$BASE/users" \
   -d '{"name": "Anna", "tariff_id": 2, "contact": "@anna"}'
 ```
 
-The response has the user with an `id` and the subscription link `sub_url`.
+The response has the user with an `id` and the subscription link `sub_url`. More in [Create a user with a key](/mikan/en/api/create-user/).
 
 Extend by 30 days or by a month (one of the two is required):
 
@@ -82,34 +90,15 @@ curl -X POST "$BASE/users/42/grants" \
   -d '{"bytes": 10737418240, "lifetime": "used"}'
 ```
 
-## Main methods
+## All methods
 
-| Method | Path | What it does |
-|---|---|---|
-| GET | `/users` | list: `state`, `q`, `limit`, `offset` |
-| POST | `/users` | create a user from a plan |
-| GET, PATCH | `/users/{id}` | a user, change |
-| POST | `/users/{id}/extend` | extend: `days` or `months` |
-| POST | `/users/{id}/reset-traffic` | reset traffic |
-| POST | `/users/{id}/reissue` | reissue the link |
-| POST | `/users/{id}/grants` | add traffic |
-| POST | `/users/bulk` | an action on a group: extend, reset, disable, enable, delete |
-| GET | `/tariffs` | plans |
-| GET | `/inbounds` | connections |
-| GET | `/nodes` | nodes |
-| GET | `/stats/overview` | overview figures |
-| GET | `/stats/traffic` | server traffic: `range` 24h, 7d or 30d |
-| GET | `/metrics` | Prometheus metrics |
+The list of methods is not kept by hand: the reference is built at every build of the site from the file `web/src/api/openapi.json`, which the panel exports itself with the `mikan openapi` command. The methods are grouped by the panel's sections, and each says which key it takes: any, only "Full access", or only the administrator's session.
+
+[Open the reference](/mikan/en/api/reference/)
 
 ## Client balances and promo code statistics
 
-The panel has no screens for these methods: they are for scripts, for example to reconcile balances with your books or to build a report on promo codes.
-
-| Method | Path | What it does |
-|---|---|---|
-| GET | `/promocodes/stats` | a summary of the promo codes: how many there are and how many are active, successful activations, bonus days and bytes given, orders with a discount and the total discount |
-| GET | `/balances/{tg_id}` | a Telegram account's balance and its last 50 operations |
-| POST | `/balances/{tg_id}/adjust` | change a balance by hand: `delta` and `note` |
+The panel has no screens for these methods: they are for scripts, for example to reconcile balances with your books or to build a report on promo codes. They are the [summary of the promo codes](/mikan/en/api/reference/operations/promocode-stats/), [a Telegram account's balance with its last operations](/mikan/en/api/reference/operations/get-balance/) and [the manual change of a balance](/mikan/en/api/reference/operations/adjust-balance/).
 
 Both GET methods are open to any key, "Read" or "Full access":
 
@@ -122,4 +111,35 @@ The amounts of a balance and its operations come in hundredths of the currency (
 
 Changing a balance moves a client's money, so an API key cannot call it: the answer is 403 `session_only`. It is available only from the administrator's session, with a body like `{"delta": -5000, "note": "refund for the downtime"}`. `delta` is in hundredths of the currency, a negative one debits, and the balance never goes below zero (the answer is `balance_low`). `note` is required and shown to the client in the balance history. Every change goes to the audit log.
 
-For the full list with request and response bodies, see the API page in the panel.
+## Purchase and renewal API
+
+Send POST requests to the configured subscription base URL with `Content-Type: application/json`.
+Enable **Sell on the website** in **Payments → Rules** to accept browser orders. The built-in
+storefront is at `<subscription base URL>/shop` when sales to new people are enabled. A third-party server or bot can
+call the same endpoints directly. With an external subscription domain, `mikan-sub` forwards
+the storefront and these requests to the panel. Payment providers send webhooks to the panel
+address shown in the adapter settings.
+
+| Path | Request body | Result |
+| --- | --- | --- |
+| `/shop/offers` | `{}` for a new purchase or `{"token":"<subscription token>"}` for a renewal | `offers` with plans and terms, and `addons` with payment methods. Prices are in kopecks. `receipt_email: true` on a method means it accepts a receipt email. |
+| `/shop/pay` | `checkout_key`, `tariff_id`, optional `term_days`, `provider` from `addons`, and `email`. Add `token` for a renewal. | `status` and `url` after invoice creation. An email is required for a new purchase. |
+| `/shop/status` | `{"checkout_key":"<checkout key>"}` | `status`, `url` for an open invoice, `retryable: true` when invoice creation can be retried, and `token` for a new purchase while its issued link is current. |
+
+Generate `checkout_key` from 32 cryptographically random bytes encoded as 64 lowercase
+hexadecimal characters. Keep it private and use it for retries of the same order. If `term_days`
+is omitted, `/shop/pay` uses the tariff's first configured term. Send `term_days` from
+`/shop/offers` when paying for a different term.
+
+Both `/shop/offers` and `/shop/pay` return `404 not_yours` for an invalid subscription token.
+
+Check `/shop/status` with the same key after a redirect or a failed invoice request. When it
+returns `retryable: true`, repeat `/shop/pay` for the same order. The retry may omit `email` to
+reuse the stored address. If `/shop/pay` returns `409 invoice_in_progress`, check status again
+after a short delay.
+
+`pending` means an invoice is being prepared or awaiting payment. `paid` means payment was
+received and `applied` means the subscription is ready. `failed` can be retried only when the
+response includes `retryable: true`. `expired` and `refunded` end the order. For an applied new
+purchase, open `<subscription base URL>/<token>` if provided. If the link has changed, contact
+support with the purchase email. For an applied renewal, use the original subscription link.

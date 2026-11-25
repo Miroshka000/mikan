@@ -85,6 +85,7 @@ func NewUsers(st *store.Store, pool *Pool, changes Changes, now func() time.Time
 // permission: nothing reads it to decide what a user may do.
 const (
 	UserFromAdmin  = "admin"  // made in the panel or by an API key
+	UserFromWeb    = "web"    // bought on the subscription site
 	UserFromBot    = "bot"    // bought in the Telegram bot
 	UserFromTrial  = "trial"  // the bot's free trial
 	UserFromImport = "import" // brought over from another panel
@@ -92,7 +93,7 @@ const (
 )
 
 // UserOrigins lists them in the order the list shows them.
-var UserOrigins = []string{UserFromAdmin, UserFromBot, UserFromTrial, UserFromFree, UserFromImport}
+var UserOrigins = []string{UserFromAdmin, UserFromBot, UserFromWeb, UserFromTrial, UserFromFree, UserFromImport}
 
 // ValidOrigin tells a source the database accepts.
 func ValidOrigin(s string) bool { return slices.Contains(UserOrigins, s) }
@@ -111,6 +112,10 @@ type CreateInput struct {
 	// TgID is the Telegram account that buys or takes the user, 0 for the admin's: it goes
 	// to the addons with events.UserCreated, nothing else reads it.
 	TgID int64
+	// StartsOnConnect makes the term wait for the first connection (starts.go); nil: as the
+	// tariff says (TariffLifecycle.StartOnConnect). A term without an end waits for nothing,
+	// and an import's users bring theirs running.
+	StartsOnConnect *bool
 }
 
 // Create makes a user the admin names (the panel, an API key): the name is checked as
@@ -122,46 +127,53 @@ func (s *Users) Create(ctx context.Context, in CreateInput) (db.User, error) {
 	}
 	in.Name = name
 	var u db.User
-	err = s.WithSlots(ctx, func() (err error) {
-		u, err = s.create(ctx, in)
-		return err
-	})
-	if err != nil {
-		return db.User{}, err
-	}
-	s.hub.Kick()
-	s.changes.PoliciesChanged()
-	return u, nil
-}
-
-func (s *Users) create(ctx context.Context, in CreateInput) (db.User, error) {
-	var u db.User
-	err := s.st.Tx(ctx, func(q *db.Queries) error {
-		var err error
+	err = s.makeUsers(ctx, func(q *db.Queries) (err error) {
 		u, err = s.createTx(ctx, q, in, false)
 		return err
 	})
 	return u, err
 }
 
-// createTx makes a user on q's transaction; anyTariff also takes an archived tariff (one
-// that was paid for before the admin archived it).
+// makeUsers runs fn, which makes users on q, in one transaction: once more after the pool is
+// topped up when it ran out of slots (WithSlots). The nodes are told once, after the commit.
+func (s *Users) makeUsers(ctx context.Context, fn func(q *db.Queries) error) error {
+	if err := s.WithSlots(ctx, func() error { return s.st.Tx(ctx, fn) }); err != nil {
+		return err
+	}
+	s.hub.Kick()
+	s.changes.PoliciesChanged()
+	return nil
+}
+
+// liveTariff is the tariff of id a new user is made of; anyTariff also takes an archived one
+// (one that was paid for before the admin archived it).
+func liveTariff(ctx context.Context, q *db.Queries, id int64, anyTariff bool) (db.Tariff, error) {
+	t, err := q.GetTariff(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && t.Archived != 0 && !anyTariff) {
+		return db.Tariff{}, fmt.Errorf("tariff %d: %w", id, ErrNotFound)
+	}
+	return t, err
+}
+
+// createTx makes a user on q's transaction; anyTariff also takes an archived tariff.
 func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, anyTariff bool) (db.User, error) {
+	t, err := liveTariff(ctx, q, in.TariffID, anyTariff)
+	if err != nil {
+		return db.User{}, err
+	}
+	return s.createOfTariff(ctx, q, in, t)
+}
+
+// createOfTariff makes a user of the tariff t, read by the caller, on q's transaction.
+func (s *Users) createOfTariff(ctx context.Context, q *db.Queries, in CreateInput, t db.Tariff) (db.User, error) {
 	now := s.now().Unix()
-	tags, err := encodeTags(in.Tags)
+	tags, err := EncodeTags(in.Tags)
 	if err != nil {
 		return db.User{}, err
 	}
 	source := cmp.Or(in.Source, UserFromAdmin)
 	if !ValidOrigin(source) {
 		return db.User{}, fieldErr("source", "bad_source")
-	}
-	t, err := q.GetTariff(ctx, in.TariffID)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && t.Archived != 0 && !anyTariff) {
-		return db.User{}, fmt.Errorf("tariff %d: %w", in.TariffID, ErrNotFound)
-	}
-	if err != nil {
-		return db.User{}, err
 	}
 	slot, err := q.TakeFreeSlot(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -192,6 +204,19 @@ func (s *Users) createTx(ctx context.Context, q *db.Queries, in CreateInput, any
 	if source == UserFromImport {
 		return u, nil
 	}
+	wait := in.StartsOnConnect
+	if wait == nil {
+		tl, err := LoadTariffLifecycle(ctx, q, t.ID)
+		if err != nil {
+			return u, err
+		}
+		wait = &tl.StartOnConnect
+	}
+	if *wait && u.ExpiresAt.Valid {
+		if err := waitForConnection(ctx, q, u.ID, time.Unix(now, 0)); err != nil {
+			return u, err
+		}
+	}
 	return u, feed.Emit(ctx, q, s.now(), events.UserCreated, u.ID, in.TgID, events.User{Source: source, TariffID: t.ID},
 		events.UserCreated+":"+strconv.FormatInt(u.ID, 10))
 }
@@ -205,10 +230,11 @@ type PurchaseInput struct {
 	// Term is the term bought, as it was when bought; invalid: the tariff's own.
 	Term sql.NullInt64
 	Name string
-	// Note and Source go on a new subscription; empty: bought in the bot. A payment of a
+	// Contact, Note and Source go on a new subscription; empty: bought in the bot. A payment of a
 	// kind of its own names itself (the trial, bought for a price).
-	Note   string
-	Source string
+	Contact string
+	Note    string
+	Source  string
 	// TgID is the Telegram account that pays (for events.UserCreated).
 	TgID int64
 	// ResetTraffic: a renewal also starts a new traffic period (the payment buys a full
@@ -217,6 +243,9 @@ type PurchaseInput struct {
 	// KeepExtraDevices: devices bought on top of the tariff stay with a renewal of the same
 	// tariff; off, or another tariff, they go with the term they were bought for.
 	KeepExtraDevices bool
+	// PaymentID is the payment that pays (0: none): what it carries over goes with it on a
+	// refund.
+	PaymentID int64
 }
 
 // Purchase applies a paid tariff on q's transaction, so the payment and its effect commit
@@ -225,14 +254,15 @@ type PurchaseInput struct {
 // (from now when that already ended; what is left of another tariff's term is what it is
 // worth on this one, carryOver) and turns the user on, one the admin switched off too:
 // the buyer paid for the term, and the admin who wants someone out deletes the subscription
-// or stops selling to them (decided 2026-10-11). ErrNoSlots: refill and run again.
-// The caller calls Changed after the commit.
+// or stops selling to them (decided 2026-10-11). A renewal that starts a new traffic period
+// carries what the old one left into it, by the carry-over rules (carryInto).
+// ErrNoSlots: refill and run again. The caller calls Changed after the commit.
 func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (u db.User, created bool, err error) {
 	if in.UserID != 0 {
 		u, err = q.GetUser(ctx, in.UserID)
 	}
 	if in.UserID == 0 || errors.Is(err, sql.ErrNoRows) {
-		u, err = s.createTx(ctx, q, CreateInput{Name: in.Name, Note: cmp.Or(in.Note, "Telegram"), TariffID: in.TariffID,
+		u, err = s.createTx(ctx, q, CreateInput{Name: in.Name, Contact: in.Contact, Note: cmp.Or(in.Note, "Telegram"), TariffID: in.TariffID,
 			TermDays: in.Term, Source: cmp.Or(in.Source, UserFromBot), TgID: in.TgID}, true)
 		return u, err == nil, err
 	}
@@ -255,40 +285,15 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (
 		}
 		base = now.Add(left)
 	}
-	billingDay := t.BillingDay
-	if !billingDay.Valid {
-		billingDay = u.BillingDay
-	}
-	devices, extra, until := t.DeviceLimit, int64(0), sql.NullInt64{}
-	switch {
-	case in.KeepExtraDevices && u.TariffID.Valid && u.TariffID.Int64 == t.ID && u.ExtraDevices > 0:
-		// They go on with the renewal, paid with it (billing.renewalExtra).
-		extra = u.ExtraDevices
-	case u.ExtraDevices > 0 && u.ExtraDevicesUntil.Valid && u.ExtraDevicesUntil.Int64 > now.Unix():
-		// Bought until the end of the term: they stay until then, and not into the new one
-		// (the maintenance takes them back, Devices.ExpireExtra).
-		extra, until = u.ExtraDevices, u.ExtraDevicesUntil
-	}
-	if devices.Valid {
-		devices.Int64 += extra
-	}
-	if extra != u.ExtraDevices || until != u.ExtraDevicesUntil {
-		if err := q.SetUserExtraDevices(ctx, db.SetUserExtraDevicesParams{ExtraDevices: extra, Until: until, ID: u.ID}); err != nil {
+	// What the period leaves is counted on the user as it is, before the tariff's limit.
+	var carried int64
+	if in.ResetTraffic {
+		if carried, err = carryInto(ctx, q, u, t); err != nil {
 			return u, false, err
 		}
 	}
-	par := UserParams(u, now.Unix())
-	par.Status, par.TariffID = "active", sql.NullInt64{Int64: t.ID, Valid: true}
-	par.TrafficLimit, par.DeviceLimit, par.SpeedLimit, par.ResetStrategy = t.TrafficLimit, devices, t.SpeedLimit, t.ResetStrategy
-	par.ExpiresAt, par.BillingDay = tariffExpiry(base, durationTariff{termDays(t, in.Term), billingDay}), billingDay
-	u, err = q.UpdateUser(ctx, par)
-	if err != nil {
-		return u, false, err
-	}
-	if err := setDeviceMode(ctx, q, &u, t.DeviceMode, now.Unix()); err != nil {
-		return u, false, err
-	}
-	if err := ApplyTariffPools(ctx, q, u.ID, t.ID); err != nil {
+	keep := in.KeepExtraDevices && u.TariffID.Valid && u.TariffID.Int64 == t.ID
+	if u, err = takeTariff(ctx, q, u, t, tariffTake{base: base, days: termDays(t, in.Term), keepExtra: keep, turnOn: true}, now); err != nil {
 		return u, false, err
 	}
 	if !in.ResetTraffic {
@@ -297,8 +302,64 @@ func (s *Users) Purchase(ctx context.Context, q *db.Queries, in PurchaseInput) (
 	if err := StartPeriod(ctx, q, u.ID, now.Unix(), now); err != nil {
 		return u, false, err
 	}
-	u, err = q.GetUser(ctx, u.ID)
-	return u, false, err
+	if u, err = q.GetUser(ctx, u.ID); err != nil {
+		return u, false, err
+	}
+	return u, false, grantCarry(ctx, q, u, carried, in.PaymentID, now)
+}
+
+// tariffTake is how takeTariff puts a user on a tariff.
+type tariffTake struct {
+	base time.Time // where the new term starts
+	days int64     // the term on the tariff (termDays)
+	// keepExtra: places bought on top stay with the term (a renewal of the same tariff that
+	// pays for them again, billing.renewalExtra).
+	keepExtra bool
+	// turnOn: the subscription is turned on, one the admin switched off too (a payment's).
+	turnOn bool
+}
+
+// takeTariff puts u on tariff t as of now, on q's transaction: the tariff's limits, device
+// mode and server groups, a term of take.days from take.base up to the tariff's billing day
+// (the user's own without one), and the places bought on top: with keepExtra they go on;
+// otherwise those bought until a date still ahead stay until then and not into the new term
+// (the maintenance takes them back, Devices.ExpireExtra), the rest go now. The traffic
+// period is the caller's.
+func takeTariff(ctx context.Context, q *db.Queries, u db.User, t db.Tariff, take tariffTake, now time.Time) (db.User, error) {
+	billingDay := t.BillingDay
+	if !billingDay.Valid {
+		billingDay = u.BillingDay
+	}
+	devices, extra, until := t.DeviceLimit, int64(0), sql.NullInt64{}
+	switch {
+	case take.keepExtra && u.ExtraDevices > 0:
+		extra = u.ExtraDevices
+	case u.ExtraDevices > 0 && u.ExtraDevicesUntil.Valid && u.ExtraDevicesUntil.Int64 > now.Unix():
+		extra, until = u.ExtraDevices, u.ExtraDevicesUntil
+	}
+	if devices.Valid {
+		devices.Int64 += extra
+	}
+	if extra != u.ExtraDevices || until != u.ExtraDevicesUntil {
+		if err := q.SetUserExtraDevices(ctx, db.SetUserExtraDevicesParams{ExtraDevices: extra, Until: until, ID: u.ID}); err != nil {
+			return u, err
+		}
+	}
+	par := UserParams(u, now.Unix())
+	if take.turnOn {
+		par.Status = "active"
+	}
+	par.TariffID = sql.NullInt64{Int64: t.ID, Valid: true}
+	par.TrafficLimit, par.DeviceLimit, par.SpeedLimit, par.ResetStrategy = t.TrafficLimit, devices, t.SpeedLimit, t.ResetStrategy
+	par.ExpiresAt, par.BillingDay = tariffExpiry(take.base, durationTariff{take.days, billingDay}), billingDay
+	u, err := q.UpdateUser(ctx, par)
+	if err != nil {
+		return u, err
+	}
+	if err := setDeviceMode(ctx, q, &u, t.DeviceMode, now.Unix()); err != nil {
+		return u, err
+	}
+	return u, ApplyTariffPools(ctx, q, u.ID, t.ID)
 }
 
 // UserParams is u as it is, to change some of it and write it back with UpdateUser: the
@@ -412,12 +473,27 @@ type Patch struct {
 	// DeviceMode changes how the device limit counts (DeviceModeBound, DeviceModeOnline);
 	// a tariff in the same patch sets it first, and this one wins.
 	DeviceMode *string
+	// ResetStrategy is when the user's traffic is reset (ValidResetStrategy): the main traffic
+	// and the groups with a limit of their own. It is the user's own until a tariff is taken
+	// again (a renewal, a change of tariff, ApplyTariffLimits), which brings the tariff's; a
+	// tariff in the same patch sets it first, and this one wins. The period that began stays,
+	// so one already over by the new rule is reset by the next scheduled check.
+	ResetStrategy *string
 	// FolderID puts the user into a folder; ClearFolder takes the user out of theirs.
 	FolderID    *int64
 	ClearFolder bool
+	// GroupID puts the user into a group of its own; ClearGroup takes it out of its own, back
+	// to its tariff's (GroupOf). The group decides what the user may connect to (UserServers).
+	GroupID    *int64
+	ClearGroup bool
 	// Extend adds a term to the expiry the transaction reads, so a payment that lands
 	// meanwhile is not overwritten by an absolute date worked out before it.
 	Extend *Extension
+	// StartsOnConnect true makes the term wait for the first connection (starts.go): only
+	// a subscription that never connected and whose term is still ahead; false starts a
+	// waiting term now. An end given by hand (ExpiresAt, ClearExpiry) ends a wait too and
+	// stands as given; an extension adds to what waits.
+	StartsOnConnect *bool
 }
 
 // Extension adds time to the current expiry, or to now when the term already ended. Days
@@ -466,6 +542,16 @@ var ErrBadSpeedLimit = errors.New("bad_speed_limit")
 // ValidSpeedLimit says whether mbps is a speed cap the panel takes.
 func ValidSpeedLimit(mbps int64) bool { return mbps >= 1 && mbps <= MaxSpeedLimit }
 
+// ValidResetStrategy says whether s is a reset the panel takes (model.NextReset): none,
+// monthly on the billing day (the 1st without one), or every period of the user's days.
+func ValidResetStrategy(s string) bool {
+	switch s {
+	case "none", "month_start", "period":
+		return true
+	}
+	return false
+}
+
 func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) {
 	var out db.User
 	err := s.st.Tx(ctx, func(q *db.Queries) (err error) {
@@ -473,6 +559,10 @@ func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) 
 		return err
 	})
 	if err == nil {
+		// A wait that ended is told (events.UserStarted).
+		if p.StartsOnConnect != nil || p.ExpiresAt != nil || p.ClearExpiry {
+			s.hub.Kick()
+		}
 		s.changes.PoliciesChanged()
 	}
 	return out, err
@@ -481,9 +571,14 @@ func (s *Users) Update(ctx context.Context, id int64, p Patch) (db.User, error) 
 // updateOn applies a patch on q's transaction; the caller tells the nodes.
 func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) (db.User, error) {
 	// The folder is locked before the user's row, as a deleted folder locks its own first
-	// and then its users': the two never wait for each other in a circle.
+	// and then its users': the two never wait for each other in a circle. So is the group.
 	if p.FolderID != nil {
-		if err := lockFolder(ctx, q, *p.FolderID); err != nil {
+		if err := LockFolder(ctx, q, *p.FolderID); err != nil {
+			return db.User{}, err
+		}
+	}
+	if p.GroupID != nil && !p.ClearGroup {
+		if err := LockGroups(ctx, q, "group_id", *p.GroupID); err != nil {
 			return db.User{}, err
 		}
 	}
@@ -513,6 +608,12 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 			return db.User{}, err
 		}
 	}
+	if p.ResetStrategy != nil {
+		if !ValidResetStrategy(*p.ResetStrategy) {
+			return db.User{}, fieldErr("reset_strategy", "bad_reset_strategy")
+		}
+		par.ResetStrategy = *p.ResetStrategy
+	}
 	switch {
 	case p.ClearBillingDay:
 		par.BillingDay = sql.NullInt64{}
@@ -535,7 +636,7 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 		par.Note = *p.Note
 	}
 	if p.Tags != nil {
-		if par.Tags, err = encodeTags(*p.Tags); err != nil {
+		if par.Tags, err = EncodeTags(*p.Tags); err != nil {
 			return db.User{}, err
 		}
 	}
@@ -620,12 +721,54 @@ func (s *Users) updateOn(ctx context.Context, q *db.Queries, id int64, p Patch) 
 			return out, err
 		}
 	}
+	if p.GroupID != nil || p.ClearGroup {
+		var err error
+		if p.GroupID != nil && !p.ClearGroup {
+			err = q.SetUserGroup(ctx, db.SetUserGroupParams{UserID: id, GroupID: *p.GroupID})
+		} else {
+			err = q.ClearUserGroup(ctx, id)
+		}
+		if err != nil {
+			return out, err
+		}
+	}
+	return s.waitOn(ctx, q, out, p)
+}
+
+// waitOn applies what p says of the wait for the first connection to out, just written on
+// q's transaction, and returns the user as it is after it.
+func (s *Users) waitOn(ctx context.Context, q *db.Queries, out db.User, p Patch) (db.User, error) {
+	now := s.now()
+	if p.ExpiresAt != nil || p.ClearExpiry {
+		if err := endWait(ctx, q, out.ID, now); err != nil {
+			return out, err
+		}
+	}
+	if p.StartsOnConnect == nil {
+		return out, nil
+	}
+	waiting, err := Waiting(ctx, q, out.ID)
+	switch {
+	case err != nil:
+		return out, err
+	case *p.StartsOnConnect && !waiting:
+		if err := mayWait(out, now); err != nil {
+			return out, err
+		}
+		return out, waitForConnection(ctx, q, out.ID, now)
+	case !*p.StartsOnConnect && waiting:
+		if _, err := startWaiting(ctx, q, []int64{out.ID}, now, events.StartedByAdmin); err != nil {
+			return out, err
+		}
+		// The clock moved on to now: the row as it is after.
+		return q.GetUser(ctx, out.ID)
+	}
 	return out, nil
 }
 
-// lockFolder keeps a folder from being deleted until the transaction ends; a folder that
+// LockFolder keeps a folder from being deleted until the transaction ends; a folder that
 // is not there is the caller's mistake, not a missing record.
-func lockFolder(ctx context.Context, q *db.Queries, id int64) error {
+func LockFolder(ctx context.Context, q *db.Queries, id int64) error {
 	if _, err := q.LockFolder(ctx, id); errors.Is(err, sql.ErrNoRows) {
 		return fieldErr("folder_id", "folder_not_found")
 	} else if err != nil {
@@ -771,6 +914,8 @@ const (
 	BulkHide   = "hide"
 	BulkUnhide = "unhide"
 	BulkMove   = "move"
+	// BulkGroup puts the users into a group of their own: what they may connect to follows it.
+	BulkGroup = "group"
 )
 
 // BulkOpt is what an action needs besides the users.
@@ -779,6 +924,33 @@ type BulkOpt struct {
 	Days int64
 	// Folder is where BulkMove puts the users; nil takes them out of their folders.
 	Folder *int64
+	// Group is the group BulkGroup gives the users; nil takes them out of their own groups,
+	// back to their tariffs'.
+	Group *int64
+}
+
+// extension is what BulkExtend adds to each user's term.
+func (o BulkOpt) extension() Extension { return Extension{Days: o.Days, Period: o.Days <= 0} }
+
+// checkBulk refuses an action Bulk does not know, and one it knows with a bad option.
+func checkBulk(action string, opt BulkOpt) error {
+	switch action {
+	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove, BulkGroup:
+	default:
+		return fmt.Errorf("bulk action %q", action)
+	}
+	if action == BulkExtend && opt.Days > MaxExtendDays {
+		return fieldErr("days", "bad_days")
+	}
+	return nil
+}
+
+// bulkIDs are the users a bulk action is asked for, each once, in id order: the order the
+// rows are locked in.
+func bulkIDs(ids []int64) []int64 {
+	want := slices.Clone(ids)
+	slices.Sort(want)
+	return slices.Compact(want)
 }
 
 // Bulk does one action to every user of ids in one transaction: all of them, or, if one
@@ -790,24 +962,22 @@ type BulkOpt struct {
 // COMMITTED is enough: what each change reads (the expiry an extension adds to) comes
 // from the locked rows, and the traffic batches lock the same rows in the same order.
 func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOpt) (int, error) {
-	switch action {
-	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove:
-	default:
-		return 0, fmt.Errorf("bulk action %q", action)
+	if err := checkBulk(action, opt); err != nil {
+		return 0, err
 	}
-	days := opt.Days
-	if action == BulkExtend && days > MaxExtendDays {
-		return 0, fieldErr("days", "bad_days")
-	}
-	want := slices.Clone(ids)
-	slices.Sort(want)
-	want = slices.Compact(want)
+	want := bulkIDs(ids)
 	done := 0
 	err := s.st.TxRC(ctx, func(q *db.Queries) error {
 		done = 0
-		// The folder first, then the users: the order a deleted folder takes its own.
+		// The folder first, then the users: the order a deleted folder takes its own. The group
+		// too.
 		if action == BulkMove && opt.Folder != nil {
-			if err := lockFolder(ctx, q, *opt.Folder); err != nil {
+			if err := LockFolder(ctx, q, *opt.Folder); err != nil {
+				return err
+			}
+		}
+		if action == BulkGroup && opt.Group != nil {
+			if err := LockGroups(ctx, q, "group_id", *opt.Group); err != nil {
 				return err
 			}
 		}
@@ -826,7 +996,7 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 		now := s.now()
 		switch action {
 		case BulkExtend:
-			ext := Extension{Days: days, Period: days <= 0}
+			ext := opt.extension()
 			p := db.SetUsersExpiryParams{UpdatedAt: now.Unix(), Ids: found, ExpiresAt: make([]int64, len(users))}
 			for i, u := range users {
 				p.ExpiresAt[i] = ext.until(now, u.ExpiresAt, u.BillingDay).Unix()
@@ -847,6 +1017,12 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 		case BulkMove:
 			folder := NullInt(opt.Folder)
 			err = q.SetUsersFolder(ctx, db.SetUsersFolderParams{FolderID: folder, UpdatedAt: now.Unix(), Ids: found})
+		case BulkGroup:
+			if opt.Group != nil {
+				err = q.SetUsersGroup(ctx, db.SetUsersGroupParams{Ids: found, GroupID: *opt.Group})
+			} else {
+				err = q.ClearUsersGroup(ctx, found)
+			}
 		}
 		if err != nil {
 			return err
@@ -863,7 +1039,9 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	return done, nil
 }
 
-func encodeTags(tags []string) (string, error) {
+// EncodeTags is how labels are kept (users.tags, nodes.tags, inbounds.tags): trimmed, the
+// empty ones dropped, as a JSON array.
+func EncodeTags(tags []string) (string, error) {
 	clean := make([]string, 0, len(tags))
 	for _, t := range tags {
 		if t = strings.TrimSpace(t); t != "" {
@@ -881,6 +1059,12 @@ func DecodeTags(raw string) []string {
 		t = []string{}
 	}
 	return t
+}
+
+// HasTag: the labels raw (EncodeTags) hold tag, in any letter case.
+func HasTag(raw, tag string) bool {
+	tag = strings.TrimSpace(tag)
+	return slices.ContainsFunc(DecodeTags(raw), func(t string) bool { return strings.EqualFold(t, tag) })
 }
 
 func DecodeInbounds(raw sql.NullString) []int64 {

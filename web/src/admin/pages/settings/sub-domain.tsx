@@ -3,9 +3,12 @@ import { api, unwrap, type Schemas } from "../../../api/client";
 import { certLine, CertPill, CertStatusBlock } from "../../../components/acme";
 import { CardHead, FormActions } from "../../../components/layout";
 import { Button, Field, Pill } from "../../../components/ui";
+import { SwitchRow } from "../../../components/switch";
 import { t } from "../../../i18n";
 import { useDraft } from "../../../lib/draft";
 import { fieldErrors } from "../../../lib/fields";
+import { certRefusal } from "./cert-refusal";
+import { CertRefusalNote } from "./former-domains";
 import { useSaveSettings } from "./shared";
 
 type Settings = Schemas["SettingsView"];
@@ -15,12 +18,14 @@ type Settings = Schemas["SettingsView"];
 export function SubDomainCard({ s }: { s: Settings }) {
   const save = useSaveSettings();
   const { draft, setDraft } = useDraft(s.sub_domain);
-  const error = fieldErrors(save.error).sub_domain;
+  const { draft: external, setDraft: setExternal } = useDraft(s.sub_external);
+  const refusal = certRefusal(save.error, ["sub_domain"]);
+  const error = refusal ? undefined : fieldErrors(save.error).sub_domain;
   const next = draft.trim().toLowerCase();
-  const changed = next !== s.sub_domain;
+  const changed = next !== s.sub_domain || external !== s.sub_external;
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (changed) save.mutate({ sub_domain: next });
+    if (changed) save.mutate({ sub_domain: next, sub_external: external });
   };
   return (
     <section className="card glass reveal" style={{ "--i": 1 } as React.CSSProperties}>
@@ -43,16 +48,28 @@ export function SubDomainCard({ s }: { s: Settings }) {
             autoComplete="off"
           />
         </Field>
+        <SwitchRow label={t("settings.subDomain.external")} sub={t("settings.subDomain.externalHint")} checked={external} onChange={setExternal} />
         <p className="text-xs text-[var(--ink-500)]">{t("settings.subDomain.note")}</p>
+        {refusal && changed ? (
+          <div className="mt-3">
+            <CertRefusalNote
+              r={refusal}
+              retrying={save.isPending && !save.variables?.force_domain}
+              forcing={save.isPending && !!save.variables?.force_domain}
+              onRetry={() => save.mutate({ sub_domain: next, sub_external: external })}
+              onForce={() => save.mutate({ sub_domain: next, sub_external: external, force_domain: true })}
+            />
+          </div>
+        ) : null}
         <FormActions saving={save.isPending && save.variables?.sub_domain === next} disabled={!changed}>
           {s.sub_domain ? (
-            <Button variant="ghost" loading={save.isPending && save.variables?.sub_domain === ""} onClick={() => save.mutate({ sub_domain: "" })}>
+            <Button variant="ghost" loading={save.isPending && save.variables?.sub_domain === ""} onClick={() => save.mutate({ sub_domain: "", sub_external: false })}>
               {t("settings.subDomain.off")}
             </Button>
           ) : null}
         </FormActions>
       </form>
-      {s.sub_domain && s.sub_certificate ? <SubCertificate s={s} c={s.sub_certificate} /> : null}
+      {s.sub_domain && !s.sub_external && s.sub_certificate ? <SubCertificate s={s} c={s.sub_certificate} /> : null}
     </section>
   );
 }
