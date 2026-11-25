@@ -1,12 +1,28 @@
 package nodesync
 
 import (
+	"context"
 	"time"
 
 	"mikan/internal/nodeapi"
 	"mikan/internal/panel/domain"
 	"mikan/internal/panel/store/db"
 )
+
+// addPaymentTraffic stores a counters batch's renewal bytes, by user and expiry, in one
+// statement.
+func addPaymentTraffic(ctx context.Context, q *db.Queries, bytes map[[2]int64]int64) error {
+	if len(bytes) == 0 {
+		return nil
+	}
+	arg := db.AddPaymentAccessTrafficParams{
+		UserIds: make([]int64, 0, len(bytes)), ExpiredAts: make([]int64, 0, len(bytes)), Bytes: make([]int64, 0, len(bytes)),
+	}
+	for key, n := range bytes {
+		arg.UserIds, arg.ExpiredAts, arg.Bytes = append(arg.UserIds, key[0]), append(arg.ExpiredAts, key[1]), append(arg.Bytes, n)
+	}
+	return q.AddPaymentAccessTraffic(ctx, arg)
+}
 
 func (s *Syncer) paymentInbound(snap *snapshot) (db.Inbound, bool) {
 	for _, in := range snap.inbounds {

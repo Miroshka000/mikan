@@ -399,7 +399,10 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 				if payKeys.UUID != "" {
 					keys = payKeys
 				}
-				cfg.Mode, cfg.Routes, cfg.Rules, cfg.Templates = routing.All, routing.Routes{}, nil, nil
+				// The renewal profile has one server: what was routed to the others goes by the
+				// mode, which stays the panel's. With ru_direct the Russian checkout and bank
+				// pages go past the tunnel, whose node lets only the listed hosts through.
+				cfg.Routes, cfg.Rules, cfg.Templates = routing.Routes{}, nil, nil
 				if cfg.Happ.Routing == xray.HappRoutingAuto {
 					appHeaders(hd, ua, cfg, "")
 					ruleHeaders(hd, cfg.Headers)

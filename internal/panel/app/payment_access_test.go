@@ -95,7 +95,13 @@ func TestPaymentAccessProfile(t *testing.T) {
 	if got := fetch(); !strings.Contains(got, "vless://"+key.UUID+"@renewal.example.com:9443?") || strings.Contains(got, "#regular-group-proxy") {
 		t.Fatal("expired subscription did not get the payment profile at its group's address")
 	}
-	if err := h.st.Q.AddPaymentAccessTraffic(ctx, db.AddPaymentAccessTrafficParams{UserID: u.ID, ExpiredAt: u.ExpiresAt.Int64, Bytes: cfg.Remaining(0)}); err != nil {
+	// The panel's routing mode stays, ru_direct by default: Russian checkout and bank pages
+	// go past the tunnel, whose node lets only the listed hosts through.
+	if rr, body := h.do(http.MethodGet, "/"+subPath+"/"+u.SubToken, nil, map[string]string{"User-Agent": "mihomo/1.19.31"}); rr.StatusCode != http.StatusOK ||
+		!strings.Contains(string(body), key.UUID) || !strings.Contains(string(body), "GEOSITE,category-ru,DIRECT") {
+		t.Fatalf("the renewal profile lost the panel's routing mode: %d %s", rr.StatusCode, body)
+	}
+	if err := h.st.Q.AddPaymentAccessTraffic(ctx, db.AddPaymentAccessTrafficParams{UserIds: []int64{u.ID}, ExpiredAts: []int64{u.ExpiresAt.Int64}, Bytes: []int64{cfg.Remaining(0)}}); err != nil {
 		t.Fatal(err)
 	}
 	if got := fetch(); !strings.Contains(got, "127.0.0.1:1") || strings.Contains(got, key.UUID) {

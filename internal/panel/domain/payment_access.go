@@ -23,6 +23,10 @@ import (
 
 const KeyPaymentAccess = "sub_payment_access"
 
+// PaymentAccessMaxDays is the longest renewal window after an expiry; the days' maximum
+// in the API (the tag below) is the same number.
+const PaymentAccessMaxDays = 14
+
 type PaymentAccess struct {
 	InboundID  int64    `json:"inbound_id" minimum:"0" doc:"0 disables payment access; otherwise an enabled VLESS inbound without a traffic group"`
 	Days       int      `json:"days" minimum:"1" maximum:"14"`
@@ -37,7 +41,7 @@ func LoadPaymentAccess(ctx context.Context, set *settings.Settings) (PaymentAcce
 }
 
 func (c *PaymentAccess) Validate() error {
-	if c.InboundID < 0 || c.Days < 1 || c.Days > 14 || c.TrafficMiB < 1 || c.TrafficMiB > 200 || c.SpeedMbps < 1 || c.SpeedMbps > 5 || len(c.Domains) > 50 {
+	if c.InboundID < 0 || c.Days < 1 || c.Days > PaymentAccessMaxDays || c.TrafficMiB < 1 || c.TrafficMiB > 200 || c.SpeedMbps < 1 || c.SpeedMbps > 5 || len(c.Domains) > 50 {
 		return fmt.Errorf("payment_access_limits")
 	}
 	c.Domains = append([]string{}, c.Domains...)
@@ -62,7 +66,7 @@ func (c PaymentAccess) Matches(in db.Inbound) bool {
 }
 
 func (c PaymentAccess) Window(u db.User, now time.Time) (until int64, ok bool) {
-	if c.InboundID == 0 || c.Days < 1 || c.Days > 14 || u.Status == StateDisabled || !u.ExpiresAt.Valid || u.ExpiresAt.Int64 <= 0 || u.ExpiresAt.Int64 > model.MaxUnix || u.SubToken == "" {
+	if c.InboundID == 0 || c.Days < 1 || c.Days > PaymentAccessMaxDays || u.Status == StateDisabled || !u.ExpiresAt.Valid || u.ExpiresAt.Int64 <= 0 || u.ExpiresAt.Int64 > model.MaxUnix || u.SubToken == "" {
 		return 0, false
 	}
 	until = u.ExpiresAt.Int64 + int64(c.Days)*86400

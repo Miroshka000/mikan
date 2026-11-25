@@ -2,6 +2,7 @@ package nodesync
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -63,7 +64,9 @@ func TestPaymentAccessAccounting(t *testing.T) {
 			t.Fatal("regular slots would expose payment credentials to older nodes")
 		}
 	}
-	node.batch = nodeapi.Counters{Epoch: "payment", Seq: 1, Slots: map[string]nodeapi.Traffic{key.Name: {Up: 100, Down: 900}}}
+	// A key of a user deleted since the node counted it is skipped, not a failed batch.
+	gone := fmt.Sprintf("%s%d-%d", nodeapi.PaymentSlotPrefix, u.ID+1000, u.ExpiresAt.Int64)
+	node.batch = nodeapi.Counters{Epoch: "payment", Seq: 1, Slots: map[string]nodeapi.Traffic{key.Name: {Up: 100, Down: 900}, gone: {Up: 5, Down: 5}}}
 	s.pullCounters(ctx)
 	s.pullCounters(ctx)
 	used, err := st.Q.PaymentAccessTraffic(ctx, db.PaymentAccessTrafficParams{UserID: u.ID, ExpiredAt: u.ExpiresAt.Int64})

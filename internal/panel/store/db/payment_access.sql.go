@@ -7,24 +7,31 @@ package db
 
 import (
 	"context"
+
+	"github.com/lib/pq"
 )
 
 const addPaymentAccessTraffic = `-- name: AddPaymentAccessTraffic :exec
 INSERT INTO payment_access_traffic (user_id, expired_at, bytes)
-SELECT id, $1::bigint, $2::bigint
-FROM users WHERE id = $3
+SELECT t.user_id, t.expired_at, t.bytes
+FROM (SELECT unnest($1::bigint[]) AS user_id, unnest($2::bigint[]) AS expired_at,
+             unnest($3::bigint[]) AS bytes) AS t
+WHERE EXISTS (SELECT 1 FROM users WHERE users.id = t.user_id)
+ORDER BY t.user_id, t.expired_at
 ON CONFLICT (user_id, expired_at) DO UPDATE
 SET bytes = payment_access_traffic.bytes + EXCLUDED.bytes
 `
 
 type AddPaymentAccessTrafficParams struct {
-	ExpiredAt int64
-	Bytes     int64
-	UserID    int64
+	UserIds    []int64
+	ExpiredAts []int64
+	Bytes      []int64
 }
 
+// A counters batch's renewal bytes by user and expiry, each key once, in key order as the
+// other batches take their rows; a user deleted since the node counted is skipped.
 func (q *Queries) AddPaymentAccessTraffic(ctx context.Context, arg AddPaymentAccessTrafficParams) error {
-	_, err := q.db.ExecContext(ctx, addPaymentAccessTraffic, arg.ExpiredAt, arg.Bytes, arg.UserID)
+	_, err := q.db.ExecContext(ctx, addPaymentAccessTraffic, pq.Array(arg.UserIds), pq.Array(arg.ExpiredAts), pq.Array(arg.Bytes))
 	return err
 }
 

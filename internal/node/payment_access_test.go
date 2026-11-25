@@ -49,17 +49,61 @@ func TestPaymentAccessCitrusRules(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ip, _ := netip.ParseAddr(tc.ip)
 			m := &C.Metadata{InUser: tc.user, Host: tc.host, DstIP: ip, DstPort: tc.port, NetWork: tc.network}
-			for _, rule := range cfg.SubRules[paymentRule] {
-				if ok, got := rule.Match(m, C.RuleMatchHelper{ResolveIP: func() {}}); ok {
-					if got != tc.want {
-						t.Errorf("rule chose %q, want %q", got, tc.want)
-					}
-					return
-				}
+			if got := paymentAdapter(t, cfg.SubRules[paymentRule], m); got != tc.want {
+				t.Errorf("rule chose %q, want %q", got, tc.want)
 			}
-			t.Fatal("no rule matched")
 		})
 	}
+}
+
+// Renewal traffic leaves the way its inbound's traffic does, through the inbound's exit
+// or WARP: a cascaded inbound must not send it out of the entry node.
+func TestPaymentAccessLeavesByTheInboundsWayOut(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		st   nodeapi.DesiredState
+		want string
+	}{
+		{"exit", cascadeState(t), nodeapi.ExitName(3)},
+		{"WARP", warpState(), warpProxy},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st := tc.st
+			st.PaymentAccess = &nodeapi.PaymentAccess{Inbound: "in-anytls", Domains: []string{"yoomoney.ru"}, Slots: []nodeapi.Slot{{Name: payUser}}}
+			raw, _, err := buildConfig(st, proto.Cert{}, false, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := executor.ParseWithBytes(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range []struct {
+				m    *C.Metadata
+				want string
+			}{
+				{&C.Metadata{InUser: payUser, Host: "yoomoney.ru", DstPort: 443, NetWork: C.TCP}, tc.want},
+				{&C.Metadata{InUser: payUser, DstIP: netip.MustParseAddr("149.154.160.1"), DstPort: 443, NetWork: C.TCP}, tc.want},
+				{&C.Metadata{InUser: payUser, Host: "example.org", DstPort: 443, NetWork: C.TCP}, "REJECT"},
+			} {
+				if got := paymentAdapter(t, cfg.SubRules[paymentRule], c.m); got != c.want {
+					t.Errorf("%s: %q, want %q", c.m.RemoteAddress(), got, c.want)
+				}
+			}
+		})
+	}
+}
+
+// paymentAdapter is the outbound the first matching rule picks for m.
+func paymentAdapter(t *testing.T, rules []C.Rule, m *C.Metadata) string {
+	t.Helper()
+	for _, rule := range rules {
+		if ok, adapter := rule.Match(m, C.RuleMatchHelper{ResolveIP: func() {}}); ok {
+			return adapter
+		}
+	}
+	t.Fatalf("no rule matched %+v", m)
+	return ""
 }
 
 func TestPaymentAccessSubscriptionAddress(t *testing.T) {
@@ -77,14 +121,7 @@ func TestPaymentAccessSubscriptionAddress(t *testing.T) {
 	}
 	for _, tc := range []struct{ ip, want string }{{"198.51.100.12", "DIRECT"}, {"198.51.100.13", "REJECT"}} {
 		m := &C.Metadata{InUser: payUser, DstIP: netip.MustParseAddr(tc.ip), DstPort: 8443, NetWork: C.TCP}
-		got := ""
-		for _, r := range cfg.SubRules[paymentRule] {
-			if ok, adapter := r.Match(m, C.RuleMatchHelper{}); ok {
-				got = adapter
-				break
-			}
-		}
-		if got != tc.want {
+		if got := paymentAdapter(t, cfg.SubRules[paymentRule], m); got != tc.want {
 			t.Errorf("%s: adapter %q, want %q", tc.ip, got, tc.want)
 		}
 	}

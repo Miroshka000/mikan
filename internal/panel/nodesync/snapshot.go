@@ -108,17 +108,18 @@ func (m *Manager) readSnapshot(ctx context.Context) (s *snapshot, err error) {
 	if s.detail, err = settings.New(q).On(ctx, settings.TrafficDetail); err != nil {
 		return nil, err
 	}
-	if s.payment, err = domain.LoadPaymentAccess(ctx, settings.New(q)); err != nil {
+	set := settings.New(q)
+	if s.payment, err = domain.LoadPaymentAccess(ctx, set); err != nil {
 		return nil, err
 	}
 	if s.payment.InboundID != 0 {
-		set := settings.New(q)
 		ep, err := set.SubEndpoint(ctx)
 		if err != nil {
 			return nil, err
 		}
 		s.paymentPage = ep.URL()
-		rows, err := q.ListPaymentAccessTraffic(ctx, m.now().Unix()-14*86400)
+		// The traffic of every expiry a window may still be open for.
+		rows, err := q.ListPaymentAccessTraffic(ctx, m.now().Unix()-domain.PaymentAccessMaxDays*86400)
 		if err != nil {
 			return nil, err
 		}

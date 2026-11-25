@@ -75,5 +75,9 @@ if [ "${KEEP:-0}" != 1 ]; then
   if [ "$status" = 0 ]; then
     sh ./guard.sh || status=$?
   fi
+  # Payment access after expiry, on the guard's stack anew.
+  if [ "$status" = 0 ]; then
+    sh ./payment.sh || status=$?
+  fi
 fi
 exit "$status"

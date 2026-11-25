@@ -50,6 +50,7 @@ func paymentRules(st nodeapi.DesiredState) map[string][]string {
 	out := map[string][]string{paymentRule: guard}
 	if users := paymentUsers(st); users != "" {
 		out[paymentRule] = append([]string{"SUB-RULE,(IN-USER," + users + ")," + paymentDestinations}, guard...)
+		way := paymentWayOut(st)
 		r := make([]string, 0, len(privateRules)+len(st.PaymentAccess.Domains)+len(telegramNetworks)+4)
 		r = append(r, privateRules...)
 		r = append(r, egressRules(st.Filters)...)
@@ -63,12 +64,12 @@ func paymentRules(st nodeapi.DesiredState) map[string][]string {
 				}
 				match = kind + "," + netip.PrefixFrom(ip, ip.BitLen()).String() + ",no-resolve"
 			}
-			r = append(r, "AND,(("+match+"),(DST-PORT,"+strconv.Itoa(int(port))+")),DIRECT")
+			r = append(r, "AND,(("+match+"),(DST-PORT,"+strconv.Itoa(int(port))+")),"+way)
 		}
 		r = append(r, "NOT,((DST-PORT,443)),REJECT")
 		for _, raw := range st.PaymentAccess.Domains {
 			if host, ok := nodeapi.PaymentDomain(raw); ok {
-				r = append(r, "DOMAIN,"+host+",DIRECT")
+				r = append(r, "DOMAIN,"+host+","+way)
 			}
 		}
 		for i, prefix := range telegramPrefixes {
@@ -76,11 +77,24 @@ func paymentRules(st nodeapi.DesiredState) map[string][]string {
 			if prefix.Addr().Is6() {
 				kind = "IP-CIDR6"
 			}
-			r = append(r, kind+","+telegramNetworks[i]+",DIRECT,no-resolve")
+			r = append(r, kind+","+telegramNetworks[i]+","+way+",no-resolve")
 		}
 		out[paymentDestinations] = append(r, "MATCH,REJECT")
 	}
 	return out
+}
+
+// paymentWayOut is the way out the node's rules give the renewal inbound's own traffic,
+// its exit's or WARP's IN-NAME rule, else DIRECT. DIRECT for all would take a cascaded
+// inbound's renewal traffic out of the entry node, past its exit.
+func paymentWayOut(st nodeapi.DesiredState) string {
+	prefix := "IN-NAME," + st.PaymentAccess.Inbound + ","
+	for _, r := range slices.Concat(exitRules(st), warpRules(st)) {
+		if way, ok := strings.CutPrefix(r, prefix); ok {
+			return way
+		}
+	}
+	return "DIRECT"
 }
 
 type paymentTargets struct {

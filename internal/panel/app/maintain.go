@@ -17,6 +17,8 @@ const (
 	trafficDailyKeep = 400 * 24 * time.Hour
 	// auditKeep is how long the admin's journal reaches back.
 	auditKeep = 180 * 24 * time.Hour
+	// paymentTrafficKeep outlasts the longest renewal window (domain.PaymentAccessMaxDays).
+	paymentTrafficKeep = 30 * 24 * time.Hour
 	// removalsPerRound bounds the inactive subscriptions one round removes: rules turned on
 	// over years of them go over a few rounds, each removal a short transaction of its own.
 	removalsPerRound = 200
@@ -27,7 +29,7 @@ const (
 // keys burn) and moves the subscriptions' lifecycle on.
 func (p *Panel) maintain(ctx context.Context) {
 	now := p.now()
-	if err := p.st.Q.PrunePaymentAccessTraffic(ctx, now.Add(-30*24*time.Hour).Unix()); err != nil {
+	if err := p.st.Q.PrunePaymentAccessTraffic(ctx, now.Add(-paymentTrafficKeep).Unix()); err != nil {
 		p.log.Error("prune payment access traffic", "err", err)
 	}
 	if err := p.st.Q.PruneTrafficDaily(ctx, now.Add(-trafficDailyKeep).Unix()/86400); err != nil {

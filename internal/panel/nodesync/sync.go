@@ -675,11 +675,10 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 		// grants on the batch's transaction: a batch delivered again is skipped above,
 		// grants included.
 		b := domain.TrafficBatch{Main: map[int64]domain.Bytes{}, Pools: map[[2]int64]domain.Bytes{}, Node: s.id}
+		renewal := map[[2]int64]int64{} // user, expiry → bytes of the renewal keys
 		for slot, t := range c.Slots {
 			if id, expired, ok := domain.ParsePaymentSlot(slot); ok {
-				if err := q.AddPaymentAccessTraffic(ctx, db.AddPaymentAccessTrafficParams{UserID: id, ExpiredAt: expired, Bytes: t.Up + t.Down}); err != nil {
-					return err
-				}
+				renewal[[2]int64{id, expired}] += t.Up + t.Down
 				continue
 			}
 			if uid, ok := owner[slot]; ok {
@@ -704,6 +703,9 @@ func (s *Syncer) pullCounters(ctx context.Context) {
 			}
 		}
 		if err := domain.CountTraffic(ctx, q, b, now); err != nil {
+			return err
+		}
+		if err := addPaymentTraffic(ctx, q, renewal); err != nil {
 			return err
 		}
 		// Each slot's own total, main and pools: what every bound device used.
