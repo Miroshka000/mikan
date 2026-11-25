@@ -52,6 +52,8 @@ func ssUserKey(cipher, secret string) string {
 
 func validateExtra(t Template, o Options) error {
 	switch t.Type() {
+	case "wireguard":
+		return validateWireGuard(t, o)
 	case "shadowquic":
 		up, ok := t["jls-upstream"].(map[string]any)
 		if !ok {
@@ -170,6 +172,8 @@ func toInt(v any) (int, bool) {
 func (c *clientBuilder) finishExtra() (Client, bool) {
 	s := c.in.Slot
 	switch c.t.Type() {
+	case "wireguard":
+		return c.wireGuardClient(), true
 	case "trusttunnel":
 		c.y["username"], c.y["password"], c.y["udp"] = s.Name, s.Secret, true
 		return Client{Mihomo: c.y}, true

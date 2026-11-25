@@ -165,8 +165,8 @@ func (a App) Supports(n proto.Needs) bool {
 			return false
 		}
 		return true
-	case FamilyXray: // no TUIC, AnyTLS or the mihomo-only types in Xray
-		if n.Gecko {
+	case FamilyXray: // no TUIC, AnyTLS, WireGuard or the mihomo-only types in Xray
+		if n.Gecko || n.Type == "wireguard" {
 			return false
 		}
 		switch n.Type {
@@ -174,7 +174,9 @@ func (a App) Supports(n proto.Needs) bool {
 			return true
 		}
 	case FamilySingBox: // no XHTTP, VLESS Encryption or Gecko in sing-box
-		if n.Transport == "xhttp" || n.Encryption || n.Gecko {
+		// sing-box knows WireGuard only as endpoints, from 1.11 on, which a share link
+		// cannot carry: its profile is built separately (singbox.go).
+		if n.Transport == "xhttp" || n.Encryption || n.Gecko || n.Type == "wireguard" {
 			return false
 		}
 		switch n.Type {
@@ -192,7 +194,7 @@ func (a App) Supports(n proto.Needs) bool {
 			return true
 		}
 	default: // what a share link can carry
-		if n.Gecko {
+		if n.Gecko || n.Type == "wireguard" {
 			return false
 		}
 		switch n.Type {

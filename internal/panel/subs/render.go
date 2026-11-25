@@ -135,6 +135,10 @@ type Profile struct {
 	// not empty or fail the subscription of everyone.
 	Skip     func(in db.Inbound, err error)
 	Slot     db.Slot
+	// Slots are every slot of the panel: the inner address of a WireGuard user depends on
+	// the whole set (see proto.WGAddresses), so a subscription renders the same set the
+	// node holds. Empty means the one Slot alone, which is what a preview gets.
+	Slots    []db.Slot
 	Inbounds []db.Inbound // enabled and allowed for this user, in display order
 	// What profile read on the way, for the subscription's page (info) to build on rather than
 	// read again: every inbound, the user's access and grants left.
@@ -210,8 +214,29 @@ func build(p Profile) ([]proxy, error) {
 			for i := 2; used[name]; i++ {
 				name = base + " " + strconv.Itoa(i)
 			}
+			// WireGuard names the user of a connection by the inner address of its peer,
+			// and the address depends on the whole set of users: it is computed from all
+			// slots of the panel, exactly as the node does.
+			var wgAddr netip.Addr
+			if t.Type() == "wireguard" {
+				all := p.Slots
+				if len(all) == 0 {
+					all = []db.Slot{p.Slot}
+				}
+				protoSlots := make([]proto.Slot, 0, len(all))
+				for _, s := range all {
+					protoSlots = append(protoSlots, proto.Slot{Name: s.Name, UUID: s.Uuid, Secret: s.Secret})
+				}
+				addrs, err := proto.WGAddresses(t, protoSlots)
+				if err != nil {
+					p.skip(in, err)
+					continue
+				}
+				wgAddr = addrs[p.Slot.Name]
+			}
 			c, err := proto.ClientConfig(t, proto.ClientInput{Name: name, Host: n.Endpoint.Host, Port: port, PortSpec: spec,
-				SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Slot: slot, SSOneKey: n.SSOneKey})
+				SNI: n.Endpoint.SNI, PinSHA256: n.Endpoint.PinSHA256, Fingerprint: p.Fingerprint, Slot: slot, SSOneKey: n.SSOneKey,
+				WGAddress: wgAddr})
 			if err != nil {
 				p.skip(in, err)
 				continue

@@ -59,6 +59,12 @@ func Listener(t Template, name, listen, port string, slots []Slot, cert Cert, o 
 		l["users"] = users(t, slots, ext)
 	}
 	listenerExtra(t, l)
+	if t.Type() == "wireguard" {
+		// The node keeps the private key of the server: the template does not carry it.
+		if key := ext.WGKey; key != "" {
+			l["private-key"] = key
+		}
+	}
 	cdnListener(t, l)
 	if t.NodeCert() {
 		if cert.CertPath == "" {
@@ -102,6 +108,14 @@ func users(t Template, slots []Slot, ext Ext) any {
 		m := make(map[string]string, len(slots))
 		for _, s := range slots {
 			m[s.UUID] = s.Secret
+		}
+		return m
+	case "wireguard":
+		// One peer per user: the public key of the peer made from the slot secret, and
+		// its own inner address. The node derives both the same way.
+		m := make(map[string]string, len(slots))
+		for _, s := range slots {
+			m[s.Name] = s.Secret
 		}
 		return m
 	default: // hysteria2, anytls, mieru

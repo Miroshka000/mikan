@@ -3,6 +3,7 @@ package proto
 import (
 	"encoding/json"
 	"net"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
@@ -26,6 +27,9 @@ type ClientInput struct {
 	// SSOneKey: the node runs Shadowsocks-2022 with one key for everyone (older than the key
 	// per user, ssMultiUser): the link carries the server's key alone, as that node expects.
 	SSOneKey bool
+	// WGAddress is the user's inner address of this node's wireguard inbound, when the
+	// caller already computed the addresses of the whole slot set (a subscription does).
+	WGAddress netip.Addr
 }
 
 // Fingerprints are the uTLS profiles that mihomo (component/tls/utls.go, v1.19.31), Xray

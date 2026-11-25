@@ -92,6 +92,8 @@ var All = []Info{
 	{ID: "mieru", Title: "Mieru", Summary: "Своё шифрование и случайный рисунок трафика. Только TCP", Type: "mieru", Network: "tcp", Port: "5443", Name: "mieru", SubName: "Mieru", Apps: "mihomo"},
 	{ID: "shadowsocks_2022", Title: "Shadowsocks-2022", Summary: "Классика, быстрый. У каждого пользователя свой ключ", Type: "shadowsocks", Network: "tcp", Port: "6443", Name: "shadowsocks", SubName: "Shadowsocks"},
 	{ID: "sudoku", Title: "Sudoku", Summary: "Прячет трафик под HTTP и текст. Один ключ на всех пользователей", Type: "sudoku", Network: "tcp", Port: "7443", Name: "sudoku", SubName: "Sudoku", Apps: "mihomo", Shared: true},
+	{ID: "wireguard", Title: "WireGuard", Summary: "WireGuard как обычный протокол панели: пир на пользователя, ключ выводится из секрета слота и не хранится. Только приложения на mihomo (и Rawline)", Type: "wireguard", Network: "udp", Port: "51820", Name: "wireguard", SubName: "WireGuard", Apps: "mihomo"},
+	{ID: "amneziawg", Title: "AmneziaWG", Summary: "WireGuard с обфускацией AmneziaWG 3.x: junk-пакеты, паддинг и защита заголовка. Против DPI, который узнаёт WireGuard по первому пакету. Только mihomo-клиенты и Amnezia", Type: "wireguard", Network: "udp", Port: "51821", Name: "awg", SubName: "AmneziaWG", Apps: "mihomo"},
 	{ID: "snell", Title: "Snell", Summary: "Протокол Surge. Один ключ на всех пользователей", Type: "snell", Network: "tcp", Port: "9443", Name: "snell", SubName: "Snell", Apps: "mihomo", Shared: true},
 	{ID: Custom, Title: "Свой конфиг", Summary: "Шаблон листенера mihomo в редакторе: любой поддерживаемый тип и параметры", Network: "", Port: "", Name: "custom", SubName: "Custom"},
 }
@@ -175,6 +177,11 @@ func NewConfig(id, dest string) (string, error) {
 	case "sudoku":
 		return proto.Marshal(proto.Template{"type": "sudoku", "key": secure.Token(32), "aead-method": "chacha20-poly1305", "padding-min": 2, "padding-max": 7,
 			"table-type": "prefer_ascii"}), nil
+	case "wireguard":
+		return proto.Marshal(proto.Template{"type": "wireguard", "mtu": 1420, "ipv4-cidr": "10.66.66.0/24"}), nil
+	case "amneziawg":
+		return proto.Marshal(proto.Template{"type": "wireguard", "mtu": 1420, "ipv4-cidr": "10.66.66.0/24",
+			"amnezia-wg-option": proto.AmneziaWGPreset()}), nil
 	case "snell":
 		return proto.Marshal(proto.Template{"type": "snell", "psk": secure.Token(32), "version": 3}), nil
 	case Custom:

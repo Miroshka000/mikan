@@ -447,6 +447,11 @@ func (h *Handler) slotFor(r *http.Request, u db.User, cfg Config) (db.Slot, erro
 // grants is what is left of the user's grants when the caller read it already; nil reads it.
 func (h *Handler) profile(ctx context.Context, u db.User, cfg Config, slot db.Slot, grants domain.GrantsLeft) (Profile, error) {
 	prof := Profile{Nodes: cfg.Nodes, Direct: cfg.Direct, Slot: slot, Fingerprint: cfg.Fingerprint}
+	// WireGuard hands every user an inner address out of a pool; the assignment depends
+	// on the whole slot set, and the node computes it the same way from its own.
+	if slots, err := h.st.Q.ListSlots(ctx); err == nil {
+		prof.Slots = slots
+	}
 	all, err := h.st.Q.ListInbounds(ctx)
 	if err != nil {
 		return prof, err

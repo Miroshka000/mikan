@@ -27,6 +27,11 @@ type Ext struct {
 	CDN    *CDN            `json:"cdn,omitempty" yaml:"cdn,omitempty"` // apps reach it through a CDN (cdn.go)
 	// SNI443: behind the node's SNI router on 443 (sni443.go).
 	SNI443 bool `json:"sni443,omitempty" yaml:"sni443,omitempty"`
+	// WGKey is the WireGuard server private key of an inbound (base64). It lives here,
+	// not in the template: the template is what reaches mihomo key by key, and mikan's
+	// own section never does. The node is given it as private-key, and clients verify the
+	// server by the public key derived from it.
+	WGKey string `json:"wg-key,omitempty" yaml:"wg-key,omitempty"`
 }
 
 // ClientOverrides change what clients get without touching the server side, e.g. a CDN
@@ -86,6 +91,10 @@ var rules = map[string]rule{
 	"sudoku": {keys: []string{"key", "aead-method", "padding-min", "padding-max", "table-type", "handshake-timeout", "enable-pure-downlink", "httpmask"},
 		network: "tcp", shared: true},
 	"snell": {keys: []string{"psk", "version", "obfs-opts"}, network: "tcp", shared: true},
+	// WireGuard has a key per user (one peer each) but no TLS: the tunnel is its own
+	// transport. The private key and the users are the node's, so a template carries only
+	// the subnets, the MTU and the obfuscation.
+	"wireguard": {keys: []string{"mtu", "ipv4-cidr", "ipv6-cidr", "workers", "amnezia-wg-option"}, network: "udp"},
 }
 
 // managed keys are set by the node; the rest of the forbidden list would let a template
@@ -232,7 +241,7 @@ func Validate(t Template, o Options) error {
 			return fail("config_key", extKey)
 		}
 		for k := range m {
-			if k != "flow" && k != "tls" && k != "client" && k != "cdn" && k != "sni443" {
+			if k != "flow" && k != "tls" && k != "client" && k != "cdn" && k != "sni443" && k != "wg-key" {
 				return fail("config_key", extKey+"."+k)
 			}
 		}
