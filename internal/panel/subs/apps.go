@@ -96,6 +96,14 @@ func DetectApp(userAgent string) App {
 		return false
 	}
 	switch {
+	// Rawline (a mihomo-family app on Android) introduces itself as "Happ/3.0 Rawline/..."
+	// on purpose: the Happ name makes panels send the Xray profile, which carries more
+	// protocols than the share links do. But Rawline parses Clash YAML natively, and the
+	// share-link format cannot carry WireGuard at all (there is no wg:// scheme), so the
+	// Happ costume would cost it exactly the protocol it asked for. Checked before Happ
+	// for that reason.
+	case has("rawline"):
+		return App{Family: FamilyMihomo}
 	case strings.HasPrefix(ua, "stash"):
 		return App{Family: FamilyStash}
 	case has("hiddify"):

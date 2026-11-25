@@ -11,6 +11,10 @@ import (
 
 func TestDetectApp(t *testing.T) {
 	for ua, want := range map[string]App{
+		// Rawline says Happ to get the fuller Xray profile, but it reads Clash YAML and a
+		// share link cannot carry WireGuard: it must be taken for a mihomo client.
+		"Happ/3.0 Rawline/1.0 (android) like ClashMeta": {Family: FamilyMihomo},
+		"Rawline/1.2.3": {Family: FamilyMihomo},
 		"koala-clash/1.4.1":                    {Family: FamilyMihomo, Core: Version{1, 19, 30}},
 		"koala-clash/1.3.1":                    {Family: FamilyMihomo, Core: Version{1, 19, 23}},
 		"mihomo/1.19.31":                       {Family: FamilyMihomo, Core: Version{1, 19, 31}},
