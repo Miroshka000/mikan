@@ -42,6 +42,8 @@ import (
 // profiles are served by, and what of subscriptions only the panel has.
 type Config struct {
 	serve.Config
+	PaymentAccess  domain.PaymentAccess
+	PaymentInbound db.Inbound
 	// HappCrypt is how the subscription page's Happ button hides the subscription address:
 	// "" plain, HappCryptAPI by Happ's own service, HappCryptLocal by the panel itself.
 	HappCrypt string

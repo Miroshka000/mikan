@@ -724,6 +724,9 @@
       "promo_already_applied": "Promo code was already applied",
       "promo_not_bonus": "This code is not a bonus promo",
       "promo_not_discount": "This code cannot be applied to a payment",
+      "payment_access_inbound": "Select an enabled VLESS inbound without a traffic group",
+      "payment_access_domain": "Enter exact domain names without URLs or wildcards",
+      "payment_access_limits": "Check the payment access window, traffic limit and speed",
       "promo_invalid_value": "Promo code settings are invalid",
       "promo_late_refund_failed": "A late promo payment could not be refunded automatically. Check the provider and refund it manually if needed.",
       "bad_value": "Value must be positive and limits/lifetimes cannot be negative",
@@ -3241,6 +3244,17 @@
       "clearText": "The subscription domain gets its certificate automatically again. Until it is issued, clients get yours.",
       "external": "External mikan-sub",
       "externalHint": "New links use HTTPS port 443. For existing links with another port, configure that port on mikan-sub or distribute new links. The edge issues its own certificate."
+    },
+    "paymentAccess": {
+      "title": "Payment access after expiry",
+      "sub": "Let expired subscribers reach Telegram, payment sites and the subscription page for a limited time.",
+      "inbound": "VLESS inbound",
+      "off": "Disabled",
+      "days": "Days after expiry",
+      "traffic": "Traffic limit (MiB)",
+      "speed": "Speed (Mbit/s)",
+      "domains": "Additional HTTPS domains",
+      "domainsHint": "One exact hostname per line. Include any bank confirmation domains used in your checkout."
     },
     "inactive": {
       "title": "When a subscription does not work",

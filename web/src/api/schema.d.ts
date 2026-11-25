@@ -7339,6 +7339,7 @@ export interface components {
             sub_inactive_text?: string;
             /** Format: int64 */
             sub_log_days?: number;
+            sub_payment_access?: components["schemas"]["PaymentAccess"];
             /**
              * Format: int64
              * @description Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать
@@ -7458,6 +7459,21 @@ export interface components {
             events?: string[];
             name?: string;
             url?: string;
+        };
+        PaymentAccess: {
+            /** Format: int64 */
+            days: number;
+            /** @description Additional exact HTTPS hostnames, including any bank redirects */
+            domains: string[];
+            /**
+             * Format: int64
+             * @description 0 disables payment access; otherwise an enabled VLESS inbound without a traffic group
+             */
+            inbound_id: number;
+            /** Format: int64 */
+            speed_mbps: number;
+            /** Format: int64 */
+            traffic_mib: number;
         };
         PaymentSettingsView: {
             /** @description Новые люди могут купить подписку в боте; иначе — только продление */
@@ -8388,6 +8404,7 @@ export interface components {
              * @description Сколько дней хранится журнал запросов подписок: время, адрес, приложение, сработавшее правило, ответ; 0 — журнал выключен
              */
             sub_log_days: number;
+            sub_payment_access: components["schemas"]["PaymentAccess"];
             /**
              * Format: int64
              * @description Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае

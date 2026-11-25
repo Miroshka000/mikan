@@ -2,6 +2,7 @@ package node
 
 import (
 	"net"
+	"sync/atomic"
 	"time"
 
 	N "github.com/metacubex/mihomo/common/net"
@@ -15,8 +16,9 @@ import (
 // of a slot: the device limit and the torrent blocker, plus the ingress filter. The
 // user's speed is the core's too, worked out by the registry (shaper.go).
 type Tunnel struct {
-	inner C.Tunnel
-	reg   *Registry
+	inner        C.Tunnel
+	reg          *Registry
+	paymentHosts atomic.Pointer[paymentTargets]
 }
 
 func (t *Tunnel) HandleTCPConn(conn net.Conn, m *C.Metadata) {
@@ -58,6 +60,12 @@ func (t *Tunnel) HandleTCPConn(conn net.Conn, m *C.Metadata) {
 			return
 		}
 	}
+	if paymentUser(m.InUser) {
+		conn = t.paymentTCP(conn, m)
+		if conn == nil {
+			return
+		}
+	}
 	// The core holds the connection to the user's speed (shaper.go) and counts it to its
 	// site as it ends (sites.go).
 	t.inner.HandleTCPConn(conn, m)
@@ -85,7 +93,7 @@ func (t *Tunnel) HandleUDPPacket(p C.UDPPacket, m *C.Metadata) {
 		t.inner.HandleUDPPacket(p, m)
 		return
 	}
-	if !t.reg.admitFrom(m.SrcIP) {
+	if paymentUser(m.InUser) || !t.reg.admitFrom(m.SrcIP) {
 		p.Drop()
 		return
 	}

@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -139,10 +140,18 @@ type Engine struct {
 // routesKey covers what the outbound side of the config depends on.
 func routesKey(st nodeapi.DesiredState, allowPrivate bool) string {
 	raw, _ := json.Marshal(struct {
-		W *nodeapi.Warp
-		E []nodeapi.Exit
-		R []string
-	}{st.Warp, st.Exits, rules(st, allowPrivate)})
+		Outbound string
+		R        []string
+		S        map[string][]string
+	}{outboundKey(st), rules(st, allowPrivate), paymentRules(st)})
+	return string(raw)
+}
+
+func outboundKey(st nodeapi.DesiredState) string {
+	raw, _ := json.Marshal(struct {
+		Warp  *nodeapi.Warp
+		Exits []nodeapi.Exit
+	}{st.Warp, st.Exits})
 	return string(raw)
 }
 
@@ -389,7 +398,7 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 
 	// Listeners are patched below; the way out (WARP and the rules that pick it) is
 	// swapped only when it changed, so open connections keep their outbound otherwise.
-	if key := routesKey(st, e.allowPrivate); key != e.routes {
+	if e.routes == "" || outboundKey(st) != outboundKey(e.applied) {
 		// The old tunnel's WireGuard device would keep its socket and goroutines.
 		if old, ok := tunnel.Proxies()[warpProxy]; ok {
 			defer func() {
@@ -399,14 +408,17 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 			}()
 		}
 		tunnel.UpdateProxies(cfg.Proxies, cfg.Providers)
-		tunnel.UpdateRules(cfg.Rules, cfg.SubRules, cfg.RuleProviders)
-		e.routes = key
 		e.warpMu.Lock()
 		e.warp = nodeapi.WarpStatus{}
 		e.warpState = ""
 		e.probes = nil
 		e.warpGen++
 		e.warpMu.Unlock()
+	}
+
+	if key := routesKey(st, e.allowPrivate); key != e.routes {
+		tunnel.UpdateRules(cfg.Rules, cfg.SubRules, cfg.RuleProviders)
+		e.routes = key
 	}
 
 	if key := exitDNSKey(st.DNS); key != e.exitDNS {
@@ -419,8 +431,13 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 
 	// Before the listeners: a new one takes users under the guard the state asks for.
 	e.setGuard(st.OwnPorts)
+	e.tun.setPaymentHosts(st.PaymentAccess)
 
-	e.Reg.SetSlots(st.Slots)
+	slots := st.Slots
+	if st.PaymentAccess != nil {
+		slots = slices.Concat(slots, st.PaymentAccess.Slots)
+	}
+	e.Reg.SetSlots(slots)
 	e.Reg.SetShaping(st.Shaping)
 	e.Reg.SetPolicies(st.Epoch, st.Policies)
 	e.Reg.SetShared(sharedListeners(st))
@@ -453,6 +470,7 @@ func (e *Engine) apply(st nodeapi.DesiredState) (nodeapi.ApplyResult, error) {
 		}
 		statuses = append(statuses, ls)
 	}
+	e.closePaymentConnections(st.PaymentAccess)
 	statuses = append(statuses, rejected...)
 	// A listener that failed to bind stays registered under its old, closed instance in
 	// the core and would be skipped as "unchanged" next time; re-patching without it
@@ -557,7 +575,7 @@ func policyShape(ps []nodeapi.Policy) string {
 			pools = append(pools, q.Pool+strconv.FormatBool(q.Remaining < 0))
 		}
 		_ = enc.Encode([]any{p.Slot, p.Allowed, p.Inbounds, p.DeviceLimit, p.QuotaRemaining < 0, p.OtherIPs, pools,
-			p.TorrentExempt, p.BannedUntil, p.SpeedMbps, p.Group})
+			p.TorrentExempt, p.BannedUntil, p.SpeedMbps, p.Group, p.ExpiresAt})
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -568,7 +586,7 @@ func (e *Engine) Health() nodeapi.Health {
 		ls, rev = append(ls, sh.listeners...), sh.revision
 	}
 	return nodeapi.Health{
-		Version: e.version, Core: coreVersion(), Revision: rev, StartedAt: e.started,
+		Version: e.version, Core: coreVersion(), Revision: rev, StartedAt: e.started, PaymentAccess: true,
 		Listeners: ls, Conns: e.Reg.ConnCount(), System: e.sys.last(), Update: e.UpdateStatus(), Host: e.host.get(), Time: time.Now(),
 		Redirect: e.redirect.Load(), Router: e.routerStatus.Load(), APILock: e.apiLock().status(),
 	}

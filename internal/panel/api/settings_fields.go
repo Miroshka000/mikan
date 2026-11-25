@@ -71,6 +71,7 @@ var settingFields = []settingField{
 	text("support_url", settings.KeySupportURL, true, func(b *patchSettingsBody) *string { return b.SupportURL }),
 	// What every subscriber's app shows: text, links and the logo it downloads.
 	text("sub_title", settings.KeySubTitle, true, func(b *patchSettingsBody) *string { return b.SubTitle }),
+	value("sub_payment_access", domain.KeyPaymentAccess, true, func(b *patchSettingsBody) *domain.PaymentAccess { return b.PaymentAccess }),
 	value("sub_inactive_server", settings.KeyInactiveServer, true, func(b *patchSettingsBody) *bool { return b.InactiveServer }),
 	text("sub_inactive_text", settings.KeyInactiveText, true, func(b *patchSettingsBody) *string { return b.InactiveText }),
 	value("sub_xray_json", settings.KeyXrayJSON, true, func(b *patchSettingsBody) *bool { return b.XrayJSON }),

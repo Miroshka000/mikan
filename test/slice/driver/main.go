@@ -17,6 +17,13 @@
 //	guard-prepare:  on the stack of guard.sh: log in, create a user, write the client's config
 //	guard:          through the node beside the panel the client opens the panel and refreshes
 //	                its subscription, and of the server's other ports only the listed ones answer
+//	payment-prepare: on the same stack: renewal access on, the user expired, the client's config
+//	                from the renewal profile
+//	payment:        the renewal key reaches the subscription page and the listed site alone,
+//	                within its speed and quota; the payment brings the regular profile back, and
+//	                a new expiry gets a key of its own
+//	payment-renewed: the new key works and the old one does not; the payment closes the
+//	                renewal key's open connections
 package main
 
 import (
@@ -218,6 +225,12 @@ func main() {
 		guardPrepare()
 	case "guard":
 		guardCheck()
+	case "payment-prepare":
+		paymentPrepare()
+	case "payment":
+		paymentCheck()
+	case "payment-renewed":
+		paymentRenewed()
 	default:
 		log.Fatalf("no phase %q", os.Args[1])
 	}
@@ -337,10 +350,7 @@ func prepare() {
 // port per proxy so a phase can pick a protocol. A device's own profile adds its proxies
 // under devicePrefix, reachable on 12001… in devProtos order.
 func writeClient(token string, device map[string]any) {
-	var cfg map[string]any
-	if err := yaml.Unmarshal(fetchSub(token, "mihomo/1.19.31"), &cfg); err != nil {
-		log.Fatalf("clash subscription is not YAML: %v", err)
-	}
+	cfg := clashProfile(token)
 	cfg["allow-lan"] = true
 	cfg["bind-address"] = "*"
 	delete(cfg, "dns")
@@ -362,6 +372,20 @@ func writeClient(token string, device map[string]any) {
 		}
 	}
 	cfg["listeners"] = listeners
+	writeClientConfig(cfg)
+}
+
+// clashProfile is the user's mihomo profile, as a mihomo app takes it.
+func clashProfile(token string) map[string]any {
+	var cfg map[string]any
+	if err := yaml.Unmarshal(fetchSub(token, "mihomo/1.19.31"), &cfg); err != nil {
+		log.Fatalf("clash subscription is not YAML: %v", err)
+	}
+	return cfg
+}
+
+// writeClientConfig writes the client's config: JSON, which mihomo's YAML parser takes.
+func writeClientConfig(cfg map[string]any) {
 	raw, _ := json.MarshalIndent(cfg, "", "  ")
 	if err := os.WriteFile("/work/client.yaml", raw, 0o644); err != nil {
 		log.Fatal(err)
@@ -432,19 +456,38 @@ func download(port int, n int64) (int64, error) { return downloadVia("client", p
 
 // downloadVia pulls n bytes from the target through a client's mixed port.
 func downloadVia(host string, port int, n int64) (int64, error) {
-	d, _ := proxy.SOCKS5("tcp", net.JoinHostPort(host, strconv.Itoa(port)), nil, &net.Dialer{Timeout: 10 * time.Second})
-	c, err := d.Dial("tcp", "target:9000")
+	c, err := dialVia(host, port, "target:9000")
 	if err != nil {
 		return 0, err
 	}
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(60 * time.Second))
-	hdr := make([]byte, 9)
-	hdr[0] = 'D'
-	binary.BigEndian.PutUint64(hdr[1:], uint64(n))
-	if _, err := c.Write(hdr); err != nil {
+	if err := request(c, 'D', n); err != nil {
 		return 0, err
 	}
+	return readDownload(c, n)
+}
+
+// dialVia opens addr through the mixed port of the client container host.
+func dialVia(host string, port int, addr string) (net.Conn, error) {
+	d, err := proxy.SOCKS5("tcp", net.JoinHostPort(host, strconv.Itoa(port)), nil, &net.Dialer{Timeout: 10 * time.Second})
+	if err != nil {
+		return nil, err
+	}
+	return d.Dial("tcp", addr)
+}
+
+// request sends a request of the target (test/e2e/target): op and n.
+func request(c net.Conn, op byte, n int64) error {
+	hdr := make([]byte, 9)
+	hdr[0] = op
+	binary.BigEndian.PutUint64(hdr[1:], uint64(n))
+	_, err := c.Write(hdr)
+	return err
+}
+
+// readDownload reads the n bytes the target sends for a 'D' request.
+func readDownload(c net.Conn, n int64) (int64, error) {
 	got, err := io.Copy(io.Discard, c)
 	if err == nil && got != n {
 		err = fmt.Errorf("short download %d/%d", got, n)
@@ -768,14 +811,13 @@ func waitRemote(p *panel) {
 
 // whoami asks the target which address the connection through proxy port came from.
 func whoami(port int) (string, error) {
-	d, _ := proxy.SOCKS5("tcp", net.JoinHostPort("client", strconv.Itoa(port)), nil, &net.Dialer{Timeout: 10 * time.Second})
-	c, err := d.Dial("tcp", "target:9000")
+	c, err := dialVia("client", port, "target:9000")
 	if err != nil {
 		return "", err
 	}
 	defer c.Close()
 	_ = c.SetDeadline(time.Now().Add(15 * time.Second))
-	if _, err := c.Write([]byte{'W', 0, 0, 0, 0, 0, 0, 0, 0}); err != nil {
+	if err := request(c, 'W', 0); err != nil {
 		return "", err
 	}
 	raw, err := io.ReadAll(c)

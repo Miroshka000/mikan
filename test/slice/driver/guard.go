@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"io"
 	"log"
 	"net"
@@ -11,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"go.yaml.in/yaml/v3"
 	"golang.org/x/net/proxy"
 )
 
@@ -42,18 +40,12 @@ func guardPrepare() {
 	p.call("PATCH", "/api/v1/settings", map[string]any{"sub_routing": "all", "auto_port": false, "auto_sni": false}, nil)
 	token := createUser(p).token()
 
-	var cfg map[string]any
-	if err := yaml.Unmarshal(fetchSub(token, "mihomo/1.19.31"), &cfg); err != nil {
-		log.Fatalf("clash subscription is not YAML: %v", err)
-	}
+	cfg := clashProfile(token)
 	cfg["allow-lan"] = true
 	cfg["bind-address"] = "*"
 	delete(cfg, "dns")
 	cfg["listeners"] = []map[string]any{{"name": "in-ss", "type": "mixed", "listen": "0.0.0.0", "port": guardPort, "proxy": "Shadowsocks"}}
-	raw, _ := json.MarshalIndent(cfg, "", "  ")
-	if err := os.WriteFile("/work/client.yaml", raw, 0o644); err != nil {
-		log.Fatal(err)
-	}
+	writeClientConfig(cfg)
 	if err := os.WriteFile("/work/token", []byte(token), 0o644); err != nil {
 		log.Fatal(err)
 	}
@@ -67,23 +59,13 @@ func guardCheck() {
 		log.Fatal(err)
 	}
 	token := string(raw)
-	eventually := func(what string, ok func() bool) {
-		deadline := time.Now().Add(guardWait)
-		for !ok() {
-			if time.Now().After(deadline) {
-				log.Fatalf("guard: %s: not in %s", what, guardWait)
-			}
-			time.Sleep(time.Second)
-		}
-		log.Printf("guard: %s", what)
-	}
 	refreshes := func(port int) func() bool {
 		return func() bool { return subThroughNode(port, token) }
 	}
 
 	// What the guard must leave open. The node may not know the user yet at the very start.
-	eventually("the client opens the panel through the node", panelThroughNode)
-	eventually("the client refreshes its subscription through the node", refreshes(2053))
+	eventually("guard: the client opens the panel through the node", panelThroughNode)
+	eventually("guard: the client refreshes its subscription through the node", refreshes(2053))
 	if !echoesThroughNode(net.JoinHostPort(guardHost, guardWeb)) {
 		log.Fatal("guard: the server's web port does not answer through the node")
 	}
@@ -110,7 +92,7 @@ func guardCheck() {
 	// A new subscription port opens on the node as soon as the panel listens on it, and the
 	// links handed out before keep working on the panel's port.
 	p.call("PATCH", "/api/v1/settings", map[string]any{"sub_port": guardSubPort}, nil)
-	eventually("the new subscription port opens through the node", refreshes(guardSubPort))
+	eventually("guard: the new subscription port opens through the node", refreshes(guardSubPort))
 	if !subThroughNode(2053, token) {
 		log.Fatal("guard: the panel's port stopped serving the subscription")
 	}
@@ -119,13 +101,25 @@ func guardCheck() {
 	node := "/api/v1/nodes/1"
 	db := net.JoinHostPort(guardHost, guardDB)
 	p.call("PATCH", node, map[string]any{"own_ports": []int{5432}}, nil)
-	eventually("the admin's port opens through the node", func() bool { return echoesThroughNode(db) })
+	eventually("guard: the admin's port opens through the node", func() bool { return echoesThroughNode(db) })
 	if echoesThroughNode(net.JoinHostPort(guardHost, guardOther)) {
 		log.Fatal("guard: the admin's port opened another one too")
 	}
 	p.call("PATCH", node, map[string]any{"own_ports": []int{}}, nil)
-	eventually("the admin's port closes again", func() bool { return !echoesThroughNode(db) })
+	eventually("guard: the admin's port closes again", func() bool { return !echoesThroughNode(db) })
 	log.Print("GUARD OK")
+}
+
+// eventually waits guardWait at most for ok to hold, and logs what once it does.
+func eventually(what string, ok func() bool) {
+	deadline := time.Now().Add(guardWait)
+	for !ok() {
+		if time.Now().After(deadline) {
+			log.Fatalf("%s: not in %s", what, guardWait)
+		}
+		time.Sleep(time.Second)
+	}
+	log.Print(what)
 }
 
 // panelThroughNode says whether the panel's login page opens through the node.

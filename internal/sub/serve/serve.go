@@ -383,11 +383,41 @@ func (h *Handler) answer(w http.ResponseWriter, r *http.Request, sub Subscriptio
 		internalError(w)
 		return ""
 	}
-	if notice := inactiveNotice(cfg, u.State, vars); notice != nil {
-		h.stub(w, cfg, ex, notice)
-		return OutcomeStub
+	var ins []model.Inbound
+	payment := false
+	if u.State == StateExpired {
+		if s, ok := sub.(interface {
+			PaymentProfile(context.Context) (proto.Slot, []model.Inbound, error)
+		}); ok {
+			var payKeys proto.Slot
+			payKeys, ins, err = s.PaymentProfile(ctx)
+			if err != nil {
+				internalError(w)
+				return ""
+			}
+			if payment = len(ins) > 0; payment {
+				if payKeys.UUID != "" {
+					keys = payKeys
+				}
+				// The renewal profile has one server: what was routed to the others goes by the
+				// mode, which stays the panel's. With ru_direct the Russian checkout and bank
+				// pages go past the tunnel, whose node lets only the listed hosts through.
+				cfg.Routes, cfg.Rules, cfg.Templates = routing.Routes{}, nil, nil
+				if cfg.Happ.Routing == xray.HappRoutingAuto {
+					appHeaders(hd, ua, cfg, "")
+					ruleHeaders(hd, cfg.Headers)
+					ruleHeaders(hd, dec.Action.Headers)
+				}
+			}
+		}
 	}
-	ins, err := sub.Inbounds(ctx)
+	if !payment {
+		if notice := inactiveNotice(cfg, u.State, vars); notice != nil {
+			h.stub(w, cfg, ex, notice)
+			return OutcomeStub
+		}
+		ins, err = sub.Inbounds(ctx)
+	}
 	if err != nil {
 		internalError(w)
 		return ""

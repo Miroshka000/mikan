@@ -2,6 +2,8 @@ package subsrc
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -47,7 +49,8 @@ type NodeHealth struct {
 	// Since is when the current failure began.
 	Since time.Time
 	// Version is the node's release.
-	Version string
+	Version       string
+	PaymentAccess bool
 }
 
 // TLSPicker gives the pin links carry for a node's certificate.
@@ -175,6 +178,16 @@ func LoadConfig(ctx context.Context, d ConfigDeps) (Config, error) {
 			cfg.App.LogoURL = cfg.SubBase + "/" + subpage.AssetPath(subpage.AssetLogo, a.Hash)
 		}
 	}
+	if cfg.PaymentAccess, err = domain.LoadPaymentAccess(ctx, set); err != nil {
+		return Config{}, err
+	}
+	var payment db.Inbound
+	if cfg.PaymentAccess.InboundID != 0 {
+		payment, err = d.Q.GetInbound(ctx, cfg.PaymentAccess.InboundID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return Config{}, err
+		}
+	}
 	nodes, err := d.Q.ListNodes(ctx)
 	if err != nil {
 		return Config{}, err
@@ -199,6 +212,9 @@ func LoadConfig(ctx context.Context, d ConfigDeps) (Config, error) {
 		// build of the source) is taken as new.
 		if known && release.Valid(hv.Version) && release.Newer(ssUsersSince, hv.Version) {
 			sn.SSOneKey = true
+		}
+		if payment.NodeID == n.ID && cfg.PaymentAccess.Matches(payment) && (n.Address == "" || hv.OK && hv.PaymentAccess) {
+			cfg.PaymentInbound = payment
 		}
 		sn.NoAuto = outOfAuto(n.NoAuto, hv, known, d.Now())
 		if d.TLS != nil {

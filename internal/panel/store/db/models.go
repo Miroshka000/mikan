@@ -470,6 +470,12 @@ type Payment struct {
 	Revert     string
 }
 
+type PaymentAccessTraffic struct {
+	UserID    int64
+	ExpiredAt int64
+	Bytes     int64
+}
+
 type PromoCode struct {
 	ID                int64
 	Code              string

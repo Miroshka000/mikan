@@ -9174,6 +9174,9 @@
             "minimum": 0,
             "type": "integer"
           },
+          "sub_payment_access": {
+            "$ref": "#/components/schemas/PaymentAccess"
+          },
           "sub_port": {
             "description": "Отдельный порт подписок на сервере панели; 0 — убрать. Ссылки переезжают на него, старые продолжают работать",
             "format": "int64",
@@ -9470,6 +9473,51 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "PaymentAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "format": "int64",
+            "maximum": 14,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "domains": {
+            "description": "Additional exact HTTPS hostnames, including any bank redirects",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "type": "array"
+          },
+          "inbound_id": {
+            "description": "0 disables payment access; otherwise an enabled VLESS inbound without a traffic group",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "speed_mbps": {
+            "format": "int64",
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "traffic_mib": {
+            "format": "int64",
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inbound_id",
+          "days",
+          "traffic_mib",
+          "speed_mbps",
+          "domains"
+        ],
         "type": "object"
       },
       "PaymentSettingsView": {
@@ -12062,6 +12110,9 @@
             "format": "int64",
             "type": "integer"
           },
+          "sub_payment_access": {
+            "$ref": "#/components/schemas/PaymentAccess"
+          },
           "sub_port": {
             "description": "Отдельный порт подписок; 0 — порт панели. Порт панели отдаёт подписки в любом случае",
             "format": "int64",
@@ -12116,6 +12167,7 @@
           "sub_announce",
           "sub_announce_url",
           "app_branding",
+          "sub_payment_access",
           "sub_inactive_server",
           "sub_inactive_text",
           "sub_xray_json",

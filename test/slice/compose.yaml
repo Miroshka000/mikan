@@ -181,6 +181,27 @@ services:
     networks: [public]
     profiles: ["guard"]
 
+  # Two sites for payment.sh on the same public addresses: pay-site is on the renewal list,
+  # pay-other is not. Each answers on 443 and 8443 over TLS and in the clear, under a
+  # certificate for both names that it writes for the driver to trust: what a renewal key
+  # does not reach, the node refused.
+  pay-site: &pay-site
+    build: {context: ../.., dockerfile: test/e2e/Dockerfile}
+    command: ["target", "-tls", ":443,:8443", "-tls-name", "pay.test,pay-other.test", "-tls-dir", "/work"]
+    hostname: pay-site
+    volumes: ["guard-work:/work"]
+    networks:
+      public:
+        aliases: [pay.test]
+    profiles: ["guard"]
+
+  pay-other:
+    <<: *pay-site
+    hostname: pay-other
+    networks:
+      public:
+        aliases: [pay-other.test]
+
 networks:
   default: {}
   isp2:
