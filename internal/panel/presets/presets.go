@@ -178,10 +178,22 @@ func NewConfig(id, dest string) (string, error) {
 		return proto.Marshal(proto.Template{"type": "sudoku", "key": secure.Token(32), "aead-method": "chacha20-poly1305", "padding-min": 2, "padding-max": 7,
 			"table-type": "prefer_ascii"}), nil
 	case "wireguard":
-		return proto.Marshal(proto.Template{"type": "wireguard", "mtu": 1420, "ipv4-cidr": "10.66.66.0/24"}), nil
+		// The server key is born with the inbound and lives in mikan.wg-key: the node is given
+		// it as private-key, clients verify the server by the public key derived from it, and
+		// no template ever carries it into mihomo.
+		key, err := proto.NewWGServerKey()
+		if err != nil {
+			return "", err
+		}
+		return proto.Marshal(proto.Template{"type": "wireguard", "mtu": 1420, "ipv4-cidr": "10.66.0.0/16",
+			"mikan": map[string]any{"wg-key": key}}), nil
 	case "amneziawg":
-		return proto.Marshal(proto.Template{"type": "wireguard", "mtu": 1420, "ipv4-cidr": "10.66.66.0/24",
-			"amnezia-wg-option": proto.AmneziaWGPreset()}), nil
+		key, err := proto.NewWGServerKey()
+		if err != nil {
+			return "", err
+		}
+		return proto.Marshal(proto.Template{"type": "wireguard", "mtu": 1420, "ipv4-cidr": "10.66.0.0/16",
+			"amnezia-wg-option": proto.AmneziaWGPreset(), "mikan": map[string]any{"wg-key": key}}), nil
 	case "snell":
 		return proto.Marshal(proto.Template{"type": "snell", "psk": secure.Token(32), "version": 3}), nil
 	case Custom:

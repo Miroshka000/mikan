@@ -100,7 +100,7 @@ func TestWGAddressesWithoutSubnetUseTheDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := addrs["a"]
-	if !addr.IsValid() || !netip.MustParsePrefix("10.66.66.0/24").Contains(addr) {
+	if !addr.IsValid() || !netip.MustParsePrefix("10.66.0.0/16").Contains(addr) {
 		t.Fatalf("address = %s, want one of the default subnet", addr)
 	}
 }

@@ -143,7 +143,10 @@ func wgPool(t Template) ([]netip.Addr, error) {
 }
 
 // defaultWGPool is the subnet a template without one gets: the core uses the same.
-const defaultWGPool = "10.66.66.0/24"
+// defaultWGPool is the subnet a template without one gets. A panel carries every slot in
+// every listener, so the pool has to hold the whole roster: a /24 (254 hosts) silently
+// strands everyone past the 254th slot.
+const defaultWGPool = "10.66.0.0/16"
 
 // wgTunnel is the subnets a template actually runs on.
 func wgTunnel(t Template) (v4, v6 string) {
