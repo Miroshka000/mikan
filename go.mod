@@ -4,10 +4,11 @@ go 1.27
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/danielgtaylor/huma/v2 v2.40.0
+	github.com/danielgtaylor/huma/v2 v2.41.0
 	github.com/descope/virtualwebauthn v1.0.5
 	github.com/go-acme/lego/v4 v4.35.2
 	github.com/go-webauthn/webauthn v0.18.2
+	github.com/gofrs/uuid/v5 v5.4.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/lib/pq v1.12.3
 	github.com/metacubex/age v0.0.0-20260603010618-28d156b4ea78
@@ -16,7 +17,7 @@ require (
 	github.com/pressly/goose/v3 v3.30.1
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.59.0
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 )
 
 require (
@@ -39,7 +40,7 @@ require (
 	github.com/ericlagergren/siv v0.0.0-20220507050439-0b757b3aa5f1 // indirect
 	github.com/ericlagergren/subtle v0.0.0-20220507045147-890d697da010 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.6 // indirect
+	github.com/fxamacker/cbor/v2 v2.10.0 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.8 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -47,7 +48,6 @@ require (
 	github.com/go-webauthn/x v0.3.1 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/ws v1.5.0 // indirect
-	github.com/gofrs/uuid/v5 v5.4.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
@@ -64,7 +64,7 @@ require (
 	github.com/josharian/native v1.1.0 // indirect
 	github.com/jsimonetti/rtnetlink v1.4.0 // indirect
 	github.com/klauspost/compress v1.20.4 // indirect
-	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.2 // indirect
 	github.com/klauspost/reedsolomon v1.12.3 // indirect
 	github.com/mdlayher/netlink v1.7.2 // indirect
 	github.com/mdlayher/socket v0.5.1 // indirect
