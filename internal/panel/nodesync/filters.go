@@ -19,12 +19,34 @@ func nodeFilters(cfg filters.Config, users []db.User, owners []db.ListSlotUsersR
 	for _, owner := range owners {
 		slots[owner.UserID] = append(slots[owner.UserID], owner.SlotName)
 	}
+	folders := map[int64][]int64{}
+	tariffs := map[int64][]int64{}
+	for _, user := range users {
+		if user.FolderID.Valid {
+			folders[user.FolderID.Int64] = append(folders[user.FolderID.Int64], user.ID)
+		}
+		if user.TariffID.Valid {
+			tariffs[user.TariffID.Int64] = append(tariffs[user.TariffID.Int64], user.ID)
+		}
+	}
 	for _, rule := range cfg.Egress.Rules {
-		r := nodeapi.ScopedEgress{Kind: rule.Kind, Value: rule.Value, Scope: rule.Scope}
-		for _, u := range users {
-			if rule.Selects(u.ID, u.FolderID.Int64, u.TariffID.Int64) {
-				r.Slots = append(r.Slots, slots[u.ID]...)
+		selected := map[int64]bool{}
+		for _, id := range rule.Users {
+			selected[id] = true
+		}
+		for _, folder := range rule.Folders {
+			for _, id := range folders[folder] {
+				selected[id] = true
 			}
+		}
+		for _, tariff := range rule.Tariffs {
+			for _, id := range tariffs[tariff] {
+				selected[id] = true
+			}
+		}
+		r := nodeapi.ScopedEgress{Kind: rule.Kind, Value: rule.Value, Scope: rule.Scope}
+		for id := range selected {
+			r.Slots = append(r.Slots, slots[id]...)
 		}
 		slices.Sort(r.Slots)
 		f.Egress.Scoped = append(f.Egress.Scoped, r)

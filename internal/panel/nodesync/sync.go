@@ -197,11 +197,7 @@ func (s *Syncer) run(ctx context.Context) {
 			if !pace.Sleep(ctx, 150*time.Millisecond) {
 				return
 			}
-			if snap, err := s.m.snapshot(ctx, s.id); err == nil && snap.filters.Egress.HasScoped() {
-				s.applyState(ctx)
-			} else {
-				s.pushPolicies(ctx, true)
-			}
+			s.applyPolicyChange(ctx)
 		}
 	}
 }
@@ -263,7 +259,7 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 		return st, "", err
 	}
 	st.Torrent = snap.torrent.Block()
-	st.Filters = snap.filterState
+	st.Filters = nodeFilters(snap.filters, snap.users, snap.owners)
 	st.DNS = snap.exitDNS.State()
 	st.Detail = snap.detail
 	st.HTTPRedirect = n.HttpRedirect != 0 && n.Address != ""
@@ -282,10 +278,25 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 }
 
 func (s *Syncer) applyState(ctx context.Context) {
+	s.syncState(ctx, false)
+}
+
+// A policy change can move users into or out of an egress audience as well as change
+// their quotas. Push the policies even when the route state did not change.
+func (s *Syncer) applyPolicyChange(ctx context.Context) {
+	if snap, err := s.m.snapshot(ctx, s.id); err == nil && snap.filters.Egress.HasScoped() && s.syncState(ctx, true) {
+		return
+	}
+	// A rejected routing update must not prevent policy changes on the listeners
+	// that are already running.
+	s.pushPolicies(ctx, true)
+}
+
+func (s *Syncer) syncState(ctx context.Context, forcePolicies bool) bool {
 	st, pin, err := s.desiredPin(ctx)
 	if err != nil {
 		s.log.Error("build node state", "err", err)
-		return
+		return false
 	}
 	key := stateKey(st)
 	now := s.m.now()
@@ -296,16 +307,16 @@ func (s *Syncer) applyState(ctx context.Context) {
 	paused := key == s.failedKey && s.retry.waiting(now)
 	s.mu.Unlock()
 	if same {
-		s.sendPolicies(ctx, st.Epoch, st.Policies, s.policiesStale(now))
-		return
+		s.sendPolicies(ctx, st.Epoch, st.Policies, forcePolicies || s.policiesStale(now))
+		return true
 	}
 	if paused {
-		return
+		return false
 	}
 	rev, err := s.nextRevision(ctx)
 	if err != nil {
 		s.log.Error("revision", "err", err)
-		return
+		return false
 	}
 	st.Revision = rev
 	res, err := s.node.Apply(ctx, st)
@@ -317,7 +328,7 @@ func (s *Syncer) applyState(ctx context.Context) {
 		if log {
 			s.log.Warn("apply node state", "err", err)
 		}
-		return
+		return false
 	}
 	if err := s.saveRevision(ctx, rev); err != nil {
 		s.log.Error("revision", "err", err)
@@ -352,6 +363,7 @@ func (s *Syncer) applyState(ctx context.Context) {
 	if old := s.served.Swap(&pin); old == nil || *old != pin {
 		s.m.tlsGen.Add(1)
 	}
+	return true
 }
 
 // ServedPin is the pin of the certificate the node serves, as of the last state it took;

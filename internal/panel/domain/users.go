@@ -15,6 +15,7 @@ import (
 
 	"mikan/internal/panel/events"
 	"mikan/internal/panel/events/feed"
+	"mikan/internal/panel/filters"
 	"mikan/internal/panel/model"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/settings"
@@ -757,6 +758,9 @@ func deleteUsers(ctx context.Context, q *db.Queries, ids []int64, now int64) err
 	if err := q.DeleteUsersBoundDevices(ctx, ids); err != nil {
 		return err
 	}
+	if err := filters.DropUserSites(ctx, settings.New(q), ids); err != nil {
+		return err
+	}
 	return q.DeleteUsers(ctx, ids)
 }
 
@@ -767,10 +771,10 @@ const (
 	BulkDisable = "disable"
 	BulkEnable  = "enable"
 	BulkDelete  = "delete"
-	// Where a user is listed, not what the user may do: no word goes to the nodes.
+	// Visibility in the panel does not change node policies.
 	BulkHide   = "hide"
 	BulkUnhide = "unhide"
-	BulkMove   = "move"
+	BulkMove   = "move" // moving folders can change the traffic filters
 )
 
 // BulkOpt is what an action needs besides the users.

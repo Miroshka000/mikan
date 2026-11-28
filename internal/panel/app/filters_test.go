@@ -75,8 +75,8 @@ func TestScopedFiltersAPI(t *testing.T) {
 	if err != nil || len(tariffs) == 0 {
 		t.Fatalf("list plans: %v", err)
 	}
-	user, err := domain.NewUsers(h.st, domain.NewPool(h.st, clock), noChanges{}, clock).Create(ctx,
-		domain.CreateInput{Name: "client", TariffID: tariffs[0].ID})
+	clients := domain.NewUsers(h.st, domain.NewPool(h.st, clock), noChanges{}, clock)
+	user, err := clients.Create(ctx, domain.CreateInput{Name: "client", TariffID: tariffs[0].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,5 +124,15 @@ func TestScopedFiltersAPI(t *testing.T) {
 	send(http.MethodPut, path+"/site", site)
 	if len(v.Sites) != 0 || len(v.Egress.Domains) != 1 {
 		t.Fatalf("clearing the exception changed the global rule: %+v", v)
+	}
+
+	site["action"] = "block"
+	send(http.MethodPut, path+"/site", site)
+	if err := clients.Delete(ctx, user.ID); err != nil {
+		t.Fatal(err)
+	}
+	send(http.MethodGet, path, nil)
+	if len(v.Sites) != 0 {
+		t.Fatalf("deleted client left site rules: %+v", v.Sites)
 	}
 }

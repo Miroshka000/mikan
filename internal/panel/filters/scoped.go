@@ -1,9 +1,11 @@
 package filters
 
 import (
+	"context"
 	"slices"
 
 	"mikan/internal/nodeapi"
+	"mikan/internal/panel/settings"
 )
 
 // Rule selects clients by ID, by client folder, or by tariff. Any selected group
@@ -17,6 +19,8 @@ type Rule struct {
 	Tariffs []int64 `json:"tariffs,omitempty" maxItems:"1000"`
 }
 
+// The core limits the number of clauses in an expression. Keep the compiled domain
+// exceptions below that limit even when every personal rule is an exception.
 const MaxSiteOverrides = 500
 
 // Site is an individual override created in the client card.
@@ -24,10 +28,6 @@ type Site struct {
 	UserID int64  `json:"user_id"`
 	Domain string `json:"domain"`
 	Allow  bool   `json:"allow"`
-}
-
-func (r Rule) Selects(user, folder, tariff int64) bool {
-	return slices.Contains(r.Users, user) || slices.Contains(r.Folders, folder) || slices.Contains(r.Tariffs, tariff)
 }
 
 func (e Egress) HasScoped() bool {
@@ -75,4 +75,20 @@ func (e *Egress) validateScoped() error {
 		site.Domain = host
 	}
 	return nil
+}
+
+// DropUserSites removes the overrides of deleted clients in the same transaction.
+func DropUserSites(ctx context.Context, set *settings.Settings, ids []int64) error {
+	c, err := Load(ctx, set)
+	if err != nil || len(c.Egress.Sites) == 0 {
+		return err
+	}
+	before := len(c.Egress.Sites)
+	c.Egress.Sites = slices.DeleteFunc(c.Egress.Sites, func(site Site) bool {
+		return slices.Contains(ids, site.UserID)
+	})
+	if len(c.Egress.Sites) == before {
+		return nil
+	}
+	return settings.Set(ctx, set, KeyConfig, c)
 }
