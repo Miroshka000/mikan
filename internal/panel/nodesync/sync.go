@@ -197,7 +197,11 @@ func (s *Syncer) run(ctx context.Context) {
 			if !pace.Sleep(ctx, 150*time.Millisecond) {
 				return
 			}
-			s.pushPolicies(ctx, true)
+			if snap, err := s.m.snapshot(ctx, s.id); err == nil && snap.filters.Egress.HasScoped() {
+				s.applyState(ctx)
+			} else {
+				s.pushPolicies(ctx, true)
+			}
 		}
 	}
 }
@@ -259,7 +263,7 @@ func (s *Syncer) desiredPin(ctx context.Context) (st nodeapi.DesiredState, pin s
 		return st, "", err
 	}
 	st.Torrent = snap.torrent.Block()
-	st.Filters = snap.filters.State()
+	st.Filters = snap.filterState
 	st.DNS = snap.exitDNS.State()
 	st.Detail = snap.detail
 	st.HTTPRedirect = n.HttpRedirect != 0 && n.Address != ""

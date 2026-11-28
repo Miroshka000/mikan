@@ -30,16 +30,22 @@ var privateRules = []string{
 }
 
 func rules(st nodeapi.DesiredState, allowPrivate bool) []string {
+	r, _ := routingRules(st, allowPrivate)
+	return r
+}
+
+func routingRules(st nodeapi.DesiredState, allowPrivate bool) ([]string, map[string][]string) {
 	var r []string
 	if !allowPrivate {
 		r = append(r, privateRules...)
 	}
 	// Outbound SMTP from a shared VPN IP gets the address blacklisted within hours.
 	r = append(r, "DST-PORT,25,REJECT")
-	r = append(r, egressRules(st.Filters)...)
+	egress, sub := egressRules(st)
+	r = append(r, egress...)
 	r = append(r, exitRules(st)...)
 	r = append(r, warpRules(st)...)
-	return append(r, "MATCH,DIRECT")
+	return append(r, "MATCH,DIRECT"), sub
 }
 
 // outbounds are the proxies besides DIRECT: WARP and the other nodes used as exits.
@@ -118,6 +124,7 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool, fr
 	if err != nil {
 		return nil, nil, err
 	}
+	rules, sub := routingRules(st, allowPrivate)
 	cfg := map[string]any{
 		"mode":              "rule",
 		"log-level":         "warning",
@@ -129,8 +136,11 @@ func buildConfig(st nodeapi.DesiredState, cert proto.Cert, allowPrivate bool, fr
 		"dns":               dnsConfig(st.DNS),
 		"sniffer":           snifferConfig(st.DNS),
 		"proxies":           proxies,
-		"rules":             rules(st, allowPrivate),
+		"rules":             rules,
 		"listeners":         listeners,
+	}
+	if len(sub) > 0 {
+		cfg["sub-rules"] = sub
 	}
 	raw, err = json.Marshal(cfg)
 	return raw, rejected, err

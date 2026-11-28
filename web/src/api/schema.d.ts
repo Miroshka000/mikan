@@ -527,6 +527,23 @@ export interface paths {
         patch: operations["update-filters"];
         trace?: never;
     };
+    "/api/v1/filters/site": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Изменить фильтр домена из карточки клиента */
+        put: operations["set-site-filter"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/folders": {
         parameters: {
             query?: never;
@@ -3675,6 +3692,8 @@ export interface components {
             networks: string[];
             /** @description Порты и диапазоны: 6881, 6881-6889 */
             ports: string[];
+            /** @description Фильтры для выбранных клиентов, папок или тарифов. При отсутствии поля текущие правила сохраняются */
+            rules?: components["schemas"]["Rule"][];
         };
         "Enable-promocodeRequest": {
             enabled: boolean;
@@ -3799,6 +3818,8 @@ export interface components {
             ingress: components["schemas"]["IngressFilter"];
             /** @description Что закрывает почтовый пресет */
             mail_ports: string[];
+            /** @description Персональные правила доменов из карточек клиентов */
+            sites: components["schemas"]["Site"][];
         };
         FolderView: {
             /** @enum {string} */
@@ -5486,6 +5507,16 @@ export interface components {
             /** Format: int64 */
             successful_activations: number;
         };
+        PutSiteFilterInputBody: {
+            /** @enum {string} */
+            action: "block-all" | "block" | "allow" | "clear";
+            domain: string;
+            /**
+             * Format: int64
+             * @description Клиент для личного правила
+             */
+            user_id?: number;
+        };
         PutSubImageInputBody: {
             /** @description Картинка в base64: PNG, JPEG или WebP; логотип до 512 КБ, фон до 2 МБ. SVG не принимается */
             data: string;
@@ -5714,6 +5745,16 @@ export interface components {
             /** @description Профиль Clash (YAML) пользователя со всеми подключениями; ключи — заглушки */
             profile: string;
         };
+        Rule: {
+            folders?: number[];
+            /** @enum {string} */
+            kind: "port" | "network" | "domain";
+            /** @enum {string} */
+            scope: "only" | "except";
+            tariffs?: number[];
+            users?: number[];
+            value: string;
+        };
         RussiaPort: {
             /** @description api или имя подключения */
             name: string;
@@ -5927,6 +5968,12 @@ export interface components {
             support_url: string;
             /** @description Искать сайты маскировки REALITY не только в /24 ноды, но и в соседних /24 её /16, до 20 найденных сайтов или 2 минут. Много подключений: хостер может принять это за сканирование сети */
             wide_sni_scan: boolean;
+        };
+        Site: {
+            allow: boolean;
+            domain: string;
+            /** Format: int64 */
+            user_id: number;
         };
         SiteBytes: {
             /** Format: int64 */
@@ -8081,6 +8128,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PatchFiltersInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FiltersView"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "set-site-filter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutSiteFilterInputBody"];
             };
         };
         responses: {

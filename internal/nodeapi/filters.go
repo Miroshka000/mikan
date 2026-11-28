@@ -97,3 +97,18 @@ func isASCII(s string) bool {
 	}
 	return true
 }
+
+// CanonEgress validates the value of a typed egress rule.
+func CanonEgress(kind, value string) (string, bool) {
+	switch kind {
+	case "port":
+		return CanonPorts(value)
+	case "network":
+		p, ok := CanonNetwork(value)
+		return p.String(), ok
+	case "domain":
+		return CanonDomain(value)
+	default:
+		return "", false
+	}
+}

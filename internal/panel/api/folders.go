@@ -268,6 +268,7 @@ func (h *handlers) deleteFolder(ctx context.Context, in *folderIDInput) (*struct
 	if err != nil {
 		return nil, err
 	}
+	h.d.Changes.PoliciesChanged()
 	h.audit(ctx, sessionOf(ctx).AdminID, "folder.delete", "folder", strconv.FormatInt(in.ID, 10), map[string]any{"users": freed})
 	return nil, nil
 }

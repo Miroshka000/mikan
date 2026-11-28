@@ -857,7 +857,7 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	if err != nil {
 		return 0, err
 	}
-	if done > 0 && action != BulkHide && action != BulkUnhide && action != BulkMove {
+	if done > 0 && action != BulkHide && action != BulkUnhide {
 		s.changes.PoliciesChanged()
 	}
 	return done, nil
