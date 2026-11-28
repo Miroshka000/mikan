@@ -106,7 +106,7 @@ func TestHidingAndFoldersChangeNothingElse(t *testing.T) {
 		t.Fatalf("show and take out: %+v %v", u, err)
 	}
 
-	// In bulk: all or nothing, and no word to the nodes (the policies are what they were).
+	// A bulk move can change folder-based filters. Hiding alone changes no node policy.
 	pushes := ch.policies
 	if n, err := users.Bulk(ctx, ids, BulkMove, BulkOpt{Folder: &folder.ID}); err != nil || n != 3 {
 		t.Fatalf("bulk move: %d %v", n, err)
@@ -114,8 +114,8 @@ func TestHidingAndFoldersChangeNothingElse(t *testing.T) {
 	if n, err := users.Bulk(ctx, ids[:2], BulkHide, BulkOpt{}); err != nil || n != 2 {
 		t.Fatalf("bulk hide: %d %v", n, err)
 	}
-	if ch.policies != pushes {
-		t.Fatal("the nodes were told about users moved and hidden")
+	if ch.policies != pushes+1 {
+		t.Fatal("the nodes should be told about moved users only")
 	}
 	if _, err := users.Bulk(ctx, ids, BulkMove, BulkOpt{Folder: &gone}); err == nil {
 		t.Fatal("a bulk move into a folder that is not there")

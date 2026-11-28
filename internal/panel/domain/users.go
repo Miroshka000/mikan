@@ -15,6 +15,7 @@ import (
 
 	"mikan/internal/panel/events"
 	"mikan/internal/panel/events/feed"
+	"mikan/internal/panel/filters"
 	"mikan/internal/panel/model"
 	"mikan/internal/panel/secure"
 	"mikan/internal/panel/settings"
@@ -757,6 +758,9 @@ func deleteUsers(ctx context.Context, q *db.Queries, ids []int64, now int64) err
 	if err := q.DeleteUsersBoundDevices(ctx, ids); err != nil {
 		return err
 	}
+	if err := filters.DropUserSites(ctx, settings.New(q), ids); err != nil {
+		return err
+	}
 	return q.DeleteUsers(ctx, ids)
 }
 
@@ -767,10 +771,10 @@ const (
 	BulkDisable = "disable"
 	BulkEnable  = "enable"
 	BulkDelete  = "delete"
-	// Where a user is listed, not what the user may do: no word goes to the nodes.
+	// Visibility in the panel does not change node policies.
 	BulkHide   = "hide"
 	BulkUnhide = "unhide"
-	BulkMove   = "move"
+	BulkMove   = "move" // moving folders can change the traffic filters
 )
 
 // BulkOpt is what an action needs besides the users.
@@ -786,9 +790,9 @@ type BulkOpt struct {
 // changes left behind). A user that is gone is skipped; a user listed twice is done once.
 // It returns how many users changed.
 //
-// The users are locked in id order and changed by a few set-based statements, so READ
-// COMMITTED is enough: what each change reads (the expiry an extension adds to) comes
-// from the locked rows, and the traffic batches lock the same rows in the same order.
+// The users are locked in ID order and changed by a few set-based statements. Bulk
+// deletion also reads and updates traffic-filter settings, so it uses a serializable
+// transaction to retry concurrent changes there.
 func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOpt) (int, error) {
 	switch action {
 	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove:
@@ -802,8 +806,12 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	want := slices.Clone(ids)
 	slices.Sort(want)
 	want = slices.Compact(want)
+	tx := s.st.TxRC
+	if action == BulkDelete {
+		tx = s.st.Tx
+	}
 	done := 0
-	err := s.st.TxRC(ctx, func(q *db.Queries) error {
+	err := tx(ctx, func(q *db.Queries) error {
 		done = 0
 		// The folder first, then the users: the order a deleted folder takes its own.
 		if action == BulkMove && opt.Folder != nil {
@@ -857,7 +865,7 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	if err != nil {
 		return 0, err
 	}
-	if done > 0 && action != BulkHide && action != BulkUnhide && action != BulkMove {
+	if done > 0 && action != BulkHide && action != BulkUnhide {
 		s.changes.PoliciesChanged()
 	}
 	return done, nil

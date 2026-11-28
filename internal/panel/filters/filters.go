@@ -38,6 +38,8 @@ type Egress struct {
 	Ports    []string `json:"ports"`
 	Networks []string `json:"networks"`
 	Domains  []string `json:"domains"`
+	Rules    []Rule   `json:"rules,omitempty"`
+	Sites    []Site   `json:"sites,omitempty"`
 }
 
 type Ingress struct {
@@ -111,7 +113,7 @@ func (c *Config) Validate() error {
 		slices.Sort(out)
 		*x.l = slices.Compact(out)
 	}
-	return nil
+	return c.Egress.validateScoped()
 }
 
 func canonNetwork(s string) (string, bool) {
@@ -133,7 +135,7 @@ func (c Config) State() *nodeapi.Filters {
 	if c.Ingress.Enabled && len(c.Ingress.Networks) > 0 {
 		f.Ingress = nodeapi.Ingress{Allow: c.Ingress.Allow, Networks: c.Ingress.Networks}
 	}
-	if len(f.Egress.Ports)+len(f.Egress.Networks)+len(f.Egress.Domains)+len(f.Ingress.Networks) == 0 {
+	if len(f.Egress.Ports)+len(f.Egress.Networks)+len(f.Egress.Domains)+len(f.Ingress.Networks) == 0 && !c.Egress.HasScoped() {
 		return nil
 	}
 	return f

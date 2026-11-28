@@ -1,6 +1,6 @@
 ---
 title: Filters and "Where clients go"
-description: Traffic filters on the nodes, per-subscription stats by site (off by default) and blocking a site for everyone with one tap.
+description: Traffic filters on the nodes, per-subscription stats by site (off by default) and rules for everyone, selected clients and groups.
 ---
 
 Traffic filters are a built-in tool: **Addons → Built in → Traffic filters**. A node applies them itself, within seconds of saving. A node older than the panel skips them: update it on the **Nodes** page.
@@ -13,6 +13,10 @@ The **Outgoing traffic** card: the nodes refuse users' traffic to what is listed
 - **Ports**: one per line, ranges too, for example `6881-6889`.
 - **Networks and addresses**: one per line, for example `203.0.113.0/24` or `2001:db8::/32`.
 - **Domains**: one per line, with their subdomains: `example.com` also closes `mail.example.com`.
+
+Under **Rules by audience**, choose who a rule blocks for a domain, network or port. The available modes are Everyone, Only selected and Everyone except selected. You can select clients, client folders and plans. A client need only match one selection. The lists above apply to everyone.
+
+The first node in a cascade evaluates rules by audience. On protocols with a shared key, the node cannot distinguish clients. Only selected has no effect there, and Everyone except selected blocks matching traffic for the shared connection. Update every node in a cascade before enabling rules by audience.
 
 ## Incoming connections
 
@@ -37,12 +41,14 @@ Only totals are kept: how many bytes per site for each subscription per day. **N
 
 ### Where it shows
 
-The client's card has a **Where it goes** block: sites by falling traffic with a bar. The period: 1, 7 or 30 days. Small sites are gathered into an "other sites" row. While counting is off, the block is hidden if there is no data.
+The client's card has a **Where it goes** block: sites by falling traffic with a bar. The period: 1, 7 or 30 days. Small sites are gathered into an "other sites" row. The client’s filter rules remain visible when counting is off.
 
-### Block a site for everyone
+### Change a domain filter
 
-Each domain in the list has a "Block the site for everyone" button. It adds the domain to the **Domains** of the outgoing traffic filter and turns that filter on if it was off: the nodes let nobody there, subdomains included. An already blocked domain has a tick in place of the button. Addresses have no button: add them to "Networks and addresses" by hand.
+The domain menu has three actions. Block for everyone adds the domain to the global list and enables outgoing traffic filtering. Block for this client adds a block for all their slots and enables the filter. Allow for this client adds an exception to the global domain list, including blocks inherited from a parent domain. Targeted blocks, port filters and network filters still apply. Remove the personal rule from the client’s filter list. Add IP addresses under Networks and addresses.
 
 ### API
 
 `GET /api/v1/traffic-detail` and `PUT /api/v1/traffic-detail` (turn on or off, days kept), `GET /api/v1/users/{id}/sites?days=7` (a subscription's sites).
+
+Set rules by audience in `egress.rules` with `PATCH /api/v1/filters`. Use `PUT /api/v1/filters/site` for actions on individual domains.

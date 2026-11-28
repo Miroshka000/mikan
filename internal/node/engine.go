@@ -124,11 +124,13 @@ type Engine struct {
 
 // routesKey covers what the outbound side of the config depends on.
 func routesKey(st nodeapi.DesiredState, allowPrivate bool) string {
+	rules, sub := routingRules(st, allowPrivate)
 	raw, _ := json.Marshal(struct {
 		W *nodeapi.Warp
 		E []nodeapi.Exit
 		R []string
-	}{st.Warp, st.Exits, rules(st, allowPrivate)})
+		S map[string][]string
+	}{st.Warp, st.Exits, rules, sub})
 	return string(raw)
 }
 

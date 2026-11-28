@@ -120,9 +120,19 @@ type Filters struct {
 // Egress: users' traffic to these ports ("465", "1000-2000"), networks ("203.0.113.0/24")
 // and domains (with their subdomains) is refused.
 type Egress struct {
-	Ports    []string `json:"ports,omitempty"`
-	Networks []string `json:"networks,omitempty"`
-	Domains  []string `json:"domains,omitempty"`
+	Ports    []string       `json:"ports,omitempty"`
+	Networks []string       `json:"networks,omitempty"`
+	Domains  []string       `json:"domains,omitempty"`
+	Scoped   []ScopedEgress `json:"scoped,omitempty"`
+}
+
+// ScopedEgress is resolved by the panel to slot names. The node also matches the
+// UUID that TUIC reports. "allow" is a personal exception to the global domain list.
+type ScopedEgress struct {
+	Kind  string   `json:"kind"`
+	Value string   `json:"value"`
+	Scope string   `json:"scope"` // only, except, allow
+	Slots []string `json:"slots,omitempty"`
 }
 
 // Ingress: connections from Networks are refused; with Allow, connections from anywhere

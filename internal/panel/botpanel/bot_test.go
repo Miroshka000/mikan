@@ -833,8 +833,16 @@ func TestRemoveSubscriptionFromTheBot(t *testing.T) {
 		e.later()
 		n := e.tg.count()
 		e.press(from, menu, data)
-		calls := e.tg.until(t, n, func(cs []call) bool { _, ok := find(cs, "editMessageText"); return ok })
-		edit, _ := find(calls, "editMessageText")
+		var edit call
+		e.tg.until(t, n, func(cs []call) bool {
+			for _, c := range cs {
+				if c.method == "editMessageText" && c.body["chat_id"] == float64(from) && c.body["message_id"] == float64(menu) {
+					edit = c
+					return true
+				}
+			}
+			return false
+		})
 		return edit
 	}
 	if got := buttons(tap(anna, "s"))["🗑 Убрать из бота"]; got != "rm" {
@@ -846,9 +854,7 @@ func TestRemoveSubscriptionFromTheBot(t *testing.T) {
 	}
 
 	// Someone else's tap with the same data changes nothing.
-	e.later()
-	e.press(other, menu, "rd:"+uid)
-	time.Sleep(100 * time.Millisecond)
+	tap(other, "rd:"+uid)
 	if l, err := e.st.Q.GetTgLink(e.ctx, e.user.ID); err != nil || l.TgID != anna {
 		t.Fatalf("another account removed the link: %+v %v", l, err)
 	}
