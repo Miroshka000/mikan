@@ -790,9 +790,9 @@ type BulkOpt struct {
 // changes left behind). A user that is gone is skipped; a user listed twice is done once.
 // It returns how many users changed.
 //
-// The users are locked in id order and changed by a few set-based statements, so READ
-// COMMITTED is enough: what each change reads (the expiry an extension adds to) comes
-// from the locked rows, and the traffic batches lock the same rows in the same order.
+// The users are locked in ID order and changed by a few set-based statements. Bulk
+// deletion also reads and updates traffic-filter settings, so it uses a serializable
+// transaction to retry concurrent changes there.
 func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOpt) (int, error) {
 	switch action {
 	case BulkExtend, BulkReset, BulkDisable, BulkEnable, BulkDelete, BulkHide, BulkUnhide, BulkMove:
@@ -806,8 +806,12 @@ func (s *Users) Bulk(ctx context.Context, ids []int64, action string, opt BulkOp
 	want := slices.Clone(ids)
 	slices.Sort(want)
 	want = slices.Compact(want)
+	tx := s.st.TxRC
+	if action == BulkDelete {
+		tx = s.st.Tx
+	}
 	done := 0
-	err := s.st.TxRC(ctx, func(q *db.Queries) error {
+	err := tx(ctx, func(q *db.Queries) error {
 		done = 0
 		// The folder first, then the users: the order a deleted folder takes its own.
 		if action == BulkMove && opt.Folder != nil {
